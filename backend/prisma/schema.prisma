@@ -1,0 +1,256 @@
+// Prisma schema for Mobile CRM Platform
+// Prisma 5.13.0 | PostgreSQL (Supabase)
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  owner
+  admin
+  member
+  viewer
+}
+
+enum OrgPlan {
+  starter
+  growth
+  business
+}
+
+enum ContactType {
+  lead
+  customer
+  partner
+  other
+}
+
+enum ContactStatus {
+  active
+  inactive
+  archived
+}
+
+enum DealStatus {
+  open
+  won
+  lost
+  archived
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum TaskStatus {
+  pending
+  in_progress
+  done
+  cancelled
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum MessageChannel {
+  sms
+  in_app
+  email
+}
+
+enum MessageStatus {
+  pending
+  sent
+  delivered
+  read
+  failed
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model User {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id   String    @db.Uuid
+  email             String    @unique
+  password_hash     String
+  name              String
+  role              UserRole  @default(member)
+  avatar_url        String?
+  phone             String?
+  is_active         Boolean   @default(true)
+  onboarding_state  Json?
+  preferences       Json?
+  last_seen_at      DateTime?
+  invited_by        String?   @db.Uuid
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  // Relations
+  organization     Org       @relation("UserOrg", fields: [organization_id], references: [id])
+  inviter          User?     @relation("UserInviter", fields: [invited_by], references: [id])
+  invitees         User[]    @relation("UserInviter")
+  ownedOrgs        Org[]     @relation("OrgOwner")
+  assignedContacts Contact[] @relation("ContactAssignedTo")
+  createdContacts  Contact[] @relation("ContactCreatedBy")
+  assignedDeals    Deal[]    @relation("DealAssignedTo")
+  createdDeals     Deal[]    @relation("DealCreatedBy")
+  assignedTasks    Task[]    @relation("TaskAssignedTo")
+  createdTasks     Task[]    @relation("TaskCreatedBy")
+  completedTasks   Task[]    @relation("TaskCompletedBy")
+  messages         Message[]
+}
+
+model Org {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String
+  slug          String   @unique
+  plan          OrgPlan  @default(starter)
+  owner_id      String?  @db.Uuid
+  settings      Json?
+  plan_features Json?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  // Relations
+  owner    User?     @relation("OrgOwner", fields: [owner_id], references: [id])
+  users    User[]    @relation("UserOrg")
+  contacts Contact[]
+  deals    Deal[]
+  tasks    Task[]
+  messages Message[]
+
+  @@map("organizations")
+}
+
+model Contact {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String        @db.Uuid
+  first_name      String
+  last_name       String?
+  company         String?
+  email           String?
+  phone           String?
+  mobile          String?
+  address         Json?
+  /// Stored as a JSON array (mirrors PostgreSQL text[] column)
+  tags            Json?
+  source          String?
+  notes           String?
+  avatar_url      String?
+  assigned_to     String?       @db.Uuid
+  type            ContactType   @default(lead)
+  status          ContactStatus @default(active)
+  custom_fields   Json?
+  is_example_data Boolean       @default(false)
+  created_by      String?       @db.Uuid
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
+
+  // Relations
+  organization Org      @relation(fields: [organization_id], references: [id])
+  assignee     User?    @relation("ContactAssignedTo", fields: [assigned_to], references: [id])
+  creator      User?    @relation("ContactCreatedBy", fields: [created_by], references: [id])
+  deals        Deal[]
+  tasks        Task[]
+  messages     Message[]
+}
+
+model Deal {
+  id              String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String     @db.Uuid
+  title           String
+  contact_id      String     @db.Uuid
+  /// FK to pipelines table (not modelled here)
+  pipeline_id     String?    @db.Uuid
+  /// FK to pipeline_stages table (not modelled here)
+  stage_id        String?    @db.Uuid
+  value           Decimal?
+  currency        String?
+  expected_close  DateTime?
+  actual_close    DateTime?
+  probability     Int?
+  status          DealStatus @default(open)
+  lost_reason     String?
+  source          String?
+  assigned_to     String?    @db.Uuid
+  custom_fields   Json?
+  is_example_data Boolean    @default(false)
+  created_by      String?    @db.Uuid
+  created_at      DateTime   @default(now())
+  updated_at      DateTime   @updatedAt
+
+  // Relations
+  organization Org      @relation(fields: [organization_id], references: [id])
+  contact      Contact  @relation(fields: [contact_id], references: [id])
+  assignee     User?    @relation("DealAssignedTo", fields: [assigned_to], references: [id])
+  creator      User?    @relation("DealCreatedBy", fields: [created_by], references: [id])
+  tasks        Task[]
+}
+
+model Task {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String       @db.Uuid
+  title           String
+  description     String?
+  contact_id      String?      @db.Uuid
+  deal_id         String?      @db.Uuid
+  assigned_to     String       @db.Uuid
+  created_by      String?      @db.Uuid
+  due_date        DateTime?
+  priority        TaskPriority @default(medium)
+  status          TaskStatus   @default(pending)
+  is_recurring    Boolean      @default(false)
+  recurrence_rule String?
+  reminder_at     DateTime?
+  completed_at    DateTime?
+  completed_by    String?      @db.Uuid
+  is_example_data Boolean      @default(false)
+  created_at      DateTime     @default(now())
+  updated_at      DateTime     @updatedAt
+
+  // Relations
+  organization Org      @relation(fields: [organization_id], references: [id])
+  contact      Contact? @relation(fields: [contact_id], references: [id])
+  deal         Deal?    @relation(fields: [deal_id], references: [id])
+  assignee     User     @relation("TaskAssignedTo", fields: [assigned_to], references: [id])
+  creator      User?    @relation("TaskCreatedBy", fields: [created_by], references: [id])
+  completer    User?    @relation("TaskCompletedBy", fields: [completed_by], references: [id])
+}
+
+model Message {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String           @db.Uuid
+  contact_id      String           @db.Uuid
+  user_id         String?          @db.Uuid
+  direction       MessageDirection
+  channel         MessageChannel
+  body            String
+  status          MessageStatus    @default(pending)
+  error_message   String?
+  twilio_sid      String?
+  read_at         DateTime?
+  delivered_at    DateTime?
+  created_at      DateTime         @default(now())
+
+  // Relations
+  organization Org      @relation(fields: [organization_id], references: [id])
+  contact      Contact  @relation(fields: [contact_id], references: [id])
+  user         User?    @relation(fields: [user_id], references: [id])
+}
