@@ -78,6 +78,45 @@ This is a class of bug worth watching for: spreading objects with the same key i
 
 ---
 
+## Sprint 2 — Task S2-2: Messages Controller
+
+### What Was Built
+
+`backend/api/controllers/messages.ts` — the messages controller implementing an append-only interaction log.
+
+Eight handlers:
+
+| Handler | Route | Notes |
+|---------|-------|-------|
+| `list` | GET /api/v1/messages | Filterable by contact, channel, direction; paginated desc |
+| `getConversation` | GET /api/v1/messages/conversation/:contact_id | Chronological asc; contact ownership verified |
+| `sendSms` | POST /api/v1/messages/sms | Outbound SMS; status=pending (Twilio picks up async) |
+| `sendInApp` | POST /api/v1/messages/in-app | Outbound in-app; status=sent |
+| `logCall` | POST /api/v1/messages/call | Call log; channel=in_app; occurred_at→created_at |
+| `markRead` | POST /api/v1/messages/:id/read | Sets status=read + read_at; never mutates body |
+| `twilioInboundWebhook` | POST /api/v1/messages/webhooks/twilio/inbound | MVP stub; no HMAC; always 200 |
+| `twilioStatusWebhook` | POST /api/v1/messages/webhooks/twilio/status | Updates status/delivered_at/error_message; always 200 |
+
+### Key Design Decisions
+
+**No `call` channel in schema.** `MessageChannel` enum is `sms | in_app | email`. Call logs are stored with `channel: in_app`. A future migration can add a `call` channel value when Twilio voice integration lands.
+
+**occurred_at → created_at.** The Message model has no separate "occurred at" timestamp. When `occurred_at` is supplied to `logCall`, it is passed as `created_at` in the Prisma create, backdating the log entry to when the call actually happened.
+
+**Contact ownership before create.** Every create handler first runs `db.contact.findFirst({ where: { id, organization_id } })`. Org mismatch returns 404 — prevents writing messages to contacts belonging to another org.
+
+**Twilio webhook stubs.** Inbound and status webhooks are functional but skip HMAC signature validation (Sprint 3). Both are wrapped in try/catch and always return HTTP 200 — Twilio retries on non-200.
+
+### Defect Found in Audit
+
+`logCall` body could be `''` when `notes: ''` (Zod has no `.min(1)`) and `duration_seconds` absent — `??` only falls back on `null`/`undefined`, not empty string. Fixed:
+
+```ts
+const callBody = (durationPrefix + (notes?.trim() ?? '')).trim() || 'Call logged';
+```
+
+---
+
 ## First Git Commit
 
 Today is also the project's first commit. The repo was initialized, `.gitignore` added (excludes `.env`, `node_modules`, build artifacts), and everything from Sprint 0 through Sprint 2 tasks controller was committed and pushed.
@@ -89,6 +128,7 @@ Today is also the project's first commit. The repo was initialized, `.gitignore`
 | File | Type | Notes |
 |------|------|-------|
 | `backend/api/controllers/tasks.ts` | New | 9 handlers, 289 lines |
+| `backend/api/controllers/messages.ts` | New | 8 handlers, 297 lines |
 | `.gitignore` | New | Node.js + Expo + Prisma patterns |
 
 ## Files Updated This Session
@@ -102,14 +142,13 @@ Today is also the project's first commit. The repo was initialized, `.gitignore`
 
 ## What's Next (Sprint 2 Continuation)
 
-1. `npm run backend:dev` — verify tasks controller compiles
-2. Manual smoke test: POST /api/v1/tasks → GET /api/v1/tasks → POST /api/v1/tasks/:id/complete
+1. `npm run backend:dev` — verify tasks + messages controllers compile
+2. Manual smoke test: POST /api/v1/messages/sms, GET /api/v1/messages/conversation/:id
 3. Deals remaining: getById, update, archive, moveStage, markWon, markLost
-4. Messages controller (full)
 
 ---
 
 *Previous: [[Day 3]] — Phase 1 + Sprint 1 complete*
-*Next: [[Day 5]] — Sprint 2 continuation: deals + messages*
+*Next: [[Day 5]] — Sprint 2 continuation: deals remaining endpoints*
 
 See [[Sprint Log]] for the full task-by-task log.

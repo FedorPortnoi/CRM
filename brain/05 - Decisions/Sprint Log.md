@@ -317,25 +317,52 @@ Live log of every task in every session. Updated before, during, and after each 
 
 ---
 
+## Task S2-2 — Messages controller
+
+**Started:** 2026-05-03
+**File:** `backend/api/controllers/messages.ts` (new)
+**Goal:** Implement full messages controller — append-only interaction log scoped to contacts. GET / (list), GET /conversation/:contact_id, POST /sms, POST /in-app, POST /call, POST /:id/read, POST /webhooks/twilio/inbound (stub), POST /webhooks/twilio/status (stub)
+
+**Codex Prompt:** 5-block format. 8 handlers, MessageDirection/MessageChannel/MessageStatus enums, contact ownership verified before every create, Twilio stubs with try/catch always returning 200. Key design decisions: no `call` enum value → channel: in_app for calls; occurred_at maps to created_at.
+
+**Audit:**
+- [x] Zero `any` — all handlers typed with FastifyRequest<{...}> generics
+- [x] MessagesController named export with exactly 8 keys: list, getConversation, sendSms, sendInApp, logCall, markRead, twilioInboundWebhook, twilioStatusWebhook
+- [x] Every non-webhook Prisma query includes organization_id: request.user.org_id
+- [x] No db.message.delete anywhere — append-only enforced
+- [x] markRead only updates status + read_at; never body
+- [x] twilioStatusWebhook only updates status/delivered_at/error_message; never body
+- [x] logCall uses channel: MessageChannel.in_app; occurred_at maps to created_at
+- [x] list runs findMany + count via Promise.all
+- [x] Contact ownership verified in sendSms, sendInApp, logCall, getConversation
+- [x] Twilio handlers wrapped in try/catch; always return 200
+
+**Defect found (audit):** logCall body empty string when notes: '' (empty, not undefined) and no duration_seconds — `??` does not fall back on empty strings. Fixed: `(durationPrefix + (notes?.trim() ?? '')).trim() || 'Call logged'`
+
+**Fix dispatched:** Applied directly (Codex sandbox read-only).
+**Approved:** 2026-05-03
+
+---
+
 ## Session 4 — Handoff to Session 5
 
-**Sprint 2 status:** Tasks controller complete (S2-1). First git commit + push.
+**Sprint 2 status:** Tasks controller (S2-1) + Messages controller (S2-2) complete.
 
 **Files written this session:**
-- `backend/api/controllers/tasks.ts` — new (9 handlers: list, create, getById, update, complete, startProgress, cancel, dueToday, overdue)
-- `.gitignore` — new (Node.js + Expo + Prisma)
-- `brain/00 - Home.md` — updated (Sprint 2 row, Day 4 journal, next priorities)
+- `backend/api/controllers/tasks.ts` — new (9 handlers)
+- `backend/api/controllers/messages.ts` — new (8 handlers: list, getConversation, sendSms, sendInApp, logCall, markRead, twilioInboundWebhook, twilioStatusWebhook)
+- `.gitignore` — new
+- `brain/00 - Home.md` — updated
 - `brain/05 - Decisions/Sprint Log.md` — Session 4 logged
-- `brain/07 - Journal/Day 4.md` — new
+- `brain/07 - Journal/Day 4.md` — new + updated
 
 **Stub methods remaining (Sprint 2+):**
 - Deals: getById, update, archive, moveStage, markWon, markLost
-- Messages: full controller
 - Contacts: getActivity, getDeals, getTasks, getMessages, importCsv, etc.
 
 **Next session priorities:**
-1. `npm run backend:dev` — verify tasks controller compiles without TypeScript errors
-2. Manual API test: POST /api/v1/tasks, GET /api/v1/tasks, POST /api/v1/tasks/:id/complete
-3. Sprint 2 continuation — deals remaining endpoints (getById, update, archive, moveStage, markWon, markLost), then messages controller
+1. `npm run backend:dev` — verify tasks + messages controllers compile, no TS errors
+2. Manual API test: POST /api/v1/messages/sms, GET /api/v1/messages/conversation/:id, POST /api/v1/messages/call
+3. Sprint 2 continuation — deals remaining endpoints (getById, update, archive, moveStage, markWon, markLost)
 
 ---

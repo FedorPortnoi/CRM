@@ -26,7 +26,8 @@ created: 2026-05-01
 | Phase 1 — Environment | ✅ Complete | Supabase project live, .env filled, migration applied, Prisma Client generated |
 | Sprint 1 — Core Controllers | ✅ Complete | Auth (register + login), Contacts (CRUD + archive), Deals (list + create) |
 | Sprint 2 — Tasks Controller | ✅ Complete | Tasks controller: list, create, getById, update, complete, start, cancel, dueToday, overdue |
-| MVP Development | 🔄 In Progress | Sprint 2 continues — deals remaining endpoints + messages controller next |
+| Sprint 2 — Messages Controller | ✅ Complete | Messages controller: list, getConversation, sendSms, sendInApp, logCall, markRead + Twilio stubs |
+| MVP Development | 🔄 In Progress | Sprint 2 continues — deals remaining endpoints next |
 
 ---
 
@@ -126,8 +127,8 @@ created: 2026-05-01
 
 ## Next Session Priorities
 
-- [ ] `npm run backend:dev` — verify tasks controller compiles, no TS errors
-- [ ] Manual smoke test: POST /api/v1/tasks, GET /api/v1/tasks, POST /api/v1/tasks/:id/complete
-- [ ] Sprint 2 continuation — deals remaining (getById, update, archive, moveStage, markWon, markLost), then messages controller
+- [ ] `npm run backend:dev` — verify tasks + messages controllers compile, no TS errors
+- [ ] Manual smoke test: POST /api/v1/messages/sms, GET /api/v1/messages/conversation/:id, POST /api/v1/messages/call
+- [ ] Sprint 2 continuation — deals remaining (getById, update, archive, moveStage, markWon, markLost)
 
 *Last updated: 2026-05-03*
