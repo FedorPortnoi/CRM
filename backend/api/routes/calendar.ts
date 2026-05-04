@@ -33,8 +33,11 @@ const EventFilterSchema = z.object({
 
 const AvailabilitySchema = z.object({
   date: z.string().date(),
-  user_ids: z.array(z.string().uuid()).min(1).max(20),
-  duration_minutes: z.number().int().min(15).max(480).default(60),
+  user_ids: z.preprocess(
+    (v) => (typeof v === 'string' ? [v] : v),
+    z.array(z.string().uuid()).min(1).max(20),
+  ),
+  duration_minutes: z.coerce.number().int().min(15).max(480).default(60),
 });
 
 const PostMeetingNotesSchema = z.object({

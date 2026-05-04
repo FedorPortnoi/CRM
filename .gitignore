@@ -35,3 +35,7 @@ Thumbs.db
 
 # Turborepo
 .turbo/
+
+# Playwright
+tests/smoke/.auth.json
+test-results/
