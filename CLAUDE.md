@@ -16,7 +16,7 @@ crm/
 ├── src/                 # React Native / Expo app
 │   └── types/
 │       └── fastify.d.ts # JWT payload type augmentation
-├── brain/               # Obsidian knowledge base (architecture, decisions, logs)
+├── (brain moved)        # Obsidian knowledge base → C:\Users\fedor\Obsidian\Brain\Projects\CRM\
 ├── docs/                # Feature specs, architecture docs
 └── package.json
 ```
@@ -113,7 +113,7 @@ All API responses use this shape:
 
 ## Key Architectural Decisions
 
-See `brain/05 - Decisions/Decision Log.md` for full reasoning. Short version:
+See `C:\Users\fedor\Obsidian\Brain\Projects\CRM\05 - Decisions\Decision Log.md` for full reasoning. Short version:
 
 | Decision | Choice |
 |----------|--------|
@@ -143,10 +143,10 @@ TWILIO_PHONE_NUMBER=
 
 ## Brain / Knowledge Base
 
-The `brain/` directory is an Obsidian vault. Key notes:
+Obsidian vault is at `C:\Users\fedor\Obsidian\Brain\Projects\CRM\`. Key notes:
 
-- `brain/00 - Home.md` — project status dashboard
-- `brain/04 - Architecture/` — system overview, data models, API design, tech stack
-- `brain/05 - Decisions/Decision Log.md` — all architectural decisions with reasoning
-- `brain/05 - Decisions/Sprint Log.md` — live task log for every session
-- `brain/05 - Decisions/Open Questions.md` — unresolved questions
+- `00 - Home.md` — project status dashboard
+- `04 - Architecture/` — system overview, data models, API design, tech stack
+- `05 - Decisions/Decision Log.md` — all architectural decisions with reasoning
+- `05 - Decisions/Sprint Log.md` — live task log for every session
+- `05 - Decisions/Open Questions.md` — unresolved questions
