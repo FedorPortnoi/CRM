@@ -81,6 +81,12 @@ enum MessageStatus {
   failed
 }
 
+enum CalendarEventStatus {
+  scheduled
+  completed
+  cancelled
+}
+
 // ---------------------------------------------------------------------------
 // Models
 // ---------------------------------------------------------------------------
@@ -113,8 +119,11 @@ model User {
   createdDeals     Deal[]    @relation("DealCreatedBy")
   assignedTasks    Task[]    @relation("TaskAssignedTo")
   createdTasks     Task[]    @relation("TaskCreatedBy")
-  completedTasks   Task[]    @relation("TaskCompletedBy")
-  messages         Message[]
+  completedTasks        Task[]              @relation("TaskCompletedBy")
+  messages              Message[]
+  calendarEventsCreated CalendarEvent[]     @relation("CalendarEventCreatedBy")
+  calendarSyncs         UserCalendarSync[]
+  createdPipelines      Pipeline[]          @relation("PipelineCreatedBy")
 }
 
 model Org {
@@ -133,8 +142,10 @@ model Org {
   users    User[]    @relation("UserOrg")
   contacts Contact[]
   deals    Deal[]
-  tasks    Task[]
-  messages Message[]
+  tasks          Task[]
+  messages       Message[]
+  calendarEvents CalendarEvent[]
+  pipelines      Pipeline[]
 
   @@map("organizations")
 }
@@ -167,9 +178,10 @@ model Contact {
   organization Org      @relation(fields: [organization_id], references: [id])
   assignee     User?    @relation("ContactAssignedTo", fields: [assigned_to], references: [id])
   creator      User?    @relation("ContactCreatedBy", fields: [created_by], references: [id])
-  deals        Deal[]
-  tasks        Task[]
-  messages     Message[]
+  deals          Deal[]
+  tasks          Task[]
+  messages       Message[]
+  calendarEvents CalendarEvent[]
 }
 
 model Deal {
@@ -177,9 +189,7 @@ model Deal {
   organization_id String     @db.Uuid
   title           String
   contact_id      String     @db.Uuid
-  /// FK to pipelines table (not modelled here)
   pipeline_id     String?    @db.Uuid
-  /// FK to pipeline_stages table (not modelled here)
   stage_id        String?    @db.Uuid
   value           Decimal?
   currency        String?
@@ -199,9 +209,12 @@ model Deal {
   // Relations
   organization Org      @relation(fields: [organization_id], references: [id])
   contact      Contact  @relation(fields: [contact_id], references: [id])
-  assignee     User?    @relation("DealAssignedTo", fields: [assigned_to], references: [id])
-  creator      User?    @relation("DealCreatedBy", fields: [created_by], references: [id])
-  tasks        Task[]
+  assignee       User?           @relation("DealAssignedTo", fields: [assigned_to], references: [id])
+  creator        User?           @relation("DealCreatedBy", fields: [created_by], references: [id])
+  pipeline       Pipeline?       @relation(fields: [pipeline_id], references: [id])
+  stage          PipelineStage?  @relation(fields: [stage_id], references: [id])
+  tasks          Task[]
+  calendarEvents CalendarEvent[]
 }
 
 model Task {
@@ -253,4 +266,88 @@ model Message {
   organization Org      @relation(fields: [organization_id], references: [id])
   contact      Contact  @relation(fields: [contact_id], references: [id])
   user         User?    @relation(fields: [user_id], references: [id])
+}
+
+model CalendarEvent {
+  id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id       String              @db.Uuid
+  title                 String
+  description           String?
+  contact_id            String?             @db.Uuid
+  deal_id               String?             @db.Uuid
+  created_by            String?             @db.Uuid
+  attendee_ids          Json?
+  start_time            DateTime
+  end_time              DateTime
+  location              String?
+  meeting_url           String?
+  reminder_minutes      Int                 @default(30)
+  status                CalendarEventStatus @default(scheduled)
+  notes                 String?
+  completed_at          DateTime?
+  post_meeting_prompted Boolean             @default(false)
+  google_event_id       String?
+  google_calendar_id    String?
+  is_example_data       Boolean             @default(false)
+  created_at            DateTime            @default(now())
+  updated_at            DateTime            @updatedAt
+
+  // Relations
+  organization Org      @relation(fields: [organization_id], references: [id])
+  contact      Contact? @relation(fields: [contact_id], references: [id])
+  deal         Deal?    @relation(fields: [deal_id], references: [id])
+  creator      User?    @relation("CalendarEventCreatedBy", fields: [created_by], references: [id])
+}
+
+model UserCalendarSync {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id             String    @db.Uuid
+  provider            String
+  access_token        String
+  refresh_token       String?
+  expires_at          DateTime?
+  google_calendar_id  String?
+  webhook_channel_id  String?
+  webhook_resource_id String?
+  webhook_expiry      DateTime?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  // Relations
+  user User @relation(fields: [user_id], references: [id])
+
+  @@unique([user_id, provider])
+}
+
+model Pipeline {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String   @db.Uuid
+  name            String
+  description     String?
+  is_default      Boolean  @default(false)
+  created_by      String?  @db.Uuid
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  // Relations
+  organization Org             @relation(fields: [organization_id], references: [id])
+  creator      User?           @relation("PipelineCreatedBy", fields: [created_by], references: [id])
+  stages       PipelineStage[]
+  deals        Deal[]
+}
+
+model PipelineStage {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pipeline_id   String   @db.Uuid
+  name          String
+  position      Int
+  color         String?
+  is_won_stage  Boolean  @default(false)
+  is_lost_stage Boolean  @default(false)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  // Relations
+  pipeline Pipeline @relation(fields: [pipeline_id], references: [id])
+  deals    Deal[]
 }

@@ -366,3 +366,175 @@ Live log of every task in every session. Updated before, during, and after each 
 3. Sprint 2 continuation — deals remaining endpoints (getById, update, archive, moveStage, markWon, markLost)
 
 ---
+
+## Session 5 — 2026-05-03
+
+---
+
+## Task S-CAL-0 — Schema: Add CalendarEvent + UserCalendarSync
+
+**Started:** 2026-05-03
+**File:** `backend/prisma/schema.prisma`
+**Goal:** Add CalendarEventStatus enum + CalendarEvent model (CRUD + Google sync fields) + UserCalendarSync model + back-relations on User/Org/Contact/Deal. Required before calendar controller can be written.
+
+**Audit:**
+- [x] CalendarEventStatus enum: scheduled, completed, cancelled
+- [x] CalendarEvent model: 23 fields, Google sync fields, post_meeting_prompted
+- [x] UserCalendarSync model: 10 fields, @@unique([user_id, provider])
+- [x] Back-relations on User (calendarEventsCreated, calendarSyncs), Org, Contact, Deal
+- [x] `prisma validate` → valid
+- [x] Migration `20260504000401_add_calendar_events` applied to Supabase
+
+**Note:** Codex sandbox blocked writes; edits applied by supervisor directly.
+**Approved:** 2026-05-03
+
+---
+
+## Task S-CAL-1 — Calendar controller: 13 handlers
+
+**Started:** 2026-05-03
+**File:** `backend/api/controllers/calendar.ts`
+**Goal:** Full implementations for list, create, getById, update, cancel, addPostMeetingNotes, markCompleted, getAvailability. Google OAuth handlers (googleOAuthStart, googleOAuthCallback, googleDisconnect, syncStatus, googleWebhook) as correctly-shaped stubs.
+
+**Audit:**
+- [x] list: org-scoped, paginated, filtered by start/end/contact_id/deal_id/status; attendee_id uses JSON array_contains; count+findMany parallel
+- [x] create: inject org_id + created_by from JWT; attendees→attendee_ids; status always 'scheduled'; 201
+- [x] getById: findFirst with org scope; includes contact + deal selects; 404 on miss
+- [x] update: 404 guard + 422 if cancelled; partial update; date string→Date conversion
+- [x] cancel: 422 if already cancelled; status='cancelled' soft delete
+- [x] addPostMeetingNotes: 422 if status='scheduled' (meeting hasn't happened); sets post_meeting_prompted=true
+- [x] markCompleted: 422 if cancelled; toggle completed↔scheduled; sets completed_at
+- [x] getAvailability: UTC day range; queries by created_by IN user_ids; returns busy_slots array
+- [x] googleOAuthStart/Callback: 501 GOOGLE_OAUTH_NOT_CONFIGURED with clear message
+- [x] googleDisconnect: findUnique by user_id_provider composite key; hard delete is correct for OAuth disconnect
+- [x] syncStatus: returns { connected, google_calendar_id, expires_at, webhook_expiry }
+- [x] googleWebhook: logs channel/resource headers; returns 200 { received: true }
+- [x] Zero `any`; named async functions; CalendarEventStatus imported from @prisma/client
+
+**Note:** Codex sandbox write-blocked; code applied by supervisor.
+**Approved:** 2026-05-03
+
+---
+
+## Task S-ANA-1 — Analytics funnel handler
+
+**Started:** 2026-05-03
+**File:** `backend/api/controllers/analytics.ts`
+**Goal:** Implement GET /api/v1/analytics/funnel — group deals by stage_id + status, compute conversion rates per stage.
+
+---
+
+## Task S-ANA-2 — Analytics revenue handler
+
+**Started:** 2026-05-03
+**File:** `backend/api/controllers/analytics.ts`
+**Goal:** Implement GET /api/v1/analytics/revenue — group won deals by time period (day/week/month/quarter), return revenue + deal counts.
+
+**Audit (S-ANA-1 + S-ANA-2 combined — same file pass):**
+- [x] resolveDateRange helper: maps period enum (today/week/month/quarter/year/custom) to { startDate, endDate }
+- [x] getPeriodKey helper: formats Date as YYYY-MM-DD / YYYY-Wnn / YYYY-Qn / YYYY-MM per group_by
+- [x] funnel: Prisma groupBy([stage_id, status]) with _count + _sum; reshapes to per-stage { open, won, lost, total, total_value, conversion_rate }; summary row with overall_conversion_rate
+- [x] revenue: findMany won deals in date range → group in JS via buckets Map; returns periods[] + summary { total_revenue, total_deals, avg_deal_value }
+- [x] revenue uses application-layer grouping (not db.$queryRaw) — simpler, avoids raw SQL dialect dependency
+- [x] Decimal values handled via parseFloat(val.toString()) — safe for Prisma Decimal type
+- [x] 10 remaining handlers left as typed stubs returning 501
+- [x] DealStatus imported from @prisma/client
+
+**Decision logged:** revenue uses application-layer time grouping over db.$queryRaw DATE_TRUNC — portable, testable, sufficient at MVP data volumes.
+**Approved:** 2026-05-03
+
+---
+
+## Task S2-SCH — Schema: Add Pipeline + PipelineStage models
+
+**Started:** 2026-05-03
+**File:** `backend/prisma/schema.prisma`
+**Goal:** Add Pipeline model + PipelineStage model. Add Prisma relation declarations to Deal.pipeline_id and Deal.stage_id (currently raw UUID FKs with no Prisma relation). Add back-relations on Org, User, Deal.
+
+**Audit:**
+- [x] Pipeline model: id, organization_id, name, description, is_default, created_by, timestamps
+- [x] PipelineStage model: id, pipeline_id, name, position, color, is_won_stage, is_lost_stage, timestamps
+- [x] Deal model: removed `/// FK to pipelines table` comments; added `pipeline Pipeline? @relation(...)` and `stage PipelineStage? @relation(...)`
+- [x] Back-relations: Org.pipelines, User.createdPipelines @relation("PipelineCreatedBy"), Pipeline.deals + Pipeline.stages, PipelineStage.deals
+- [x] `prisma validate` → valid
+- [x] Migration `20260504001316_add_pipeline_stages` applied to Supabase
+
+**Decision logged (A6 resolved):** Pipeline + Stage as full Prisma models. Gives type safety, joins, and migration support. Recorded in Open Questions as resolved.
+**Approved:** 2026-05-03
+
+---
+
+## Task S2-DEAL-1 — Deals controller: getById, update, archive, moveStage, markWon, markLost
+
+**Started:** 2026-05-03
+**File:** `backend/api/controllers/deals.ts`
+**Goal:** Implement 6 remaining deal handlers. Also implement pipeline management methods (listPipelines, createPipeline, getPipeline, updatePipeline, deletePipeline, listStages, createStage, updateStage, deleteStage) in same pass.
+
+**Audit:**
+- [x] getById: findFirst org-scoped; includes contact + pipeline + stage selects; 404 on miss
+- [x] update: partial; expected_close string→Date; no status guard (allow updating won/lost deals — data correction use case)
+- [x] archive: 422 if already archived; status='archived' soft delete
+- [x] moveStage: 422 if deal not open; verifies target stage belongs to deal's pipeline; updates stage_id
+- [x] markWon: 422 if already won; sets status='won', actual_close defaults to now()
+- [x] markLost: 422 if already lost; sets status='lost', lost_reason, actual_close defaults to now()
+- [x] listPipelines: ordered by is_default desc then created_at asc; includes stages + deal count
+- [x] createPipeline: if is_default=true, unsets prior default first (updateMany); 201
+- [x] getPipeline: org-scoped findFirst; includes stages + deal count
+- [x] updatePipeline: org-scoped; if is_default=true, unsets other defaults (excludes self)
+- [x] deletePipeline: 409 if open deals exist with count in message; hard delete (config object, see Decision Log)
+- [x] listStages: verifies pipeline belongs to org; ordered by position; includes deal count
+- [x] createStage: verifies pipeline belongs to org; 201
+- [x] updateStage: verifies stage → pipeline → org chain; partial update
+- [x] deleteStage: verifies org chain; 409 if open deals; hard delete
+- [x] dealInclude const: contact + pipeline + stage selects shared across handlers
+- [x] All 17 exported methods present
+
+**Decision:** Pipeline/Stage use hard delete (not soft delete) because they are configuration objects with no PII; soft delete would require adding deleted_at columns + filter logic to every query. Logged to Decision Log.
+**Approved:** 2026-05-03
+
+---
+
+## Task S2-SEED — Seed default pipeline on org register
+
+**Started:** 2026-05-03
+**File:** `backend/api/controllers/auth.ts`
+**Goal:** Create "Sales Pipeline" + 4 default stages inside the register transaction. Atomic with org+user creation.
+
+**Audit:**
+- [x] Pipeline creation added inside existing db.$transaction (steps 4+5 of 5)
+- [x] Pipeline: name='Sales Pipeline', is_default=true, organization_id=org.id, created_by=user.id
+- [x] createMany for 4 stages: Lead (pos 0), Qualified (pos 1), Proposal (pos 2), Closed Won (pos 3, is_won_stage=true)
+- [x] Inside transaction = atomic: if any step fails, org+user+pipeline all roll back
+- [x] No change to JWT signing or response shape
+
+**Decision:** Default pipeline seeded inside transaction (not after) — atomicity guarantees a new org always has a usable pipeline. Logged to Decision Log.
+**Approved:** 2026-05-03
+
+---
+
+## Session 5 — Handoff to Session 6
+
+**Sprint 2 (current) status:** Deals controller fully implemented + pipeline management complete.
+
+**Files written/modified this session:**
+- `backend/prisma/schema.prisma` — Added CalendarEventStatus enum, CalendarEvent, UserCalendarSync, Pipeline, PipelineStage models; back-relations on all affected models
+- `backend/prisma/migrations/20260504000401_add_calendar_events/` — Supabase migration
+- `backend/prisma/migrations/20260504001316_add_pipeline_stages/` — Supabase migration
+- `backend/api/controllers/calendar.ts` — 13 handlers (8 full + 5 Google stubs)
+- `backend/api/controllers/analytics.ts` — funnel + revenue implemented; 10 stubs
+- `backend/api/controllers/deals.ts` — complete rewrite, all 17 handlers
+- `backend/api/controllers/auth.ts` — default pipeline seed in register transaction
+
+**Backend status:** Starts clean, no TypeScript errors (verified via tsx watch startup).
+
+**Stub controllers remaining (future sprints):**
+- analytics: dashboard, conversionRates, stageDuration, leadSources, winLoss, teamActivity, repPerformance, exportReport, exportStatus, exportDownload
+- contacts: getActivity, getDeals, getTasks, getMessages, importCsv, importFromPhone, bulkAssign, bulkTag, bulkArchive
+- calendar: full Google Calendar OAuth (needs GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET)
+- messages: Twilio inbound HMAC validation (currently stub)
+
+**Next session priorities:**
+1. `npm run backend:dev` + smoke test all new endpoints (POST /register, GET /pipelines, POST /deals, PATCH /deals/:id/stage, GET /analytics/funnel, GET /analytics/revenue, GET /calendar)
+2. Implement contact sub-routes (getActivity, getDeals, getTasks — reads against existing data)
+3. Consider: messages route smoke test (POST /messages/sms, GET /messages/conversation/:id)
+

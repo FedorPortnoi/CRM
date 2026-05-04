@@ -27,7 +27,11 @@ created: 2026-05-01
 | Sprint 1 — Core Controllers | ✅ Complete | Auth (register + login), Contacts (CRUD + archive), Deals (list + create) |
 | Sprint 2 — Tasks Controller | ✅ Complete | Tasks controller: list, create, getById, update, complete, start, cancel, dueToday, overdue |
 | Sprint 2 — Messages Controller | ✅ Complete | Messages controller: list, getConversation, sendSms, sendInApp, logCall, markRead + Twilio stubs |
-| MVP Development | 🔄 In Progress | Sprint 2 continues — deals remaining endpoints next |
+| Sprint 2 — Calendar Controller | ✅ Complete | Calendar controller: 8 full handlers + 5 Google sync stubs; CalendarEvent + UserCalendarSync schema |
+| Sprint 2 — Analytics (funnel + revenue) | ✅ Complete | funnel: groupBy stage+status; revenue: application-layer time grouping |
+| Sprint 2 — Deals controller (full) | ✅ Complete | All 17 handlers: getById, update, archive, moveStage, markWon, markLost + full pipeline/stage CRUD |
+| Sprint 2 — Pipeline + Stage schema | ✅ Complete | Pipeline + PipelineStage models; migration applied; default pipeline seeded on register |
+| MVP Development | 🔄 In Progress | Sprint 2 wrapping up — contact sub-routes next |
 
 ---
 
@@ -112,6 +116,7 @@ created: 2026-05-01
 | 2026-05-02 | [[Day 2]] — Sprint 0 complete: Fastify v5 server live, 6 controller stubs, Prisma schema, 5 open questions resolved |
 | 2026-05-02 | [[Day 3]] — Phase 1 + Sprint 1 complete: Supabase live, migration applied, auth + contacts + deals controllers written |
 | 2026-05-03 | [[Day 4]] — Sprint 2 start: tasks controller (9 handlers) implemented, audited, and committed |
+| 2026-05-03 | [[Day 5]] — Sprint 2 bulk: calendar (13), analytics (funnel+revenue), deals (17), pipeline schema + migration, register seed |
 
 ---
 
@@ -127,8 +132,9 @@ created: 2026-05-01
 
 ## Next Session Priorities
 
-- [ ] `npm run backend:dev` — verify tasks + messages controllers compile, no TS errors
-- [ ] Manual smoke test: POST /api/v1/messages/sms, GET /api/v1/messages/conversation/:id, POST /api/v1/messages/call
-- [ ] Sprint 2 continuation — deals remaining (getById, update, archive, moveStage, markWon, markLost)
+- [ ] Smoke test new endpoints: POST /api/v1/auth/register (verify pipeline seeded), GET /api/v1/deals/pipelines, POST /api/v1/deals, PATCH /api/v1/deals/:id/stage
+- [ ] Smoke test: GET /api/v1/analytics/funnel, GET /api/v1/analytics/revenue, GET /api/v1/calendar
+- [ ] Implement contact sub-routes: GET /contacts/:id/activity, GET /contacts/:id/deals, GET /contacts/:id/tasks, GET /contacts/:id/messages
+- [ ] Implement remaining analytics handlers (leadSources, winLoss, teamActivity, repPerformance)
 
 *Last updated: 2026-05-03*

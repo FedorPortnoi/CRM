@@ -42,6 +42,25 @@ export const AuthController = {
           data: { owner_id: user.id },
         });
 
+        // Seed default Sales Pipeline with 4 stages
+        const pipeline = await tx.pipeline.create({
+          data: {
+            name: 'Sales Pipeline',
+            is_default: true,
+            organization_id: org.id,
+            created_by: user.id,
+          },
+        });
+
+        await tx.pipelineStage.createMany({
+          data: [
+            { pipeline_id: pipeline.id, name: 'Lead',       position: 0 },
+            { pipeline_id: pipeline.id, name: 'Qualified',  position: 1 },
+            { pipeline_id: pipeline.id, name: 'Proposal',   position: 2 },
+            { pipeline_id: pipeline.id, name: 'Closed Won', position: 3, is_won_stage: true },
+          ],
+        });
+
         return { org, user };
       });
 
