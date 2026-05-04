@@ -31,7 +31,8 @@ created: 2026-05-01
 | Sprint 2 — Analytics (funnel + revenue) | ✅ Complete | funnel: groupBy stage+status; revenue: application-layer time grouping |
 | Sprint 2 — Deals controller (full) | ✅ Complete | All 17 handlers: getById, update, archive, moveStage, markWon, markLost + full pipeline/stage CRUD |
 | Sprint 2 — Pipeline + Stage schema | ✅ Complete | Pipeline + PipelineStage models; migration applied; default pipeline seeded on register |
-| MVP Development | 🔄 In Progress | Sprint 2 wrapping up — contact sub-routes next |
+| Sprint 2 — Smoke Tests | ✅ Complete | 41 Playwright API tests across 9 suites, all green; commit 39c2209 |
+| MVP Development | 🔄 In Progress | Sprint 2 wrapping up — contact sub-routes + remaining analytics next |
 
 ---
 
@@ -117,6 +118,7 @@ created: 2026-05-01
 | 2026-05-02 | [[Day 3]] — Phase 1 + Sprint 1 complete: Supabase live, migration applied, auth + contacts + deals controllers written |
 | 2026-05-03 | [[Day 4]] — Sprint 2 start: tasks controller (9 handlers) implemented, audited, and committed |
 | 2026-05-03 | [[Day 5]] — Sprint 2 bulk: calendar (13), analytics (funnel+revenue), deals (17), pipeline schema + migration, register seed |
+| 2026-05-04 | [[Day 6]] — Sprint 2 smoke tests: 41 Playwright API tests, 9 suites, all green; 8 route mismatches found and fixed |
 
 ---
 
@@ -132,9 +134,8 @@ created: 2026-05-01
 
 ## Next Session Priorities
 
-- [ ] Smoke test new endpoints: POST /api/v1/auth/register (verify pipeline seeded), GET /api/v1/deals/pipelines, POST /api/v1/deals, PATCH /api/v1/deals/:id/stage
-- [ ] Smoke test: GET /api/v1/analytics/funnel, GET /api/v1/analytics/revenue, GET /api/v1/calendar
-- [ ] Implement contact sub-routes: GET /contacts/:id/activity, GET /contacts/:id/deals, GET /contacts/:id/tasks, GET /contacts/:id/messages
-- [ ] Implement remaining analytics handlers (leadSources, winLoss, teamActivity, repPerformance)
+- [ ] Implement contact sub-routes: GET /contacts/:id/deals, /tasks, /messages, /activity
+- [ ] Implement remaining analytics: leadSources, winLoss, teamActivity, repPerformance
+- [ ] Add smoke tests for new handlers (extend existing suites)
 
-*Last updated: 2026-05-03*
+*Last updated: 2026-05-04*

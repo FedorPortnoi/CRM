@@ -538,3 +538,65 @@ Live log of every task in every session. Updated before, during, and after each 
 2. Implement contact sub-routes (getActivity, getDeals, getTasks — reads against existing data)
 3. Consider: messages route smoke test (POST /messages/sms, GET /messages/conversation/:id)
 
+---
+
+## Session 6 — 2026-05-04
+
+**Goal:** Playwright smoke testing — no feature code.
+
+### S6-SETUP — Playwright install + config + 9 spec stubs
+
+**Status:** ✅ Complete
+
+- Installed `@playwright/test` as dev dependency
+- Created `playwright.config.ts` (baseURL: localhost:3000, timeout: 10s, workers: 1, globalSetup)
+- Created `tests/smoke/helpers/global-setup.ts` — registers fresh user per run, saves JWT to `.auth.json`
+- Created `tests/smoke/helpers/auth.ts` — `getAuth()` reads `.auth.json`
+- Created 9 spec files: 00-health through 08-pipelines
+
+**Route-schema mismatches discovered and fixed during testing:**
+
+| # | Bug | Fix |
+|---|-----|-----|
+| 1 | Global setup used `/api/v1/auth/register` — route is `POST /api/v1/auth/` | Fixed URL + body (`name` not `first_name`) |
+| 2 | `Content-Type: application/json` as global header → DELETE 400 | Removed from `extraHTTPHeaders` — Playwright sets it only when `data:` provided |
+| 3 | Deal create missing `pipeline_id` + `stage_id` (required in CreateDealSchema) | `beforeAll` fetches default pipeline + first stage; uses those IDs |
+| 4 | `PATCH /:id/won` → route is `POST /:id/won`; missing body causes 400 | Changed to `request.post()`; added `data: {}` |
+| 5 | `lost_reason` → `reason`; `body.data.type` → `body.data.channel`; `'completed'` → `'done'` | Assertion field names corrected to match schemas |
+| 6 | Task routes: `PATCH /complete` → `POST /complete`; `/due-today` → `/today` | Fixed method and path |
+| 7 | Calendar: `start_at`/`end_at` → `start_time`/`end_time`; cancel is `DELETE /:id`; Google OAuth is `/sync/google/auth` | Fixed all three |
+| 8 | `AvailabilitySchema user_ids` — single `?user_ids=uuid` sent as string, schema expects array | Added `z.preprocess((v) => typeof v === 'string' ? [v] : v, ...)` to route schema; `z.coerce.number()` for duration_minutes |
+
+**Note:** Backend restart required after route schema change (tsx watch did not pick up the file change during the test run).
+
+### Final result
+
+**41 tests, 0 failures.** All 9 suites green in full sequential run (56.5s).
+
+Commit: `39c2209`
+
+---
+
+## Session 6 — Handoff to Session 7
+
+**Sprint 2 status:** Feature code complete. Smoke tests passing.
+
+**Files written/modified this session:**
+- `playwright.config.ts` — new
+- `tests/smoke/helpers/global-setup.ts` — new
+- `tests/smoke/helpers/auth.ts` — new
+- `tests/smoke/00-health.spec.ts` through `08-pipelines.spec.ts` — 9 new files
+- `backend/api/routes/calendar.ts` — AvailabilitySchema user_ids preprocess fix
+- `.gitignore` — added `tests/smoke/.auth.json`, `test-results/`
+
+**Stub controllers remaining (unchanged from Session 5):**
+- analytics: dashboard, conversionRates, stageDuration, leadSources, winLoss, teamActivity, repPerformance, exportReport, exportStatus, exportDownload
+- contacts: getActivity, getDeals, getTasks, getMessages, importCsv, importFromPhone, bulkAssign, bulkTag, bulkArchive
+- calendar: full Google Calendar OAuth (needs credentials)
+- messages: Twilio inbound HMAC validation
+
+**Next session priorities:**
+1. Implement contact sub-routes: GET /contacts/:id/deals, /tasks, /messages, /activity
+2. Implement remaining analytics: leadSources, winLoss, teamActivity, repPerformance
+3. Extend smoke suites 02-contacts and 07-analytics to cover new handlers
+
