@@ -113,7 +113,7 @@ All API responses use this shape:
 
 ## Key Architectural Decisions
 
-See `C:\Users\fedor\Obsidian\Brain\Projects\CRM\05 - Decisions\Decision Log.md` for full reasoning. Short version:
+See `C:\Users\fedor\Obsidian\Brain\Projects\CRM\05 - Decisions\Decisions.md` for full reasoning. Short version:
 
 | Decision | Choice |
 |----------|--------|
@@ -147,6 +147,6 @@ Obsidian vault is at `C:\Users\fedor\Obsidian\Brain\Projects\CRM\`. Key notes:
 
 - `00 - Home.md` — project status dashboard
 - `04 - Architecture/` — system overview, data models, API design, tech stack
-- `05 - Decisions/Decision Log.md` — all architectural decisions with reasoning
-- `05 - Decisions/Sprint Log.md` — live task log for every session
-- `05 - Decisions/Open Questions.md` — unresolved questions
+- `05 - Decisions/Decisions.md` — all architectural decisions with reasoning
+- `05 - Decisions/Sprints.md` — live task log for every session
+- `05 - Decisions/Questions.md` — unresolved questions
