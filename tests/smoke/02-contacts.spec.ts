@@ -72,3 +72,105 @@ test('DELETE /api/v1/contacts/:id archives contact (status=archived)', async ({ 
   const body = await res.json();
   expect(body.data.status).toBe('archived');
 });
+
+// ─── Sub-routes ───────────────────────────────────────────────────────────────
+
+test.describe('Contact sub-routes', () => {
+  let contactId: string;
+
+  test.beforeAll(async ({ request }) => {
+    const { token, userId } = getAuth();
+
+    const contactRes = await request.post('/api/v1/contacts', {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { first_name: 'SubRoute', last_name: 'Contact' },
+    });
+    contactId = (await contactRes.json()).data.id;
+
+    await request.post('/api/v1/messages/in-app', {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { contact_id: contactId, body: 'Activity test message' },
+    });
+
+    await request.post('/api/v1/tasks', {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { title: 'Activity test task', assigned_to: userId, contact_id: contactId },
+    });
+
+    const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const pipelines = (await pipelinesRes.json()).data;
+    const pipeline = pipelines.find((p: { is_default: boolean }) => p.is_default) ?? pipelines[0];
+    const stagesRes = await request.get(`/api/v1/deals/pipelines/${pipeline.id}/stages`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const stageId = (await stagesRes.json()).data[0].id;
+
+    await request.post('/api/v1/deals', {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { title: 'Activity test deal', contact_id: contactId, pipeline_id: pipeline.id, stage_id: stageId, value: 1000 },
+    });
+  });
+
+  test('GET /api/v1/contacts/:id/activity returns merged activity feed', async ({ request }) => {
+    const { token } = getAuth();
+    const res = await request.get(`/api/v1/contacts/${contactId}/activity`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.data.contact_id).toBe(contactId);
+    expect(Array.isArray(body.data.items)).toBe(true);
+    expect(body.data.items.length).toBeGreaterThan(0);
+    const item = body.data.items[0];
+    expect(item).toMatchObject({ type: expect.any(String), id: expect.any(String), summary: expect.any(String), created_at: expect.any(String) });
+  });
+
+  test('GET /api/v1/contacts/:id/deals returns deals with pipeline+stage', async ({ request }) => {
+    const { token } = getAuth();
+    const res = await request.get(`/api/v1/contacts/${contactId}/deals`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.data.length).toBeGreaterThan(0);
+    const deal = body.data[0];
+    expect(deal.contact_id).toBe(contactId);
+    expect(deal).toHaveProperty('pipeline');
+    expect(deal).toHaveProperty('stage');
+  });
+
+  test('GET /api/v1/contacts/:id/tasks returns non-cancelled tasks sorted by due_date', async ({ request }) => {
+    const { token } = getAuth();
+    const res = await request.get(`/api/v1/contacts/${contactId}/tasks`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.data.length).toBeGreaterThan(0);
+    expect(body.data.every((t: { status: string }) => t.status !== 'cancelled')).toBe(true);
+  });
+
+  test('GET /api/v1/contacts/:id/messages returns messages sorted desc', async ({ request }) => {
+    const { token } = getAuth();
+    const res = await request.get(`/api/v1/contacts/${contactId}/messages`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.data.length).toBeGreaterThan(0);
+    expect(body.data[0].contact_id).toBe(contactId);
+  });
+
+  test('GET /api/v1/contacts/:id/activity returns 404 for unknown contact', async ({ request }) => {
+    const { token } = getAuth();
+    const res = await request.get('/api/v1/contacts/00000000-0000-0000-0000-000000000000/activity', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status()).toBe(404);
+  });
+});

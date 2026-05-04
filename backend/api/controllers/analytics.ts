@@ -203,6 +203,203 @@ async function revenue(
   });
 }
 
+// ─── Analytics: Team Activity + Rep Performance ──────────────────────────────
+
+async function teamActivity(
+  request: FastifyRequest<{ Querystring: DateRangeQuery }>,
+  reply: FastifyReply,
+): Promise<void> {
+  const { start, end, period } = request.query;
+  const { startDate, endDate } = resolveDateRange(period, start, end);
+  const orgId = request.user.org_id;
+  const dateRange = { created_at: { gte: startDate, lte: endDate } };
+
+  const [msgGroups, taskGroups, meetingGroups] = await Promise.all([
+    db.message.groupBy({
+      by: ['user_id'],
+      where: { organization_id: orgId, user_id: { not: null }, ...dateRange },
+      _count: { _all: true },
+    }),
+    db.task.groupBy({
+      by: ['assigned_to'],
+      where: { organization_id: orgId, ...dateRange },
+      _count: { _all: true },
+    }),
+    db.calendarEvent.groupBy({
+      by: ['created_by'],
+      where: { organization_id: orgId, created_by: { not: null }, ...dateRange },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const allUserIds = new Set<string>();
+  msgGroups.forEach(r => { if (r.user_id) allUserIds.add(r.user_id); });
+  taskGroups.forEach(r => allUserIds.add(r.assigned_to));
+  meetingGroups.forEach(r => { if (r.created_by) allUserIds.add(r.created_by); });
+
+  const users = await db.user.findMany({
+    where: { id: { in: Array.from(allUserIds) }, organization_id: orgId },
+    select: { id: true, name: true },
+  });
+
+  const userMap = new Map<string, string>(users.map(u => [u.id, u.name]));
+  const msgMap = new Map<string, number>(
+    msgGroups.flatMap(r => (r.user_id ? [[r.user_id, r._count._all]] : [])),
+  );
+  const taskMap = new Map<string, number>(taskGroups.map(r => [r.assigned_to, r._count._all]));
+  const meetingMap = new Map<string, number>(
+    meetingGroups.flatMap(r => (r.created_by ? [[r.created_by, r._count._all]] : [])),
+  );
+
+  const data = Array.from(allUserIds).map(uid => {
+    const messages = msgMap.get(uid) ?? 0;
+    const tasks = taskMap.get(uid) ?? 0;
+    const meetings = meetingMap.get(uid) ?? 0;
+    return { user_id: uid, name: userMap.get(uid) ?? 'Unknown', messages, tasks, meetings, total: messages + tasks + meetings };
+  });
+
+  reply.send({ data, meta: {} });
+}
+
+async function repPerformance(
+  request: FastifyRequest<{ Querystring: DateRangeQuery }>,
+  reply: FastifyReply,
+): Promise<void> {
+  const { start, end, period } = request.query;
+  const { startDate, endDate } = resolveDateRange(period, start, end);
+  const orgId = request.user.org_id;
+  const baseWhere: Prisma.DealWhereInput = {
+    organization_id: orgId,
+    assigned_to: { not: null },
+    created_at: { gte: startDate, lte: endDate },
+  };
+
+  const [allGroups, wonGroups, lostGroups] = await Promise.all([
+    db.deal.groupBy({
+      by: ['assigned_to'],
+      where: baseWhere,
+      _count: { _all: true },
+      _sum: { value: true },
+    }),
+    db.deal.groupBy({
+      by: ['assigned_to'],
+      where: { ...baseWhere, status: DealStatus.won },
+      _count: { _all: true },
+    }),
+    db.deal.groupBy({
+      by: ['assigned_to'],
+      where: { ...baseWhere, status: DealStatus.lost },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const userIds = allGroups.flatMap(r => (r.assigned_to ? [r.assigned_to] : []));
+  const users = await db.user.findMany({
+    where: { id: { in: userIds }, organization_id: orgId },
+    select: { id: true, name: true },
+  });
+
+  const userMap = new Map<string, string>(users.map(u => [u.id, u.name]));
+  const wonMap = new Map<string, number>(
+    wonGroups.flatMap(r => (r.assigned_to ? [[r.assigned_to, r._count._all]] : [])),
+  );
+  const lostMap = new Map<string, number>(
+    lostGroups.flatMap(r => (r.assigned_to ? [[r.assigned_to, r._count._all]] : [])),
+  );
+
+  const data = allGroups.flatMap(r => {
+    if (!r.assigned_to) return [];
+    const uid = r.assigned_to;
+    const deals_total = r._count._all;
+    const deals_won = wonMap.get(uid) ?? 0;
+    const deals_lost = lostMap.get(uid) ?? 0;
+    const total_value = r._sum.value ? Math.round(parseFloat(r._sum.value.toString()) * 100) / 100 : 0;
+    const win_rate = deals_total > 0 ? Math.round((deals_won / deals_total) * 10_000) / 100 : 0;
+    return [{ user_id: uid, name: userMap.get(uid) ?? 'Unknown', deals_total, deals_won, deals_lost, total_value, win_rate }];
+  });
+
+  reply.send({ data, meta: {} });
+}
+
+// ─── Analytics: Win-Loss + Lead Sources ──────────────────────────────────────
+
+async function leadSources(
+  request: FastifyRequest<{ Querystring: DateRangeQuery }>,
+  reply: FastifyReply,
+): Promise<void> {
+  const { start, end, period, pipeline_id, assigned_to } = request.query;
+  const { startDate, endDate } = resolveDateRange(period, start, end);
+
+  const groups = await db.deal.groupBy({
+    by: ['source'],
+    where: {
+      organization_id: request.user.org_id,
+      created_at: { gte: startDate, lte: endDate },
+      ...(pipeline_id && { pipeline_id }),
+      ...(assigned_to && { assigned_to }),
+    },
+    _count: { _all: true },
+    _sum: { value: true },
+  });
+
+  const data = groups.map(r => ({
+    source: r.source ?? 'unknown',
+    count: r._count._all,
+    total_value: r._sum.value ? Math.round(parseFloat(r._sum.value.toString()) * 100) / 100 : 0,
+  }));
+
+  reply.send({ data, meta: {} });
+}
+
+async function winLoss(
+  request: FastifyRequest<{ Querystring: DateRangeQuery }>,
+  reply: FastifyReply,
+): Promise<void> {
+  const { start, end, period, pipeline_id, assigned_to } = request.query;
+  const { startDate, endDate } = resolveDateRange(period, start, end);
+
+  const baseWhere: Prisma.DealWhereInput = {
+    organization_id: request.user.org_id,
+    created_at: { gte: startDate, lte: endDate },
+    ...(pipeline_id && { pipeline_id }),
+    ...(assigned_to && { assigned_to }),
+  };
+
+  const [statusGroups, reasonGroups] = await Promise.all([
+    db.deal.groupBy({
+      by: ['status'],
+      where: { ...baseWhere, status: { in: [DealStatus.won, DealStatus.lost] } },
+      _count: { _all: true },
+      _sum: { value: true },
+    }),
+    db.deal.groupBy({
+      by: ['lost_reason'],
+      where: { ...baseWhere, status: DealStatus.lost },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const wonRow = statusGroups.find(r => r.status === DealStatus.won);
+  const lostRow = statusGroups.find(r => r.status === DealStatus.lost);
+
+  const data = {
+    won: {
+      count: wonRow?._count._all ?? 0,
+      total_value: wonRow?._sum.value ? Math.round(parseFloat(wonRow._sum.value.toString()) * 100) / 100 : 0,
+    },
+    lost: {
+      count: lostRow?._count._all ?? 0,
+      total_value: lostRow?._sum.value ? Math.round(parseFloat(lostRow._sum.value.toString()) * 100) / 100 : 0,
+    },
+    reasons: reasonGroups.map(r => ({
+      reason: r.lost_reason ?? 'unspecified',
+      count: r._count._all,
+    })),
+  };
+
+  reply.send({ data, meta: {} });
+}
+
 // ─── Stubs (Sprint 3+) ────────────────────────────────────────────────────────
 
 const stub = (_req: FastifyRequest, reply: FastifyReply): void => {
@@ -216,11 +413,11 @@ export const AnalyticsController = {
   funnel,
   conversionRates: stub,
   stageDuration: stub,
-  leadSources: stub,
-  winLoss: stub,
+  leadSources,
+  winLoss,
   revenue,
-  teamActivity: stub,
-  repPerformance: stub,
+  teamActivity,
+  repPerformance,
   exportReport: stub,
   exportStatus: stub,
   exportDownload: stub,

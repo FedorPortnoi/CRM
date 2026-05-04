@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { Prisma } from '@prisma/client';
+import { Prisma, TaskStatus } from '@prisma/client';
 import { db } from '../../services/db';
 
 export const ContactsController = {
@@ -136,17 +136,99 @@ export const ContactsController = {
     return reply.send({ data: contact });
   },
 
-  getActivity: async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.code(501).send({ error: 'Not implemented' });
+  getActivity: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+
+    const contact = await db.contact.findFirst({
+      where: { id, organization_id: request.user.org_id },
+    });
+    if (!contact) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    }
+
+    const [messages, tasks, events] = await Promise.all([
+      db.message.findMany({
+        where: { contact_id: id, organization_id: request.user.org_id },
+        select: { id: true, body: true, channel: true, created_at: true },
+      }),
+      db.task.findMany({
+        where: { contact_id: id, organization_id: request.user.org_id },
+        select: { id: true, title: true, created_at: true },
+      }),
+      db.calendarEvent.findMany({
+        where: { contact_id: id, organization_id: request.user.org_id },
+        select: { id: true, title: true, created_at: true },
+      }),
+    ]);
+
+    const items = [
+      ...messages.map(m => ({ type: 'message' as const, id: m.id, summary: m.body, created_at: m.created_at })),
+      ...tasks.map(t => ({ type: 'task' as const, id: t.id, summary: t.title, created_at: t.created_at })),
+      ...events.map(e => ({ type: 'meeting' as const, id: e.id, summary: e.title, created_at: e.created_at })),
+    ].sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
+
+    return reply.send({ data: { contact_id: id, items } });
   },
-  getDeals: async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.code(501).send({ error: 'Not implemented' });
+
+  getDeals: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+
+    const contact = await db.contact.findFirst({
+      where: { id, organization_id: request.user.org_id },
+    });
+    if (!contact) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    }
+
+    const deals = await db.deal.findMany({
+      where: { contact_id: id, organization_id: request.user.org_id },
+      include: {
+        pipeline: { select: { id: true, name: true } },
+        stage: { select: { id: true, name: true, position: true } },
+      },
+    });
+
+    return reply.send({ data: deals });
   },
-  getTasks: async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.code(501).send({ error: 'Not implemented' });
+
+  getTasks: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+
+    const contact = await db.contact.findFirst({
+      where: { id, organization_id: request.user.org_id },
+    });
+    if (!contact) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    }
+
+    const tasks = await db.task.findMany({
+      where: {
+        contact_id: id,
+        organization_id: request.user.org_id,
+        status: { not: TaskStatus.cancelled },
+      },
+      orderBy: { due_date: 'asc' },
+    });
+
+    return reply.send({ data: tasks });
   },
-  getMessages: async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.code(501).send({ error: 'Not implemented' });
+
+  getMessages: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+
+    const contact = await db.contact.findFirst({
+      where: { id, organization_id: request.user.org_id },
+    });
+    if (!contact) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    }
+
+    const messages = await db.message.findMany({
+      where: { contact_id: id, organization_id: request.user.org_id },
+      orderBy: { created_at: 'desc' },
+    });
+
+    return reply.send({ data: messages });
   },
   getCalendarEvents: async (_request: FastifyRequest, reply: FastifyReply) => {
     return reply.code(501).send({ error: 'Not implemented' });
