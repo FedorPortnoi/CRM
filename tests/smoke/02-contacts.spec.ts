@@ -121,10 +121,30 @@ test.describe('Contact sub-routes', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(body.data.contact_id).toBe(contactId);
-    expect(Array.isArray(body.data.items)).toBe(true);
-    expect(body.data.items.length).toBeGreaterThan(0);
-    const item = body.data.items[0];
-    expect(item).toMatchObject({ type: expect.any(String), id: expect.any(String), summary: expect.any(String), created_at: expect.any(String) });
+
+    const items: { type: string; id: string; summary: string; created_at: string }[] = body.data.items;
+    expect(Array.isArray(items)).toBe(true);
+    expect(items.length).toBeGreaterThanOrEqual(2);
+
+    // All items must have the correct shape
+    for (const item of items) {
+      expect(['message', 'task', 'meeting']).toContain(item.type);
+      expect(typeof item.id).toBe('string');
+      expect(typeof item.summary).toBe('string');
+      expect(typeof item.created_at).toBe('string');
+    }
+
+    // Both source types seeded in beforeAll must appear
+    const types = items.map(i => i.type);
+    expect(types).toContain('message');
+    expect(types).toContain('task');
+
+    // Items must be sorted by created_at descending
+    for (let i = 1; i < items.length; i++) {
+      expect(new Date(items[i - 1].created_at).getTime()).toBeGreaterThanOrEqual(
+        new Date(items[i].created_at).getTime(),
+      );
+    }
   });
 
   test('GET /api/v1/contacts/:id/deals returns deals with pipeline+stage', async ({ request }) => {
