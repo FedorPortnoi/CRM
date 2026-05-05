@@ -116,6 +116,10 @@ async function getById(
 
   const task = await db.task.findFirst({
     where: { id, organization_id: request.user.org_id },
+    include: {
+      assignee: { select: { id: true, name: true } },
+      contact: { select: { id: true, first_name: true, last_name: true } },
+    },
   });
 
   if (!task) {
