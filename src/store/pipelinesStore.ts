@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
-
-const API_URL = 'http://localhost:3000/api/v1';
+import { API_URL } from '../../utils/api';
 
 type PipelineStage = {
   id: string;
