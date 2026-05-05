@@ -20,6 +20,10 @@ const CreateContactSchema = z.object({
 
 const UpdateContactSchema = CreateContactSchema.partial();
 
+const MergeContactSchema = z.object({
+  source_id: z.string().uuid(),
+});
+
 const ContactFilterSchema = z.object({
   q: z.string().optional(),
   status: z.enum(['active', 'inactive', 'archived']).optional(),
@@ -70,4 +74,9 @@ export default async function contactsRoutes(fastify: FastifyInstance) {
   f.post('/bulk-assign', { preHandler: [authenticate] }, ContactsController.bulkAssign);
   f.post('/bulk-tag', { preHandler: [authenticate] }, ContactsController.bulkTag);
   f.post('/bulk-archive', { preHandler: [authenticate] }, ContactsController.bulkArchive);
+
+  f.post('/:id/merge', {
+    preHandler: [authenticate],
+    schema: { body: MergeContactSchema },
+  }, ContactsController.merge);
 }

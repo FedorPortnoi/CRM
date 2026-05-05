@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { DealStatus, Prisma } from '@prisma/client';
+import { DealStatus, Prisma, TaskStatus } from '@prisma/client';
 import { db } from '../../services/db';
 
 // ─── Local request types ──────────────────────────────────────────────────────
@@ -402,6 +402,90 @@ async function winLoss(
 
 // ─── Stubs (Sprint 3+) ────────────────────────────────────────────────────────
 
+
+async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const orgId = request.user.org_id;
+
+  const org = await db.org.findUniqueOrThrow({
+    where: { id: orgId },
+    select: { stalled_threshold_days: true, decay_factor: true },
+  });
+
+  const stalledThreshold = new Date(Date.now() - org.stalled_threshold_days * 86_400_000);
+
+  const todayUTC = new Date();
+  todayUTC.setUTCHours(0, 0, 0, 0);
+  const tomorrowUTC = new Date(todayUTC.getTime() + 86_400_000);
+
+  const [dealsAgg, tasksDueCount, recentMsgs, recentTasks, recentEvents, wonCount, lostCount, stalledCount] =
+    await Promise.all([
+      db.deal.aggregate({
+        where: { organization_id: orgId, status: DealStatus.open },
+        _count: { _all: true },
+        _sum: { value: true },
+      }),
+      db.task.count({
+        where: {
+          organization_id: orgId,
+          status: { notIn: [TaskStatus.cancelled, TaskStatus.done] },
+          due_date: { gte: todayUTC, lt: tomorrowUTC },
+        },
+      }),
+      db.message.findMany({
+        where: { organization_id: orgId },
+        orderBy: { created_at: 'desc' },
+        take: 3,
+        select: { id: true, body: true, channel: true, created_at: true },
+      }),
+      db.task.findMany({
+        where: { organization_id: orgId },
+        orderBy: { created_at: 'desc' },
+        take: 3,
+        select: { id: true, title: true, created_at: true },
+      }),
+      db.calendarEvent.findMany({
+        where: { organization_id: orgId },
+        orderBy: { created_at: 'desc' },
+        take: 3,
+        select: { id: true, title: true, created_at: true },
+      }),
+      db.deal.count({ where: { organization_id: orgId, status: DealStatus.won } }),
+      db.deal.count({ where: { organization_id: orgId, status: DealStatus.lost } }),
+      db.deal.count({
+        where: {
+          organization_id: orgId,
+          status: DealStatus.open,
+          updated_at: { lt: stalledThreshold },
+        },
+      }),
+    ]);
+
+  const activity = [
+    ...recentMsgs.map((m) => ({ type: 'message' as const, id: m.id, summary: m.body, created_at: m.created_at })),
+    ...recentTasks.map((t) => ({ type: 'task' as const, id: t.id, summary: t.title, created_at: t.created_at })),
+    ...recentEvents.map((e) => ({ type: 'meeting' as const, id: e.id, summary: e.title, created_at: e.created_at })),
+  ]
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
+    .slice(0, 5);
+
+  const denominator = wonCount + lostCount + stalledCount * org.decay_factor;
+  const rawScore = denominator === 0 ? 0 : wonCount / denominator;
+  const pipeline_health_score = Math.round(rawScore * 10_000) / 100;
+
+  return reply.send({
+    data: {
+      open_deals: {
+        count: dealsAgg._count._all,
+        total_value: Math.round(parseFloat((dealsAgg._sum.value ?? 0).toString()) * 100) / 100,
+      },
+      tasks_due_today: tasksDueCount,
+      recent_activity: activity,
+      pipeline_health_score,
+    },
+    meta: {},
+  });
+}
+
 const stub = (_req: FastifyRequest, reply: FastifyReply): void => {
   reply.status(501).send({ error: { code: 'NOT_IMPLEMENTED', message: 'Not yet implemented' } });
 };
@@ -409,7 +493,7 @@ const stub = (_req: FastifyRequest, reply: FastifyReply): void => {
 // ─── Export ───────────────────────────────────────────────────────────────────
 
 export const AnalyticsController = {
-  dashboard: stub,
+  dashboard,
   funnel,
   conversionRates: stub,
   stageDuration: stub,

@@ -133,9 +133,11 @@ model Org {
   plan          OrgPlan  @default(starter)
   owner_id      String?  @db.Uuid
   settings      Json?
-  plan_features Json?
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  plan_features           Json?
+  stalled_threshold_days  Int     @default(30)
+  decay_factor            Float   @default(0.5)
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
 
   // Relations
   owner    User?     @relation("OrgOwner", fields: [owner_id], references: [id])

@@ -194,3 +194,81 @@ test.describe('Contact sub-routes', () => {
     expect(res.status()).toBe(404);
   });
 });
+
+// ─── Merge ────────────────────────────────────────────────────────────────────
+
+test.describe('Contact merge', () => {
+  let targetId: string;
+  let sourceId: string;
+
+  test.beforeAll(async ({ request }) => {
+    const { token, userId } = getAuth();
+
+    // Create target contact
+    const targetRes = await request.post('/api/v1/contacts', {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { first_name: 'MergeTarget', last_name: 'Contact' },
+    });
+    targetId = (await targetRes.json()).data.id;
+
+    // Create source contact
+    const sourceRes = await request.post('/api/v1/contacts', {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { first_name: 'MergeSource', last_name: 'Contact' },
+    });
+    sourceId = (await sourceRes.json()).data.id;
+
+    // Attach a task to source (should be reassigned to target after merge)
+    await request.post('/api/v1/tasks', {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { title: 'Merge test task', assigned_to: userId, contact_id: sourceId },
+    });
+  });
+
+  test('POST /api/v1/contacts/:id/merge returns 422 when source === target', async ({ request }) => {
+    const { token } = getAuth();
+    const res = await request.post(`/api/v1/contacts/${targetId}/merge`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { source_id: targetId },
+    });
+    expect(res.status()).toBe(422);
+    const body = await res.json();
+    expect(body.error.code).toBe('INVALID_MERGE');
+  });
+
+  test('POST /api/v1/contacts/:id/merge returns 404 for unknown source', async ({ request }) => {
+    const { token } = getAuth();
+    const res = await request.post(`/api/v1/contacts/${targetId}/merge`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { source_id: '00000000-0000-0000-0000-000000000000' },
+    });
+    expect(res.status()).toBe(404);
+  });
+
+  test('POST /api/v1/contacts/:id/merge merges source into target and archives source', async ({ request }) => {
+    const { token } = getAuth();
+    const res = await request.post(`/api/v1/contacts/${targetId}/merge`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { source_id: sourceId },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    // Returns target contact
+    expect(body.data.id).toBe(targetId);
+
+    // Source is now archived
+    const sourceRes = await request.get(`/api/v1/contacts/${sourceId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(sourceRes.status()).toBe(200);
+    expect((await sourceRes.json()).data.status).toBe('archived');
+
+    // Task previously on source is now on target
+    const tasksRes = await request.get(`/api/v1/contacts/${targetId}/tasks`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(tasksRes.status()).toBe(200);
+    const tasks = (await tasksRes.json()).data;
+    expect(tasks.some((t: { title: string }) => t.title === 'Merge test task')).toBe(true);
+  });
+});

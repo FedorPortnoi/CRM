@@ -230,6 +230,64 @@ export const ContactsController = {
 
     return reply.send({ data: messages });
   },
+  merge: async (
+    request: FastifyRequest<{ Params: { id: string }; Body: { source_id: string } }>,
+    reply: FastifyReply,
+  ) => {
+    const { id } = request.params;
+    const { source_id } = request.body;
+    const org_id = request.user.org_id;
+
+    if (source_id === id) {
+      return reply.code(422).send({
+        error: { code: 'INVALID_MERGE', message: 'Source and target must be different contacts' },
+      });
+    }
+
+    const source = await db.contact.findFirst({
+      where: { id: source_id, organization_id: org_id },
+    });
+    if (!source) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Source contact not found' } });
+    }
+
+    const target = await db.contact.findFirst({
+      where: { id, organization_id: org_id },
+    });
+    if (!target) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    }
+
+    await db.$transaction(async (tx) => {
+      await tx.deal.updateMany({
+        where: { contact_id: source.id, organization_id: org_id },
+        data: { contact_id: target.id },
+      });
+      await tx.task.updateMany({
+        where: { contact_id: source.id, organization_id: org_id },
+        data: { contact_id: target.id },
+      });
+      await tx.message.updateMany({
+        where: { contact_id: source.id, organization_id: org_id },
+        data: { contact_id: target.id },
+      });
+      await tx.calendarEvent.updateMany({
+        where: { contact_id: source.id, organization_id: org_id },
+        data: { contact_id: target.id },
+      });
+      await tx.contact.update({
+        where: { id: source.id },
+        data: { status: 'archived' },
+      });
+    });
+
+    const updated = await db.contact.findFirst({
+      where: { id: target.id, organization_id: org_id },
+      include: { assignee: { select: { id: true, name: true } } },
+    });
+
+    return reply.send({ data: updated ?? target });
+  },
   getCalendarEvents: async (_request: FastifyRequest, reply: FastifyReply) => {
     return reply.code(501).send({ error: 'Not implemented' });
   },
