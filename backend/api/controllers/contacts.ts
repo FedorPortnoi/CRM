@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { Prisma, TaskStatus } from '@prisma/client';
+import { ContactStatus, Prisma, TaskStatus } from '@prisma/client';
 import { db } from '../../services/db';
 
 export const ContactsController = {
@@ -19,7 +19,7 @@ export const ContactsController = {
 
     const where: Prisma.ContactWhereInput = {
       organization_id: request.user.org_id,
-      ...(status && { status }),
+      status: status ?? { not: ContactStatus.archived },
       ...(type && { type }),
       ...(assigned_to && { assigned_to }),
       ...(tag && { tags: { array_contains: tag } }),

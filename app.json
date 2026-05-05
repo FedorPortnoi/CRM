@@ -30,7 +30,11 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "http://localhost:3000/api/v1"
+      "apiUrls": {
+        "development": "http://localhost:3000/api/v1",
+        "staging": "https://staging.railway.app/api/v1",
+        "production": "https://api.railway.app/api/v1"
+      }
     }
   }
 }

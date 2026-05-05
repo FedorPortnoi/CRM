@@ -271,4 +271,73 @@ test.describe('Contact merge', () => {
     const tasks = (await tasksRes.json()).data;
     expect(tasks.some((t: { title: string }) => t.title === 'Merge test task')).toBe(true);
   });
+
+  test('archived source contact is excluded from GET /contacts list after successful merge', async ({ request }) => {
+    const { token } = getAuth();
+    const res = await request.get('/api/v1/contacts', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const contactIds = (body.data as { id: string }[]).map((c) => c.id);
+    expect(contactIds).not.toContain(sourceId);
+  });
+
+  test('merge with non-existent source_id returns 404 with correct { error: { code, message } } shape', async ({ request }) => {
+    const { token } = getAuth();
+    const res = await request.post(`/api/v1/contacts/${targetId}/merge`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { source_id: '11111111-1111-4111-8111-111111111111' },
+    });
+    expect(res.status()).toBe(404);
+    const body = await res.json();
+    expect(body.error.code).toBe('NOT_FOUND');
+    expect(typeof body.error.message).toBe('string');
+    expect((body.error.message as string).length).toBeGreaterThan(0);
+  });
+
+  test('self-merge returns 422 with INVALID_MERGE code and non-empty message field', async ({ request }) => {
+    const { token } = getAuth();
+    const res = await request.post(`/api/v1/contacts/${targetId}/merge`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { source_id: targetId },
+    });
+    expect(res.status()).toBe(422);
+    const body = await res.json();
+    expect(body.error.code).toBe('INVALID_MERGE');
+    expect(typeof body.error.message).toBe('string');
+    expect((body.error.message as string).length).toBeGreaterThan(0);
+  });
+});
+
+test('soft-deleted contact is excluded from GET /contacts list but remains accessible via GET /contacts/:id', async ({ request }) => {
+  const { token } = getAuth();
+
+  const createRes = await request.post('/api/v1/contacts', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { first_name: 'SoftDeleteTest' },
+  });
+  expect(createRes.status()).toBe(201);
+  const { data: created } = await createRes.json();
+  const softId = created.id as string;
+
+  const deleteRes = await request.delete(`/api/v1/contacts/${softId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(deleteRes.status()).toBe(200);
+  expect((await deleteRes.json()).data.status).toBe('archived');
+
+  const listRes = await request.get('/api/v1/contacts', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(listRes.status()).toBe(200);
+  const listBody = await listRes.json();
+  const ids = (listBody.data as { id: string }[]).map((c) => c.id);
+  expect(ids).not.toContain(softId);
+
+  const getRes = await request.get(`/api/v1/contacts/${softId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(getRes.status()).toBe(200);
+  expect((await getRes.json()).data.status).toBe('archived');
 });

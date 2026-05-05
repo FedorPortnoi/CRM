@@ -116,7 +116,7 @@ export const useDealsStore = create<DealsState>()((set, get) => ({
 
     try {
       const token: string = await getToken();
-      const response: Response = await fetch(`${API_URL}/deals?page=1&per_page=100`, {
+      const response: Response = await fetch(`${API_URL}/deals?page=1&per_page=100&status=open`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
