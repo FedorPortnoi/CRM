@@ -11,6 +11,7 @@ import DraggableFlatList, {
   ScaleDecorator,
   RenderItemParams,
 } from 'react-native-draggable-flatlist';
+import { router } from 'expo-router';
 import { useDealsStore } from '../../store/dealsStore';
 import { usePipelinesStore } from '../../store/pipelinesStore';
 
@@ -107,6 +108,7 @@ const KanbanBoard: React.FC = () => {
     ({ item, isActive }: RenderItemParams<Deal>) => (
       <ScaleDecorator>
         <TouchableOpacity
+          onPress={() => router.push({ pathname: '/deal/[id]', params: { id: item.id } })}
           onLongPress={() => handleLongPress(item, allStages)}
           disabled={isActive}
           style={{
