@@ -17,7 +17,8 @@ const CreateDealSchema = z.object({
   custom_fields: z.record(z.unknown()).optional(),
 });
 
-const UpdateDealSchema = CreateDealSchema.partial().omit({ contact_id: true, pipeline_id: true });
+const UpdateDealSchema = CreateDealSchema.partial()
+  .extend({ value: z.number().positive().optional() });
 
 const MoveStageSchema = z.object({
   stage_id: z.string().uuid(),

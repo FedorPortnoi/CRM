@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { router } from 'expo-router';
 import KanbanBoard from '../../screens/KanbanBoard';
 import { useDealsStore } from '../../store/dealsStore';
 import { usePipelinesStore } from '../../store/pipelinesStore';
@@ -113,13 +114,18 @@ function DealListView(): JSX.Element {
         const { deal } = item;
         const contactName = deal.contact.first_name + ' ' + deal.contact.last_name;
         return (
-          <View style={listStyles.dealRow}>
+          <TouchableOpacity
+            style={listStyles.dealRow}
+            onPress={() => router.push({ pathname: '/deal/[id]', params: { id: deal.id } })}
+            accessibilityRole="button"
+            activeOpacity={0.75}
+          >
             <View style={listStyles.dealMain}>
               <Text style={listStyles.dealTitle} numberOfLines={1}>{deal.title}</Text>
               <Text style={listStyles.dealContact} numberOfLines={1}>{contactName}</Text>
             </View>
             <Text style={listStyles.dealValue}>{formatValue(deal.value)}</Text>
-          </View>
+          </TouchableOpacity>
         );
       }}
     />

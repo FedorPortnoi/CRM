@@ -95,6 +95,18 @@ async function create(
 ): Promise<void> {
   const body = request.body;
 
+  if (body.contact_id) {
+    const contact = await db.contact.findFirst({
+      where: { id: body.contact_id, organization_id: request.user.org_id },
+    });
+    if (!contact) {
+      reply.status(403).send({
+        error: { code: 'FORBIDDEN', message: 'Contact does not belong to your organization' },
+      });
+      return;
+    }
+  }
+
   const task = await db.task.create({
     data: {
       ...body,

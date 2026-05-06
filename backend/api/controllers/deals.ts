@@ -31,7 +31,7 @@ type CreateBody = {
   custom_fields?: Record<string, unknown>;
 };
 
-type UpdateBody = Partial<Omit<CreateBody, 'contact_id' | 'pipeline_id'>>;
+type UpdateBody = Partial<CreateBody>;
 
 type IdParams = { id: string };
 
@@ -167,14 +167,71 @@ async function update(
     return;
   }
 
+  if (body.contact_id !== undefined) {
+    const contact = await db.contact.findFirst({
+      where: { id: body.contact_id, organization_id: request.user.org_id },
+    });
+    if (!contact) {
+      reply.status(403).send({
+        error: { code: 'FORBIDDEN', message: 'Contact does not belong to your organization' },
+      });
+      return;
+    }
+  }
+
+  if (body.pipeline_id !== undefined) {
+    const pipeline = await db.pipeline.findFirst({
+      where: { id: body.pipeline_id, organization_id: request.user.org_id },
+    });
+    if (!pipeline) {
+      reply.status(404).send({ error: { code: 'PIPELINE_NOT_FOUND', message: 'Pipeline not found' } });
+      return;
+    }
+  }
+
+  if (body.stage_id !== undefined || body.pipeline_id !== undefined) {
+    const nextPipelineId = body.pipeline_id ?? deal.pipeline_id;
+    const nextStageId = body.stage_id ?? deal.stage_id;
+    if (!nextPipelineId || !nextStageId) {
+      reply.status(400).send({
+        error: { code: 'STAGE_PIPELINE_MISMATCH', message: 'Stage does not belong to this deal\'s pipeline' },
+      });
+      return;
+    }
+    const stage = await db.pipelineStage.findFirst({
+      where: {
+        id: nextStageId,
+        pipeline_id: nextPipelineId,
+      },
+    });
+    if (!stage) {
+      reply.status(400).send({
+        error: { code: 'STAGE_PIPELINE_MISMATCH', message: 'Stage does not belong to this deal\'s pipeline' },
+      });
+      return;
+    }
+  }
+
+  const updateData: Prisma.DealUncheckedUpdateInput = {};
+  if (body.title !== undefined) updateData.title = body.title;
+  if (body.contact_id !== undefined) updateData.contact_id = body.contact_id;
+  if (body.pipeline_id !== undefined) updateData.pipeline_id = body.pipeline_id;
+  if (body.stage_id !== undefined) updateData.stage_id = body.stage_id;
+  if (body.value !== undefined) updateData.value = body.value;
+  if (body.currency !== undefined) updateData.currency = body.currency;
+  if (body.expected_close !== undefined) {
+    updateData.expected_close = body.expected_close ? new Date(body.expected_close) : null;
+  }
+  if (body.probability !== undefined) updateData.probability = body.probability;
+  if (body.source !== undefined) updateData.source = body.source;
+  if (body.assigned_to !== undefined) updateData.assigned_to = body.assigned_to;
+  if (body.custom_fields !== undefined) {
+    updateData.custom_fields = body.custom_fields as Prisma.InputJsonValue;
+  }
+
   const updated = await db.deal.update({
     where: { id },
-    data: {
-      ...body,
-      ...(body.expected_close !== undefined && {
-        expected_close: body.expected_close ? new Date(body.expected_close) : null,
-      }),
-    },
+    data: updateData,
     include: dealInclude,
   });
 

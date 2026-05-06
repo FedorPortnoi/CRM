@@ -136,7 +136,23 @@ export default function ContactDetailScreen(): JSX.Element {
 
   return (
     <>
-      <Stack.Screen options={{ title: contactName || 'Contact', headerBackTitle: 'Contacts' }} />
+      <Stack.Screen
+        options={{
+          title: contactName || 'Contact',
+          headerBackTitle: 'Contacts',
+          headerRight: () => (
+            contact ? (
+              <TouchableOpacity
+                style={styles.headerEditButton}
+                onPress={() => router.push({ pathname: '/contact/edit/[id]', params: { id } })}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.headerEditText}>Edit</Text>
+              </TouchableOpacity>
+            ) : null
+          ),
+        }}
+      />
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -351,4 +367,6 @@ const styles = StyleSheet.create({
   retryButton: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#1A73E8', borderRadius: 6 },
   retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
   emptyText: { fontSize: 14, color: '#9B9B9B', textAlign: 'center', paddingVertical: 8 },
+  headerEditButton: { paddingHorizontal: 8, paddingVertical: 4 },
+  headerEditText: { color: '#1A73E8', fontSize: 16, fontWeight: '600' },
 });

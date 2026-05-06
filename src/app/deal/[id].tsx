@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 }  from 'react-native';
+import type { DimensionValue } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { API_URL } from '../../utils/api';
 import { useUserStore } from '../../store/userStore';
@@ -28,7 +29,7 @@ interface Deal {
 }
 
 interface SkeletonBoxProps {
-  width: number | string;
+  width: DimensionValue;
   height: number;
   borderRadius?: number;
   marginBottom?: number;
@@ -232,7 +233,21 @@ export default function DealDetailScreen(): JSX.Element {
       contentContainerStyle={{ paddingTop: 16, paddingBottom: 32 }}
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
     >
-      <Stack.Screen options={{ title: screenTitle, headerBackTitle: 'Deals' }} />
+      <Stack.Screen
+        options={{
+          title: screenTitle,
+          headerBackTitle: 'Deals',
+          headerRight: () => (
+            <TouchableOpacity
+              style={styles.headerEditButton}
+              onPress={() => router.push({ pathname: '/deal/edit/[id]', params: { id } })}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.headerEditText}>Edit</Text>
+            </TouchableOpacity>
+          ),
+        }}
+      />
 
       {/* Header card */}
       <View style={styles.card}>
@@ -458,6 +473,15 @@ const styles = StyleSheet.create({
   retryText: {
     fontSize: 15,
     color: '#1A73E8',
+    fontWeight: '600',
+  },
+  headerEditButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  headerEditText: {
+    color: '#1A73E8',
+    fontSize: 16,
     fontWeight: '600',
   },
 });
