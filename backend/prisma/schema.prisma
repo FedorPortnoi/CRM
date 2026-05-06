@@ -184,6 +184,9 @@ model Contact {
   tasks          Task[]
   messages       Message[]
   calendarEvents CalendarEvent[]
+
+  @@index([organization_id, status])
+  @@index([organization_id, created_at])
 }
 
 model Deal {
@@ -217,6 +220,11 @@ model Deal {
   stage          PipelineStage?  @relation(fields: [stage_id], references: [id])
   tasks          Task[]
   calendarEvents CalendarEvent[]
+
+  @@index([organization_id, status])
+  @@index([organization_id, created_at])
+  @@index([organization_id, contact_id])
+  @@index([organization_id, pipeline_id])
 }
 
 model Task {
@@ -247,6 +255,11 @@ model Task {
   assignee     User     @relation("TaskAssignedTo", fields: [assigned_to], references: [id])
   creator      User?    @relation("TaskCreatedBy", fields: [created_by], references: [id])
   completer    User?    @relation("TaskCompletedBy", fields: [completed_by], references: [id])
+
+  @@index([organization_id, status, due_date])
+  @@index([organization_id, created_at])
+  @@index([organization_id, contact_id])
+  @@index([organization_id, deal_id])
 }
 
 model Message {
@@ -268,6 +281,9 @@ model Message {
   organization Org      @relation(fields: [organization_id], references: [id])
   contact      Contact  @relation(fields: [contact_id], references: [id])
   user         User?    @relation(fields: [user_id], references: [id])
+
+  @@index([organization_id, created_at])
+  @@index([organization_id, contact_id, created_at])
 }
 
 model CalendarEvent {
@@ -299,6 +315,11 @@ model CalendarEvent {
   contact      Contact? @relation(fields: [contact_id], references: [id])
   deal         Deal?    @relation(fields: [deal_id], references: [id])
   creator      User?    @relation("CalendarEventCreatedBy", fields: [created_by], references: [id])
+
+  @@index([organization_id, status, start_time])
+  @@index([organization_id, created_at])
+  @@index([organization_id, contact_id])
+  @@index([organization_id, deal_id])
 }
 
 model UserCalendarSync {

@@ -42,6 +42,22 @@ type AvailabilityQuery = {
   duration_minutes: number;
 };
 
+async function contactBelongsToOrg(contactId: string, orgId: string): Promise<boolean> {
+  const contact = await db.contact.findFirst({
+    where: { id: contactId, organization_id: orgId },
+    select: { id: true },
+  });
+  return contact !== null;
+}
+
+async function dealBelongsToOrg(dealId: string, orgId: string): Promise<boolean> {
+  const deal = await db.deal.findFirst({
+    where: { id: dealId, organization_id: orgId },
+    select: { id: true },
+  });
+  return deal !== null;
+}
+
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 async function list(
@@ -89,6 +105,29 @@ async function create(
   reply: FastifyReply,
 ): Promise<void> {
   const { attendees, start_time, end_time, send_invite: _send_invite, ...rest } = request.body;
+
+  const [ownsContact, ownsDeal] = await Promise.all([
+    rest.contact_id !== undefined
+      ? contactBelongsToOrg(rest.contact_id, request.user.org_id)
+      : Promise.resolve(true),
+    rest.deal_id !== undefined
+      ? dealBelongsToOrg(rest.deal_id, request.user.org_id)
+      : Promise.resolve(true),
+  ]);
+
+  if (!ownsContact) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Contact does not belong to your organization' },
+    });
+    return;
+  }
+
+  if (!ownsDeal) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Deal does not belong to your organization' },
+    });
+    return;
+  }
 
   const event = await db.calendarEvent.create({
     data: {
@@ -145,6 +184,29 @@ async function update(
 
   if (event.status === CalendarEventStatus.cancelled) {
     reply.status(422).send({ error: { code: 'EVENT_CANCELLED', message: 'Cannot update a cancelled event' } });
+    return;
+  }
+
+  const [ownsContact, ownsDeal] = await Promise.all([
+    rest.contact_id !== undefined
+      ? contactBelongsToOrg(rest.contact_id, request.user.org_id)
+      : Promise.resolve(true),
+    rest.deal_id !== undefined
+      ? dealBelongsToOrg(rest.deal_id, request.user.org_id)
+      : Promise.resolve(true),
+  ]);
+
+  if (!ownsContact) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Contact does not belong to your organization' },
+    });
+    return;
+  }
+
+  if (!ownsDeal) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Deal does not belong to your organization' },
+    });
     return;
   }
 

@@ -36,6 +36,57 @@ type UpdateBody = Partial<CreateBody>;
 
 type IdParams = { id: string };
 
+const contactOrgCache = new Set<string>();
+const dealOrgCache = new Set<string>();
+
+function orgCacheKey(recordId: string, orgId: string): string {
+  return `${orgId}:${recordId}`;
+}
+
+async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
+  const user = await db.user.findFirst({
+    where: { id: userId, organization_id: orgId },
+    select: { id: true },
+  });
+  return user !== null;
+}
+
+async function contactBelongsToOrg(contactId: string, orgId: string): Promise<boolean> {
+  const key = orgCacheKey(contactId, orgId);
+  if (contactOrgCache.has(key)) {
+    return true;
+  }
+
+  const contact = await db.contact.findFirst({
+    where: { id: contactId, organization_id: orgId },
+    select: { id: true },
+  });
+  if (contact) {
+    contactOrgCache.add(key);
+    return true;
+  }
+
+  return false;
+}
+
+async function dealBelongsToOrg(dealId: string, orgId: string): Promise<boolean> {
+  const key = orgCacheKey(dealId, orgId);
+  if (dealOrgCache.has(key)) {
+    return true;
+  }
+
+  const deal = await db.deal.findFirst({
+    where: { id: dealId, organization_id: orgId },
+    select: { id: true },
+  });
+  if (deal) {
+    dealOrgCache.add(key);
+    return true;
+  }
+
+  return false;
+}
+
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 async function list(
@@ -95,16 +146,37 @@ async function create(
 ): Promise<void> {
   const body = request.body;
 
-  if (body.contact_id) {
-    const contact = await db.contact.findFirst({
-      where: { id: body.contact_id, organization_id: request.user.org_id },
+  const [ownsAssignee, ownsContact, ownsDeal] = await Promise.all([
+    body.assigned_to === request.user.sub
+      ? Promise.resolve(true)
+      : userBelongsToOrg(body.assigned_to, request.user.org_id),
+    body.contact_id
+      ? contactBelongsToOrg(body.contact_id, request.user.org_id)
+      : Promise.resolve(true),
+    body.deal_id
+      ? dealBelongsToOrg(body.deal_id, request.user.org_id)
+      : Promise.resolve(true),
+  ]);
+
+  if (!ownsAssignee) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Assigned user does not belong to your organization' },
     });
-    if (!contact) {
-      reply.status(403).send({
-        error: { code: 'FORBIDDEN', message: 'Contact does not belong to your organization' },
-      });
-      return;
-    }
+    return;
+  }
+
+  if (!ownsContact) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Contact does not belong to your organization' },
+    });
+    return;
+  }
+
+  if (!ownsDeal) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Deal does not belong to your organization' },
+    });
+    return;
   }
 
   const task = await db.task.create({
@@ -160,6 +232,39 @@ async function update(
 
   if (task.status === TaskStatus.cancelled) {
     reply.status(422).send({ error: { code: 'TASK_CANCELLED', message: 'Cannot update a cancelled task' } });
+    return;
+  }
+
+  const [ownsAssignee, ownsContact, ownsDeal] = await Promise.all([
+    body.assigned_to !== undefined && body.assigned_to !== request.user.sub
+      ? userBelongsToOrg(body.assigned_to, request.user.org_id)
+      : Promise.resolve(true),
+    body.contact_id !== undefined
+      ? contactBelongsToOrg(body.contact_id, request.user.org_id)
+      : Promise.resolve(true),
+    body.deal_id !== undefined
+      ? dealBelongsToOrg(body.deal_id, request.user.org_id)
+      : Promise.resolve(true),
+  ]);
+
+  if (!ownsAssignee) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Assigned user does not belong to your organization' },
+    });
+    return;
+  }
+
+  if (!ownsContact) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Contact does not belong to your organization' },
+    });
+    return;
+  }
+
+  if (!ownsDeal) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Deal does not belong to your organization' },
+    });
     return;
   }
 

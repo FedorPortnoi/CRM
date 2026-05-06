@@ -18,7 +18,9 @@ const CreateContactSchema = z.object({
   custom_fields: z.record(z.unknown()).optional(),
 });
 
-const UpdateContactSchema = CreateContactSchema.partial();
+const UpdateContactSchema = CreateContactSchema.partial().extend({
+  email: z.union([z.string().email(), z.literal('')]).optional(),
+});
 
 const MergeContactSchema = z.object({
   source_id: z.string().uuid(),

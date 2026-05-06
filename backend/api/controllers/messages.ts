@@ -34,6 +34,31 @@ type LogCallBody = {
   occurred_at?: string;
 };
 
+const contactOrgCache = new Set<string>();
+
+function contactOrgCacheKey(contactId: string, orgId: string): string {
+  return `${orgId}:${contactId}`;
+}
+
+async function contactBelongsToOrg(contactId: string, orgId: string): Promise<boolean> {
+  const key = contactOrgCacheKey(contactId, orgId);
+  if (contactOrgCache.has(key)) {
+    return true;
+  }
+
+  const contact = await db.contact.findFirst({
+    where: { id: contactId, organization_id: orgId },
+    select: { id: true },
+  });
+
+  if (contact) {
+    contactOrgCache.add(key);
+    return true;
+  }
+
+  return false;
+}
+
 // --- Handlers ---
 
 async function list(
@@ -71,12 +96,8 @@ async function getConversation(
 ): Promise<void> {
   const { contact_id } = request.params;
 
-  const contact = await db.contact.findFirst({
-    where: { id: contact_id, organization_id: request.user.org_id },
-    select: { id: true },
-  });
-
-  if (!contact) {
+  const ownsContact = await contactBelongsToOrg(contact_id, request.user.org_id);
+  if (!ownsContact) {
     reply.status(404).send({ error: { code: 'CONTACT_NOT_FOUND', message: 'Contact not found' } });
     return;
   }
@@ -96,12 +117,8 @@ async function sendSms(
   const { contact_id, body } = request.body;
   const organization_id = request.user.org_id;
 
-  const contact = await db.contact.findFirst({
-    where: { id: contact_id, organization_id },
-    select: { id: true },
-  });
-
-  if (!contact) {
+  const ownsContact = await contactBelongsToOrg(contact_id, organization_id);
+  if (!ownsContact) {
     reply.status(404).send({ error: { code: 'CONTACT_NOT_FOUND', message: 'Contact not found' } });
     return;
   }
@@ -128,12 +145,8 @@ async function sendInApp(
   const { contact_id, body } = request.body;
   const organization_id = request.user.org_id;
 
-  const contact = await db.contact.findFirst({
-    where: { id: contact_id, organization_id },
-    select: { id: true },
-  });
-
-  if (!contact) {
+  const ownsContact = await contactBelongsToOrg(contact_id, organization_id);
+  if (!ownsContact) {
     reply.status(404).send({ error: { code: 'CONTACT_NOT_FOUND', message: 'Contact not found' } });
     return;
   }
@@ -160,12 +173,8 @@ async function logCall(
   const { contact_id, direction, duration_seconds, notes, occurred_at } = request.body;
   const organization_id = request.user.org_id;
 
-  const contact = await db.contact.findFirst({
-    where: { id: contact_id, organization_id },
-    select: { id: true },
-  });
-
-  if (!contact) {
+  const ownsContact = await contactBelongsToOrg(contact_id, organization_id);
+  if (!ownsContact) {
     reply.status(404).send({ error: { code: 'CONTACT_NOT_FOUND', message: 'Contact not found' } });
     return;
   }

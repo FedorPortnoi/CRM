@@ -60,6 +60,14 @@ const dealInclude = {
   stage: { select: { id: true, name: true, position: true } },
 } as const;
 
+async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
+  const user = await db.user.findFirst({
+    where: { id: userId, organization_id: orgId },
+    select: { id: true },
+  });
+  return user !== null;
+}
+
 // ─── Deal CRUD ────────────────────────────────────────────────────────────────
 
 async function list(
@@ -99,13 +107,45 @@ async function create(
 ): Promise<void> {
   const body = request.body;
 
-  const stage = await db.pipelineStage.findFirst({
-    where: { id: body.stage_id, pipeline_id: body.pipeline_id },
-  });
+  const [contact, pipeline, stage, ownsAssignee] = await Promise.all([
+    db.contact.findFirst({
+      where: { id: body.contact_id, organization_id: request.user.org_id },
+      select: { id: true },
+    }),
+    db.pipeline.findFirst({
+      where: { id: body.pipeline_id, organization_id: request.user.org_id },
+      select: { id: true },
+    }),
+    db.pipelineStage.findFirst({
+      where: { id: body.stage_id, pipeline_id: body.pipeline_id },
+    }),
+    body.assigned_to !== undefined && body.assigned_to !== request.user.sub
+      ? userBelongsToOrg(body.assigned_to, request.user.org_id)
+      : Promise.resolve(true),
+  ]);
+
+  if (!contact) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Contact does not belong to your organization' },
+    });
+    return;
+  }
+
+  if (!pipeline) {
+    reply.status(404).send({ error: { code: 'PIPELINE_NOT_FOUND', message: 'Pipeline not found' } });
+    return;
+  }
 
   if (!stage) {
     reply.status(400).send({
       error: { code: 'STAGE_PIPELINE_MISMATCH', message: 'Stage does not belong to the specified pipeline' },
+    });
+    return;
+  }
+
+  if (!ownsAssignee) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Assigned user does not belong to your organization' },
     });
     return;
   }
@@ -167,28 +207,7 @@ async function update(
     return;
   }
 
-  if (body.contact_id !== undefined) {
-    const contact = await db.contact.findFirst({
-      where: { id: body.contact_id, organization_id: request.user.org_id },
-    });
-    if (!contact) {
-      reply.status(403).send({
-        error: { code: 'FORBIDDEN', message: 'Contact does not belong to your organization' },
-      });
-      return;
-    }
-  }
-
-  if (body.pipeline_id !== undefined) {
-    const pipeline = await db.pipeline.findFirst({
-      where: { id: body.pipeline_id, organization_id: request.user.org_id },
-    });
-    if (!pipeline) {
-      reply.status(404).send({ error: { code: 'PIPELINE_NOT_FOUND', message: 'Pipeline not found' } });
-      return;
-    }
-  }
-
+  let stageMatchesPromise: Promise<boolean> = Promise.resolve(true);
   if (body.stage_id !== undefined || body.pipeline_id !== undefined) {
     const nextPipelineId = body.pipeline_id ?? deal.pipeline_id;
     const nextStageId = body.stage_id ?? deal.stage_id;
@@ -198,18 +217,58 @@ async function update(
       });
       return;
     }
-    const stage = await db.pipelineStage.findFirst({
+    stageMatchesPromise = db.pipelineStage.findFirst({
       where: {
         id: nextStageId,
         pipeline_id: nextPipelineId,
       },
+      select: { id: true },
+    }).then((stage) => stage !== null);
+  }
+
+  const [ownsContact, ownsPipeline, ownsAssignee, stageMatches] = await Promise.all([
+    body.contact_id !== undefined
+      ? db.contact.findFirst({
+        where: { id: body.contact_id, organization_id: request.user.org_id },
+        select: { id: true },
+      }).then((contact) => contact !== null)
+      : Promise.resolve(true),
+    body.pipeline_id !== undefined
+      ? db.pipeline.findFirst({
+        where: { id: body.pipeline_id, organization_id: request.user.org_id },
+        select: { id: true },
+      }).then((pipeline) => pipeline !== null)
+      : Promise.resolve(true),
+    body.assigned_to !== undefined && body.assigned_to !== request.user.sub
+      ? userBelongsToOrg(body.assigned_to, request.user.org_id)
+      : Promise.resolve(true),
+    stageMatchesPromise,
+  ]);
+
+  if (!ownsContact) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Contact does not belong to your organization' },
     });
-    if (!stage) {
-      reply.status(400).send({
-        error: { code: 'STAGE_PIPELINE_MISMATCH', message: 'Stage does not belong to this deal\'s pipeline' },
-      });
-      return;
-    }
+    return;
+  }
+
+  if (!ownsPipeline) {
+    reply.status(404).send({ error: { code: 'PIPELINE_NOT_FOUND', message: 'Pipeline not found' } });
+    return;
+  }
+
+  if (!ownsAssignee) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Assigned user does not belong to your organization' },
+    });
+    return;
+  }
+
+  if (!stageMatches) {
+    reply.status(400).send({
+      error: { code: 'STAGE_PIPELINE_MISMATCH', message: 'Stage does not belong to this deal\'s pipeline' },
+    });
+    return;
   }
 
   const updateData: Prisma.DealUncheckedUpdateInput = {};

@@ -2,6 +2,14 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { ContactStatus, Prisma, TaskStatus } from '@prisma/client';
 import { db } from '../../services/db';
 
+async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
+  const user = await db.user.findFirst({
+    where: { id: userId, organization_id: orgId },
+    select: { id: true },
+  });
+  return user !== null;
+}
+
 export const ContactsController = {
   list: async (request: FastifyRequest, reply: FastifyReply) => {
     const { q, status, type, assigned_to, tag, page, per_page, sort, order } = request.query as {
@@ -63,6 +71,15 @@ export const ContactsController = {
       custom_fields?: Record<string, unknown>;
     };
 
+    if (body.assigned_to !== undefined && body.assigned_to !== request.user.sub) {
+      const ownsAssignee = await userBelongsToOrg(body.assigned_to, request.user.org_id);
+      if (!ownsAssignee) {
+        return reply.code(403).send({
+          error: { code: 'FORBIDDEN', message: 'Assigned user does not belong to your organization' },
+        });
+      }
+    }
+
     const contact = await db.contact.create({
       data: {
         ...body,
@@ -114,6 +131,15 @@ export const ContactsController = {
       type: 'lead' | 'customer' | 'partner' | 'other';
       custom_fields: Record<string, unknown>;
     }>;
+
+    if (body.assigned_to !== undefined && body.assigned_to !== request.user.sub) {
+      const ownsAssignee = await userBelongsToOrg(body.assigned_to, request.user.org_id);
+      if (!ownsAssignee) {
+        return reply.code(403).send({
+          error: { code: 'FORBIDDEN', message: 'Assigned user does not belong to your organization' },
+        });
+      }
+    }
 
     const contact = await db.contact.update({ where: { id }, data: body });
 

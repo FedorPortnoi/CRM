@@ -417,48 +417,54 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
   todayUTC.setUTCHours(0, 0, 0, 0);
   const tomorrowUTC = new Date(todayUTC.getTime() + 86_400_000);
 
-  const [dealsAgg, tasksDueCount, recentMsgs, recentTasks, recentEvents, wonCount, lostCount, stalledCount] =
-    await Promise.all([
-      db.deal.aggregate({
-        where: { organization_id: orgId, status: DealStatus.open },
-        _count: { _all: true },
-        _sum: { value: true },
-      }),
-      db.task.count({
-        where: {
-          organization_id: orgId,
-          status: { notIn: [TaskStatus.cancelled, TaskStatus.done] },
-          due_date: { gte: todayUTC, lt: tomorrowUTC },
-        },
-      }),
-      db.message.findMany({
-        where: { organization_id: orgId },
-        orderBy: { created_at: 'desc' },
-        take: 3,
-        select: { id: true, body: true, channel: true, created_at: true },
-      }),
-      db.task.findMany({
-        where: { organization_id: orgId },
-        orderBy: { created_at: 'desc' },
-        take: 3,
-        select: { id: true, title: true, created_at: true },
-      }),
-      db.calendarEvent.findMany({
-        where: { organization_id: orgId },
-        orderBy: { created_at: 'desc' },
-        take: 3,
-        select: { id: true, title: true, created_at: true },
-      }),
-      db.deal.count({ where: { organization_id: orgId, status: DealStatus.won } }),
-      db.deal.count({ where: { organization_id: orgId, status: DealStatus.lost } }),
-      db.deal.count({
-        where: {
-          organization_id: orgId,
-          status: DealStatus.open,
-          updated_at: { lt: stalledThreshold },
-        },
-      }),
-    ]);
+  const [dealStatusAgg, tasksDueCount, recentMsgs, recentTasks, recentEvents, stalledCount] = await Promise.all([
+    db.deal.groupBy({
+      by: ['status'],
+      where: {
+        organization_id: orgId,
+        status: { in: [DealStatus.open, DealStatus.won, DealStatus.lost] },
+      },
+      _count: { _all: true },
+      _sum: { value: true },
+    }),
+    db.task.count({
+      where: {
+        organization_id: orgId,
+        status: { notIn: [TaskStatus.cancelled, TaskStatus.done] },
+        due_date: { gte: todayUTC, lt: tomorrowUTC },
+      },
+    }),
+    db.message.findMany({
+      where: { organization_id: orgId },
+      orderBy: { created_at: 'desc' },
+      take: 3,
+      select: { id: true, body: true, channel: true, created_at: true },
+    }),
+    db.task.findMany({
+      where: { organization_id: orgId },
+      orderBy: { created_at: 'desc' },
+      take: 3,
+      select: { id: true, title: true, created_at: true },
+    }),
+    db.calendarEvent.findMany({
+      where: { organization_id: orgId },
+      orderBy: { created_at: 'desc' },
+      take: 3,
+      select: { id: true, title: true, created_at: true },
+    }),
+    db.deal.count({
+      where: {
+        organization_id: orgId,
+        status: DealStatus.open,
+        updated_at: { lt: stalledThreshold },
+      },
+    }),
+  ]);
+
+  const openAgg = dealStatusAgg.find((row) => row.status === DealStatus.open);
+  const wonCount = dealStatusAgg.find((row) => row.status === DealStatus.won)?._count._all ?? 0;
+  const lostCount = dealStatusAgg.find((row) => row.status === DealStatus.lost)?._count._all ?? 0;
+  const openTotalValue = openAgg?._sum.value ?? 0;
 
   const activity = [
     ...recentMsgs.map((m) => ({ type: 'message' as const, id: m.id, summary: m.body, created_at: m.created_at })),
@@ -475,8 +481,8 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
   return reply.send({
     data: {
       open_deals: {
-        count: dealsAgg._count._all,
-        total_value: Math.round(parseFloat((dealsAgg._sum.value ?? 0).toString()) * 100) / 100,
+        count: openAgg?._count._all ?? 0,
+        total_value: Math.round(parseFloat(openTotalValue.toString()) * 100) / 100,
       },
       tasks_due_today: tasksDueCount,
       recent_activity: activity,
