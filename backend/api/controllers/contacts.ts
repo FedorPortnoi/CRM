@@ -96,7 +96,7 @@ export const ContactsController = {
       where: { id, organization_id: request.user.org_id },
     });
 
-    if (!existing) {
+    if (!existing || existing.status === ContactStatus.archived) {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
     }
 

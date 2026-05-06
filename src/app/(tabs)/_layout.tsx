@@ -1,5 +1,6 @@
-import { Tabs } from 'expo-router';
-import { Kanban, LayoutDashboard, Users, CheckSquare } from 'lucide-react-native';
+import { TouchableOpacity } from 'react-native';
+import { Tabs, router } from 'expo-router';
+import { Kanban, LayoutDashboard, Users, CheckSquare, Plus } from 'lucide-react-native';
 
 export default function TabsLayout() {
   return (
@@ -28,6 +29,16 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }: { color: string; size: number }): JSX.Element => (
             <Users color={color} size={size} />
           ),
+          headerRight: (): JSX.Element => (
+            <TouchableOpacity
+              onPress={() => { router.push('/contact/new'); }}
+              style={{ marginRight: 16, padding: 4 }}
+              accessibilityRole="button"
+              accessibilityLabel="New contact"
+            >
+              <Plus size={24} color="#007AFF" />
+            </TouchableOpacity>
+          ),
         }}
       />
       <Tabs.Screen
@@ -38,6 +49,16 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }: { color: string; size: number }): JSX.Element => (
             <Kanban color={color} size={size} />
           ),
+          headerRight: (): JSX.Element => (
+            <TouchableOpacity
+              onPress={() => { router.push('/deal/new'); }}
+              style={{ marginRight: 16, padding: 4 }}
+              accessibilityRole="button"
+              accessibilityLabel="New deal"
+            >
+              <Plus size={24} color="#007AFF" />
+            </TouchableOpacity>
+          ),
         }}
       />
       <Tabs.Screen
@@ -47,6 +68,16 @@ export default function TabsLayout() {
           tabBarLabel: 'Tasks',
           tabBarIcon: ({ color, size }: { color: string; size: number }): JSX.Element => (
             <CheckSquare color={color} size={size} />
+          ),
+          headerRight: (): JSX.Element => (
+            <TouchableOpacity
+              onPress={() => { router.push('/task/new'); }}
+              style={{ marginRight: 16, padding: 4 }}
+              accessibilityRole="button"
+              accessibilityLabel="New task"
+            >
+              <Plus size={24} color="#007AFF" />
+            </TouchableOpacity>
           ),
         }}
       />

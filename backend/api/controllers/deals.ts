@@ -99,6 +99,17 @@ async function create(
 ): Promise<void> {
   const body = request.body;
 
+  const stage = await db.pipelineStage.findFirst({
+    where: { id: body.stage_id, pipeline_id: body.pipeline_id },
+  });
+
+  if (!stage) {
+    reply.status(400).send({
+      error: { code: 'STAGE_PIPELINE_MISMATCH', message: 'Stage does not belong to the specified pipeline' },
+    });
+    return;
+  }
+
   const deal = await db.deal.create({
     data: {
       title: body.title,
