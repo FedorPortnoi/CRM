@@ -220,6 +220,28 @@ export default function DashboardScreen(): JSX.Element {
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Calendar</Text>
+        </View>
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => router.push('/calendar')}
+            accessibilityRole="button"
+          >
+            <Text style={styles.actionButtonText}>Agenda</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.actionButtonSecondary]}
+            onPress={() => router.push('/calendar/new')}
+            accessibilityRole="button"
+          >
+            <Text style={styles.actionButtonSecondaryText}>New Event</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Today's Tasks</Text>
         </View>
         {tasks.isLoading ? (
@@ -393,6 +415,33 @@ const styles = StyleSheet.create({
     color: '#9B9B9B',
     fontSize: 14,
     paddingVertical: 12,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionButton: {
+    flex: 1,
+    backgroundColor: '#1A73E8',
+    borderRadius: 8,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionButtonSecondary: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#1A73E8',
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  actionButtonSecondaryText: {
+    color: '#1A73E8',
+    fontSize: 14,
+    fontWeight: '600',
   },
   inlineError: {
     backgroundColor: '#FFF4F2',

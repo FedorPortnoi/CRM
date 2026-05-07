@@ -19,14 +19,14 @@ export const AuthController = {
     };
 
     try {
+      const password_hash = await bcrypt.hash(password, 12);
+
       const { org, user } = await db.$transaction(async (tx) => {
         const slug = generateSlug(org_name);
 
         const org = await tx.org.create({
           data: { name: org_name, slug, plan: 'starter' },
         });
-
-        const password_hash = await bcrypt.hash(password, 12);
 
         const user = await tx.user.create({
           data: {

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
+import { MessageCircle } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 
@@ -210,6 +211,16 @@ export default function ContactDetailScreen(): JSX.Element {
                   ) : null}
                 </View>
               ) : null}
+              <TouchableOpacity
+                style={styles.conversationButton}
+                onPress={() => router.push({ pathname: '/contact/[id]/messages', params: { id } })}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Open conversation"
+              >
+                <MessageCircle size={18} color="#FFFFFF" />
+                <Text style={styles.conversationButtonText}>Conversation</Text>
+              </TouchableOpacity>
             </View>
           ) : null}
         </View>
@@ -353,6 +364,17 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   detailLabel: { fontSize: 13, color: '#9B9B9B', width: 64 },
   detailValue: { fontSize: 13, color: '#1A1A1A', flex: 1 },
+  conversationButton: {
+    marginTop: 14,
+    minHeight: 44,
+    borderRadius: 8,
+    backgroundColor: '#1A73E8',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  conversationButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   activitySummary: { fontSize: 14, color: '#1A1A1A', marginBottom: 2 },
   activityDate: { fontSize: 12, color: '#9B9B9B' },
   dealTitle: { fontSize: 15, fontWeight: '600', color: '#1A1A1A', marginBottom: 8 },
