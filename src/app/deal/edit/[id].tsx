@@ -67,7 +67,7 @@ type DealForm = {
 
 type DealPatch = {
   title?: string;
-  value?: number;
+  value?: number | null;
   pipeline_id?: string;
   stage_id?: string;
   contact_id?: string;
@@ -98,8 +98,12 @@ function buildPatch(current: DealForm, original: DealForm): DealPatch {
   if (current.title.trim() !== original.title.trim()) {
     patch.title = current.title.trim();
   }
-  if (current.value.trim() !== '' && current.value.trim() !== original.value.trim()) {
-    patch.value = Number(current.value.trim());
+  const currentValue = current.value.trim();
+  const originalValue = original.value.trim();
+  if (currentValue === '' && originalValue !== '') {
+    patch.value = null;
+  } else if (currentValue !== '' && currentValue !== originalValue) {
+    patch.value = Number(currentValue);
   }
   if (current.pipeline_id !== original.pipeline_id) {
     patch.pipeline_id = current.pipeline_id;

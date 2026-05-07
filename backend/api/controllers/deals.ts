@@ -31,7 +31,9 @@ type CreateBody = {
   custom_fields?: Record<string, unknown>;
 };
 
-type UpdateBody = Partial<CreateBody>;
+type UpdateBody = Partial<Omit<CreateBody, 'value'>> & {
+  value?: number | null;
+};
 
 type IdParams = { id: string };
 

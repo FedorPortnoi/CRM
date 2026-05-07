@@ -18,7 +18,7 @@ const CreateDealSchema = z.object({
 });
 
 const UpdateDealSchema = CreateDealSchema.partial()
-  .extend({ value: z.number().positive().optional() });
+  .extend({ value: z.union([z.number().positive(), z.null()]).optional() });
 
 const MoveStageSchema = z.object({
   stage_id: z.string().uuid(),
