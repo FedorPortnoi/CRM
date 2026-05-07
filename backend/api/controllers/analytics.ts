@@ -17,7 +17,22 @@ type RevenueQuery = DateRangeQuery & {
   currency: string;
 };
 
+type ExportBody = DateRangeQuery & {
+  format: 'csv' | 'pdf';
+  report: 'funnel' | 'revenue' | 'team_activity' | 'win_loss' | 'lead_sources';
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function toCsv(headers: string[], rows: (string | number | null)[][]): string {
+  const escape = (v: string | number | null): string => {
+    const s = v === null || v === undefined ? '' : String(v);
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"`
+      : s;
+  };
+  return [headers, ...rows].map(row => row.map(escape).join(',')).join('\n');
+}
 
 function resolveDateRange(
   period: string,
@@ -492,8 +507,295 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
   });
 }
 
-const stub = (_req: FastifyRequest, reply: FastifyReply): void => {
-  reply.status(501).send({ error: { code: 'NOT_IMPLEMENTED', message: 'Not yet implemented' } });
+async function conversionRates(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const { pipeline_id } = request.query as DateRangeQuery;
+  const orgId = request.user.org_id;
+
+  const pipelines = await db.pipeline.findMany({
+    where: {
+      organization_id: orgId,
+      ...(pipeline_id ? { id: pipeline_id } : {}),
+    },
+    include: {
+      stages: { orderBy: { position: 'asc' } },
+    },
+  });
+
+  const data = await Promise.all(
+    pipelines.map(async (pipeline) => {
+      const deals = await db.deal.findMany({
+        where: {
+          organization_id: orgId,
+          pipeline_id: pipeline.id,
+          status: { not: DealStatus.archived },
+        },
+        select: {
+          status: true,
+          stage: { select: { position: true } },
+        },
+      });
+
+      const transitions = pipeline.stages.slice(1).flatMap((toStage, index) => {
+        const fromStage = pipeline.stages[index];
+        if (!fromStage) return [];
+
+        const entered_count = deals.filter(
+          (d) => (d.stage?.position ?? -1) >= fromStage.position || d.status === DealStatus.won,
+        ).length;
+
+        const progressed_count = deals.filter(
+          (d) => (d.stage?.position ?? -1) >= toStage.position || d.status === DealStatus.won,
+        ).length;
+
+        const conversion_rate =
+          entered_count === 0 ? 0 : Math.round((progressed_count / entered_count) * 10_000) / 100;
+
+        return [{
+          from_stage_id: fromStage.id,
+          from_stage_name: fromStage.name,
+          from_stage_position: fromStage.position,
+          to_stage_id: toStage.id,
+          to_stage_name: toStage.name,
+          to_stage_position: toStage.position,
+          entered_count,
+          progressed_count,
+          conversion_rate,
+        }];
+      });
+
+      return {
+        pipeline_id: pipeline.id,
+        pipeline_name: pipeline.name,
+        transitions,
+        note: 'Conversion rates use current stage position as a proxy — no stage history table available',
+      };
+    }),
+  );
+
+  reply.send({ data, meta: {} });
+}
+
+async function stageDuration(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const { pipeline_id } = request.query as DateRangeQuery;
+  const orgId = request.user.org_id;
+  const now = Date.now();
+
+  const deals = await db.deal.findMany({
+    where: {
+      organization_id: orgId,
+      status: { not: DealStatus.archived },
+      stage_id: { not: null },
+      ...(pipeline_id ? { pipeline_id } : {}),
+    },
+    select: {
+      stage_id: true,
+      status: true,
+      updated_at: true,
+      actual_close: true,
+      pipeline_id: true,
+      stage: { select: { name: true, position: true } },
+      pipeline: { select: { name: true } },
+    },
+  });
+
+  const stageMap = new Map<
+    string,
+    { name: string; position: number; pipeline_id: string; pipeline_name: string; total_days: number; count: number }
+  >();
+
+  for (const deal of deals) {
+    if (!deal.stage_id || !deal.stage) continue;
+
+    const closeMs =
+      deal.status === DealStatus.won || deal.status === DealStatus.lost
+        ? (deal.actual_close?.getTime() ?? deal.updated_at.getTime())
+        : now;
+
+    const days_in_stage = Math.max(0, (closeMs - deal.updated_at.getTime()) / 86_400_000);
+
+    const existing = stageMap.get(deal.stage_id) ?? {
+      name: deal.stage.name,
+      position: deal.stage.position,
+      pipeline_id: deal.pipeline_id ?? '',
+      pipeline_name: deal.pipeline?.name ?? '',
+      total_days: 0,
+      count: 0,
+    };
+
+    existing.total_days += days_in_stage;
+    existing.count += 1;
+    stageMap.set(deal.stage_id, existing);
+  }
+
+  const data = Array.from(stageMap.entries())
+    .map(([stage_id, s]) => ({
+      stage_id,
+      stage_name: s.name,
+      pipeline_id: s.pipeline_id,
+      pipeline_name: s.pipeline_name,
+      avg_days: Math.round((s.total_days / s.count) * 100) / 100,
+      deal_count: s.count,
+    }))
+    .sort((a, b) => {
+      if (a.pipeline_id < b.pipeline_id) return -1;
+      if (a.pipeline_id > b.pipeline_id) return 1;
+      const posA = stageMap.get(a.stage_id)?.position ?? 0;
+      const posB = stageMap.get(b.stage_id)?.position ?? 0;
+      return posA - posB;
+    });
+
+  reply.send({
+    data,
+    meta: { note: 'Stage duration uses updated_at delta as a proxy — no stage history table available' },
+  });
+}
+
+async function exportReport(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const { format, report, period, start, end, pipeline_id, assigned_to } =
+    request.body as ExportBody;
+
+  if (format === 'pdf') {
+    reply.status(501).send({
+      error: { code: 'PDF_NOT_IMPLEMENTED', message: 'PDF export not implemented for MVP' },
+    });
+    return;
+  }
+
+  const orgId = request.user.org_id;
+  const { startDate, endDate } = resolveDateRange(period, start, end);
+  const baseWhere: Prisma.DealWhereInput = {
+    organization_id: orgId,
+    created_at: { gte: startDate, lte: endDate },
+    ...(pipeline_id && { pipeline_id }),
+    ...(assigned_to && { assigned_to }),
+  };
+
+  let csv = '';
+
+  if (report === 'funnel') {
+    const groups = await db.deal.groupBy({
+      by: ['stage_id', 'status'],
+      where: baseWhere,
+      _count: { _all: true },
+      _sum: { value: true },
+    });
+    const stageMap = new Map<string, { open: number; won: number; lost: number; total_value: number }>();
+    for (const row of groups) {
+      const key = row.stage_id ?? 'unassigned';
+      const e = stageMap.get(key) ?? { open: 0, won: 0, lost: 0, total_value: 0 };
+      if (row.status === DealStatus.open) e.open += row._count._all;
+      else if (row.status === DealStatus.won) e.won += row._count._all;
+      else if (row.status === DealStatus.lost) e.lost += row._count._all;
+      e.total_value += row._sum.value ? parseFloat(row._sum.value.toString()) : 0;
+      stageMap.set(key, e);
+    }
+    const rows = Array.from(stageMap.entries()).map(([stage_id, d]) => {
+      const closed = d.won + d.lost;
+      return [stage_id, d.open, d.won, d.lost, d.open + d.won + d.lost,
+        Math.round(d.total_value * 100) / 100,
+        closed > 0 ? Math.round((d.won / closed) * 10_000) / 100 : null,
+      ] as (string | number | null)[];
+    });
+    csv = toCsv(['stage_id', 'open', 'won', 'lost', 'total', 'total_value', 'conversion_rate'], rows);
+
+  } else if (report === 'revenue') {
+    const deals = await db.deal.findMany({
+      where: {
+        organization_id: orgId,
+        status: DealStatus.won,
+        actual_close: { gte: startDate, lte: endDate },
+        ...(pipeline_id && { pipeline_id }),
+        ...(assigned_to && { assigned_to }),
+      },
+      select: { actual_close: true, value: true },
+      orderBy: { actual_close: 'asc' },
+    });
+    const buckets = new Map<string, { count: number; revenue: number }>();
+    for (const deal of deals) {
+      if (!deal.actual_close) continue;
+      const key = getPeriodKey(deal.actual_close, 'month');
+      const ex = buckets.get(key) ?? { count: 0, revenue: 0 };
+      buckets.set(key, {
+        count: ex.count + 1,
+        revenue: ex.revenue + (deal.value ? parseFloat(deal.value.toString()) : 0),
+      });
+    }
+    const rows = Array.from(buckets.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([p, d]) => [p, d.count, Math.round(d.revenue * 100) / 100,
+        d.count > 0 ? Math.round((d.revenue / d.count) * 100) / 100 : 0,
+      ] as (string | number | null)[]);
+    csv = toCsv(['period', 'deal_count', 'revenue', 'avg_deal_value'], rows);
+
+  } else if (report === 'team_activity') {
+    const dateRange = { created_at: { gte: startDate, lte: endDate } };
+    const [msgGroups, taskGroups, meetingGroups] = await Promise.all([
+      db.message.groupBy({ by: ['user_id'], where: { organization_id: orgId, user_id: { not: null }, ...dateRange }, _count: { _all: true } }),
+      db.task.groupBy({ by: ['assigned_to'], where: { organization_id: orgId, ...dateRange }, _count: { _all: true } }),
+      db.calendarEvent.groupBy({ by: ['created_by'], where: { organization_id: orgId, created_by: { not: null }, ...dateRange }, _count: { _all: true } }),
+    ]);
+    const allUserIds = new Set<string>();
+    msgGroups.forEach(r => { if (r.user_id) allUserIds.add(r.user_id); });
+    taskGroups.forEach(r => allUserIds.add(r.assigned_to));
+    meetingGroups.forEach(r => { if (r.created_by) allUserIds.add(r.created_by); });
+    const users = await db.user.findMany({
+      where: { id: { in: Array.from(allUserIds) }, organization_id: orgId },
+      select: { id: true, name: true },
+    });
+    const userMap = new Map(users.map(u => [u.id, u.name]));
+    const msgMap = new Map(msgGroups.flatMap(r => r.user_id ? [[r.user_id, r._count._all] as [string, number]] : []));
+    const taskMap = new Map(taskGroups.map(r => [r.assigned_to, r._count._all] as [string, number]));
+    const meetingMap = new Map(meetingGroups.flatMap(r => r.created_by ? [[r.created_by, r._count._all] as [string, number]] : []));
+    const rows = Array.from(allUserIds).map(uid => {
+      const msgs = msgMap.get(uid) ?? 0;
+      const tasks = taskMap.get(uid) ?? 0;
+      const meetings = meetingMap.get(uid) ?? 0;
+      return [uid, userMap.get(uid) ?? 'Unknown', msgs, tasks, meetings, msgs + tasks + meetings] as (string | number | null)[];
+    });
+    csv = toCsv(['user_id', 'name', 'messages', 'tasks', 'meetings', 'total'], rows);
+
+  } else if (report === 'win_loss') {
+    const [statusGroups, reasonGroups] = await Promise.all([
+      db.deal.groupBy({ by: ['status'], where: { ...baseWhere, status: { in: [DealStatus.won, DealStatus.lost] } }, _count: { _all: true }, _sum: { value: true } }),
+      db.deal.groupBy({ by: ['lost_reason'], where: { ...baseWhere, status: DealStatus.lost }, _count: { _all: true } }),
+    ]);
+    const rows: (string | number | null)[][] = statusGroups.map(r => [
+      r.status, r._count._all,
+      r._sum.value ? Math.round(parseFloat(r._sum.value.toString()) * 100) / 100 : 0,
+      null, null,
+    ]);
+    for (const r of reasonGroups) {
+      rows.push([null, null, null, r.lost_reason ?? 'unspecified', r._count._all]);
+    }
+    csv = toCsv(['status', 'count', 'total_value', 'lost_reason', 'reason_count'], rows);
+
+  } else {
+    // lead_sources
+    const groups = await db.deal.groupBy({
+      by: ['source'],
+      where: baseWhere,
+      _count: { _all: true },
+      _sum: { value: true },
+    });
+    const rows = groups.map(r => [
+      r.source ?? 'unknown', r._count._all,
+      r._sum.value ? Math.round(parseFloat(r._sum.value.toString()) * 100) / 100 : 0,
+    ] as (string | number | null)[]);
+    csv = toCsv(['source', 'count', 'total_value'], rows);
+  }
+
+  reply
+    .header('Content-Type', 'text/csv')
+    .header('Content-Disposition', `attachment; filename="export-${report}-${Date.now()}.csv"`)
+    .send(csv);
+}
+
+const exportStatus = (_req: FastifyRequest, reply: FastifyReply): void => {
+  reply.status(501).send({ error: { code: 'ASYNC_EXPORT_NOT_IMPLEMENTED', message: 'Async export not implemented for MVP' } });
+};
+
+const exportDownload = (_req: FastifyRequest, reply: FastifyReply): void => {
+  reply.status(501).send({ error: { code: 'ASYNC_EXPORT_NOT_IMPLEMENTED', message: 'Async export not implemented for MVP' } });
 };
 
 // ─── Export ───────────────────────────────────────────────────────────────────
@@ -501,14 +803,14 @@ const stub = (_req: FastifyRequest, reply: FastifyReply): void => {
 export const AnalyticsController = {
   dashboard,
   funnel,
-  conversionRates: stub,
-  stageDuration: stub,
+  conversionRates,
+  stageDuration,
   leadSources,
   winLoss,
   revenue,
   teamActivity,
   repPerformance,
-  exportReport: stub,
-  exportStatus: stub,
-  exportDownload: stub,
+  exportReport,
+  exportStatus,
+  exportDownload,
 };
