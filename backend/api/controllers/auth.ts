@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcryptjs';
+import { Prisma } from '@prisma/client';
 import { db } from '../../services/db';
 
 function generateSlug(name: string): string {
@@ -75,8 +76,8 @@ export const AuthController = {
           token,
         },
       });
-    } catch (err: any) {
-      if (err?.code === 'P2002') {
+    } catch (err: unknown) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         return reply.code(409).send({
           error: { code: 'EMAIL_ALREADY_EXISTS', message: 'An account with this email already exists' },
         });

@@ -6,8 +6,8 @@ declare module '@fastify/jwt' {
       sub: string;
       org_id: string;
       role: 'owner' | 'admin' | 'member' | 'viewer';
-      iat: number;
-      exp: number;
+      iat?: number;
+      exp?: number;
     };
     user: {
       sub: string;

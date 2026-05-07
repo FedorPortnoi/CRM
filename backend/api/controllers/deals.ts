@@ -71,11 +71,11 @@ async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean>
 // ─── Deal CRUD ────────────────────────────────────────────────────────────────
 
 async function list(
-  request: FastifyRequest<{ Querystring: ListQuery }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
   const { pipeline_id, stage_id, assigned_to, status, contact_id, q, page, per_page, sort, order } =
-    request.query;
+    request.query as ListQuery;
 
   const where: Prisma.DealWhereInput = {
     organization_id: request.user.org_id,
@@ -102,10 +102,10 @@ async function list(
 }
 
 async function create(
-  request: FastifyRequest<{ Body: CreateBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const body = request.body;
+  const body = request.body as CreateBody;
 
   const [contact, pipeline, stage, ownsAssignee] = await Promise.all([
     db.contact.findFirst({
@@ -162,7 +162,7 @@ async function create(
       probability: body.probability,
       source: body.source,
       assigned_to: body.assigned_to,
-      custom_fields: body.custom_fields,
+      custom_fields: body.custom_fields as Prisma.InputJsonValue | undefined,
       organization_id: request.user.org_id,
       created_by: request.user.sub,
     },
@@ -173,10 +173,10 @@ async function create(
 }
 
 async function getById(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
 
   const deal = await db.deal.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -192,11 +192,11 @@ async function getById(
 }
 
 async function update(
-  request: FastifyRequest<{ Params: IdParams; Body: UpdateBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
-  const body = request.body;
+  const { id } = request.params as IdParams;
+  const body = request.body as UpdateBody;
 
   const deal = await db.deal.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -298,10 +298,10 @@ async function update(
 }
 
 async function archive(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
 
   const deal = await db.deal.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -327,11 +327,11 @@ async function archive(
 }
 
 async function moveStage(
-  request: FastifyRequest<{ Params: IdParams; Body: MoveStageBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
-  const { stage_id } = request.body;
+  const { id } = request.params as IdParams;
+  const { stage_id } = request.body as MoveStageBody;
 
   const deal = await db.deal.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -367,11 +367,11 @@ async function moveStage(
 }
 
 async function markWon(
-  request: FastifyRequest<{ Params: IdParams; Body: MarkWonBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
-  const { actual_close } = request.body;
+  const { id } = request.params as IdParams;
+  const { actual_close } = request.body as MarkWonBody;
 
   const deal = await db.deal.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -400,11 +400,11 @@ async function markWon(
 }
 
 async function markLost(
-  request: FastifyRequest<{ Params: IdParams; Body: MarkLostBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
-  const { reason, actual_close } = request.body;
+  const { id } = request.params as IdParams;
+  const { reason, actual_close } = request.body as MarkLostBody;
 
   const deal = await db.deal.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -452,10 +452,10 @@ async function listPipelines(
 }
 
 async function createPipeline(
-  request: FastifyRequest<{ Body: CreatePipelineBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { name, description, is_default } = request.body;
+  const { name, description, is_default } = request.body as CreatePipelineBody;
 
   // If new pipeline is default, unset existing default
   if (is_default) {
@@ -480,10 +480,10 @@ async function createPipeline(
 }
 
 async function getPipeline(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
 
   const pipeline = await db.pipeline.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -502,11 +502,11 @@ async function getPipeline(
 }
 
 async function updatePipeline(
-  request: FastifyRequest<{ Params: IdParams; Body: UpdatePipelineBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
-  const { name, description, is_default } = request.body;
+  const { id } = request.params as IdParams;
+  const { name, description, is_default } = request.body as UpdatePipelineBody;
 
   const pipeline = await db.pipeline.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -534,10 +534,10 @@ async function updatePipeline(
 }
 
 async function deletePipeline(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
 
   const pipeline = await db.pipeline.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -570,10 +570,10 @@ async function deletePipeline(
 // ─── Stage management ─────────────────────────────────────────────────────────
 
 async function listStages(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id: pipeline_id } = request.params;
+  const { id: pipeline_id } = request.params as IdParams;
 
   const pipeline = await db.pipeline.findFirst({
     where: { id: pipeline_id, organization_id: request.user.org_id },
@@ -594,11 +594,11 @@ async function listStages(
 }
 
 async function createStage(
-  request: FastifyRequest<{ Params: IdParams; Body: CreateStageBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id: pipeline_id } = request.params;
-  const body = request.body;
+  const { id: pipeline_id } = request.params as IdParams;
+  const body = request.body as CreateStageBody;
 
   const pipeline = await db.pipeline.findFirst({
     where: { id: pipeline_id, organization_id: request.user.org_id },
@@ -617,10 +617,11 @@ async function createStage(
 }
 
 async function updateStage(
-  request: FastifyRequest<{ Params: IdParams; Body: UpdateStageBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
+  const body = request.body as UpdateStageBody;
 
   const stage = await db.pipelineStage.findFirst({
     where: { id },
@@ -634,17 +635,17 @@ async function updateStage(
 
   const updated = await db.pipelineStage.update({
     where: { id },
-    data: request.body,
+    data: body,
   });
 
   reply.send({ data: updated, meta: {} });
 }
 
 async function deleteStage(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
 
   const stage = await db.pipelineStage.findFirst({
     where: { id },

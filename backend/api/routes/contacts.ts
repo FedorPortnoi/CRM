@@ -39,7 +39,7 @@ const ContactFilterSchema = z.object({
   order: z.enum(['asc', 'desc']).default('desc'),
 });
 
-const authenticate = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
   await request.jwtVerify();
 };
 

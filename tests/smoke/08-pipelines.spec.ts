@@ -1,17 +1,23 @@
 import { test, expect } from '@playwright/test';
 import { getAuth } from './helpers/auth';
 
+type PipelineSummary = {
+  id: string;
+  name: string;
+  is_default: boolean;
+};
+
 test('GET /api/v1/deals/pipelines returns default pipeline', async ({ request }) => {
   const { token } = getAuth();
   const res = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${token}` },
   });
   expect(res.status()).toBe(200);
-  const body = await res.json();
+  const body = (await res.json()) as { data: PipelineSummary[] };
   expect(Array.isArray(body.data)).toBe(true);
   expect(body.data.length).toBeGreaterThanOrEqual(1);
-  const defaultPipeline = body.data.find((p: any) => p.is_default);
-  expect(defaultPipeline).toBeDefined();
+  const defaultPipeline = body.data.find((p) => p.is_default);
+  if (!defaultPipeline) throw new Error('Default pipeline not found');
   expect(defaultPipeline.name).toBe('Sales Pipeline');
 });
 
@@ -20,8 +26,9 @@ test('Default pipeline has exactly 4 stages in correct order', async ({ request 
   const list = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const { data: pipelines } = await list.json();
-  const defaultPipeline = pipelines.find((p: any) => p.is_default);
+  const { data: pipelines } = (await list.json()) as { data: PipelineSummary[] };
+  const defaultPipeline = pipelines.find((p) => p.is_default);
+  if (!defaultPipeline) throw new Error('Default pipeline not found');
 
   const res = await request.get(`/api/v1/deals/pipelines/${defaultPipeline.id}/stages`, {
     headers: { Authorization: `Bearer ${token}` },

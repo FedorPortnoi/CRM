@@ -90,7 +90,7 @@ async function dealBelongsToOrg(dealId: string, orgId: string): Promise<boolean>
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 async function list(
-  request: FastifyRequest<{ Querystring: ListQuery }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
   const {
@@ -106,7 +106,7 @@ async function list(
     per_page,
     sort,
     order,
-  } = request.query;
+  } = request.query as ListQuery;
 
   const where: Prisma.TaskWhereInput = {
     organization_id: request.user.org_id,
@@ -141,10 +141,10 @@ async function list(
 }
 
 async function create(
-  request: FastifyRequest<{ Body: CreateBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const body = request.body;
+  const body = request.body as CreateBody;
 
   const [ownsAssignee, ownsContact, ownsDeal] = await Promise.all([
     body.assigned_to === request.user.sub
@@ -193,10 +193,10 @@ async function create(
 }
 
 async function getById(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
 
   const task = await db.task.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -215,11 +215,11 @@ async function getById(
 }
 
 async function update(
-  request: FastifyRequest<{ Params: IdParams; Body: UpdateBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
-  const body = request.body;
+  const { id } = request.params as IdParams;
+  const body = request.body as UpdateBody;
 
   const task = await db.task.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -281,10 +281,10 @@ async function update(
 }
 
 async function complete(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
 
   const task = await db.task.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -312,10 +312,10 @@ async function complete(
 }
 
 async function startProgress(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
 
   const task = await db.task.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -340,10 +340,10 @@ async function startProgress(
 }
 
 async function cancel(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
 
   const task = await db.task.findFirst({
     where: { id, organization_id: request.user.org_id },

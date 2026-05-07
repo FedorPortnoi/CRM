@@ -1,6 +1,8 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 import { getAuth } from './helpers/auth';
 
+test.describe.configure({ timeout: 30000 });
+
 interface PipelineStage { id: string; name: string; position: number; }
 interface Pipeline { id: string; name: string; is_default: boolean; stages: PipelineStage[]; }
 
@@ -65,7 +67,7 @@ test('GET /api/v1/deals/:id with non-existent UUID returns 404 and error.code DE
   expect(((await res.json()).error as { code: string }).code).toBe('DEAL_NOT_FOUND');
 });
 
-test('Cross-org: Org B token cannot GET Org A deal — returns 404', { timeout: 30000 }, async ({ request }) => {
+test('Cross-org: Org B token cannot GET Org A deal — returns 404', async ({ request }) => {
   const orgA = await registerOrg(request, 'ga3');
   const orgB = await registerOrg(request, 'gb3');
   const { pipelineId, stageId } = await getPipelineAndStage(request, orgA.token);
@@ -75,7 +77,7 @@ test('Cross-org: Org B token cannot GET Org A deal — returns 404', { timeout: 
   expect(res.status()).toBe(404);
 });
 
-test('Cross-org: Org B token cannot PATCH Org A deal — returns 404', { timeout: 30000 }, async ({ request }) => {
+test('Cross-org: Org B token cannot PATCH Org A deal — returns 404', async ({ request }) => {
   const orgA = await registerOrg(request, 'ga4');
   const orgB = await registerOrg(request, 'gb4');
   const { pipelineId, stageId } = await getPipelineAndStage(request, orgA.token);
@@ -180,7 +182,7 @@ test('GET /api/v1/analytics/dashboard response includes a meta field that is a n
   expect(body.meta).not.toBeNull();
 });
 
-test('Cross-org: Org B token GET /api/v1/contacts returns empty array — no Org A contacts leaked', { timeout: 30000 }, async ({ request }) => {
+test('Cross-org: Org B token GET /api/v1/contacts returns empty array — no Org A contacts leaked', async ({ request }) => {
   const orgA = await registerOrg(request, 'ga14');
   const orgB = await registerOrg(request, 'gb14');
   await createContact(request, orgA.token);

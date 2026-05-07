@@ -1,6 +1,8 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 import { getAuth } from './helpers/auth';
 
+test.describe.configure({ timeout: 30000 });
+
 interface PipelineStage {
   id: string;
   name: string;
@@ -262,4 +264,4 @@ test('Cross-org isolation: contact created by Org B not accessible by Org A toke
     headers: { Authorization: `Bearer ${mainToken}` },
   });
   expect(res.status()).toBe(404);
-}, { timeout: 30000 });
+});

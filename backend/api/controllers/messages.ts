@@ -1,4 +1,4 @@
-﻿import { FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyRequest, FastifyReply } from 'fastify';
 import { MessageDirection, MessageChannel, MessageStatus, Prisma } from '@prisma/client';
 import { db } from '../../services/db';
 
@@ -62,10 +62,10 @@ async function contactBelongsToOrg(contactId: string, orgId: string): Promise<bo
 // --- Handlers ---
 
 async function list(
-  request: FastifyRequest<{ Querystring: ListQuery }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { contact_id, channel, direction, page, per_page } = request.query;
+  const { contact_id, channel, direction, page, per_page } = request.query as ListQuery;
 
   const where: Prisma.MessageWhereInput = {
     organization_id: request.user.org_id,
@@ -91,10 +91,10 @@ async function list(
 }
 
 async function getConversation(
-  request: FastifyRequest<{ Params: ContactIdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { contact_id } = request.params;
+  const { contact_id } = request.params as ContactIdParams;
 
   const ownsContact = await contactBelongsToOrg(contact_id, request.user.org_id);
   if (!ownsContact) {
@@ -111,10 +111,10 @@ async function getConversation(
 }
 
 async function sendSms(
-  request: FastifyRequest<{ Body: SendSmsBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { contact_id, body } = request.body;
+  const { contact_id, body } = request.body as SendSmsBody;
   const organization_id = request.user.org_id;
 
   const ownsContact = await contactBelongsToOrg(contact_id, organization_id);
@@ -139,10 +139,10 @@ async function sendSms(
 }
 
 async function sendInApp(
-  request: FastifyRequest<{ Body: SendInAppBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { contact_id, body } = request.body;
+  const { contact_id, body } = request.body as SendInAppBody;
   const organization_id = request.user.org_id;
 
   const ownsContact = await contactBelongsToOrg(contact_id, organization_id);
@@ -167,10 +167,10 @@ async function sendInApp(
 }
 
 async function logCall(
-  request: FastifyRequest<{ Body: LogCallBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { contact_id, direction, duration_seconds, notes, occurred_at } = request.body;
+  const { contact_id, direction, duration_seconds, notes, occurred_at } = request.body as LogCallBody;
   const organization_id = request.user.org_id;
 
   const ownsContact = await contactBelongsToOrg(contact_id, organization_id);
@@ -199,10 +199,10 @@ async function logCall(
 }
 
 async function markRead(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
 
   const existing = await db.message.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -222,13 +222,14 @@ async function markRead(
 }
 
 async function twilioInboundWebhook(
-  request: FastifyRequest<{ Body: Record<string, unknown> }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
   try {
-    const from = request.body['From'];
-    const messageBody = request.body['Body'];
-    const smsSid = request.body['SmsSid'];
+    const body = request.body as Record<string, unknown>;
+    const from = body['From'];
+    const messageBody = body['Body'];
+    const smsSid = body['SmsSid'];
 
     const contact = await db.contact.findFirst({
       where: { phone: String(from) },
@@ -255,12 +256,13 @@ async function twilioInboundWebhook(
 }
 
 async function twilioStatusWebhook(
-  request: FastifyRequest<{ Body: Record<string, unknown> }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
   try {
-    const sid = request.body['MessageSid'];
-    const twilioStatus = request.body['MessageStatus'];
+    const body = request.body as Record<string, unknown>;
+    const sid = body['MessageSid'];
+    const twilioStatus = body['MessageStatus'];
 
     const existing = await db.message.findFirst({
       where: { twilio_sid: String(sid) },

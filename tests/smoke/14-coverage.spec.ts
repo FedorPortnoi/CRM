@@ -1,6 +1,8 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 import { getAuth } from './helpers/auth';
 
+test.describe.configure({ timeout: 30000 });
+
 interface CalendarEvent {
   id: string;
   status: string;
@@ -126,7 +128,7 @@ test('GET /api/v1/tasks/:id with non-existent id returns 404 TASK_NOT_FOUND', as
 
 // ─── Cross-org isolation (Rung 5) ─────────────────────────────────────────────
 
-test('cross-org isolation: Org B token cannot access Org A contact — returns 404', { timeout: 30000 }, async ({ request }) => {
+test('cross-org isolation: Org B token cannot access Org A contact — returns 404', async ({ request }) => {
   const emailA = 'org-a-contact-' + Date.now() + '@test.com';
   const emailB = 'org-b-contact-' + (Date.now() + 1) + '@test.com';
 
@@ -155,7 +157,7 @@ test('cross-org isolation: Org B token cannot access Org A contact — returns 4
   expect(res.status()).toBe(404);
 });
 
-test('cross-org isolation: Org B token cannot access Org A task — returns 404', { timeout: 30000 }, async ({ request }) => {
+test('cross-org isolation: Org B token cannot access Org A task — returns 404', async ({ request }) => {
   const emailA = 'org-a-task-' + Date.now() + '@test.com';
   const emailB = 'org-b-task-' + (Date.now() + 1) + '@test.com';
 

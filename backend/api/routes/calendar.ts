@@ -44,7 +44,7 @@ const PostMeetingNotesSchema = z.object({
   notes: z.string().min(1).max(10000),
 });
 
-const authenticate = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
   await request.jwtVerify();
 };
 

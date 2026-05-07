@@ -12,8 +12,8 @@ import DraggableFlatList, {
   RenderItemParams,
 } from 'react-native-draggable-flatlist';
 import { router } from 'expo-router';
-import { useDealsStore } from '../../store/dealsStore';
-import { usePipelinesStore } from '../../store/pipelinesStore';
+import { useDealsStore } from '../store/dealsStore';
+import { usePipelinesStore } from '../store/pipelinesStore';
 
 type DealStatus = 'open' | 'won' | 'lost' | 'archived';
 

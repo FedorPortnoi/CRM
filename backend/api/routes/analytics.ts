@@ -22,7 +22,7 @@ const ExportSchema = z.object({
   ...DateRangeSchema.shape,
 });
 
-const authenticate = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
   await request.jwtVerify();
 };
 

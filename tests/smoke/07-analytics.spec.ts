@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { getAuth } from './helpers/auth';
 
+test.describe.configure({ timeout: 30000 });
+
 test('GET /api/v1/analytics/funnel returns funnel data', async ({ request }) => {
   const { token } = getAuth();
   const res = await request.get('/api/v1/analytics/funnel', {
@@ -115,7 +117,7 @@ test('pipeline_health_score is 0 when org has no won, lost, or stalled deals (ze
   expect(body.data.pipeline_health_score).toBe(0);
 });
 
-test('pipeline_health_score increases from 0 to non-zero after a deal is moved to won status', { timeout: 30000 }, async ({ request }) => {
+test('pipeline_health_score increases from 0 to non-zero after a deal is moved to won status', async ({ request }) => {
   const regRes = await request.post('/api/v1/auth/', {
     data: {
       email: `phs-recalc-${Date.now()}@test.com`,
@@ -173,7 +175,7 @@ test('pipeline_health_score increases from 0 to non-zero after a deal is moved t
   expect((await after.json()).data.pipeline_health_score).toBeGreaterThan(0);
 });
 
-test('dashboard recent_activity is capped at exactly 5 items when pool contains more than 5', { timeout: 30000 }, async ({ request }) => {
+test('dashboard recent_activity is capped at exactly 5 items when pool contains more than 5', async ({ request }) => {
   const regRes = await request.post('/api/v1/auth/', {
     data: {
       email: `phs-activity-${Date.now()}@test.com`,

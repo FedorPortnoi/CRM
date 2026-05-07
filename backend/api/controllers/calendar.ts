@@ -61,10 +61,11 @@ async function dealBelongsToOrg(dealId: string, orgId: string): Promise<boolean>
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 async function list(
-  request: FastifyRequest<{ Querystring: ListQuery }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { start, end, contact_id, deal_id, attendee_id, status, page, per_page } = request.query;
+  const { start, end, contact_id, deal_id, attendee_id, status, page, per_page } =
+    request.query as ListQuery;
 
   const where: Prisma.CalendarEventWhereInput = {
     organization_id: request.user.org_id,
@@ -101,10 +102,11 @@ async function list(
 }
 
 async function create(
-  request: FastifyRequest<{ Body: CreateBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { attendees, start_time, end_time, send_invite: _send_invite, ...rest } = request.body;
+  const { attendees, start_time, end_time, send_invite: _send_invite, ...rest } =
+    request.body as CreateBody;
 
   const [ownsContact, ownsDeal] = await Promise.all([
     rest.contact_id !== undefined
@@ -145,10 +147,10 @@ async function create(
 }
 
 async function getById(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
 
   const event = await db.calendarEvent.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -167,11 +169,12 @@ async function getById(
 }
 
 async function update(
-  request: FastifyRequest<{ Params: IdParams; Body: UpdateBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
-  const { attendees, start_time, end_time, send_invite: _send_invite, ...rest } = request.body;
+  const { id } = request.params as IdParams;
+  const { attendees, start_time, end_time, send_invite: _send_invite, ...rest } =
+    request.body as UpdateBody;
 
   const event = await db.calendarEvent.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -224,10 +227,10 @@ async function update(
 }
 
 async function cancel(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
 
   const event = await db.calendarEvent.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -252,11 +255,11 @@ async function cancel(
 }
 
 async function addPostMeetingNotes(
-  request: FastifyRequest<{ Params: IdParams; Body: PostMeetingNotesBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
-  const { notes } = request.body;
+  const { id } = request.params as IdParams;
+  const { notes } = request.body as PostMeetingNotesBody;
 
   const event = await db.calendarEvent.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -281,10 +284,10 @@ async function addPostMeetingNotes(
 }
 
 async function markCompleted(
-  request: FastifyRequest<{ Params: IdParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { id } = request.params;
+  const { id } = request.params as IdParams;
 
   const event = await db.calendarEvent.findFirst({
     where: { id, organization_id: request.user.org_id },
@@ -312,10 +315,10 @@ async function markCompleted(
 }
 
 async function getAvailability(
-  request: FastifyRequest<{ Querystring: AvailabilityQuery }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { date, user_ids } = request.query;
+  const { date, user_ids } = request.query as AvailabilityQuery;
 
   const startOfDay = new Date(date);
   startOfDay.setUTCHours(0, 0, 0, 0);

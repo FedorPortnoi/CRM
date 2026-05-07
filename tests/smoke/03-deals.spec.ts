@@ -5,6 +5,11 @@ let contactId: string;
 let pipelineId: string;
 let stageId: string;
 
+type PipelineSummary = {
+  id: string;
+  is_default: boolean;
+};
+
 test.beforeAll(async ({ request }) => {
   const { token } = getAuth();
 
@@ -17,8 +22,8 @@ test.beforeAll(async ({ request }) => {
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const pipelines = (await pipelinesRes.json()).data;
-  const defaultPipeline = pipelines.find((p: any) => p.is_default) ?? pipelines[0];
+  const pipelines = ((await pipelinesRes.json()) as { data: PipelineSummary[] }).data;
+  const defaultPipeline = pipelines.find((p) => p.is_default) ?? pipelines[0];
   pipelineId = defaultPipeline.id;
 
   const stagesRes = await request.get(`/api/v1/deals/pipelines/${pipelineId}/stages`, {

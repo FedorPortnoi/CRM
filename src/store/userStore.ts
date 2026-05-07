@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
-import { API_URL } from '../../utils/api';
+import { API_URL } from '../utils/api';
 
 type AuthUser = {
   id: string;

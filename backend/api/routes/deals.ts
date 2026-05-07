@@ -60,7 +60,7 @@ const CreateStageSchema = z.object({
   is_lost_stage: z.boolean().default(false),
 });
 
-const authenticate = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
   await request.jwtVerify();
 };
 

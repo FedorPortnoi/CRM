@@ -1,6 +1,8 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 import { getAuth } from './helpers/auth';
 
+test.describe.configure({ timeout: 30000 });
+
 interface Task { id: string; status: string; due_date: string | null }
 interface ActivityItem { type: string; id: string; summary: string; created_at: string }
 interface PipelineStage { id: string; position: number }
@@ -27,7 +29,7 @@ async function getPipelineAndStage(
   if (!def) throw new Error('No default pipeline found');
   return { pipelineId: def.id, stageId: def.stages[0].id, stages: def.stages };
 }
-test('contact merge re-points calendarEvent.contact_id to target — meeting appears in target activity feed', { timeout: 30000 }, async ({ request }) => {
+test('contact merge re-points calendarEvent.contact_id to target — meeting appears in target activity feed', async ({ request }) => {
   const email = 'merge-cal-' + Date.now() + '@test.com';
   const regRes = await request.post('/api/v1/auth/', { data: { email, password: 'Test1234!', name: 'MergeCal', org_name: 'MergeCal Org' } });
   expect(regRes.status()).toBe(201);
@@ -55,7 +57,7 @@ test('contact merge re-points calendarEvent.contact_id to target — meeting app
   expect(meetingItems.some((i) => i.summary === 'CalMergeEvent')).toBe(true);
 });
 
-test('cancelled task due today is absent from GET /api/v1/tasks/today', { timeout: 30000 }, async ({ request }) => {
+test('cancelled task due today is absent from GET /api/v1/tasks/today', async ({ request }) => {
   const email = 'cancel-today-' + Date.now() + '@test.com';
   const regRes = await request.post('/api/v1/auth/', { data: { email, password: 'Test1234!', name: 'CancelToday', org_name: 'CancelToday Org' } });
   expect(regRes.status()).toBe(201);
@@ -77,7 +79,7 @@ test('cancelled task due today is absent from GET /api/v1/tasks/today', { timeou
   expect(ids).not.toContain(taskId);
 });
 
-test('GET /api/v1/contacts/:id/tasks excludes cancelled task linked to that contact', { timeout: 30000 }, async ({ request }) => {
+test('GET /api/v1/contacts/:id/tasks excludes cancelled task linked to that contact', async ({ request }) => {
   const email = 'contact-cancel-' + Date.now() + '@test.com';
   const regRes = await request.post('/api/v1/auth/', { data: { email, password: 'Test1234!', name: 'ContactCancel', org_name: 'ContactCancel Org' } });
   expect(regRes.status()).toBe(201);

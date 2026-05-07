@@ -2,6 +2,21 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { ContactStatus, Prisma, TaskStatus } from '@prisma/client';
 import { db } from '../../services/db';
 
+type ContactBody = {
+  first_name: string;
+  last_name?: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  tags?: string[];
+  source?: string;
+  notes?: string;
+  assigned_to?: string;
+  type?: 'lead' | 'customer' | 'partner' | 'other';
+  custom_fields?: Prisma.InputJsonValue;
+};
+
 async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
   const user = await db.user.findFirst({
     where: { id: userId, organization_id: orgId },
@@ -56,20 +71,7 @@ export const ContactsController = {
   },
 
   create: async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as {
-      first_name: string;
-      last_name?: string;
-      company?: string;
-      email?: string;
-      phone?: string;
-      mobile?: string;
-      tags?: string[];
-      source?: string;
-      notes?: string;
-      assigned_to?: string;
-      type?: 'lead' | 'customer' | 'partner' | 'other';
-      custom_fields?: Record<string, unknown>;
-    };
+    const body = request.body as ContactBody;
 
     if (body.assigned_to !== undefined && body.assigned_to !== request.user.sub) {
       const ownsAssignee = await userBelongsToOrg(body.assigned_to, request.user.org_id);
@@ -80,13 +82,24 @@ export const ContactsController = {
       }
     }
 
-    const contact = await db.contact.create({
-      data: {
-        ...body,
-        organization_id: request.user.org_id,
-        created_by: request.user.sub,
-      },
-    });
+    const data: Prisma.ContactUncheckedCreateInput = {
+      first_name: body.first_name,
+      last_name: body.last_name,
+      company: body.company,
+      email: body.email,
+      phone: body.phone,
+      mobile: body.mobile,
+      tags: body.tags,
+      source: body.source,
+      notes: body.notes,
+      assigned_to: body.assigned_to,
+      type: body.type,
+      custom_fields: body.custom_fields,
+      organization_id: request.user.org_id,
+      created_by: request.user.sub,
+    };
+
+    const contact = await db.contact.create({ data });
 
     return reply.code(201).send({ data: contact });
   },
@@ -117,20 +130,7 @@ export const ContactsController = {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
     }
 
-    const body = request.body as Partial<{
-      first_name: string;
-      last_name: string;
-      company: string;
-      email: string;
-      phone: string;
-      mobile: string;
-      tags: string[];
-      source: string;
-      notes: string;
-      assigned_to: string;
-      type: 'lead' | 'customer' | 'partner' | 'other';
-      custom_fields: Record<string, unknown>;
-    }>;
+    const body = request.body as Partial<ContactBody>;
 
     if (body.assigned_to !== undefined && body.assigned_to !== request.user.sub) {
       const ownsAssignee = await userBelongsToOrg(body.assigned_to, request.user.org_id);
@@ -141,7 +141,21 @@ export const ContactsController = {
       }
     }
 
-    const contact = await db.contact.update({ where: { id }, data: body });
+    const updateData: Prisma.ContactUncheckedUpdateInput = {};
+    if (body.first_name !== undefined) updateData.first_name = body.first_name;
+    if (body.last_name !== undefined) updateData.last_name = body.last_name;
+    if (body.company !== undefined) updateData.company = body.company;
+    if (body.email !== undefined) updateData.email = body.email;
+    if (body.phone !== undefined) updateData.phone = body.phone;
+    if (body.mobile !== undefined) updateData.mobile = body.mobile;
+    if (body.tags !== undefined) updateData.tags = body.tags;
+    if (body.source !== undefined) updateData.source = body.source;
+    if (body.notes !== undefined) updateData.notes = body.notes;
+    if (body.assigned_to !== undefined) updateData.assigned_to = body.assigned_to;
+    if (body.type !== undefined) updateData.type = body.type;
+    if (body.custom_fields !== undefined) updateData.custom_fields = body.custom_fields;
+
+    const contact = await db.contact.update({ where: { id }, data: updateData });
 
     return reply.send({ data: contact });
   },
@@ -256,12 +270,9 @@ export const ContactsController = {
 
     return reply.send({ data: messages });
   },
-  merge: async (
-    request: FastifyRequest<{ Params: { id: string }; Body: { source_id: string } }>,
-    reply: FastifyReply,
-  ) => {
-    const { id } = request.params;
-    const { source_id } = request.body;
+  merge: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const { source_id } = request.body as { source_id: string };
     const org_id = request.user.org_id;
 
     if (source_id === id) {

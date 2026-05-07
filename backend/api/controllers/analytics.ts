@@ -69,10 +69,10 @@ function getPeriodKey(date: Date, groupBy: string): string {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 async function funnel(
-  request: FastifyRequest<{ Querystring: DateRangeQuery }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { start, end, period, pipeline_id, assigned_to } = request.query;
+  const { start, end, period, pipeline_id, assigned_to } = request.query as DateRangeQuery;
   const { startDate, endDate } = resolveDateRange(period, start, end);
 
   const where: Prisma.DealWhereInput = {
@@ -145,10 +145,10 @@ async function funnel(
 }
 
 async function revenue(
-  request: FastifyRequest<{ Querystring: RevenueQuery }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { start, end, period, pipeline_id, assigned_to, group_by } = request.query;
+  const { start, end, period, pipeline_id, assigned_to, group_by } = request.query as RevenueQuery;
   const { startDate, endDate } = resolveDateRange(period, start, end);
 
   const deals = await db.deal.findMany({
@@ -206,10 +206,10 @@ async function revenue(
 // ─── Analytics: Team Activity + Rep Performance ──────────────────────────────
 
 async function teamActivity(
-  request: FastifyRequest<{ Querystring: DateRangeQuery }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { start, end, period } = request.query;
+  const { start, end, period } = request.query as DateRangeQuery;
   const { startDate, endDate } = resolveDateRange(period, start, end);
   const orgId = request.user.org_id;
   const dateRange = { created_at: { gte: startDate, lte: endDate } };
@@ -262,10 +262,10 @@ async function teamActivity(
 }
 
 async function repPerformance(
-  request: FastifyRequest<{ Querystring: DateRangeQuery }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { start, end, period } = request.query;
+  const { start, end, period } = request.query as DateRangeQuery;
   const { startDate, endDate } = resolveDateRange(period, start, end);
   const orgId = request.user.org_id;
   const baseWhere: Prisma.DealWhereInput = {
@@ -324,10 +324,10 @@ async function repPerformance(
 // ─── Analytics: Win-Loss + Lead Sources ──────────────────────────────────────
 
 async function leadSources(
-  request: FastifyRequest<{ Querystring: DateRangeQuery }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { start, end, period, pipeline_id, assigned_to } = request.query;
+  const { start, end, period, pipeline_id, assigned_to } = request.query as DateRangeQuery;
   const { startDate, endDate } = resolveDateRange(period, start, end);
 
   const groups = await db.deal.groupBy({
@@ -352,10 +352,10 @@ async function leadSources(
 }
 
 async function winLoss(
-  request: FastifyRequest<{ Querystring: DateRangeQuery }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { start, end, period, pipeline_id, assigned_to } = request.query;
+  const { start, end, period, pipeline_id, assigned_to } = request.query as DateRangeQuery;
   const { startDate, endDate } = resolveDateRange(period, start, end);
 
   const baseWhere: Prisma.DealWhereInput = {

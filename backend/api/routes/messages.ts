@@ -29,7 +29,7 @@ const MessageFilterSchema = z.object({
   per_page: z.coerce.number().min(1).max(100).default(50),
 });
 
-const authenticate = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
   await request.jwtVerify();
 };
 
