@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export default async function globalSetup() {
-  const api = await request.newContext({ baseURL: 'http://localhost:3000' });
+  const api = await request.newContext({ baseURL: 'http://127.0.0.1:3000' });
 
   const email = `smoke-${Date.now()}@test.com`;
   const password = 'SmokeTest123!';
