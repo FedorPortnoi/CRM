@@ -3,7 +3,24 @@ import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { CalendarController } from '../controllers/calendar';
 
-const CreateEventSchema = z.object({
+function validateEventWindow(
+  body: { start_time?: string; end_time?: string },
+  ctx: z.RefinementCtx,
+): void {
+  if (
+    body.start_time !== undefined
+    && body.end_time !== undefined
+    && new Date(body.end_time).getTime() <= new Date(body.start_time).getTime()
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['end_time'],
+      message: 'end_time must be after start_time',
+    });
+  }
+}
+
+const EventFieldsSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(5000).optional(),
   contact_id: z.string().uuid().optional(),
@@ -18,7 +35,9 @@ const CreateEventSchema = z.object({
   notes: z.string().max(5000).optional(),
 });
 
-const UpdateEventSchema = CreateEventSchema.partial();
+const CreateEventSchema = EventFieldsSchema.superRefine(validateEventWindow);
+
+const UpdateEventSchema = EventFieldsSchema.partial().superRefine(validateEventWindow);
 
 const EventFilterSchema = z.object({
   start: z.string().datetime().optional(),

@@ -208,7 +208,21 @@ export default function TaskDetailScreen(): JSX.Element {
 
   return (
     <>
-      <Stack.Screen options={{ title: task.title, headerBackTitle: 'Tasks' }} />
+      <Stack.Screen
+        options={{
+          title: task.title,
+          headerBackTitle: 'Tasks',
+          headerRight: () => (
+            <TouchableOpacity
+              style={styles.headerEditButton}
+              onPress={() => router.push({ pathname: '/task/edit/[id]', params: { id } })}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.headerEditText}>Edit</Text>
+            </TouchableOpacity>
+          ),
+        }}
+      />
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -369,4 +383,13 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+  headerEditButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  headerEditText: {
+    color: '#1A73E8',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });

@@ -58,6 +58,10 @@ async function dealBelongsToOrg(dealId: string, orgId: string): Promise<boolean>
   return deal !== null;
 }
 
+function hasInvalidEventWindow(startTime: Date, endTime: Date): boolean {
+  return endTime.getTime() <= startTime.getTime();
+}
+
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 async function list(
@@ -107,6 +111,13 @@ async function create(
 ): Promise<void> {
   const { attendees, start_time, end_time, send_invite: _send_invite, ...rest } =
     request.body as CreateBody;
+
+  if (hasInvalidEventWindow(new Date(start_time), new Date(end_time))) {
+    reply.status(400).send({
+      error: { code: 'VALIDATION_ERROR', message: 'end_time must be after start_time' },
+    });
+    return;
+  }
 
   const [ownsContact, ownsDeal] = await Promise.all([
     rest.contact_id !== undefined
@@ -187,6 +198,16 @@ async function update(
 
   if (event.status === CalendarEventStatus.cancelled) {
     reply.status(422).send({ error: { code: 'EVENT_CANCELLED', message: 'Cannot update a cancelled event' } });
+    return;
+  }
+
+  const nextStartTime = start_time !== undefined ? new Date(start_time) : event.start_time;
+  const nextEndTime = end_time !== undefined ? new Date(end_time) : event.end_time;
+
+  if (hasInvalidEventWindow(nextStartTime, nextEndTime)) {
+    reply.status(400).send({
+      error: { code: 'VALIDATION_ERROR', message: 'end_time must be after start_time' },
+    });
     return;
   }
 

@@ -11,7 +11,10 @@ import calendarRoutes from './api/routes/calendar';
 import analyticsRoutes from './api/routes/analytics';
 
 async function start() {
-  const server = Fastify({ logger: true });
+  const useMcp = process.env.ENABLE_MCP === 'true';
+  const server = Fastify({
+    logger: useMcp ? { stream: process.stderr } : true,
+  });
 
   server.setValidatorCompiler(validatorCompiler);
   server.setSerializerCompiler(serializerCompiler);
@@ -45,6 +48,11 @@ async function start() {
 
   try {
     await server.listen({ port, host: '0.0.0.0' });
+
+    if (process.env.ENABLE_MCP === 'true') {
+      const { startMcp } = await import('./mcp/server');
+      await startMcp();
+    }
   } catch (err) {
     server.log.error(err);
     process.exit(1);

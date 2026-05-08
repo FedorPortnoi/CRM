@@ -277,6 +277,16 @@ export default function CalendarEventDetailScreen(): JSX.Element {
           title: event.title,
           headerShown: true,
           headerBackTitle: 'Calendar',
+          headerRight: () => (
+            <TouchableOpacity
+              style={styles.headerEditButton}
+              onPress={() => router.push({ pathname: '/calendar/edit/[id]', params: { id } })}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+            >
+              <Text style={styles.headerEditText}>Edit</Text>
+            </TouchableOpacity>
+          ),
         }}
       />
       <ScrollView
@@ -629,6 +639,15 @@ const styles = StyleSheet.create({
   retryText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  headerEditButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  headerEditText: {
+    color: '#1A73E8',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

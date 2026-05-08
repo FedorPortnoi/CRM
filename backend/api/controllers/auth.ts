@@ -3,6 +3,20 @@ import bcrypt from 'bcryptjs';
 import { Prisma } from '@prisma/client';
 import { db } from '../../services/db';
 
+type AuthUserListItem = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+};
+
+type AuthUsersResponse = {
+  data: AuthUserListItem[];
+  meta: {
+    total: number;
+  };
+};
+
 function generateSlug(name: string): string {
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const suffix = Math.random().toString(36).slice(2, 7);
@@ -108,5 +122,28 @@ export const AuthController = {
         token,
       },
     });
+  },
+
+  listUsers: async (request: FastifyRequest, reply: FastifyReply) => {
+    const users = await db.user.findMany({
+      where: {
+        organization_id: request.user.org_id,
+        is_active: true,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    const response: AuthUsersResponse = {
+      data: users,
+      meta: { total: users.length },
+    };
+
+    return reply.send(response);
   },
 };

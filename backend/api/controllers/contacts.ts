@@ -17,6 +17,35 @@ type ContactBody = {
   custom_fields?: Prisma.InputJsonValue;
 };
 
+type BulkArchiveBody = {
+  contact_ids: string[];
+};
+
+type BulkAssignBody = BulkArchiveBody & {
+  assigned_to: string;
+};
+
+type ContactImportRow = {
+  first_name: string;
+  last_name?: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  source?: string;
+  notes?: string;
+  type?: 'lead' | 'customer' | 'partner' | 'other';
+};
+
+function optionalTrimmedString(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
   const user = await db.user.findFirst({
     where: { id: userId, organization_id: orgId },
@@ -328,19 +357,104 @@ export const ContactsController = {
   getCalendarEvents: async (_request: FastifyRequest, reply: FastifyReply) => {
     return reply.code(501).send({ error: 'Not implemented' });
   },
-  importCsv: async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.code(501).send({ error: 'Not implemented' });
+  importCsv: async (request: FastifyRequest, reply: FastifyReply) => {
+    const rows = request.body as ContactImportRow[];
+
+    const data: Prisma.ContactCreateManyInput[] = rows.map(row => ({
+      organization_id: request.user.org_id,
+      created_by: request.user.sub,
+      first_name: row.first_name.trim(),
+      last_name: optionalTrimmedString(row.last_name),
+      company: optionalTrimmedString(row.company),
+      email: optionalTrimmedString(row.email),
+      phone: optionalTrimmedString(row.phone),
+      mobile: optionalTrimmedString(row.mobile),
+      source: optionalTrimmedString(row.source),
+      notes: optionalTrimmedString(row.notes),
+      type: row.type,
+    }));
+
+    const result = await db.$transaction(async (tx) => tx.contact.createMany({ data }));
+
+    return reply.code(201).send({ data: { imported_count: result.count }, meta: {} });
   },
   importFromPhone: async (_request: FastifyRequest, reply: FastifyReply) => {
     return reply.code(501).send({ error: 'Not implemented' });
   },
-  bulkAssign: async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.code(501).send({ error: 'Not implemented' });
+  bulkAssign: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { contact_ids, assigned_to } = request.body as BulkAssignBody;
+    const orgId = request.user.org_id;
+    const uniqueContactIds = Array.from(new Set(contact_ids));
+
+    if (assigned_to !== request.user.sub) {
+      const ownsAssignee = await userBelongsToOrg(assigned_to, orgId);
+      if (!ownsAssignee) {
+        return reply.code(403).send({
+          error: { code: 'FORBIDDEN', message: 'Assigned user does not belong to your organization' },
+        });
+      }
+    }
+
+    const contacts = await db.contact.findMany({
+      where: {
+        id: { in: uniqueContactIds },
+        organization_id: orgId,
+        status: { not: ContactStatus.archived },
+      },
+      select: { id: true },
+    });
+
+    if (contacts.length !== uniqueContactIds.length) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'One or more contacts not found' } });
+    }
+
+    const result = await db.contact.updateMany({
+      where: {
+        id: { in: uniqueContactIds },
+        organization_id: orgId,
+        status: { not: ContactStatus.archived },
+      },
+      data: { assigned_to },
+    });
+
+    return reply.send({
+      data: { assigned_count: result.count, assigned_to, contact_ids: uniqueContactIds },
+      meta: {},
+    });
   },
   bulkTag: async (_request: FastifyRequest, reply: FastifyReply) => {
     return reply.code(501).send({ error: 'Not implemented' });
   },
-  bulkArchive: async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.code(501).send({ error: 'Not implemented' });
+  bulkArchive: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { contact_ids } = request.body as BulkArchiveBody;
+    const orgId = request.user.org_id;
+    const uniqueContactIds = Array.from(new Set(contact_ids));
+
+    const contacts = await db.contact.findMany({
+      where: {
+        id: { in: uniqueContactIds },
+        organization_id: orgId,
+        status: { not: ContactStatus.archived },
+      },
+      select: { id: true },
+    });
+
+    if (contacts.length !== uniqueContactIds.length) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'One or more contacts not found' } });
+    }
+
+    const result = await db.contact.updateMany({
+      where: {
+        id: { in: uniqueContactIds },
+        organization_id: orgId,
+        status: { not: ContactStatus.archived },
+      },
+      data: { status: ContactStatus.archived },
+    });
+
+    return reply.send({
+      data: { archived_count: result.count, contact_ids: uniqueContactIds },
+      meta: {},
+    });
   },
 };
