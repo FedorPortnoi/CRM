@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import KanbanBoard from '../../screens/KanbanBoard';
 import { useDealsStore } from '../../store/dealsStore';
@@ -42,10 +42,16 @@ function DealListView(): JSX.Element {
   const pipelinesLoading = usePipelinesStore((s) => s.isLoading);
   const pipelinesError = usePipelinesStore((s) => s.error);
   const fetchPipelines = usePipelinesStore((s) => s.fetchPipelines);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   useEffect(() => {
     void Promise.all([fetchDeals(), fetchPipelines()]);
   }, []);
+
+  const handleRefresh = useCallback((): void => {
+    setIsRefreshing(true);
+    void Promise.all([fetchDeals(), fetchPipelines()]).finally(() => setIsRefreshing(false));
+  }, [fetchDeals, fetchPipelines]);
 
   const defaultPipeline = pipelines.find((p) => p.is_default) ?? pipelines[0];
 
@@ -102,6 +108,14 @@ function DealListView(): JSX.Element {
       keyExtractor={(item) => item.type === 'header' ? 'header-' + item.stageId : 'deal-' + item.deal.id}
       style={listStyles.list}
       contentContainerStyle={listStyles.listContent}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          colors={['#1A73E8']}
+          tintColor="#1A73E8"
+        />
+      }
       renderItem={({ item }) => {
         if (item.type === 'header') {
           return (

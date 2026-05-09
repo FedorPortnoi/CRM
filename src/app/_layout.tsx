@@ -3,8 +3,11 @@ import { ActivityIndicator, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useUserStore } from '../store/userStore';
 import { registerDevicePushToken } from '../utils/notifications';
+import { queryClient, asyncStoragePersister } from '../utils/queryClient';
+import OfflineBanner from '../components/OfflineBanner';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -57,21 +60,26 @@ export default function RootLayout() {
 
   if (isRestoring) {
     return (
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" />
-        </View>
-      </GestureHandlerRootView>
+      <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: asyncStoragePersister }}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator size="large" />
+          </View>
+        </GestureHandlerRootView>
+      </PersistQueryClientProvider>
     );
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="register" options={{ headerShown: false }} />
-      </Stack>
-    </GestureHandlerRootView>
+    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: asyncStoragePersister }}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <OfflineBanner />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="register" options={{ headerShown: false }} />
+        </Stack>
+      </GestureHandlerRootView>
+    </PersistQueryClientProvider>
   );
 }

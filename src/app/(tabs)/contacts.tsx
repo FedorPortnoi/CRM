@@ -10,6 +10,7 @@ import {
   ListRenderItemInfo,
   Alert,
   Modal,
+  RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Check } from 'lucide-react-native';
@@ -60,6 +61,7 @@ export default function ContactsScreen(): JSX.Element {
   const [usersError, setUsersError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [assignError, setAssignError] = useState<string | null>(null);
 
   const selectedContactIdSet = useMemo(
@@ -110,6 +112,13 @@ export default function ContactsScreen(): JSX.Element {
     setIsLoading(true);
     setPage(1);
     void fetchContacts(1, true);
+  }, [fetchContacts]);
+
+  const handleRefresh = useCallback((): void => {
+    setIsRefreshing(true);
+    setPage(1);
+    setSelectedContactIds([]);
+    void fetchContacts(1, true).finally(() => setIsRefreshing(false));
   }, [fetchContacts]);
 
   const handleLongPressContact = useCallback(
@@ -482,6 +491,14 @@ export default function ContactsScreen(): JSX.Element {
         data={filtered}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={['#1A73E8']}
+            tintColor="#1A73E8"
+          />
+        }
         onEndReached={search.trim() ? undefined : loadMore}
         onEndReachedThreshold={0.3}
         ListEmptyComponent={

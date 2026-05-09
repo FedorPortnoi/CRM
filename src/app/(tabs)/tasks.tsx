@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ListRenderItemInfo,
+  RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useUserStore } from '../../store/userStore';
@@ -61,6 +62,7 @@ export default function TasksScreen(): JSX.Element {
   const [activeTab, setActiveTab] = useState<Tab>('today');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   const fetchTasks = useCallback(async (): Promise<void> => {
     if (!token) return;
@@ -98,6 +100,11 @@ export default function TasksScreen(): JSX.Element {
   const handleRetry = useCallback((): void => {
     setIsLoading(true);
     void fetchTasks();
+  }, [fetchTasks]);
+
+  const handleRefresh = useCallback((): void => {
+    setIsRefreshing(true);
+    void fetchTasks().finally(() => setIsRefreshing(false));
   }, [fetchTasks]);
 
   const renderItem = useCallback(({ item }: ListRenderItemInfo<Task>): JSX.Element => {
@@ -186,6 +193,14 @@ export default function TasksScreen(): JSX.Element {
         data={displayTasks}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={['#1A73E8']}
+            tintColor="#1A73E8"
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>

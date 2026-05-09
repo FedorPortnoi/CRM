@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
+import NetInfo from '@react-native-community/netinfo';
 import { API_URL } from '../utils/api';
+import * as offlineQueue from '../utils/offlineQueue';
 
 type DealStatus = 'open' | 'won' | 'lost' | 'archived';
 
@@ -139,6 +141,19 @@ export const useDealsStore = create<DealsState>()((set, get) => ({
         d.id === dealId ? { ...d, stage_id: stageId } : d,
       ),
     });
+
+    const netState = await NetInfo.fetch();
+    const isOnline: boolean =
+      netState.isConnected === true && netState.isInternetReachable !== false;
+
+    if (!isOnline) {
+      await offlineQueue.enqueue({
+        url: `${API_URL}/deals/${dealId}/stage`,
+        method: 'PATCH',
+        body: JSON.stringify({ stage_id: stageId }),
+      });
+      return;
+    }
 
     try {
       const token: string = await getToken();
