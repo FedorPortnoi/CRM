@@ -1,6 +1,6 @@
-import { TouchableOpacity } from 'react-native';
+import { Alert, TouchableOpacity } from 'react-native';
 import { Tabs, router } from 'expo-router';
-import { Kanban, LayoutDashboard, Users, CheckSquare, Plus } from 'lucide-react-native';
+import { Kanban, LayoutDashboard, Users, CheckSquare, Plus, MoreVertical } from 'lucide-react-native';
 
 export default function TabsLayout() {
   return (
@@ -31,12 +31,18 @@ export default function TabsLayout() {
           ),
           headerRight: (): JSX.Element => (
             <TouchableOpacity
-              onPress={() => { router.push('/contact/new'); }}
+              onPress={() => {
+                Alert.alert('Add Contact', undefined, [
+                  { text: 'New Contact', onPress: () => { router.push('/contact/new'); } },
+                  { text: 'Import from Phone', onPress: () => { router.push('/contact/import-phone'); } },
+                  { text: 'Cancel', style: 'cancel' },
+                ]);
+              }}
               style={{ marginRight: 16, padding: 4 }}
               accessibilityRole="button"
-              accessibilityLabel="New contact"
+              accessibilityLabel="Add contact options"
             >
-              <Plus size={24} color="#007AFF" />
+              <MoreVertical size={24} color="#007AFF" />
             </TouchableOpacity>
           ),
         }}
