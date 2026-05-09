@@ -1,19 +1,19 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import {
-  StyleSheet,
-  ScrollView,
-  View,
-  Text,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { cancelTaskDueReminder, scheduleTaskDueReminder } from '../../utils/notifications';
 
-interface TaskAssignee { id: string; name: string; }
-interface TaskContact { id: string; first_name: string; last_name: string | null; }
+interface TaskAssignee {
+  id: string;
+  name: string;
+}
+interface TaskContact {
+  id: string;
+  first_name: string;
+  last_name: string | null;
+}
 
 interface Task {
   id: string;
@@ -28,7 +28,11 @@ interface Task {
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 function isOverdue(due_date: string | null, status: string): boolean {
@@ -59,7 +63,17 @@ interface SkeletonBoxProps {
 }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: '#E8E8E8', borderRadius, marginBottom }} />;
+  return (
+    <View
+      style={{
+        width,
+        height,
+        backgroundColor: '#E8E8E8',
+        borderRadius,
+        marginBottom,
+      }}
+    />
+  );
 }
 
 export default function TaskDetailScreen(): JSX.Element {
@@ -85,7 +99,9 @@ export default function TaskDetailScreen(): JSX.Element {
           headers: { Authorization: 'Bearer ' + token },
         });
         if (!res.ok) {
-          const body = (await res.json()) as { error: { code: string; message: string } };
+          const body = (await res.json()) as {
+            error: { code: string; message: string };
+          };
           setFetchError(body.error.message);
         } else {
           const body = (await res.json()) as { data: Task };
@@ -102,8 +118,12 @@ export default function TaskDetailScreen(): JSX.Element {
     [id, token],
   );
 
-  useEffect(() => { fetchTask(false); }, [fetchTask]);
-  const onRefresh = useCallback((): void => { fetchTask(true); }, [fetchTask]);
+  useEffect(() => {
+    fetchTask(false);
+  }, [fetchTask]);
+  const onRefresh = useCallback((): void => {
+    fetchTask(true);
+  }, [fetchTask]);
 
   async function handleComplete(): Promise<void> {
     setIsActionLoading(true);
@@ -114,9 +134,21 @@ export default function TaskDetailScreen(): JSX.Element {
         headers: { Authorization: 'Bearer ' + token },
       });
       if (!res.ok) {
-        const body = (await res.json()) as { error: { code: string; message: string } };
+        const body = (await res.json()) as {
+          error: { code: string; message: string };
+        };
         setActionError(body.error.message);
       } else {
+        const body = (await res.json()) as { data: Task };
+        try {
+          if (body.data.status === 'done') {
+            await cancelTaskDueReminder(id);
+          } else if (body.data.due_date) {
+            await scheduleTaskDueReminder(id, body.data.title, body.data.due_date);
+          }
+        } catch {
+          // The server action succeeded; reminder cleanup is best-effort.
+        }
         router.back();
       }
     } catch {
@@ -135,9 +167,16 @@ export default function TaskDetailScreen(): JSX.Element {
         headers: { Authorization: 'Bearer ' + token },
       });
       if (!res.ok) {
-        const body = (await res.json()) as { error: { code: string; message: string } };
+        const body = (await res.json()) as {
+          error: { code: string; message: string };
+        };
         setActionError(body.error.message);
       } else {
+        try {
+          await cancelTaskDueReminder(id);
+        } catch {
+          // The server action succeeded; reminder cleanup is best-effort.
+        }
         router.back();
       }
     } catch {
@@ -231,9 +270,7 @@ export default function TaskDetailScreen(): JSX.Element {
         <View style={styles.card}>
           <Text style={styles.taskTitle}>{task.title}</Text>
           {task.due_date ? (
-            <Text style={[styles.dueDate, dueDateOverdue ? styles.dueDateOverdue : null]}>
-              Due {formatDate(task.due_date)}
-            </Text>
+            <Text style={[styles.dueDate, dueDateOverdue ? styles.dueDateOverdue : null]}>Due {formatDate(task.due_date)}</Text>
           ) : null}
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
             <View style={[styles.badge, { backgroundColor: priorityBadgeColor(task.priority) }]}>
@@ -261,7 +298,10 @@ export default function TaskDetailScreen(): JSX.Element {
             {task.contact !== null && contactName !== null ? (
               <TouchableOpacity
                 onPress={() =>
-                  router.push({ pathname: '/contact/[id]', params: { id: task.contact!.id } })
+                  router.push({
+                    pathname: '/contact/[id]',
+                    params: { id: task.contact!.id },
+                  })
                 }
                 activeOpacity={0.7}
               >
@@ -275,23 +315,15 @@ export default function TaskDetailScreen(): JSX.Element {
 
         <View style={[styles.card, { marginTop: 16 }]}>
           <Text style={styles.sectionLabel}>Notes</Text>
-          <Text style={task.description ? styles.notesText : styles.emptyText}>
-            {task.description ?? 'No notes'}
-          </Text>
+          <Text style={task.description ? styles.notesText : styles.emptyText}>{task.description ?? 'No notes'}</Text>
         </View>
 
         {hasActions ? (
           <View style={[styles.card, { marginTop: 16 }]}>
-            {actionError ? (
-              <Text style={[styles.errorText, { marginBottom: 12 }]}>{actionError}</Text>
-            ) : null}
+            {actionError ? <Text style={[styles.errorText, { marginBottom: 12 }]}>{actionError}</Text> : null}
             {showCompleteButton ? (
               <TouchableOpacity
-                style={[
-                  styles.button,
-                  styles.buttonPrimary,
-                  isActionLoading ? styles.buttonDisabled : null,
-                ]}
+                style={[styles.button, styles.buttonPrimary, isActionLoading ? styles.buttonDisabled : null]}
                 onPress={handleComplete}
                 disabled={isActionLoading}
                 activeOpacity={0.7}
@@ -338,7 +370,12 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  taskTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A1A', marginBottom: 6 },
+  taskTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 6,
+  },
   dueDate: { fontSize: 13, color: '#6B6B6B' },
   dueDateOverdue: { color: '#D93025', fontWeight: '500' },
   badge: {
@@ -347,7 +384,12 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 4,
   },
-  badgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600', textTransform: 'capitalize' },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
   cancelledBanner: {
     marginTop: 12,
     backgroundColor: '#FEE8E6',
@@ -357,11 +399,27 @@ const styles = StyleSheet.create({
     borderLeftColor: '#D93025',
   },
   cancelledText: { fontSize: 13, color: '#D93025', fontWeight: '500' },
-  detailRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   detailLabel: { fontSize: 13, color: '#9B9B9B', width: 72 },
   detailValue: { fontSize: 13, color: '#1A1A1A', flex: 1, textAlign: 'right' },
-  linkText: { fontSize: 13, color: '#1A73E8', fontWeight: '500', textAlign: 'right' },
-  sectionLabel: { fontSize: 12, fontWeight: '600', color: '#9B9B9B', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  linkText: {
+    fontSize: 13,
+    color: '#1A73E8',
+    fontWeight: '500',
+    textAlign: 'right',
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9B9B9B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
   notesText: { fontSize: 14, color: '#1A1A1A', lineHeight: 20 },
   emptyText: { fontSize: 14, color: '#9B9B9B' },
   button: {
@@ -374,8 +432,18 @@ const styles = StyleSheet.create({
   buttonDestructive: { backgroundColor: '#D93025' },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  errorText: { fontSize: 14, color: '#D93025', textAlign: 'center', marginBottom: 8 },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#D93025',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
   retryButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,

@@ -1,13 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as Notifications from 'expo-notifications';
 import { useUserStore } from '../store/userStore';
+import { registerDevicePushToken } from '../utils/notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function RootLayout() {
   const router = useRouter();
   const { token, restoreSession } = useUserStore();
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
+  const pushRegistrationAttemptRef = useRef<string | null>(null);
 
   useEffect(() => {
     void restoreSession().finally(() => {
@@ -20,6 +31,29 @@ export default function RootLayout() {
       router.replace('/login');
     }
   }, [token, isRestoring]);
+
+  useEffect(() => {
+    if (token === null) {
+      pushRegistrationAttemptRef.current = null;
+      return;
+    }
+
+    if (pushRegistrationAttemptRef.current === token) return;
+    pushRegistrationAttemptRef.current = token;
+
+    void (async () => {
+      try {
+        const registered = await registerDevicePushToken(token);
+        if (!registered && pushRegistrationAttemptRef.current === token) {
+          pushRegistrationAttemptRef.current = null;
+        }
+      } catch {
+        if (pushRegistrationAttemptRef.current === token) {
+          pushRegistrationAttemptRef.current = null;
+        }
+      }
+    })();
+  }, [token]);
 
   if (isRestoring) {
     return (

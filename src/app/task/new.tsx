@@ -1,18 +1,10 @@
 import { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Modal,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { Calendar } from 'react-native-calendars';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { scheduleTaskDueReminder } from '../../utils/notifications';
 
 interface ContactPreview {
   id: string;
@@ -51,10 +43,9 @@ export default function NewTaskScreen(): JSX.Element | null {
   useEffect(() => {
     const timer = setTimeout(() => {
       if (contactQuery.trim().length >= 2) {
-        fetch(
-          `${API_URL}/contacts?q=${encodeURIComponent(contactQuery.trim())}&per_page=8`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        )
+        fetch(`${API_URL}/contacts?q=${encodeURIComponent(contactQuery.trim())}&per_page=8`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
           .then((r) => r.json())
           .then((body: { data: ContactPreview[] }) => setContactResults(body.data))
           .catch(() => setContactResults([]));
@@ -69,7 +60,11 @@ export default function NewTaskScreen(): JSX.Element | null {
 
   const formatDate = (dateStr: string): string => {
     const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   };
 
   const handleSubmit = async (): Promise<void> => {
@@ -95,9 +90,17 @@ export default function NewTaskScreen(): JSX.Element | null {
       });
       const parsed = await res.json();
       if (res.status === 201) {
+        const taskId = (parsed as TaskApiResponse).data.id;
+        if (dueDate !== '') {
+          try {
+            await scheduleTaskDueReminder(taskId, title.trim(), dueDate);
+          } catch {
+            // Task creation should still succeed if local reminders are unavailable.
+          }
+        }
         router.replace({
           pathname: '/task/[id]',
-          params: { id: (parsed as TaskApiResponse).data.id },
+          params: { id: taskId },
         });
       } else {
         setApiError((parsed as ErrorApiResponse)?.error?.message ?? 'Failed to create task');
@@ -132,9 +135,7 @@ export default function NewTaskScreen(): JSX.Element | null {
 
       <Text style={styles.label}>Due Date (optional)</Text>
       <TouchableOpacity style={styles.input} onPress={() => setShowCalendar(true)}>
-        <Text style={dueDate ? styles.inputText : styles.placeholderText}>
-          {dueDate ? formatDate(dueDate) : 'Pick a date'}
-        </Text>
+        <Text style={dueDate ? styles.inputText : styles.placeholderText}>{dueDate ? formatDate(dueDate) : 'Pick a date'}</Text>
       </TouchableOpacity>
       {dueDate !== '' && (
         <TouchableOpacity onPress={() => setDueDate('')}>
@@ -156,10 +157,9 @@ export default function NewTaskScreen(): JSX.Element | null {
           }}
           markedDates={
             dueDate
-              ? ({ [dueDate]: { selected: true, selectedColor: '#1A73E8' } } as Record<
-                  string,
-                  { selected?: boolean; selectedColor?: string }
-                >)
+              ? ({
+                  [dueDate]: { selected: true, selectedColor: '#1A73E8' },
+                } as Record<string, { selected?: boolean; selectedColor?: string }>)
               : {}
           }
         />
@@ -202,9 +202,7 @@ export default function NewTaskScreen(): JSX.Element | null {
               style={styles.dropdownRow}
               onPress={() => {
                 setSelectedContactId(c.id);
-                setSelectedContactName(
-                  `${c.first_name}${c.last_name ? ' ' + c.last_name : ''}`,
-                );
+                setSelectedContactName(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''}`);
                 setContactQuery('');
                 setContactResults([]);
               }}
@@ -219,14 +217,12 @@ export default function NewTaskScreen(): JSX.Element | null {
 
       <TouchableOpacity
         style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-        onPress={() => { void handleSubmit(); }}
+        onPress={() => {
+          void handleSubmit();
+        }}
         disabled={isSubmitting}
       >
-        {isSubmitting ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.submitText}>Create Task</Text>
-        )}
+        {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitText}>Create Task</Text>}
       </TouchableOpacity>
     </ScrollView>
   );
@@ -234,9 +230,20 @@ export default function NewTaskScreen(): JSX.Element | null {
 
 const styles = StyleSheet.create({
   container: { padding: 16, backgroundColor: '#F5F5F5', flexGrow: 1 },
-  errorBanner: { backgroundColor: '#FFEBEE', padding: 12, borderRadius: 8, marginBottom: 16 },
+  errorBanner: {
+    backgroundColor: '#FFEBEE',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
   errorBannerText: { color: '#D93025' },
-  label: { fontSize: 14, fontWeight: '600', color: '#1A1A1A', marginBottom: 6, marginTop: 16 },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 6,
+    marginTop: 16,
+  },
   input: {
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -291,7 +298,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
   },
-  dropdownRow: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
+  dropdownRow: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
   dropdownText: { color: '#1A1A1A', fontSize: 14 },
   submitButton: {
     backgroundColor: '#1A73E8',

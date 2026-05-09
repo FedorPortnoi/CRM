@@ -107,6 +107,7 @@ model User {
   invited_by        String?   @db.Uuid
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
+  push_token        String?
 
   // Relations
   organization     Org       @relation("UserOrg", fields: [organization_id], references: [id])

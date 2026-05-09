@@ -9,6 +9,7 @@ import tasksRoutes from './api/routes/tasks';
 import messagesRoutes from './api/routes/messages';
 import calendarRoutes from './api/routes/calendar';
 import analyticsRoutes from './api/routes/analytics';
+import notificationsRoutes from './api/routes/notifications';
 
 async function start() {
   const useMcp = process.env.ENABLE_MCP === 'true';
@@ -29,6 +30,7 @@ async function start() {
   await server.register(messagesRoutes, { prefix: '/api/v1/messages' });
   await server.register(calendarRoutes, { prefix: '/api/v1/calendar' });
   await server.register(analyticsRoutes, { prefix: '/api/v1/analytics' });
+  await server.register(notificationsRoutes, { prefix: '/api/v1/notifications' });
 
   server.get('/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() };

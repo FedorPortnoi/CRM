@@ -1,20 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
+import { scheduleTaskDueReminder } from '../../../utils/notifications';
 
 interface TaskContact {
   id: string;
@@ -89,7 +80,11 @@ function toDateInputValue(dateStr: string | null): string {
 
 function formatDate(dateStr: string): string {
   const date = new Date(`${dateStr}T00:00:00`);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 function toForm(task: Task): TaskForm {
@@ -183,9 +178,7 @@ export default function EditTaskScreen(): JSX.Element {
       setDueDate(loadedForm.due_date);
       setNotes(loadedForm.description);
       setSelectedContactId(loadedForm.contact_id);
-      setSelectedContactName(
-        parsedBody.data.contact !== null ? contactDisplayName(parsedBody.data.contact) : '',
-      );
+      setSelectedContactName(parsedBody.data.contact !== null ? contactDisplayName(parsedBody.data.contact) : '');
       setContactQuery('');
       setContactResults([]);
     } catch (err) {
@@ -207,17 +200,18 @@ export default function EditTaskScreen(): JSX.Element {
       }
 
       try {
-        const response = await fetch(
-          `${API_URL}/contacts?q=${encodeURIComponent(contactQuery.trim())}&per_page=8`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
+        const response = await fetch(`${API_URL}/contacts?q=${encodeURIComponent(contactQuery.trim())}&per_page=8`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
         if (!response.ok) {
           setContactResults([]);
           return;
         }
 
-        const parsedBody = (await response.json()) as { data: ContactPreview[] };
+        const parsedBody = (await response.json()) as {
+          data: ContactPreview[];
+        };
         setContactResults(parsedBody.data);
       } catch {
         setContactResults([]);
@@ -257,6 +251,14 @@ export default function EditTaskScreen(): JSX.Element {
       });
 
       if (response.ok) {
+        const parsedBody = (await response.json()) as { data: Task };
+        if (parsedBody.data.due_date) {
+          try {
+            await scheduleTaskDueReminder(id, parsedBody.data.title, parsedBody.data.due_date);
+          } catch {
+            // The task update succeeded; local reminder updates are best-effort.
+          }
+        }
         router.back();
       } else {
         const parsedBody = (await response.json()) as ErrorApiResponse;
@@ -286,16 +288,17 @@ export default function EditTaskScreen(): JSX.Element {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: 'Edit Task' }} />
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {apiError !== null ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorBannerText}>{apiError}</Text>
             {!isSubmitting ? (
-              <TouchableOpacity style={styles.bannerRetry} onPress={() => { void loadTask(); }}>
+              <TouchableOpacity
+                style={styles.bannerRetry}
+                onPress={() => {
+                  void loadTask();
+                }}
+              >
                 <Text style={styles.bannerRetryText}>Retry</Text>
               </TouchableOpacity>
             ) : null}
@@ -338,11 +341,7 @@ export default function EditTaskScreen(): JSX.Element {
               ) : null}
             </View>
 
-            <Modal
-              animationType="slide"
-              visible={showCalendar}
-              onRequestClose={() => setShowCalendar(false)}
-            >
+            <Modal animationType="slide" visible={showCalendar} onRequestClose={() => setShowCalendar(false)}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Select Date</Text>
                 <TouchableOpacity onPress={() => setShowCalendar(false)}>
@@ -356,10 +355,9 @@ export default function EditTaskScreen(): JSX.Element {
                 }}
                 markedDates={
                   dueDate !== ''
-                    ? ({ [dueDate]: { selected: true, selectedColor: '#1A73E8' } } as Record<
-                        string,
-                        { selected?: boolean; selectedColor?: string }
-                      >)
+                    ? ({
+                        [dueDate]: { selected: true, selectedColor: '#1A73E8' },
+                      } as Record<string, { selected?: boolean; selectedColor?: string }>)
                     : {}
                 }
               />
@@ -423,7 +421,9 @@ export default function EditTaskScreen(): JSX.Element {
 
             <TouchableOpacity
               style={[styles.submitButton, isSubmitting ? styles.submitButtonDisabled : null]}
-              onPress={() => { void handleSubmit(); }}
+              onPress={() => {
+                void handleSubmit();
+              }}
               disabled={isSubmitting}
             >
               {isSubmitting ? (
