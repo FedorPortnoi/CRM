@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { TaskPriority, TaskStatus, Prisma } from '@prisma/client';
+import { TaskPriority, TaskStatus, Prisma, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
+import { evaluateWorkflows } from '../../services/workflows';
 
 // ─── Local request types ──────────────────────────────────────────────────────
 
@@ -307,6 +308,16 @@ async function complete(
         ? { status: TaskStatus.pending, completed_at: null, completed_by: null }
         : { status: TaskStatus.done, completed_at: new Date(), completed_by: request.user.sub },
   });
+
+  if (updatedTask.status === TaskStatus.done && task.status !== TaskStatus.done) {
+    await evaluateWorkflows({
+      organizationId: request.user.org_id,
+      trigger: WorkflowTrigger.task_completed,
+      record: updatedTask as unknown as Record<string, unknown>,
+      userId: request.user.sub,
+      triggerRecordId: updatedTask.id,
+    });
+  }
 
   reply.send({ data: updatedTask, meta: {} });
 }

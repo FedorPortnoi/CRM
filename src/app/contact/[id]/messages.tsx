@@ -16,6 +16,7 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { Check, MessageCircle, PhoneCall, Send } from 'lucide-react-native';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
+import { sendOrQueueMutation } from '../../../utils/offlineMutation';
 
 type MessageDirection = 'inbound' | 'outbound';
 type MessageChannel = 'sms' | 'in_app' | 'email';
@@ -282,14 +283,19 @@ export default function ContactMessagesScreen(): JSX.Element {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${API_URL}/messages/in-app`, {
+      const result = await sendOrQueueMutation({
+        url: `${API_URL}/messages/in-app`,
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ contact_id: id, body: trimmedBody }),
+        token,
+        body: { contact_id: id, body: trimmedBody },
       });
+
+      if (result.queued) {
+        setNoteBody('');
+        return;
+      }
+
+      const response = result.response;
 
       if (!response.ok) {
         throw new Error(await readErrorMessage(response, 'Failed to send note'));
@@ -334,14 +340,20 @@ export default function ContactMessagesScreen(): JSX.Element {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${API_URL}/messages/call`, {
+      const result = await sendOrQueueMutation({
+        url: `${API_URL}/messages/call`,
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        token,
+        body: payload,
       });
+
+      if (result.queued) {
+        setCallNotes('');
+        setDurationMinutes('');
+        return;
+      }
+
+      const response = result.response;
 
       if (!response.ok) {
         throw new Error(await readErrorMessage(response, 'Failed to log call'));

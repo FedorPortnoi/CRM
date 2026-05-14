@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import { useUserStore } from '../../store/userStore';
 import { usePipelinesStore } from '../../store/pipelinesStore';
 import { API_URL } from '../../utils/api';
+import { sendOrQueueMutation } from '../../utils/offlineMutation';
 
 interface PipelineStage {
   id: string;
@@ -134,15 +135,19 @@ export default function NewDealScreen(): JSX.Element {
     };
 
     try {
-      const res = await fetch(`${API_URL}/deals`, {
+      const result = await sendOrQueueMutation({
+        url: `${API_URL}/deals`,
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
+        token: token ?? '',
+        body,
       });
 
+      if (result.queued) {
+        router.replace('/(tabs)/kanban');
+        return;
+      }
+
+      const res = result.response;
       if (res.status === 201) {
         const data = (await res.json()) as DealApiResponse;
         router.replace({ pathname: '/deal/[id]', params: { id: data.data.id } });

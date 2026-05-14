@@ -8,6 +8,7 @@ type AuthUser = {
   name: string;
   role: string;
   org_id: string;
+  onboarding_completed?: boolean;
 };
 
 interface UserState {
@@ -24,6 +25,7 @@ interface UserState {
   ) => Promise<void>;
   logout: () => Promise<void>;
   restoreSession: () => Promise<void>;
+  completeOnboarding: () => Promise<void>;
 }
 
 function extractErrorMessage(body: unknown, status: number): string {
@@ -102,6 +104,29 @@ export const useUserStore = create<UserState>()((set) => ({
     await SecureStore.deleteItemAsync('crm_auth_token');
     await SecureStore.deleteItemAsync('crm_auth_user');
     set({ user: null, token: null, error: null });
+  },
+
+  completeOnboarding: async (): Promise<void> => {
+    const token = await SecureStore.getItemAsync('crm_auth_token');
+    const userJson = await SecureStore.getItemAsync('crm_auth_user');
+    if (!token || !userJson) return;
+
+    const response = await fetch(`${API_URL}/auth/onboarding`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ completed: true }),
+    });
+    const body: unknown = await response.json();
+    if (!response.ok) {
+      throw new Error(extractErrorMessage(body, response.status));
+    }
+
+    const { data } = body as { data: AuthUser };
+    await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(data));
+    set({ user: data });
   },
 
   restoreSession: async (): Promise<void> => {

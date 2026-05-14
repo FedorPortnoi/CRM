@@ -237,6 +237,13 @@ export default function DashboardScreen(): JSX.Element {
           >
             <Text style={styles.actionButtonSecondaryText}>New Event</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.actionButtonSecondary]}
+            onPress={() => router.push('/workflows' as never)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.actionButtonSecondaryText}>Workflows</Text>
+          </TouchableOpacity>
         </View>
       </View>
 

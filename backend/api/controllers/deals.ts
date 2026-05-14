@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { DealStatus, Prisma } from '@prisma/client';
+import { DealStatus, Prisma, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
+import { evaluateWorkflows } from '../../services/workflows';
 
 // ─── Local request types ──────────────────────────────────────────────────────
 
@@ -363,6 +364,14 @@ async function moveStage(
     where: { id },
     data: { stage_id },
     include: dealInclude,
+  });
+
+  await evaluateWorkflows({
+    organizationId: request.user.org_id,
+    trigger: WorkflowTrigger.deal_stage_changed,
+    record: updated as unknown as Record<string, unknown>,
+    userId: request.user.sub,
+    triggerRecordId: updated.id,
   });
 
   reply.send({ data: updated, meta: {} });

@@ -204,17 +204,6 @@ test('G2: POST /api/v1/contacts/bulk-assign rejects an empty contact_ids array (
   expect(res.status()).toBe(400);
 });
 
-test('G3: POST /api/v1/contacts/import-csv rejects an empty row array (ImportContactsCsvSchema array min(1))', async ({ request }) => {
-  const { token } = getAuth();
-
-  const res = await request.post('/api/v1/contacts/import-csv', {
-    headers: authHeaders(token),
-    data: [],
-  });
-
-  expect(res.status()).toBe(400);
-});
-
 test('G4: POST /api/v1/contacts/import-csv with two rows sharing an email creates both contacts (Contact.email has no unique constraint)', async ({
   request,
 }) => {

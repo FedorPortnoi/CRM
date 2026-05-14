@@ -14,6 +14,7 @@ import type { DimensionValue } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { API_URL } from '../../utils/api';
 import { useUserStore } from '../../store/userStore';
+import { sendOrQueueMutation } from '../../utils/offlineMutation';
 
 interface Deal {
   id: string;
@@ -119,14 +120,17 @@ export default function DealDetailScreen(): JSX.Element {
     setIsActionLoading(true);
     setActionError(null);
     try {
-      const res = await fetch(API_URL + '/deals/' + id + '/won', {
+      const result = await sendOrQueueMutation({
+        url: API_URL + '/deals/' + id + '/won',
         method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + token,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}),
+        token: token ?? '',
+        body: {},
       });
+      if (result.queued) {
+        router.back();
+        return;
+      }
+      const res = result.response;
       if (!res.ok) {
         const body = (await res.json()) as ErrorApiResponse;
         throw new Error(body.error?.message ?? 'Failed to mark deal as won');
@@ -145,14 +149,17 @@ export default function DealDetailScreen(): JSX.Element {
     setActionError(null);
     try {
       const bodyPayload: { reason?: string } = reason ? { reason } : {};
-      const res = await fetch(API_URL + '/deals/' + id + '/lost', {
+      const result = await sendOrQueueMutation({
+        url: API_URL + '/deals/' + id + '/lost',
         method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + token,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(bodyPayload),
+        token: token ?? '',
+        body: bodyPayload,
       });
+      if (result.queued) {
+        router.back();
+        return;
+      }
+      const res = result.response;
       if (!res.ok) {
         const resBody = (await res.json()) as ErrorApiResponse;
         throw new Error(resBody.error?.message ?? 'Failed to mark deal as lost');

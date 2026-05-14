@@ -560,10 +560,6 @@ test('POST /api/v1/analytics/export report=win_loss returns CSV win-loss header'
   await expectCsvHeader(request, 'win_loss', 'status,count,total_value,lost_reason,reason_count');
 });
 
-test('POST /api/v1/analytics/export report=lead_sources returns CSV lead sources header', async ({ request }) => {
-  await expectCsvHeader(request, 'lead_sources', 'source,count,total_value');
-});
-
 test('GET /api/v1/auth/users returns 200 with requester org user, excludes another org user, reports total, and omits password_hash', async ({ request }) => {
   type AuthUserListItem = {
     id: string;

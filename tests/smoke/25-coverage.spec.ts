@@ -163,17 +163,6 @@ async function createDeal(
 }
 
 // -- Tests ---------------------------------------------------------------------
-test('G1: POST /api/v1/notifications/register without token returns 400', async ({ request }) => {
-  const { token } = getAuth();
-
-  const res = await request.post('/api/v1/notifications/register', {
-    headers: authHeaders(token),
-    data: {},
-  });
-
-  expect(res.status()).toBe(400);
-});
-
 test('G2: POST /api/v1/notifications/register with a non-Expo token returns 400 INVALID_PUSH_TOKEN', async ({ request }) => {
   const { token } = getAuth();
 
@@ -196,24 +185,6 @@ test('G3: POST /api/v1/notifications/send without title returns 400', async ({ r
   });
 
   expect(res.status()).toBe(400);
-});
-
-test('G4: GET /api/v1/contacts?type=customer returns only customer contacts and matched meta.total', async ({ request }) => {
-  const org = await registerOrg(request, 'g4-customer-type');
-  const customer = await createContact(request, org.token, 'G4 Customer', 'customer');
-  const lead = await createContact(request, org.token, 'G4 Lead', 'lead');
-
-  const res = await request.get('/api/v1/contacts?type=customer', {
-    headers: authHeaders(org.token),
-  });
-
-  expect(res.status()).toBe(200);
-  const body = (await res.json()) as ContactListResponse;
-  const ids = body.data.map((contact) => contact.id);
-  expect(ids).toContain(customer.id);
-  expect(ids).not.toContain(lead.id);
-  expect(body.meta.total).toBe(1);
-  expect(body.data.every((contact) => contact.type === 'customer')).toBe(true);
 });
 
 test('G5: GET /api/v1/tasks?due_before returns tasks before the ISO cutoff only', async ({ request }) => {

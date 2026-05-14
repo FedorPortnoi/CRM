@@ -87,6 +87,23 @@ enum CalendarEventStatus {
   cancelled
 }
 
+enum WorkflowStatus {
+  active
+  paused
+  archived
+}
+
+enum WorkflowTrigger {
+  contact_created
+  deal_stage_changed
+  task_completed
+}
+
+enum WorkflowRunStatus {
+  success
+  failed
+}
+
 // ---------------------------------------------------------------------------
 // Models
 // ---------------------------------------------------------------------------
@@ -125,6 +142,7 @@ model User {
   calendarEventsCreated CalendarEvent[]     @relation("CalendarEventCreatedBy")
   calendarSyncs         UserCalendarSync[]
   createdPipelines      Pipeline[]          @relation("PipelineCreatedBy")
+  createdWorkflows      Workflow[]          @relation("WorkflowCreatedBy")
 }
 
 model Org {
@@ -149,6 +167,7 @@ model Org {
   messages       Message[]
   calendarEvents CalendarEvent[]
   pipelines      Pipeline[]
+  workflows      Workflow[]
 
   @@map("organizations")
 }
@@ -374,4 +393,39 @@ model PipelineStage {
   // Relations
   pipeline Pipeline @relation(fields: [pipeline_id], references: [id])
   deals    Deal[]
+}
+
+model Workflow {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String          @db.Uuid
+  name            String
+  description     String?
+  trigger         WorkflowTrigger
+  conditions      Json?
+  actions         Json
+  status          WorkflowStatus  @default(active)
+  created_by      String?         @db.Uuid
+  created_at      DateTime        @default(now())
+  updated_at      DateTime        @updatedAt
+
+  organization Org           @relation(fields: [organization_id], references: [id])
+  creator      User?         @relation("WorkflowCreatedBy", fields: [created_by], references: [id])
+  runs         WorkflowRun[]
+
+  @@index([organization_id, status, trigger])
+}
+
+model WorkflowRun {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflow_id       String            @db.Uuid
+  organization_id   String            @db.Uuid
+  trigger_record_id String?
+  status            WorkflowRunStatus
+  error_message     String?
+  created_at        DateTime          @default(now())
+
+  workflow Workflow @relation(fields: [workflow_id], references: [id])
+
+  @@index([organization_id, created_at])
+  @@index([workflow_id, created_at])
 }

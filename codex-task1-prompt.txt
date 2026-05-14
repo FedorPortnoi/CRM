@@ -1,0 +1,238 @@
+CONTEXT
+
+You are writing a Playwright smoke test file for a Fastify v5 REST API.
+Project root: /c/Users/fedor/crm
+Test output: tests/smoke/25-coverage.spec.ts
+
+The test infrastructure:
+- Base URL: http://127.0.0.1:3000 (set in playwright.config.ts)
+- Auth helper: import { getAuth } from './helpers/auth' — returns { token: string, userId: string, email: string } from a pre-seeded .auth.json
+- All protected routes require: Authorization: Bearer <token>
+- API prefix: /api/v1 (already in base URL config, so use /api/v1/... in paths)
+- Org isolation: use registerOrg() helper (shown below) to create fresh isolated orgs for cross-org tests
+
+Here is the exact helpers/auth.ts:
+```typescript
+import * as fs from 'fs';
+import * as path from 'path';
+
+interface AuthState {
+  token: string;
+  userId: string;
+  email: string;
+}
+
+export function getAuth(): AuthState {
+  const authPath = path.resolve(__dirname, '../.auth.json');
+  return JSON.parse(fs.readFileSync(authPath, 'utf-8'));
+}
+```
+
+Here is the pattern from the previous coverage file (24-coverage.spec.ts) — follow this style exactly:
+```typescript
+import { test, expect } from '@playwright/test';
+import type { APIRequestContext } from '@playwright/test';
+import { randomUUID } from 'crypto';
+import { getAuth } from './helpers/auth';
+
+test.describe.configure({ timeout: 30000 });
+
+// ── Interfaces ────────────────────────────────────────────────────────────────
+interface RegisterResponse {
+  data: { token: string; user: { id: string } };
+}
+interface ContactRecord {
+  id: string;
+  first_name: string;
+  type: string;
+  status: string;
+}
+interface ContactListMeta { total: number; page: number; per_page: number; }
+interface ContactListResponse { data: ContactRecord[]; meta: ContactListMeta; }
+interface TaskRecord { id: string; title: string; status: string; priority: string; assigned_to: string; }
+interface TaskListResponse { data: TaskRecord[]; meta: { total: number }; }
+interface DealRecord { id: string; title: string; status: string; }
+interface DealListResponse { data: DealRecord[]; meta: { total: number }; }
+interface PipelineStageRecord { id: string; }
+interface PipelineRecord { id: string; is_default: boolean; stages: PipelineStageRecord[]; }
+interface PipelineListResponse { data: PipelineRecord[]; }
+interface ErrorResponse { error: { code: string; message: string }; }
+interface AuthOrg { token: string; userId: string; }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function authHeaders(token: string): { Authorization: string } {
+  return { Authorization: `Bearer ${token}` };
+}
+
+function uniqueSuffix(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function registerOrg(request: APIRequestContext, suffix: string): Promise<AuthOrg> {
+  const unique = uniqueSuffix(suffix);
+  const res = await request.post('/api/v1/auth/', {
+    data: {
+      email: `${unique}@example.com`,
+      password: 'Password123!',
+      name: `User ${suffix}`,
+      org_name: `Org ${unique}`,
+    },
+  });
+  expect(res.status()).toBe(201);
+  const body = (await res.json()) as RegisterResponse;
+  return { token: body.data.token, userId: body.data.user.id };
+}
+
+async function createContact(
+  request: APIRequestContext,
+  token: string,
+  firstName: string,
+  type: 'lead' | 'customer' | 'partner' | 'other' = 'lead',
+): Promise<ContactRecord> {
+  const res = await request.post('/api/v1/contacts', {
+    headers: authHeaders(token),
+    data: { first_name: firstName, type },
+  });
+  expect(res.status()).toBe(201);
+  const body = (await res.json()) as { data: ContactRecord };
+  return body.data;
+}
+
+async function createTask(
+  request: APIRequestContext,
+  org: AuthOrg,
+  title: string,
+  extra: Record<string, unknown> = {},
+): Promise<TaskRecord> {
+  const res = await request.post('/api/v1/tasks', {
+    headers: authHeaders(org.token),
+    data: { title, assigned_to: org.userId, ...extra },
+  });
+  expect(res.status()).toBe(201);
+  const body = (await res.json()) as { data: TaskRecord };
+  return body.data;
+}
+
+async function getDefaultPipeline(request: APIRequestContext, token: string): Promise<PipelineRecord> {
+  const res = await request.get('/api/v1/deals/pipelines', { headers: authHeaders(token) });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as PipelineListResponse;
+  return body.data.find((p) => p.is_default) ?? body.data[0];
+}
+
+async function createDeal(
+  request: APIRequestContext,
+  token: string,
+  title: string,
+  contactId: string,
+  pipelineId: string,
+  stageId: string,
+): Promise<DealRecord> {
+  const res = await request.post('/api/v1/deals', {
+    headers: authHeaders(token),
+    data: { title, contact_id: contactId, pipeline_id: pipelineId, stage_id: stageId, currency: 'USD' },
+  });
+  expect(res.status()).toBe(201);
+  const body = (await res.json()) as { data: DealRecord };
+  return body.data;
+}
+```
+
+Key backend behaviors confirmed from source code:
+
+POST /api/v1/notifications/register:
+  - Schema: { token: z.string().min(1) } — missing token → 400
+  - Controller: if (!Expo.isExpoPushToken(token)) → 400 { error: { code: 'INVALID_PUSH_TOKEN', message: '...' } }
+  - A non-Expo format string like "not-an-expo-push-token" fails isExpoPushToken → 400 INVALID_PUSH_TOKEN
+
+POST /api/v1/notifications/send:
+  - Schema: { user_id: z.string().uuid(), title: z.string().min(1).max(200), body: z.string().min(1).max(1000) }
+  - Sending without title field → 400 (Zod schema)
+
+GET /api/v1/contacts?type=customer:
+  - Returns contacts matching that type only
+  - meta.total reflects ONLY the type-matched count, not all org contacts
+
+POST /api/v1/contacts/bulk-archive:
+  - Schema: { contact_ids: z.array(z.string().uuid()).min(1).max(100) }
+  - Controller: findMany where { id: { in: uniqueContactIds }, organization_id: orgId, status: { not: 'archived' } }
+  - If one contact is already archived, it's excluded from findMany → contacts.length < uniqueContactIds.length → 404 NOT_FOUND
+  - If all contact_ids belong to a different org, none are found → contacts.length === 0 < uniqueContactIds.length → 404 NOT_FOUND
+
+GET /api/v1/tasks?due_before=<ISO datetime>:
+  - Controller: due_date: { lt: new Date(due_before) }
+  - Tasks with due_date >= due_before are excluded
+  - due_before must be a valid ISO 8601 datetime string (e.g., "2026-12-31T00:00:00.000Z")
+
+GET /api/v1/deals?status=lost:
+  - Controller supports status filter (same as ?status=won tested in 24-coverage G8)
+  - Returns only deals with status='lost'
+  - Endpoint to mark lost: POST /api/v1/deals/:id/lost with body { reason?: string }
+
+GET /api/v1/tasks?status=in_progress:
+  - Returns only in_progress tasks
+  - Start a task via POST /api/v1/tasks/:id/start (pending → in_progress)
+
+GET /api/v1/contacts?type=customer&status=active:
+  - Both filters applied together
+  - Returns contacts that are BOTH type=customer AND status=active
+
+GET /api/v1/tasks?assigned_to=<userId>:
+  - Returns only tasks assigned to that specific user
+  - A task assigned to userA does NOT appear when filtered by userB's id
+
+PATCH /api/v1/tasks/:id with non-existent id:
+  - Controller: findFirst returns null → 404 { error: { code: 'TASK_NOT_FOUND', message: '...' } }
+  - Use a random UUID that doesn't exist
+
+POST /api/v1/calendar with end_time <= start_time:
+  - Zod schema: CreateEventSchema = EventFieldsSchema.superRefine(validateEventWindow)
+  - validateEventWindow: if end_time <= start_time → z.ZodIssueCode.custom on 'end_time' path
+  - Returns 400 (Zod validation error, NOT the { error: { code } } envelope — just check status 400)
+  - Required fields: title, start_time, end_time (both z.string().datetime())
+
+
+TASK
+
+Create the file tests/smoke/25-coverage.spec.ts with exactly 12 tests covering the gaps G1-G12 described above.
+
+Each test must have a descriptive title stating exactly what it verifies, following the pattern "G<N>: <description>" used in 24-coverage.spec.ts.
+
+Tests must be self-contained: each test that needs data creates its own org via registerOrg(), or uses getAuth() for simple validation-only tests.
+
+
+CONSTRAINTS
+
+1. TypeScript only — zero `any` types. All response bodies typed via interfaces.
+2. All interfaces defined at the top of the file before tests.
+3. Follow the exact pattern from 24-coverage.spec.ts shown in CONTEXT.
+4. test.describe.configure({ timeout: 30000 }) at the top.
+5. Import randomUUID from 'crypto' (needed for G8 cross-org bulk-archive test).
+6. Do NOT modify any existing file — only create tests/smoke/25-coverage.spec.ts.
+7. Do NOT import from '../../src/...' or any non-test file.
+8. For G12 (calendar end_time validation), only assert status 400 — do not assert error code shape (Zod returns its own format).
+9. For G5 (due_before filter): use ISO datetime strings with timezone offset, e.g., new Date(Date.now() + ms).toISOString(). Create one task with due_date = tomorrow, one with due_date = 10 days from now, query due_before = 5 days from now. Only the tomorrow task should appear.
+10. For G6 (deals status=lost): mark a deal as lost via POST /api/v1/deals/:id/lost with body {}.
+11. For G7 (tasks status=in_progress): start a task via POST /api/v1/tasks/:id/start.
+12. For G8 (bulk-archive cross-org): create a contact in orgB, then try to bulk-archive it using orgA's token → 404.
+13. Never touch an existing file.
+
+
+OUTPUT
+
+Single file: tests/smoke/25-coverage.spec.ts
+
+Structure:
+1. Imports
+2. test.describe.configure
+3. All interfaces
+4. All helper functions
+5. 12 test() blocks (G1-G12), each testing exactly one gap
+
+
+VALIDATION
+
+After writing the file:
+1. Run: cd /c/Users/fedor/crm && npx tsc --noEmit
+2. Report any TypeScript errors.
+3. Do NOT run the Playwright tests — that step is done by the supervisor.

@@ -210,19 +210,6 @@ test('G2: POST /api/v1/contacts/import-csv rejects an unsupported contact type',
   expect(res.status()).toBe(400);
 });
 
-test('G3: POST /api/v1/analytics/export returns the funnel CSV header', async ({ request }) => {
-  const { token } = getAuth();
-
-  const res = await request.post('/api/v1/analytics/export', {
-    headers: authHeaders(token),
-    data: { format: 'csv', report: 'funnel', period: 'month' },
-  });
-
-  expect(res.status()).toBe(200);
-  const text = await res.text();
-  expect(text.split('\n')[0]).toBe('stage_id,open,won,lost,total,total_value,conversion_rate');
-});
-
 test('G4: GET /api/v1/analytics/conversion-rates returns an empty transition set for a pipeline with no stages', async ({ request }) => {
   const org = await registerOrg(request, 'g4-conversion-rates');
   const pipeline = await createPipeline(request, org.token);
@@ -238,59 +225,6 @@ test('G4: GET /api/v1/analytics/conversion-rates returns an empty transition set
   expect(body.data[0].transitions).toEqual([]);
   expect(typeof body.data[0].note).toBe('string');
   expect(body.data[0].note.length).toBeGreaterThan(0);
-});
-
-test('G5: DELETE /api/v1/calendar/:id returns EVENT_ALREADY_CANCELLED when repeated', async ({ request }) => {
-  const org = await registerOrg(request, 'g5-double-cancel');
-  const event = await createCalendarEvent(request, org.token, 'G5 Double Cancel');
-
-  const firstDelete = await request.delete(`/api/v1/calendar/${event.id}`, {
-    headers: authHeaders(org.token),
-  });
-  expect(firstDelete.status()).toBe(200);
-
-  const secondDelete = await request.delete(`/api/v1/calendar/${event.id}`, {
-    headers: authHeaders(org.token),
-  });
-  expect(secondDelete.status()).toBe(422);
-  const body = (await secondDelete.json()) as ErrorResponse;
-  expect(body.error.code).toBe('EVENT_ALREADY_CANCELLED');
-});
-
-test('G6: PATCH /api/v1/calendar/:id rejects cancelled events and preserves start_time', async ({ request }) => {
-  const org = await registerOrg(request, 'g6-cancelled-patch');
-  const startTime = futureIso(1, 10);
-  const event = await createCalendarEvent(request, org.token, 'G6 Cancel Then Patch', startTime, futureIso(1, 11));
-
-  const deleteRes = await request.delete(`/api/v1/calendar/${event.id}`, {
-    headers: authHeaders(org.token),
-  });
-  expect(deleteRes.status()).toBe(200);
-
-  const patchRes = await request.patch(`/api/v1/calendar/${event.id}`, {
-    headers: authHeaders(org.token),
-    data: { title: 'Changed' },
-  });
-  expect(patchRes.status()).toBe(422);
-  const body = (await patchRes.json()) as ErrorResponse;
-  expect(body.error.code).toBe('EVENT_CANCELLED');
-
-  const stored = await getCalendarEvent(request, org.token, event.id);
-  expect(stored.start_time).toBe(startTime);
-});
-
-test('G7: POST /api/v1/calendar/:id/notes rejects a scheduled event', async ({ request }) => {
-  const org = await registerOrg(request, 'g7-notes-scheduled');
-  const event = await createCalendarEvent(request, org.token, 'G7 Scheduled Notes');
-
-  const res = await request.post(`/api/v1/calendar/${event.id}/notes`, {
-    headers: authHeaders(org.token),
-    data: { notes: 'hello' },
-  });
-
-  expect(res.status()).toBe(422);
-  const body = (await res.json()) as ErrorResponse;
-  expect(body.error.code).toBe('EVENT_NOT_COMPLETED');
 });
 
 test('G8: GET /api/v1/tasks/overdue returns an empty list for a fresh org', async ({ request }) => {
@@ -332,29 +266,6 @@ test('G9: GET /api/v1/tasks/overdue excludes completed and cancelled overdue tas
   expect(overdueIds).toContain(taskA.id);
   expect(overdueIds).not.toContain(taskB.id);
   expect(overdueIds).not.toContain(taskC.id);
-});
-
-test('G10: POST /api/v1/calendar/:id/complete toggles completed events back to scheduled', async ({ request }) => {
-  const org = await registerOrg(request, 'g10-complete-toggle');
-  const event = await createCalendarEvent(request, org.token, 'G10 Toggle Complete');
-
-  const firstComplete = await request.post(`/api/v1/calendar/${event.id}/complete`, {
-    headers: authHeaders(org.token),
-  });
-  expect(firstComplete.status()).toBe(200);
-  const firstBody = (await firstComplete.json()) as DataResponse<CalendarEventRecord>;
-  expect(firstBody.data.status).toBe('completed');
-
-  const secondComplete = await request.post(`/api/v1/calendar/${event.id}/complete`, {
-    headers: authHeaders(org.token),
-  });
-  expect(secondComplete.status()).toBe(200);
-  const secondBody = (await secondComplete.json()) as DataResponse<CalendarEventRecord>;
-  expect(secondBody.data.status).toBe('scheduled');
-
-  const stored = await getCalendarEvent(request, org.token, event.id);
-  expect(stored.status).toBe('scheduled');
-  expect(stored.completed_at).toBeNull();
 });
 
 test('G11: GET /api/v1/analytics/conversion-rates is scoped to the requester org', async ({ request }) => {

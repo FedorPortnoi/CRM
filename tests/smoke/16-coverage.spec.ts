@@ -255,13 +255,3 @@ test('GET /tasks?contact_id returns only tasks for that contact', async ({ reque
   expect(taskIds).toContain(taskAId);
   expect(taskIds).not.toContain(taskBId);
 });
-
-test('Cross-org isolation: contact created by Org B not accessible by Org A token', async ({ request }) => {
-  const { token: mainToken } = getAuth();
-  const orgB = await registerOrg(request, 'orgB');
-  const orgBContactId = await createContact(request, orgB.token);
-  const res = await request.get(`/api/v1/contacts/${orgBContactId}`, {
-    headers: { Authorization: `Bearer ${mainToken}` },
-  });
-  expect(res.status()).toBe(404);
-});

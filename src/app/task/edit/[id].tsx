@@ -6,6 +6,7 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
 import { scheduleTaskDueReminder } from '../../../utils/notifications';
+import { sendOrQueueMutation } from '../../../utils/offlineMutation';
 
 interface TaskContact {
   id: string;
@@ -241,14 +242,19 @@ export default function EditTaskScreen(): JSX.Element {
     }
 
     try {
-      const response = await fetch(`${API_URL}/tasks/${id}`, {
+      const result = await sendOrQueueMutation({
+        url: `${API_URL}/tasks/${id}`,
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(patch),
+        token,
+        body: patch,
       });
+
+      if (result.queued) {
+        router.back();
+        return;
+      }
+
+      const response = result.response;
 
       if (response.ok) {
         const parsedBody = (await response.json()) as { data: Task };

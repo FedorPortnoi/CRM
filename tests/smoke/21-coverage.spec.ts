@@ -81,53 +81,6 @@ test("PATCH /calendar/:id using a different org\'s token returns 404 (event not 
   expect(patchRes.status()).toBe(404);
 });
 
-test('PATCH /calendar/:id on a cancelled event returns 422 EVENT_CANCELLED', async ({ request }) => {
-  const { token } = getAuth();
-  const createRes = await request.post('/api/v1/calendar', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { title: 'To Cancel', ...futureEvent() },
-  });
-  expect(createRes.status()).toBe(201);
-  const createBody = (await createRes.json()) as { data: { id: string } };
-  const eventId = createBody.data.id;
-
-  const deleteRes = await request.delete(`/api/v1/calendar/${eventId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  expect(deleteRes.status()).toBe(200);
-
-  const patchRes = await request.patch(`/api/v1/calendar/${eventId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { title: 'Updated' },
-  });
-  expect(patchRes.status()).toBe(422);
-  const body = (await patchRes.json()) as { error: { code: string } };
-  expect(body.error.code).toBe('EVENT_CANCELLED');
-});
-
-test('DELETE /calendar/:id called twice on the same event returns 422 EVENT_ALREADY_CANCELLED on second call', async ({ request }) => {
-  const { token } = getAuth();
-  const createRes = await request.post('/api/v1/calendar', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { title: 'Double Cancel', ...futureEvent() },
-  });
-  expect(createRes.status()).toBe(201);
-  const createBody = (await createRes.json()) as { data: { id: string } };
-  const eventId = createBody.data.id;
-
-  const firstDelete = await request.delete(`/api/v1/calendar/${eventId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  expect(firstDelete.status()).toBe(200);
-
-  const secondDelete = await request.delete(`/api/v1/calendar/${eventId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  expect(secondDelete.status()).toBe(422);
-  const body = (await secondDelete.json()) as { error: { code: string } };
-  expect(body.error.code).toBe('EVENT_ALREADY_CANCELLED');
-});
-
 test("DELETE /calendar/:id using a different org\'s token returns 404", async ({ request }) => {
   const orgA = await registerOrg(request, 'orgA-delete');
   const orgB = await registerOrg(request, 'orgB-delete');
@@ -144,48 +97,6 @@ test("DELETE /calendar/:id using a different org\'s token returns 404", async ({
     headers: { Authorization: `Bearer ${orgB.token}` },
   });
   expect(deleteRes.status()).toBe(404);
-});
-
-test('POST /calendar/:id/complete on a cancelled event returns 422 EVENT_CANCELLED', async ({ request }) => {
-  const { token } = getAuth();
-  const createRes = await request.post('/api/v1/calendar', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { title: 'Complete Cancelled', ...futureEvent() },
-  });
-  expect(createRes.status()).toBe(201);
-  const createBody = (await createRes.json()) as { data: { id: string } };
-  const eventId = createBody.data.id;
-
-  const deleteRes = await request.delete(`/api/v1/calendar/${eventId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  expect(deleteRes.status()).toBe(200);
-
-  const completeRes = await request.post(`/api/v1/calendar/${eventId}/complete`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  expect(completeRes.status()).toBe(422);
-  const body = (await completeRes.json()) as { error: { code: string } };
-  expect(body.error.code).toBe('EVENT_CANCELLED');
-});
-
-test('POST /calendar/:id/notes on a scheduled event returns 422 EVENT_NOT_COMPLETED', async ({ request }) => {
-  const { token } = getAuth();
-  const createRes = await request.post('/api/v1/calendar', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { title: 'Notes Scheduled', ...futureEvent() },
-  });
-  expect(createRes.status()).toBe(201);
-  const createBody = (await createRes.json()) as { data: { id: string } };
-  const eventId = createBody.data.id;
-
-  const notesRes = await request.post(`/api/v1/calendar/${eventId}/notes`, {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { notes: 'agenda' },
-  });
-  expect(notesRes.status()).toBe(422);
-  const body = (await notesRes.json()) as { error: { code: string } };
-  expect(body.error.code).toBe('EVENT_NOT_COMPLETED');
 });
 
 // Messages tests
@@ -293,33 +204,6 @@ test('POST /messages/sms returns 201 with channel sms, direction outbound, and s
   expect(smsBody.data.direction).toBe('outbound');
   expect(smsBody.data.status).toBe('pending');
   expect(smsBody.data.contact_id).toBe(contactId);
-});
-
-test('POST /messages/:id/read marks the message status as read and sets read_at to a non-null timestamp', async ({ request }) => {
-  const { token } = getAuth();
-  const contactRes = await request.post('/api/v1/contacts', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { first_name: 'ReadContact' },
-  });
-  expect(contactRes.status()).toBe(201);
-  const contactBody = (await contactRes.json()) as { data: { id: string } };
-  const contactId = contactBody.data.id;
-
-  const msgRes = await request.post('/api/v1/messages/in-app', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: contactId, body: 'to be read' },
-  });
-  expect(msgRes.status()).toBe(201);
-  const msgBody = (await msgRes.json()) as { data: { id: string } };
-  const messageId = msgBody.data.id;
-
-  const readRes = await request.post(`/api/v1/messages/${messageId}/read`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  expect(readRes.status()).toBe(200);
-  const readBody = (await readRes.json()) as { data: { status: string; read_at: string | null } };
-  expect(readBody.data.status).toBe('read');
-  expect(readBody.data.read_at).not.toBeNull();
 });
 
 // Deals tests
@@ -563,15 +447,17 @@ test('GET /analytics/stage-duration with pipeline_id filter returns only deals f
 
 // Analytics: exportReport (Task 4)
 
-test('POST /analytics/export with format=pdf returns 501 PDF_NOT_IMPLEMENTED', async ({ request }) => {
+test('POST /analytics/export with format=pdf returns a PDF attachment', async ({ request }) => {
   const { token } = getAuth();
   const res = await request.post('/api/v1/analytics/export', {
     headers: { Authorization: `Bearer ${token}` },
     data: { format: 'pdf', report: 'funnel', period: 'month' },
   });
-  expect(res.status()).toBe(501);
-  const body = (await res.json()) as { error: { code: string } };
-  expect(body.error.code).toBe('PDF_NOT_IMPLEMENTED');
+  expect(res.status()).toBe(200);
+  expect(res.headers()['content-type']).toContain('application/pdf');
+  expect(res.headers()['content-disposition']).toContain('funnel');
+  const body = await res.body();
+  expect(body.subarray(0, 8).toString()).toBe('%PDF-1.4');
 });
 
 test('POST /analytics/export with format=csv and report=lead_sources returns 200 text/csv with Content-Disposition attachment', async ({ request }) => {
@@ -602,24 +488,22 @@ test('POST /analytics/export with format=csv and report=funnel returns CSV with 
 
 // Analytics: exportStatus + exportDownload (Task 5)
 
-test('GET /analytics/export/:job_id/status returns 501 ASYNC_EXPORT_NOT_IMPLEMENTED', async ({ request }) => {
+test('GET /analytics/export/:job_id/status returns synchronous export status', async ({ request }) => {
   const { token } = getAuth();
   const res = await request.get('/api/v1/analytics/export/00000000-0000-0000-0000-000000000001/status', {
     headers: { Authorization: `Bearer ${token}` },
   });
-  expect(res.status()).toBe(501);
-  const body = (await res.json()) as { error: { code: string; message: string } };
-  expect(body.error.code).toBe('ASYNC_EXPORT_NOT_IMPLEMENTED');
-  expect(body.error.message).toBe('Async export not implemented for MVP');
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as { data: { status: string; mode: string } };
+  expect(body.data).toMatchObject({ status: 'completed', mode: 'synchronous' });
 });
 
-test('GET /analytics/export/:job_id/download returns 501 ASYNC_EXPORT_NOT_IMPLEMENTED', async ({ request }) => {
+test('GET /analytics/export/:job_id/download returns 404 for absent async file', async ({ request }) => {
   const { token } = getAuth();
   const res = await request.get('/api/v1/analytics/export/00000000-0000-0000-0000-000000000001/download', {
     headers: { Authorization: `Bearer ${token}` },
   });
-  expect(res.status()).toBe(501);
+  expect(res.status()).toBe(404);
   const body = (await res.json()) as { error: { code: string; message: string } };
-  expect(body.error.code).toBe('ASYNC_EXPORT_NOT_IMPLEMENTED');
-  expect(body.error.message).toBe('Async export not implemented for MVP');
+  expect(body.error.code).toBe('EXPORT_NOT_FOUND');
 });

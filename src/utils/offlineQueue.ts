@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { randomUUID } from 'crypto';
 
 const STORAGE_KEY = 'crm-offline-queue';
 
@@ -51,6 +50,10 @@ async function writeQueue(queue: QueuedMutation[]): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
 }
 
+function createQueueId(): string {
+  return `queue-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export async function enqueue(
   mutation: Omit<QueuedMutation, 'id' | 'enqueuedAt'>,
 ): Promise<void> {
@@ -58,7 +61,7 @@ export async function enqueue(
 
   queue.push({
     ...mutation,
-    id: randomUUID(),
+    id: createQueueId(),
     enqueuedAt: Date.now(),
   });
 

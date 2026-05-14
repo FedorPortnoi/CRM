@@ -19,7 +19,7 @@ Notifications.setNotificationHandler({
 
 export default function RootLayout() {
   const router = useRouter();
-  const { token, restoreSession } = useUserStore();
+  const { token, user, restoreSession } = useUserStore();
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
   const pushRegistrationAttemptRef = useRef<string | null>(null);
 
@@ -34,6 +34,12 @@ export default function RootLayout() {
       router.replace('/login');
     }
   }, [token, isRestoring]);
+
+  useEffect(() => {
+    if (!isRestoring && token !== null && user?.onboarding_completed === false) {
+      router.replace('/onboarding' as never);
+    }
+  }, [token, user?.onboarding_completed, isRestoring]);
 
   useEffect(() => {
     if (token === null) {
@@ -78,6 +84,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="register" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         </Stack>
       </GestureHandlerRootView>
     </PersistQueryClientProvider>

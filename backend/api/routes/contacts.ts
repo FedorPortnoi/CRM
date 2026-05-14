@@ -36,6 +36,14 @@ const ImportContactRowSchema = z.object({
 
 const ImportContactsCsvSchema = z.array(ImportContactRowSchema).min(1).max(500);
 
+const BusinessCardSchema = z.object({
+  text: z.string().max(10000).optional(),
+  image_base64: z.string().max(10_000_000).optional(),
+  create_contact: z.boolean().default(false),
+}).refine((body) => Boolean(body.text || body.image_base64), {
+  message: 'text or image_base64 is required',
+});
+
 const MergeContactSchema = z.object({
   source_id: z.string().uuid(),
 });
@@ -46,6 +54,11 @@ const BulkArchiveSchema = z.object({
 
 const BulkAssignSchema = BulkArchiveSchema.extend({
   assigned_to: z.string().uuid(),
+});
+
+const BulkTagSchema = BulkArchiveSchema.extend({
+  tags: z.array(z.string().trim().min(1).max(50)).min(1).max(20),
+  mode: z.enum(['append', 'replace']).default('append'),
 });
 
 const ContactFilterSchema = z.object({
@@ -101,12 +114,22 @@ export default async function contactsRoutes(fastify: FastifyInstance) {
     preHandler: [authenticate],
     schema: { body: ImportContactsCsvSchema },
   }, ContactsController.importCsv);
-  f.post('/import/phone', { preHandler: [authenticate] }, ContactsController.importFromPhone);
+  f.post('/import/phone', {
+    preHandler: [authenticate],
+    schema: { body: ImportContactsCsvSchema },
+  }, ContactsController.importFromPhone);
+  f.post('/business-card/scan', {
+    preHandler: [authenticate],
+    schema: { body: BusinessCardSchema },
+  }, ContactsController.scanBusinessCard);
   f.post('/bulk-assign', {
     preHandler: [authenticate],
     schema: { body: BulkAssignSchema },
   }, ContactsController.bulkAssign);
-  f.post('/bulk-tag', { preHandler: [authenticate] }, ContactsController.bulkTag);
+  f.post('/bulk-tag', {
+    preHandler: [authenticate],
+    schema: { body: BulkTagSchema },
+  }, ContactsController.bulkTag);
   f.post('/bulk-archive', {
     preHandler: [authenticate],
     schema: { body: BulkArchiveSchema },

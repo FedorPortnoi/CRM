@@ -11,6 +11,7 @@ import {
 import { Stack, router } from 'expo-router';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { sendOrQueueMutation } from '../../utils/offlineMutation';
 
 type CreateCalendarEventResponse = {
   data: { id: string };
@@ -153,14 +154,19 @@ export default function NewCalendarEventScreen(): JSX.Element {
     };
 
     try {
-      const res = await fetch(`${API_URL}/calendar`, {
+      const result = await sendOrQueueMutation({
+        url: `${API_URL}/calendar`,
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
+        token: token ?? '',
+        body,
       });
+
+      if (result.queued) {
+        router.replace('/calendar');
+        return;
+      }
+
+      const res = result.response;
 
       if (res.status === 201) {
         const parsed = (await res.json()) as CreateCalendarEventResponse;

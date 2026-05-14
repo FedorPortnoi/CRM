@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { ContactStatus, Prisma, TaskStatus } from '@prisma/client';
+import { CalendarEventStatus, ContactStatus, Prisma, TaskStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
+import { evaluateWorkflows } from '../../services/workflows';
 
 type ContactBody = {
   first_name: string;
@@ -25,6 +26,11 @@ type BulkAssignBody = BulkArchiveBody & {
   assigned_to: string;
 };
 
+type BulkTagBody = BulkArchiveBody & {
+  tags: string[];
+  mode?: 'append' | 'replace';
+};
+
 type ContactImportRow = {
   first_name: string;
   last_name?: string;
@@ -35,6 +41,12 @@ type ContactImportRow = {
   source?: string;
   notes?: string;
   type?: 'lead' | 'customer' | 'partner' | 'other';
+};
+
+type BusinessCardBody = {
+  text?: string;
+  image_base64?: string;
+  create_contact?: boolean;
 };
 
 function optionalTrimmedString(value: string | undefined): string | undefined {
@@ -52,6 +64,68 @@ async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean>
     select: { id: true },
   });
   return user !== null;
+}
+
+function parseBusinessCardText(text: string): ContactImportRow {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const joined = lines.join(' ');
+  const email = joined.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
+  const phone = joined.match(/(?:\+?\d[\d\s().-]{7,}\d)/)?.[0]?.trim();
+  const websiteIndex = lines.findIndex((line) => /https?:\/\/|www\.|@/.test(line));
+  const nameLine = lines.find((line) => line !== email && line !== phone && !/https?:\/\/|www\./i.test(line)) ?? 'Unknown';
+  const [firstName, ...restName] = nameLine.split(/\s+/);
+  const company = lines.find((line, index) =>
+    index !== websiteIndex &&
+    line !== nameLine &&
+    line !== email &&
+    line !== phone &&
+    !/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(line) &&
+    !/(?:\+?\d[\d\s().-]{7,}\d)/.test(line),
+  );
+
+  return {
+    first_name: firstName || 'Unknown',
+    last_name: restName.length > 0 ? restName.join(' ') : undefined,
+    company,
+    email,
+    phone,
+    source: 'business_card',
+    notes: text,
+  };
+}
+
+async function extractTextWithGoogleVision(imageBase64: string): Promise<string> {
+  const key = process.env.GOOGLE_VISION_API_KEY;
+  if (!key) {
+    throw new Error('GOOGLE_VISION_API_KEY is not configured');
+  }
+
+  const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      requests: [
+        {
+          image: { content: imageBase64 },
+          features: [{ type: 'TEXT_DETECTION' }],
+        },
+      ],
+    }),
+  });
+
+  const body = await response.json() as {
+    responses?: Array<{ fullTextAnnotation?: { text?: string }; error?: { message?: string } }>;
+    error?: { message?: string };
+  };
+
+  if (!response.ok || body.error || body.responses?.[0]?.error) {
+    throw new Error(body.error?.message ?? body.responses?.[0]?.error?.message ?? 'Google Vision OCR failed');
+  }
+
+  return body.responses?.[0]?.fullTextAnnotation?.text ?? '';
 }
 
 export const ContactsController = {
@@ -129,6 +203,14 @@ export const ContactsController = {
     };
 
     const contact = await db.contact.create({ data });
+
+    await evaluateWorkflows({
+      organizationId: request.user.org_id,
+      trigger: WorkflowTrigger.contact_created,
+      record: contact as unknown as Record<string, unknown>,
+      userId: request.user.sub,
+      triggerRecordId: contact.id,
+    });
 
     return reply.code(201).send({ data: contact });
   },
@@ -355,7 +437,28 @@ export const ContactsController = {
     return reply.send({ data: updated ?? target });
   },
   getCalendarEvents: async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.code(501).send({ error: 'Not implemented' });
+    const request = _request;
+    const { id } = request.params as { id: string };
+
+    const contact = await db.contact.findFirst({
+      where: { id, organization_id: request.user.org_id },
+      select: { id: true },
+    });
+
+    if (!contact) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    }
+
+    const events = await db.calendarEvent.findMany({
+      where: {
+        contact_id: id,
+        organization_id: request.user.org_id,
+        status: { not: CalendarEventStatus.cancelled },
+      },
+      orderBy: { start_time: 'asc' },
+    });
+
+    return reply.send({ data: events, meta: { total: events.length } });
   },
   importCsv: async (request: FastifyRequest, reply: FastifyReply) => {
     const rows = request.body as ContactImportRow[];
@@ -378,8 +481,26 @@ export const ContactsController = {
 
     return reply.code(201).send({ data: { imported_count: result.count }, meta: {} });
   },
-  importFromPhone: async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.code(501).send({ error: 'Not implemented' });
+  importFromPhone: async (request: FastifyRequest, reply: FastifyReply) => {
+    const rows = request.body as ContactImportRow[];
+
+    const data: Prisma.ContactCreateManyInput[] = rows.map(row => ({
+      organization_id: request.user.org_id,
+      created_by: request.user.sub,
+      first_name: row.first_name.trim(),
+      last_name: optionalTrimmedString(row.last_name),
+      company: optionalTrimmedString(row.company),
+      email: optionalTrimmedString(row.email),
+      phone: optionalTrimmedString(row.phone),
+      mobile: optionalTrimmedString(row.mobile),
+      source: optionalTrimmedString(row.source) ?? 'phone_contacts',
+      notes: optionalTrimmedString(row.notes),
+      type: row.type,
+    }));
+
+    const result = await db.$transaction(async (tx) => tx.contact.createMany({ data }));
+
+    return reply.code(201).send({ data: { imported_count: result.count }, meta: {} });
   },
   bulkAssign: async (request: FastifyRequest, reply: FastifyReply) => {
     const { contact_ids, assigned_to } = request.body as BulkAssignBody;
@@ -422,8 +543,39 @@ export const ContactsController = {
       meta: {},
     });
   },
-  bulkTag: async (_request: FastifyRequest, reply: FastifyReply) => {
-    return reply.code(501).send({ error: 'Not implemented' });
+  bulkTag: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { contact_ids, tags, mode } = request.body as BulkTagBody;
+    const orgId = request.user.org_id;
+    const uniqueContactIds = Array.from(new Set(contact_ids));
+
+    const contacts = await db.contact.findMany({
+      where: {
+        id: { in: uniqueContactIds },
+        organization_id: orgId,
+        status: { not: ContactStatus.archived },
+      },
+      select: { id: true, tags: true },
+    });
+
+    if (contacts.length !== uniqueContactIds.length) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'One or more contacts not found' } });
+    }
+
+    await db.$transaction(
+      contacts.map((contact) => {
+        const existingTags = Array.isArray(contact.tags) ? contact.tags.filter((tag): tag is string => typeof tag === 'string') : [];
+        const nextTags = mode === 'replace' ? tags : Array.from(new Set([...existingTags, ...tags]));
+        return db.contact.update({
+          where: { id: contact.id },
+          data: { tags: nextTags },
+        });
+      }),
+    );
+
+    return reply.send({
+      data: { tagged_count: contacts.length, contact_ids: uniqueContactIds, tags, mode: mode ?? 'append' },
+      meta: {},
+    });
   },
   bulkArchive: async (request: FastifyRequest, reply: FastifyReply) => {
     const { contact_ids } = request.body as BulkArchiveBody;
@@ -456,5 +608,53 @@ export const ContactsController = {
       data: { archived_count: result.count, contact_ids: uniqueContactIds },
       meta: {},
     });
+  },
+  scanBusinessCard: async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as BusinessCardBody;
+
+    try {
+      const rawText = body.text?.trim() || (body.image_base64 ? await extractTextWithGoogleVision(body.image_base64) : '');
+      if (!rawText) {
+        return reply.code(400).send({
+          error: { code: 'OCR_INPUT_REQUIRED', message: 'Provide text or image_base64' },
+        });
+      }
+
+      const extracted = parseBusinessCardText(rawText);
+      let contact = null;
+
+      if (body.create_contact === true) {
+        contact = await db.contact.create({
+          data: {
+            organization_id: request.user.org_id,
+            created_by: request.user.sub,
+            first_name: extracted.first_name,
+            last_name: extracted.last_name,
+            company: extracted.company,
+            email: extracted.email,
+            phone: extracted.phone,
+            source: extracted.source,
+            notes: extracted.notes,
+          },
+        });
+
+        await evaluateWorkflows({
+          organizationId: request.user.org_id,
+          trigger: WorkflowTrigger.contact_created,
+          record: contact as unknown as Record<string, unknown>,
+          userId: request.user.sub,
+          triggerRecordId: contact.id,
+        });
+      }
+
+      return reply.send({ data: { raw_text: rawText, extracted, contact }, meta: {} });
+    } catch (error) {
+      return reply.code(502).send({
+        error: {
+          code: 'OCR_FAILED',
+          message: error instanceof Error ? error.message : 'Business card OCR failed',
+        },
+      });
+    }
   },
 };

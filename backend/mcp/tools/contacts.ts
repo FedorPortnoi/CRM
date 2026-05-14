@@ -109,7 +109,10 @@ registerTool(
     required: ['first_name'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
-    const first_name = typeof args.first_name === 'string' ? args.first_name : '';
+    const first_name = typeof args.first_name === 'string' ? args.first_name.trim() : '';
+    if (!first_name) {
+      return { error: { code: 'VALIDATION_ERROR', message: 'first_name is required' } };
+    }
     const last_name = typeof args.last_name === 'string' ? args.last_name : undefined;
     const company = typeof args.company === 'string' ? args.company : undefined;
     const email = typeof args.email === 'string' ? args.email : undefined;

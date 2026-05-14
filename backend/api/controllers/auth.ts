@@ -17,6 +17,26 @@ type AuthUsersResponse = {
   };
 };
 
+function onboardingCompleted(state: Prisma.JsonValue | null): boolean {
+  return (
+    typeof state === 'object' &&
+    state !== null &&
+    !Array.isArray(state) &&
+    (state as Record<string, unknown>).completed === true
+  );
+}
+
+function publicUser(user: { id: string; email: string; name: string; role: string; organization_id: string; onboarding_state?: Prisma.JsonValue | null }) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    org_id: user.organization_id,
+    onboarding_completed: onboardingCompleted(user.onboarding_state ?? null),
+  };
+}
+
 function generateSlug(name: string): string {
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const suffix = Math.random().toString(36).slice(2, 7);
@@ -35,49 +55,52 @@ export const AuthController = {
     try {
       const password_hash = await bcrypt.hash(password, 12);
 
-      const { org, user } = await db.$transaction(async (tx) => {
-        const slug = generateSlug(org_name);
+      const { org, user } = await db.$transaction(
+        async (tx) => {
+          const slug = generateSlug(org_name);
 
-        const org = await tx.org.create({
-          data: { name: org_name, slug, plan: 'starter' },
-        });
+          const org = await tx.org.create({
+            data: { name: org_name, slug, plan: 'starter' },
+          });
 
-        const user = await tx.user.create({
-          data: {
-            email,
-            password_hash,
-            name,
-            organization_id: org.id,
-            role: 'owner',
-          },
-        });
+          const user = await tx.user.create({
+            data: {
+              email,
+              password_hash,
+              name,
+              organization_id: org.id,
+              role: 'owner',
+            },
+          });
 
-        await tx.org.update({
-          where: { id: org.id },
-          data: { owner_id: user.id },
-        });
+          await tx.org.update({
+            where: { id: org.id },
+            data: { owner_id: user.id },
+          });
 
-        // Seed default Sales Pipeline with 4 stages
-        const pipeline = await tx.pipeline.create({
-          data: {
-            name: 'Sales Pipeline',
-            is_default: true,
-            organization_id: org.id,
-            created_by: user.id,
-          },
-        });
+          // Seed default Sales Pipeline with 4 stages
+          const pipeline = await tx.pipeline.create({
+            data: {
+              name: 'Sales Pipeline',
+              is_default: true,
+              organization_id: org.id,
+              created_by: user.id,
+            },
+          });
 
-        await tx.pipelineStage.createMany({
-          data: [
-            { pipeline_id: pipeline.id, name: 'Lead',       position: 0 },
-            { pipeline_id: pipeline.id, name: 'Qualified',  position: 1 },
-            { pipeline_id: pipeline.id, name: 'Proposal',   position: 2 },
-            { pipeline_id: pipeline.id, name: 'Closed Won', position: 3, is_won_stage: true },
-          ],
-        });
+          await tx.pipelineStage.createMany({
+            data: [
+              { pipeline_id: pipeline.id, name: 'Lead',       position: 0 },
+              { pipeline_id: pipeline.id, name: 'Qualified',  position: 1 },
+              { pipeline_id: pipeline.id, name: 'Proposal',   position: 2 },
+              { pipeline_id: pipeline.id, name: 'Closed Won', position: 3, is_won_stage: true },
+            ],
+          });
 
-        return { org, user };
-      });
+          return { org, user };
+        },
+        { maxWait: 10_000, timeout: 20_000 },
+      );
 
       const token = await reply.jwtSign(
         { sub: user.id, org_id: org.id, role: user.role },
@@ -86,7 +109,7 @@ export const AuthController = {
 
       return reply.code(201).send({
         data: {
-          user: { id: user.id, email: user.email, name: user.name, role: user.role, org_id: org.id },
+          user: publicUser(user),
           token,
         },
       });
@@ -118,7 +141,7 @@ export const AuthController = {
 
     return reply.send({
       data: {
-        user: { id: user.id, email: user.email, name: user.name, role: user.role, org_id: user.organization_id },
+        user: publicUser(user),
         token,
       },
     });
@@ -145,5 +168,36 @@ export const AuthController = {
     };
 
     return reply.send(response);
+  },
+
+  getOnboarding: async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = await db.user.findFirst({
+      where: { id: request.user.sub, organization_id: request.user.org_id },
+      select: { onboarding_state: true },
+    });
+
+    return reply.send({
+      data: user?.onboarding_state ?? { completed: false },
+      meta: {},
+    });
+  },
+
+  updateOnboarding: async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as { completed?: boolean; dismissed_steps?: string[] };
+    const state = {
+      completed: body.completed ?? false,
+      dismissed_steps: body.dismissed_steps ?? [],
+      completed_at: body.completed ? new Date().toISOString() : undefined,
+    };
+
+    const user = await db.user.update({
+      where: { id: request.user.sub },
+      data: { onboarding_state: state },
+    });
+
+    return reply.send({
+      data: publicUser(user),
+      meta: {},
+    });
   },
 };

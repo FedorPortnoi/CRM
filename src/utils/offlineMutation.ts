@@ -1,0 +1,39 @@
+import NetInfo from '@react-native-community/netinfo';
+import * as offlineQueue from './offlineQueue';
+
+type MutationOptions = {
+  url: string;
+  method: 'POST' | 'PATCH' | 'DELETE';
+  token: string;
+  body?: unknown;
+};
+
+type MutationResult =
+  | { queued: true }
+  | { queued: false; response: Response };
+
+export async function sendOrQueueMutation(options: MutationOptions): Promise<MutationResult> {
+  const netState = await NetInfo.fetch();
+  const isOnline = netState.isConnected === true && netState.isInternetReachable !== false;
+  const serializedBody = options.body === undefined ? '' : JSON.stringify(options.body);
+
+  if (!isOnline) {
+    await offlineQueue.enqueue({
+      url: options.url,
+      method: options.method,
+      body: serializedBody,
+    });
+    return { queued: true };
+  }
+
+  const response = await fetch(options.url, {
+    method: options.method,
+    headers: {
+      Authorization: `Bearer ${options.token}`,
+      'Content-Type': 'application/json',
+    },
+    body: serializedBody || undefined,
+  });
+
+  return { queued: false, response };
+}

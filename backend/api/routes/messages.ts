@@ -25,6 +25,7 @@ const MessageFilterSchema = z.object({
   contact_id: z.string().uuid().optional(),
   channel: z.enum(['sms', 'in_app', 'email']).optional(),
   direction: z.enum(['inbound', 'outbound']).optional(),
+  status: z.enum(['pending', 'sent', 'delivered', 'read', 'failed']).optional(),
   page: z.coerce.number().min(1).default(1),
   per_page: z.coerce.number().min(1).max(100).default(50),
 });

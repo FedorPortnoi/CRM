@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { MessageDirection, MessageChannel, MessageStatus, Prisma } from '@prisma/client';
+import twilio from 'twilio';
 import { db } from '../../services/db';
 
 // --- Local request types ---
@@ -8,6 +9,7 @@ type ListQuery = {
   contact_id?: string;
   channel?: MessageChannel;
   direction?: MessageDirection;
+  status?: MessageStatus;
   page: number;
   per_page: number;
 };
@@ -65,13 +67,14 @@ async function list(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { contact_id, channel, direction, page, per_page } = request.query as ListQuery;
+  const { contact_id, channel, direction, status, page, per_page } = request.query as ListQuery;
 
   const where: Prisma.MessageWhereInput = {
     organization_id: request.user.org_id,
     ...(contact_id && { contact_id }),
     ...(channel && { channel }),
     ...(direction && { direction }),
+    ...(status && { status }),
   };
 
   const skip = (page - 1) * per_page;
@@ -117,11 +120,17 @@ async function sendSms(
   const { contact_id, body } = request.body as SendSmsBody;
   const organization_id = request.user.org_id;
 
-  const ownsContact = await contactBelongsToOrg(contact_id, organization_id);
-  if (!ownsContact) {
+  const contact = await db.contact.findFirst({
+    where: { id: contact_id, organization_id },
+    select: { id: true, phone: true, mobile: true },
+  });
+
+  if (!contact) {
     reply.status(404).send({ error: { code: 'CONTACT_NOT_FOUND', message: 'Contact not found' } });
     return;
   }
+
+  contactOrgCache.add(contactOrgCacheKey(contact_id, organization_id));
 
   const message = await db.message.create({
     data: {
@@ -135,7 +144,47 @@ async function sendSms(
     },
   });
 
-  reply.status(201).send({ data: message, meta: {} });
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const from = process.env.TWILIO_FROM_NUMBER ?? process.env.TWILIO_PHONE_NUMBER;
+  const to = contact.mobile ?? contact.phone;
+
+  if (!accountSid || !authToken || !from || process.env.TWILIO_SEND_ENABLED !== 'true') {
+    reply.status(201).send({ data: message, meta: { delivery: 'queued_without_twilio_config' } });
+    return;
+  }
+
+  if (!to) {
+    const failed = await db.message.update({
+      where: { id: message.id },
+      data: { status: MessageStatus.failed, error_message: 'Contact has no phone number' },
+    });
+    reply.status(422).send({ error: { code: 'CONTACT_PHONE_MISSING', message: 'Contact has no phone number' }, data: failed });
+    return;
+  }
+
+  try {
+    const client = twilio(accountSid, authToken);
+    const sent = await client.messages.create({ from, to, body });
+    const updated = await db.message.update({
+      where: { id: message.id },
+      data: {
+        twilio_sid: sent.sid,
+        status: MessageStatus.sent,
+      },
+    });
+
+    reply.status(201).send({ data: updated, meta: { delivery: 'sent_to_twilio' } });
+  } catch (error) {
+    const failed = await db.message.update({
+      where: { id: message.id },
+      data: {
+        status: MessageStatus.failed,
+        error_message: error instanceof Error ? error.message : 'Twilio send failed',
+      },
+    });
+    reply.status(201).send({ data: failed, meta: { delivery: 'twilio_failed' } });
+  }
 }
 
 async function sendInApp(

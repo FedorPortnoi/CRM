@@ -13,6 +13,7 @@ import type { ListRenderItemInfo } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
+import { sendOrQueueMutation } from '../../../utils/offlineMutation';
 
 type CalendarContact = {
   id: string;
@@ -331,14 +332,19 @@ export default function EditCalendarEventScreen(): JSX.Element {
     }
 
     try {
-      const response = await fetch(`${API_URL}/calendar/${id}`, {
+      const result = await sendOrQueueMutation({
+        url: `${API_URL}/calendar/${id}`,
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(patch),
+        token,
+        body: patch,
       });
+
+      if (result.queued) {
+        router.back();
+        return;
+      }
+
+      const response = result.response;
 
       if (response.ok) {
         router.back();

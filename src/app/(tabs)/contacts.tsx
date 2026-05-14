@@ -16,6 +16,7 @@ import { router } from 'expo-router';
 import { Check } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { sendOrQueueMutation } from '../../utils/offlineMutation';
 
 type Contact = {
   id: string;
@@ -208,16 +209,16 @@ export default function ContactsScreen(): JSX.Element {
         setIsArchiving(true);
         setArchiveError(null);
         setAssignError(null);
-        const res = await fetch(`${API_URL}/contacts/bulk-archive`, {
+        const result = await sendOrQueueMutation({
+          url: `${API_URL}/contacts/bulk-archive`,
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ contact_ids: contactIds }),
+          token,
+          body: { contact_ids: contactIds },
         });
 
-        if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+        if (!result.queued && !result.response.ok) {
+          throw new Error(`Request failed with status ${result.response.status}`);
+        }
 
         const archivedContactIds = new Set(contactIds);
         setContacts((prev) =>
@@ -293,19 +294,19 @@ export default function ContactsScreen(): JSX.Element {
         setIsAssigning(true);
         setAssignError(null);
         setArchiveError(null);
-        const res = await fetch(`${API_URL}/contacts/bulk-assign`, {
+        const result = await sendOrQueueMutation({
+          url: `${API_URL}/contacts/bulk-assign`,
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+          token,
+          body: {
             contact_ids: contactIds,
             assigned_to: assignedTo,
-          }),
+          },
         });
 
-        if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+        if (!result.queued && !result.response.ok) {
+          throw new Error(`Request failed with status ${result.response.status}`);
+        }
 
         setSelectedContactIds([]);
         setIsAssignModalVisible(false);

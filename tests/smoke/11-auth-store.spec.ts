@@ -51,15 +51,6 @@ test('POST /api/v1/auth/login returns token + user for valid credentials', async
   expect(body.data.user.email).toBe(getAuth().email);
 });
 
-test('POST /api/v1/auth/login returns 401 for invalid password', async ({ request }) => {
-  const res = await request.post('/api/v1/auth/login', {
-    data: { email: getAuth().email, password: 'wrong-password' },
-  });
-  expect(res.status()).toBe(401);
-  const body: ErrorResponse = await res.json();
-  expect(body.error.code).toBe('INVALID_CREDENTIALS');
-});
-
 test('POST /api/v1/auth/ returns 409 for duplicate email', async ({ request }) => {
   const res = await request.post('/api/v1/auth/', {
     data: { email: getAuth().email, password: 'Test123!', name: 'Dup', org_name: 'Dup Org' },

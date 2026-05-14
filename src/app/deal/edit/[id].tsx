@@ -15,6 +15,7 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { usePipelinesStore } from '../../../store/pipelinesStore';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
+import { sendOrQueueMutation } from '../../../utils/offlineMutation';
 
 interface PipelineStage {
   id: string;
@@ -261,14 +262,19 @@ export default function EditDealScreen(): JSX.Element {
     }
 
     try {
-      const res = await fetch(`${API_URL}/deals/${id}`, {
+      const result = await sendOrQueueMutation({
+        url: `${API_URL}/deals/${id}`,
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(patch),
+        token,
+        body: patch,
       });
+
+      if (result.queued) {
+        router.back();
+        return;
+      }
+
+      const res = result.response;
 
       if (res.ok) {
         router.back();

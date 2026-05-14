@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { CalendarEventStatus, Prisma } from '@prisma/client';
+import crypto from 'crypto';
 import { db } from '../../services/db';
 
 // ─── Local request types ──────────────────────────────────────────────────────
@@ -42,6 +43,26 @@ type AvailabilityQuery = {
   duration_minutes: number;
 };
 
+type GoogleCallbackQuery = {
+  code?: string;
+  state?: string;
+  error?: string;
+};
+
+type GoogleOAuthState = {
+  sub: string;
+  org_id: string;
+  exp: number;
+};
+
+type GoogleTokenResponse = {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  token_type?: string;
+  scope?: string;
+};
+
 async function contactBelongsToOrg(contactId: string, orgId: string): Promise<boolean> {
   const contact = await db.contact.findFirst({
     where: { id: contactId, organization_id: orgId },
@@ -60,6 +81,166 @@ async function dealBelongsToOrg(dealId: string, orgId: string): Promise<boolean>
 
 function hasInvalidEventWindow(startTime: Date, endTime: Date): boolean {
   return endTime.getTime() <= startTime.getTime();
+}
+
+function base64Url(input: string | Buffer): string {
+  return Buffer.from(input).toString('base64url');
+}
+
+function signState(payload: GoogleOAuthState): string {
+  const encoded = base64Url(JSON.stringify(payload));
+  const secret = process.env.JWT_SECRET ?? '';
+  const signature = crypto.createHmac('sha256', secret).update(encoded).digest('base64url');
+  return `${encoded}.${signature}`;
+}
+
+function verifyState(state: string): GoogleOAuthState | null {
+  const [encoded, signature] = state.split('.');
+  if (!encoded || !signature) return null;
+
+  const expected = crypto
+    .createHmac('sha256', process.env.JWT_SECRET ?? '')
+    .update(encoded)
+    .digest('base64url');
+
+  const signatureBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (
+    signatureBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)
+  ) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as GoogleOAuthState;
+    if (payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function googleRedirectUri(request: FastifyRequest): string {
+  if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
+  const host = request.headers.host ?? `localhost:${process.env.PORT ?? '3000'}`;
+  return `${request.protocol}://${host}/api/v1/calendar/sync/google/callback`;
+}
+
+function googleConfigured(): boolean {
+  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+}
+
+async function exchangeGoogleToken(params: Record<string, string>): Promise<GoogleTokenResponse> {
+  const response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params).toString(),
+  });
+
+  const body = await response.json() as GoogleTokenResponse & { error?: string; error_description?: string };
+
+  if (!response.ok) {
+    throw new Error(body.error_description ?? body.error ?? `Google token exchange failed with ${response.status}`);
+  }
+
+  return body;
+}
+
+async function getValidGoogleSync(userId: string) {
+  const sync = await db.userCalendarSync.findUnique({
+    where: { user_id_provider: { user_id: userId, provider: 'google' } },
+  });
+
+  if (!sync) return null;
+
+  const expiresAt = sync.expires_at?.getTime() ?? 0;
+  if (!sync.refresh_token || expiresAt > Date.now() + 60_000) {
+    return sync;
+  }
+
+  const token = await exchangeGoogleToken({
+    client_id: process.env.GOOGLE_CLIENT_ID ?? '',
+    client_secret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    refresh_token: sync.refresh_token,
+    grant_type: 'refresh_token',
+  });
+
+  return db.userCalendarSync.update({
+    where: { user_id_provider: { user_id: userId, provider: 'google' } },
+    data: {
+      access_token: token.access_token,
+      expires_at: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : sync.expires_at,
+    },
+  });
+}
+
+async function syncGoogleEventForUser(userId: string | null | undefined, eventId: string): Promise<void> {
+  if (!userId || !googleConfigured()) return;
+
+  const sync = await getValidGoogleSync(userId);
+  if (!sync) return;
+
+  const event = await db.calendarEvent.findUnique({
+    where: { id: eventId },
+    include: {
+      contact: { select: { first_name: true, last_name: true, email: true } },
+    },
+  });
+
+  if (!event || event.status === CalendarEventStatus.cancelled) return;
+
+  const calendarId = sync.google_calendar_id ?? 'primary';
+  const payload = {
+    summary: event.title,
+    description: event.description ?? undefined,
+    location: event.location ?? undefined,
+    start: { dateTime: event.start_time.toISOString() },
+    end: { dateTime: event.end_time.toISOString() },
+    attendees: event.contact?.email ? [{ email: event.contact.email }] : undefined,
+  };
+
+  const url = event.google_event_id
+    ? `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(event.google_event_id)}`
+    : `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
+
+  const response = await fetch(url, {
+    method: event.google_event_id ? 'PATCH' : 'POST',
+    headers: {
+      Authorization: `Bearer ${sync.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) return;
+
+  const googleEvent = await response.json() as { id?: string };
+  if (googleEvent.id && googleEvent.id !== event.google_event_id) {
+    await db.calendarEvent.update({
+      where: { id: event.id },
+      data: { google_event_id: googleEvent.id, google_calendar_id: calendarId },
+    });
+  }
+}
+
+async function deleteGoogleEventForUser(userId: string | null | undefined, eventId: string): Promise<void> {
+  if (!userId || !googleConfigured()) return;
+
+  const event = await db.calendarEvent.findUnique({ where: { id: eventId } });
+  if (!event?.google_event_id) return;
+
+  const sync = await getValidGoogleSync(userId);
+  if (!sync) return;
+
+  const calendarId = event.google_calendar_id ?? sync.google_calendar_id ?? 'primary';
+  await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(event.google_event_id)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${sync.access_token}` },
+    },
+  );
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -154,6 +335,8 @@ async function create(
     },
   });
 
+  await syncGoogleEventForUser(request.user.sub, event.id);
+
   reply.status(201).send({ data: event, meta: {} });
 }
 
@@ -244,6 +427,8 @@ async function update(
     },
   });
 
+  await syncGoogleEventForUser(request.user.sub, updated.id);
+
   reply.send({ data: updated, meta: {} });
 }
 
@@ -271,6 +456,8 @@ async function cancel(
     where: { id },
     data: { status: CalendarEventStatus.cancelled },
   });
+
+  await deleteGoogleEventForUser(request.user.sub, updated.id);
 
   reply.send({ data: updated, meta: {} });
 }
@@ -373,27 +560,105 @@ async function getAvailability(
 }
 
 async function googleOAuthStart(
-  _request: FastifyRequest,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  reply.status(501).send({
-    error: {
-      code: 'GOOGLE_OAUTH_NOT_CONFIGURED',
-      message: 'Google Calendar sync requires OAuth credentials. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.',
-    },
+  if (!googleConfigured()) {
+    reply.status(501).send({
+      error: {
+        code: 'GOOGLE_OAUTH_NOT_CONFIGURED',
+        message: 'Google Calendar sync requires OAuth credentials. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.',
+      },
+    });
+    return;
+  }
+
+  const state = signState({
+    sub: request.user.sub,
+    org_id: request.user.org_id,
+    exp: Date.now() + 10 * 60 * 1000,
   });
+  const redirectUri = googleRedirectUri(request);
+  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  authUrl.searchParams.set('client_id', process.env.GOOGLE_CLIENT_ID ?? '');
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('access_type', 'offline');
+  authUrl.searchParams.set('prompt', 'consent');
+  authUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.events');
+  authUrl.searchParams.set('state', state);
+
+  reply.send({ data: { auth_url: authUrl.toString(), redirect_uri: redirectUri }, meta: {} });
 }
 
 async function googleOAuthCallback(
-  _request: FastifyRequest,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  reply.status(501).send({
-    error: {
-      code: 'GOOGLE_OAUTH_NOT_CONFIGURED',
-      message: 'Google Calendar OAuth callback requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.',
+  const { code, state, error } = request.query as GoogleCallbackQuery;
+
+  if (error) {
+    reply.status(400).send({ error: { code: 'GOOGLE_OAUTH_DENIED', message: error } });
+    return;
+  }
+
+  if (!code || !state) {
+    reply.status(400).send({ error: { code: 'GOOGLE_OAUTH_INVALID_CALLBACK', message: 'Missing code or state' } });
+    return;
+  }
+
+  if (!googleConfigured()) {
+    reply.status(501).send({
+      error: {
+        code: 'GOOGLE_OAUTH_NOT_CONFIGURED',
+        message: 'Google Calendar OAuth callback requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.',
+      },
+    });
+    return;
+  }
+
+  const payload = verifyState(state);
+  if (!payload) {
+    reply.status(400).send({ error: { code: 'GOOGLE_OAUTH_INVALID_STATE', message: 'Invalid or expired OAuth state' } });
+    return;
+  }
+
+  const existing = await db.userCalendarSync.findUnique({
+    where: { user_id_provider: { user_id: payload.sub, provider: 'google' } },
+  });
+  const token = await exchangeGoogleToken({
+    code,
+    client_id: process.env.GOOGLE_CLIENT_ID ?? '',
+    client_secret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    redirect_uri: googleRedirectUri(request),
+    grant_type: 'authorization_code',
+  });
+
+  await db.userCalendarSync.upsert({
+    where: { user_id_provider: { user_id: payload.sub, provider: 'google' } },
+    create: {
+      user_id: payload.sub,
+      provider: 'google',
+      access_token: token.access_token,
+      refresh_token: token.refresh_token,
+      expires_at: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined,
+      google_calendar_id: 'primary',
+    },
+    update: {
+      access_token: token.access_token,
+      refresh_token: token.refresh_token ?? existing?.refresh_token,
+      expires_at: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined,
+      google_calendar_id: existing?.google_calendar_id ?? 'primary',
     },
   });
+
+  const successUrl = process.env.GOOGLE_CALENDAR_SUCCESS_URL;
+  if (successUrl) {
+    reply.redirect(successUrl);
+    return;
+  }
+
+  reply.type('text/html').send('<html><body>Google Calendar connected. You can close this window.</body></html>');
 }
 
 async function googleDisconnect(

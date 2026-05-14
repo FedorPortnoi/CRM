@@ -12,6 +12,7 @@ import {
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { sendOrQueueMutation } from '../../utils/offlineMutation';
 
 type CalendarEventStatus = 'scheduled' | 'completed' | 'cancelled';
 
@@ -145,7 +146,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
 
   async function runAction(
     action: ActionName,
-    request: () => Promise<Response>,
+    request: () => Promise<{ queued: true } | { queued: false; response: Response }>,
     onSuccess: (updated: CalendarEvent) => void,
   ): Promise<void> {
     if (activeAction) return;
@@ -153,7 +154,13 @@ export default function CalendarEventDetailScreen(): JSX.Element {
     setActionError(null);
 
     try {
-      const res = await request();
+      const result = await request();
+      if (result.queued) {
+        router.back();
+        return;
+      }
+
+      const res = result.response;
       if (!res.ok) {
         const body = (await res.json()) as ErrorResponse;
         throw new Error(body.error?.message ?? `Action failed with status ${res.status}`);
@@ -172,9 +179,10 @@ export default function CalendarEventDetailScreen(): JSX.Element {
     await runAction(
       'complete',
       () =>
-        fetch(`${API_URL}/calendar/${id}/complete`, {
+        sendOrQueueMutation({
+          url: `${API_URL}/calendar/${id}/complete`,
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
+          token: token ?? '',
         }),
       (updated) => {
         setEvent(updated);
@@ -187,9 +195,10 @@ export default function CalendarEventDetailScreen(): JSX.Element {
     await runAction(
       'cancel',
       () =>
-        fetch(`${API_URL}/calendar/${id}`, {
+        sendOrQueueMutation({
+          url: `${API_URL}/calendar/${id}`,
           method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
+          token: token ?? '',
         }),
       (updated) => {
         setEvent(updated);
@@ -207,13 +216,11 @@ export default function CalendarEventDetailScreen(): JSX.Element {
     await runAction(
       'notes',
       () =>
-        fetch(`${API_URL}/calendar/${id}/notes`, {
+        sendOrQueueMutation({
+          url: `${API_URL}/calendar/${id}/notes`,
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ notes: postMeetingNotes.trim() }),
+          token: token ?? '',
+          body: { notes: postMeetingNotes.trim() },
         }),
       (updated) => {
         setEvent(updated);

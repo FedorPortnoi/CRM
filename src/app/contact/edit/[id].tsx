@@ -11,6 +11,7 @@ import {
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
+import { sendOrQueueMutation } from '../../../utils/offlineMutation';
 
 interface Contact {
   id: string;
@@ -145,14 +146,19 @@ export default function EditContactScreen(): JSX.Element {
     }
 
     try {
-      const response = await fetch(`${API_URL}/contacts/${id}`, {
+      const result = await sendOrQueueMutation({
+        url: `${API_URL}/contacts/${id}`,
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(patch),
+        token,
+        body: patch,
       });
+
+      if (result.queued) {
+        router.back();
+        return;
+      }
+
+      const response = result.response;
 
       if (response.ok) {
         router.back();

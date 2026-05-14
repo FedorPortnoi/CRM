@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator,
 import { router } from 'expo-router';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { sendOrQueueMutation } from '../../utils/offlineMutation';
 
 interface CreateContactResponse {
   data: { id: string };
@@ -41,15 +42,19 @@ export default function NewContactScreen(): JSX.Element {
     if (notes.trim() !== '') body.notes = notes.trim();
 
     try {
-      const response = await fetch(`${API_URL}/contacts`, {
+      const result = await sendOrQueueMutation({
+        url: `${API_URL}/contacts`,
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
+        token: token ?? '',
+        body,
       });
 
+      if (result.queued) {
+        router.replace('/(tabs)/contacts');
+        return;
+      }
+
+      const response = result.response;
       if (response.ok) {
         const responseBody = (await response.json()) as CreateContactResponse;
         router.replace({ pathname: '/contact/[id]', params: { id: responseBody.data.id } });

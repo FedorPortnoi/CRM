@@ -5,6 +5,7 @@ import { Calendar } from 'react-native-calendars';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { scheduleTaskDueReminder } from '../../utils/notifications';
+import { sendOrQueueMutation } from '../../utils/offlineMutation';
 
 interface ContactPreview {
   id: string;
@@ -80,14 +81,19 @@ export default function NewTaskScreen(): JSX.Element | null {
       ...(selectedContactId !== '' ? { contact_id: selectedContactId } : {}),
     };
     try {
-      const res = await fetch(`${API_URL}/tasks`, {
+      const result = await sendOrQueueMutation({
+        url: `${API_URL}/tasks`,
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
+        token,
+        body,
       });
+
+      if (result.queued) {
+        router.replace('/(tabs)/tasks');
+        return;
+      }
+
+      const res = result.response;
       const parsed = await res.json();
       if (res.status === 201) {
         const taskId = (parsed as TaskApiResponse).data.id;

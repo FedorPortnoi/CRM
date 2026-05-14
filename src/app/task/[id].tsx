@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { cancelTaskDueReminder, scheduleTaskDueReminder } from '../../utils/notifications';
+import { sendOrQueueMutation } from '../../utils/offlineMutation';
 
 interface TaskAssignee {
   id: string;
@@ -129,10 +130,17 @@ export default function TaskDetailScreen(): JSX.Element {
     setIsActionLoading(true);
     setActionError(null);
     try {
-      const res = await fetch(API_URL + '/tasks/' + id + '/complete', {
+      const result = await sendOrQueueMutation({
+        url: API_URL + '/tasks/' + id + '/complete',
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + token },
+        token: token ?? '',
       });
+      if (result.queued) {
+        await cancelTaskDueReminder(id);
+        router.back();
+        return;
+      }
+      const res = result.response;
       if (!res.ok) {
         const body = (await res.json()) as {
           error: { code: string; message: string };
@@ -162,10 +170,17 @@ export default function TaskDetailScreen(): JSX.Element {
     setIsActionLoading(true);
     setActionError(null);
     try {
-      const res = await fetch(API_URL + '/tasks/' + id, {
+      const result = await sendOrQueueMutation({
+        url: API_URL + '/tasks/' + id,
         method: 'DELETE',
-        headers: { Authorization: 'Bearer ' + token },
+        token: token ?? '',
       });
+      if (result.queued) {
+        await cancelTaskDueReminder(id);
+        router.back();
+        return;
+      }
+      const res = result.response;
       if (!res.ok) {
         const body = (await res.json()) as {
           error: { code: string; message: string };
