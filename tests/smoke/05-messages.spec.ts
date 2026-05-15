@@ -125,7 +125,7 @@ test('POST /api/v1/messages/log-call logs a call', async ({ request }) => {
   });
   expect(res.status()).toBe(201);
   const body = await res.json();
-  expect(body.data.channel).toBe('in_app');
+  expect(body.data.channel).toBe('call');
 });
 
 test('GET /api/v1/messages/conversation/:contactId returns thread', async ({ request }) => {
@@ -554,7 +554,7 @@ test('GET /messages meta.page and per_page match request parameters', async ({ r
   expect(json.meta.per_page).toBe(5);
 });
 
-test('POST /messages/call channel is in_app (calls stored as in_app)', async ({ request }) => {
+test('POST /messages/call channel is call', async ({ request }) => {
   const { token } = await registerOrg(request, 'r4-call-channel');
   const cid = await createContact(request, token, 'CallChannel');
   const res = await request.post('/api/v1/messages/call', {
@@ -563,7 +563,7 @@ test('POST /messages/call channel is in_app (calls stored as in_app)', async ({ 
   });
   expect(res.status()).toBe(201);
   const json = (await res.json()) as MessageResponse;
-  expect(json.data.channel).toBe('in_app');
+  expect(json.data.channel).toBe('call');
 });
 
 test('POST /messages/call direction=inbound stored as inbound in response', async ({ request }) => {

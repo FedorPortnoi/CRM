@@ -239,7 +239,7 @@ test('mobile messaging: logging a call creates a message activity item', async (
   const callBody = (await callRes.json()) as DataResponse<MessageRecord>;
   expect(callBody.data.contact_id).toBe(contact.id);
   expect(callBody.data.direction).toBe('outbound');
-  expect(callBody.data.channel).toBe('in_app');
+  expect(callBody.data.channel).toBe('call');
   expect(callBody.data.status).toBe('delivered');
   expect(callBody.data.body).toBe(`[345s] ${callNotes}`);
 

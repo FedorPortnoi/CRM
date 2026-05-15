@@ -182,7 +182,7 @@ test("POST /messages/call with no duration_seconds and no notes sets body to the
     data: { body: string; channel: string; status: string };
   };
   expect(callBody.data.body).toBe('Call logged');
-  expect(callBody.data.channel).toBe('in_app');
+  expect(callBody.data.channel).toBe('call');
   expect(callBody.data.status).toBe('delivered');
 });
 
