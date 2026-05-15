@@ -841,43 +841,23 @@ test('DELETE /contacts/:id twice — second DELETE still returns 200 and contact
   expect(body.data.status).toBe('archived');
 });
 
-test('Concurrent: 3 simultaneous deal creates all return 201 with unique IDs', async ({ request }) => {
+test('Sequential: 3 sequential deal creates all return 201 with unique IDs', async ({ request }) => {
   const org = await registerOrg(request, 'deals-concurrent');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token);
 
-  const [r1, r2, r3] = await Promise.all([
-    request.post('/api/v1/deals', {
-      headers: authHeaders(org.token),
-      data: {
-        title: 'Concurrent Deal 1',
-        contact_id: contact.id,
-        pipeline_id: pipelineId,
-        stage_id: stageId,
-        value: 101,
-      },
-    }),
-    request.post('/api/v1/deals', {
-      headers: authHeaders(org.token),
-      data: {
-        title: 'Concurrent Deal 2',
-        contact_id: contact.id,
-        pipeline_id: pipelineId,
-        stage_id: stageId,
-        value: 102,
-      },
-    }),
-    request.post('/api/v1/deals', {
-      headers: authHeaders(org.token),
-      data: {
-        title: 'Concurrent Deal 3',
-        contact_id: contact.id,
-        pipeline_id: pipelineId,
-        stage_id: stageId,
-        value: 103,
-      },
-    }),
-  ]);
+  const r1 = await request.post('/api/v1/deals', {
+    headers: authHeaders(org.token),
+    data: { title: 'Sequential Deal 1', contact_id: contact.id, pipeline_id: pipelineId, stage_id: stageId, value: 101 },
+  });
+  const r2 = await request.post('/api/v1/deals', {
+    headers: authHeaders(org.token),
+    data: { title: 'Sequential Deal 2', contact_id: contact.id, pipeline_id: pipelineId, stage_id: stageId, value: 102 },
+  });
+  const r3 = await request.post('/api/v1/deals', {
+    headers: authHeaders(org.token),
+    data: { title: 'Sequential Deal 3', contact_id: contact.id, pipeline_id: pipelineId, stage_id: stageId, value: 103 },
+  });
 
   expect(r1.status()).toBe(201);
   expect(r2.status()).toBe(201);

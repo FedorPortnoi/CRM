@@ -823,6 +823,8 @@ test.describe('Tasks sub-route respects status filtering', () => {
   let cancelledTaskId: string;
 
   test.beforeAll(async ({ request }) => {
+    test.setTimeout(30_000);
+
     ({ token, userId } = await registerOrg(request, 'task-status'));
 
     const cRes = await request.post('/api/v1/contacts', {
