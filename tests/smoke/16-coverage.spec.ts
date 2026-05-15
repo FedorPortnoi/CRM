@@ -255,3 +255,196 @@ test('GET /tasks?contact_id returns only tasks for that contact', async ({ reque
   expect(taskIds).toContain(taskAId);
   expect(taskIds).not.toContain(taskBId);
 });
+
+// ── Gap-coverage tests (Sprint 1 round 2) ────────────────────────────────────
+
+test('POST /contacts with all optional fields stores and returns them', async ({ request }) => {
+  const { token } = await registerOrg(request, 'allfields');
+  const ts = Date.now();
+  const res = await request.post('/api/v1/contacts', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      first_name: 'Full',
+      last_name: 'Contact',
+      phone: '+15550001234',
+      email: `full-${ts}@test.com`,
+      company: 'Acme Ltd',
+      notes: 'Important client',
+    },
+  });
+  expect(res.status()).toBe(201);
+  const body = (await res.json()) as {
+    data: { id: string; first_name: string; last_name: string; phone: string; email: string; company: string; notes: string };
+  };
+  expect(body.data.first_name).toBe('Full');
+  expect(body.data.last_name).toBe('Contact');
+  expect(body.data.phone).toBe('+15550001234');
+  expect(body.data.email).toBe(`full-${ts}@test.com`);
+  expect(body.data.company).toBe('Acme Ltd');
+  expect(body.data.notes).toBe('Important client');
+});
+
+test('POST /contacts with only first_name (minimum required) returns 201', async ({ request }) => {
+  const { token } = await registerOrg(request, 'minfield');
+  const res = await request.post('/api/v1/contacts', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { first_name: 'Minimal' },
+  });
+  expect(res.status()).toBe(201);
+  const body = (await res.json()) as { data: { id: string; first_name: string } };
+  expect(typeof body.data.id).toBe('string');
+  expect(body.data.first_name).toBe('Minimal');
+});
+
+test('GET /contacts?q=<first_name> returns matching contacts', async ({ request }) => {
+  const { token } = await registerOrg(request, 'search');
+  const unique = `Zqx${Date.now()}`;
+  const createRes = await request.post('/api/v1/contacts', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { first_name: unique },
+  });
+  expect(createRes.status()).toBe(201);
+  const createBody = (await createRes.json()) as { data: { id: string } };
+  const createdId = createBody.data.id;
+  const searchRes = await request.get(`/api/v1/contacts?q=${unique}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(searchRes.status()).toBe(200);
+  const searchBody = (await searchRes.json()) as { data: Array<{ id: string }> };
+  const ids = searchBody.data.map((c: { id: string }) => c.id);
+  expect(ids).toContain(createdId);
+});
+
+test('DELETE contact then GET /contacts/:id returns the contact with status=archived', async ({ request }) => {
+  const { token } = await registerOrg(request, 'del404');
+  const contactId = await createContact(request, token);
+  const delRes = await request.delete(`/api/v1/contacts/${contactId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(delRes.status()).toBe(200);
+  const getRes = await request.get(`/api/v1/contacts/${contactId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(getRes.status()).toBe(200);
+  const getBody = (await getRes.json()) as { data: { status: string } };
+  expect(getBody.data.status).toBe('archived');
+});
+
+test('GET /contacts?status=active excludes archived contacts — archived contact absent from default list', async ({ request }) => {
+  const { token } = await registerOrg(request, 'archget');
+  const contactId = await createContact(request, token);
+  await request.delete(`/api/v1/contacts/${contactId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const res = await request.get('/api/v1/contacts', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(res.status()).toBe(200);
+  const ids = (await res.json()).data.map((c: { id: string }) => c.id);
+  expect(ids).not.toContain(contactId);
+});
+
+test('POST /tasks with priority=high — response body priority is high', async ({ request }) => {
+  const { token, userId } = await registerOrg(request, 'prihigh');
+  const res = await request.post('/api/v1/tasks', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { title: 'High Priority Task', assigned_to: userId, priority: 'high' },
+  });
+  expect(res.status()).toBe(201);
+  const body = (await res.json()) as { data: { priority: string } };
+  expect(body.data.priority).toBe('high');
+});
+
+test('POST /tasks with priority=low — response body priority is low', async ({ request }) => {
+  const { token, userId } = await registerOrg(request, 'prilow');
+  const res = await request.post('/api/v1/tasks', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { title: 'Low Priority Task', assigned_to: userId, priority: 'low' },
+  });
+  expect(res.status()).toBe(201);
+  const body = (await res.json()) as { data: { priority: string } };
+  expect(body.data.priority).toBe('low');
+});
+
+test('GET /tasks?status=done returns only done tasks', async ({ request }) => {
+  const { token, userId } = await registerOrg(request, 'taskdone');
+  const createRes = await request.post('/api/v1/tasks', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { title: 'Task To Complete', assigned_to: userId },
+  });
+  expect(createRes.status()).toBe(201);
+  const createBody = (await createRes.json()) as { data: { id: string } };
+  const taskId = createBody.data.id;
+  const completeRes = await request.post(`/api/v1/tasks/${taskId}/complete`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(completeRes.status()).toBe(200);
+  const listRes = await request.get('/api/v1/tasks?status=done', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(listRes.status()).toBe(200);
+  const listBody = (await listRes.json()) as { data: Array<{ id: string; status: string }> };
+  for (const t of listBody.data) {
+    expect(t.status).toBe('done');
+  }
+  const ids = listBody.data.map((t: { id: string; status: string }) => t.id);
+  expect(ids).toContain(taskId);
+});
+
+test('GET /tasks?status=cancelled returns only cancelled tasks', async ({ request }) => {
+  const { token, userId } = await registerOrg(request, 'taskcncl');
+  const createRes = await request.post('/api/v1/tasks', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { title: 'Task To Cancel', assigned_to: userId },
+  });
+  expect(createRes.status()).toBe(201);
+  const createBody = (await createRes.json()) as { data: { id: string } };
+  const taskId = createBody.data.id;
+  const cancelRes = await request.delete(`/api/v1/tasks/${taskId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(cancelRes.status()).toBe(200);
+  const listRes = await request.get('/api/v1/tasks?status=cancelled', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(listRes.status()).toBe(200);
+  const listBody = (await listRes.json()) as { data: Array<{ id: string; status: string }> };
+  for (const t of listBody.data) {
+    expect(t.status).toBe('cancelled');
+  }
+  const ids = listBody.data.map((t: { id: string; status: string }) => t.id);
+  expect(ids).toContain(taskId);
+});
+
+test('POST /tasks with assigned_to from same org — assigned_to field is set in response', async ({ request }) => {
+  const { token, userId } = await registerOrg(request, 'taskassign');
+  const res = await request.post('/api/v1/tasks', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { title: 'Assigned Task', assigned_to: userId },
+  });
+  expect(res.status()).toBe(201);
+  const body = (await res.json()) as { data: { assigned_to: string } };
+  expect(body.data.assigned_to).toBe(userId);
+});
+
+test('POST /deals without stage_id returns 400 validation error', async ({ request }) => {
+  const { token } = await registerOrg(request, 'dealnostage');
+  const { pipelineId } = await getPipelineAndStage(request, token);
+  const contactId = await createContact(request, token);
+  const res = await request.post('/api/v1/deals', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { title: 'No Stage Deal', contact_id: contactId, pipeline_id: pipelineId },
+  });
+  expect(res.status()).toBe(400);
+});
+
+test('POST /deals without pipeline_id returns 400 validation error', async ({ request }) => {
+  const { token } = await registerOrg(request, 'dealnopl');
+  const { stageId } = await getPipelineAndStage(request, token);
+  const contactId = await createContact(request, token);
+  const res = await request.post('/api/v1/deals', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { title: 'No Pipeline Deal', contact_id: contactId, stage_id: stageId },
+  });
+  expect(res.status()).toBe(400);
+});

@@ -111,6 +111,10 @@ function futureIso(daysFromNow: number, hourUtc: number): string {
   return date.toISOString();
 }
 
+function dateOnly(iso: string): string {
+  return iso.slice(0, 10);
+}
+
 async function registerOrg(request: APIRequestContext, suffix: string): Promise<AuthOrg> {
   const unique = uniqueSuffix(suffix);
   const res = await request.post('/api/v1/auth/', {
@@ -290,6 +294,122 @@ test('G12: POST /api/v1/contacts/import-csv rejects a whitespace-only first_name
     data: [{ first_name: '   ' }],
   });
 
+  expect(res.status()).toBe(400);
+});
+
+test('G13: POST /api/v1/contacts/import alias imports a row through the same CSV contract', async ({ request }) => {
+  type ImportedContact = {
+    id: string;
+    first_name: string;
+    email: string | null;
+    source: string | null;
+  };
+
+  const org = await registerOrg(request, 'g13-import-alias');
+  const prefix = uniqueSuffix('ImportAlias');
+  const email = `${prefix.toLowerCase()}@example.com`;
+
+  const res = await request.post('/api/v1/contacts/import', {
+    headers: authHeaders(org.token),
+    data: [{ first_name: ` ${prefix} `, email: ` ${email} `, source: ' Alias Import ' }],
+  });
+  expect(res.status()).toBe(201);
+  const body = (await res.json()) as DataResponse<{ imported_count: number }>;
+  expect(body.data.imported_count).toBe(1);
+
+  const listRes = await request.get(`/api/v1/contacts?q=${encodeURIComponent(email)}&per_page=10`, {
+    headers: authHeaders(org.token),
+  });
+  expect(listRes.status()).toBe(200);
+  const listBody = (await listRes.json()) as { data: ImportedContact[]; meta: { total: number } };
+  expect(listBody.meta.total).toBe(1);
+  expect(listBody.data[0].first_name).toBe(prefix);
+  expect(listBody.data[0].email).toBe(email);
+  expect(listBody.data[0].source).toBe('Alias Import');
+});
+
+test('G14: GET /api/v1/calendar with attendee_id returns only events containing that attendee', async ({ request }) => {
+  type AttendeeEvent = CalendarEventRecord & { attendee_ids: string[] };
+
+  const org = await registerOrg(request, 'g14-attendee-filter');
+  const matchingRes = await request.post('/api/v1/calendar', {
+    headers: authHeaders(org.token),
+    data: {
+      title: 'Attendee Match',
+      start_time: futureIso(3, 10),
+      end_time: futureIso(3, 11),
+      attendees: [org.userId],
+    },
+  });
+  expect(matchingRes.status()).toBe(201);
+  const matching = ((await matchingRes.json()) as DataResponse<AttendeeEvent>).data;
+
+  const other = await createCalendarEvent(request, org.token, 'Attendee Miss', futureIso(3, 12), futureIso(3, 13));
+
+  const listRes = await request.get(`/api/v1/calendar?attendee_id=${org.userId}&per_page=10`, {
+    headers: authHeaders(org.token),
+  });
+  expect(listRes.status()).toBe(200);
+  const listBody = (await listRes.json()) as { data: AttendeeEvent[]; meta: { total: number } };
+  const ids = listBody.data.map((event) => event.id);
+  expect(ids).toContain(matching.id);
+  expect(ids).not.toContain(other.id);
+  expect(listBody.data.every((event) => event.attendee_ids.includes(org.userId))).toBe(true);
+});
+
+test('G15: GET /api/v1/calendar/availability includes scheduled events for the requested user', async ({ request }) => {
+  const org = await registerOrg(request, 'g15-availability-busy');
+  const start = futureIso(4, 15);
+  const end = futureIso(4, 16);
+  const event = await createCalendarEvent(request, org.token, 'Busy Slot Event', start, end);
+
+  const res = await request.get(
+    `/api/v1/calendar/availability?date=${dateOnly(start)}&user_ids=${org.userId}&duration_minutes=60`,
+    { headers: authHeaders(org.token) },
+  );
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as {
+    data: { busy_slots: { user_id: string; start_time: string; end_time: string; title: string }[] };
+    meta: EmptyMeta;
+  };
+  expect(body.data.busy_slots).toContainEqual({
+    user_id: org.userId,
+    start_time: event.start_time,
+    end_time: event.end_time,
+    title: 'Busy Slot Event',
+  });
+});
+
+test('G16: GET /api/v1/calendar/availability excludes cancelled events', async ({ request }) => {
+  const org = await registerOrg(request, 'g16-availability-cancelled');
+  const start = futureIso(5, 15);
+  const event = await createCalendarEvent(request, org.token, 'Cancelled Busy Slot', start, futureIso(5, 16));
+
+  const cancelRes = await request.delete(`/api/v1/calendar/${event.id}`, {
+    headers: authHeaders(org.token),
+  });
+  expect(cancelRes.status()).toBe(200);
+
+  const res = await request.get(
+    `/api/v1/calendar/availability?date=${dateOnly(start)}&user_ids=${org.userId}&duration_minutes=60`,
+    { headers: authHeaders(org.token) },
+  );
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as {
+    data: { busy_slots: { title: string }[] };
+    meta: EmptyMeta;
+  };
+  expect(body.data.busy_slots.map((slot) => slot.title)).not.toContain('Cancelled Busy Slot');
+});
+
+test('G17: GET /api/v1/calendar/availability rejects duration below the 15 minute minimum', async ({ request }) => {
+  const org = await registerOrg(request, 'g17-availability-duration');
+  const date = dateOnly(futureIso(6, 10));
+
+  const res = await request.get(
+    `/api/v1/calendar/availability?date=${date}&user_ids=${org.userId}&duration_minutes=5`,
+    { headers: authHeaders(org.token) },
+  );
   expect(res.status()).toBe(400);
 });
 

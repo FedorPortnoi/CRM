@@ -210,3 +210,168 @@ test('GET /api/v1/deals with status=open filter returns only open deals and excl
   expect(ids).toContain(deal1Id);
   expect(ids).not.toContain(deal2Id);
 });
+
+test('GET /api/v1/contacts/:id/tasks returns tasks linked to that contact', async ({ request }) => {
+  const org = await registerOrg(request, 'ct1');
+  const contactId = await createContact(request, org.token);
+  const due = new Date(Date.now() + 86400 * 1000).toISOString();
+  const createRes = await request.post('/api/v1/tasks', {
+    headers: { Authorization: 'Bearer ' + org.token },
+    data: { title: 'Contact Task Link', assigned_to: org.userId, due_date: due, contact_id: contactId },
+  });
+  expect(createRes.status()).toBe(201);
+  const taskId = ((await createRes.json()).data as { id: string }).id;
+  const res = await request.get('/api/v1/contacts/' + contactId + '/tasks', { headers: { Authorization: 'Bearer ' + org.token } });
+  expect(res.status()).toBe(200);
+  const body = await res.json() as { data: Array<{ id: string }> };
+  expect(Array.isArray(body.data)).toBe(true);
+  expect(body.data.map((t) => t.id)).toContain(taskId);
+});
+
+test('GET /api/v1/contacts/:id/deals returns deals linked to that contact and not others', async ({ request }) => {
+  const org = await registerOrg(request, 'cd1');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
+  const contactA = await createContact(request, org.token);
+  const contactB = await createContact(request, org.token);
+  const dealA = await createDeal(request, org.token, contactA, pipelineId, stageId, 'Contact A Deal');
+  const dealB = await createDeal(request, org.token, contactB, pipelineId, stageId, 'Contact B Deal');
+  const res = await request.get('/api/v1/contacts/' + contactA + '/deals', { headers: { Authorization: 'Bearer ' + org.token } });
+  expect(res.status()).toBe(200);
+  const ids = ((await res.json()).data as Array<{ id: string }>).map((d) => d.id);
+  expect(ids).toContain(dealA);
+  expect(ids).not.toContain(dealB);
+});
+
+test('GET /api/v1/analytics/revenue returns data with periods array each having period and revenue fields', async ({ request }) => {
+  const org = await registerOrg(request, 'rt1');
+  const res = await request.get('/api/v1/analytics/revenue', { headers: { Authorization: 'Bearer ' + org.token } });
+  expect(res.status()).toBe(200);
+  const body = await res.json() as { data: { periods: Array<{ period: unknown; revenue: unknown }> } };
+  expect(body.data).toBeDefined();
+  expect(Array.isArray(body.data.periods)).toBe(true);
+});
+
+test('GET /api/v1/analytics/funnel returns data.stages array with stage_id and total fields', async ({ request }) => {
+  const org = await registerOrg(request, 'fn1');
+  const res = await request.get('/api/v1/analytics/funnel', { headers: { Authorization: 'Bearer ' + org.token } });
+  expect(res.status()).toBe(200);
+  const body = await res.json() as { data: { stages: Array<{ stage_id: unknown; total: unknown }> } };
+  expect(body.data).toBeDefined();
+  expect(Array.isArray(body.data.stages)).toBe(true);
+});
+
+test('GET /api/v1/contacts with per_page=2 limits results and meta.total is correct', async ({ request }) => {
+  const org = await registerOrg(request, 'pg1');
+  await createContact(request, org.token);
+  await createContact(request, org.token);
+  await createContact(request, org.token);
+  const res = await request.get('/api/v1/contacts?per_page=2&page=1', { headers: { Authorization: 'Bearer ' + org.token } });
+  expect(res.status()).toBe(200);
+  const body = await res.json() as { data: unknown[]; meta: { total: number; per_page: number } };
+  expect(body.data.length).toBeLessThanOrEqual(2);
+  expect(typeof body.meta.total).toBe('number');
+  expect(body.meta.total).toBeGreaterThanOrEqual(3);
+});
+
+test('GET /api/v1/contacts page=2 with per_page=1 returns the second contact', async ({ request }) => {
+  const org = await registerOrg(request, 'pg2');
+  const c1 = await createContact(request, org.token);
+  const c2 = await createContact(request, org.token);
+  const page1Res = await request.get('/api/v1/contacts?per_page=1&page=1', { headers: { Authorization: 'Bearer ' + org.token } });
+  expect(page1Res.status()).toBe(200);
+  const page1Ids = ((await page1Res.json()).data as Array<{ id: string }>).map((c) => c.id);
+  const page2Res = await request.get('/api/v1/contacts?per_page=1&page=2', { headers: { Authorization: 'Bearer ' + org.token } });
+  expect(page2Res.status()).toBe(200);
+  const page2Ids = ((await page2Res.json()).data as Array<{ id: string }>).map((c) => c.id);
+  expect(page2Ids.length).toBe(1);
+  expect(page1Ids[0]).not.toBe(page2Ids[0]);
+  const allIds = [c1, c2];
+  expect(allIds).toContain(page1Ids[0]);
+  expect(allIds).toContain(page2Ids[0]);
+});
+
+test('POST /api/v1/contacts with phone field stores and returns phone on readback', async ({ request }) => {
+  const org = await registerOrg(request, 'ph1');
+  const tag = Date.now().toString(36);
+  const createRes = await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + org.token },
+    data: { first_name: 'Phone', last_name: 'Test', email: 'phone' + tag + '@example.com', phone: '+15550001234' },
+  });
+  expect(createRes.status()).toBe(201);
+  const contactId = ((await createRes.json()).data as { id: string }).id;
+  const getRes = await request.get('/api/v1/contacts/' + contactId, { headers: { Authorization: 'Bearer ' + org.token } });
+  expect(getRes.status()).toBe(200);
+  expect(((await getRes.json()).data as { phone: string }).phone).toBe('+15550001234');
+});
+
+test('PATCH /api/v1/contacts/:id updates company field and readback confirms the new value', async ({ request }) => {
+  const org = await registerOrg(request, 'co1');
+  const contactId = await createContact(request, org.token);
+  const patchRes = await request.patch('/api/v1/contacts/' + contactId, {
+    headers: { Authorization: 'Bearer ' + org.token },
+    data: { company: 'Acme Corp' },
+  });
+  expect(patchRes.status()).toBe(200);
+  const getRes = await request.get('/api/v1/contacts/' + contactId, { headers: { Authorization: 'Bearer ' + org.token } });
+  expect(getRes.status()).toBe(200);
+  expect(((await getRes.json()).data as { company: string }).company).toBe('Acme Corp');
+});
+
+test('PATCH /api/v1/deals/:id changes title and GET readback confirms the updated title', async ({ request }) => {
+  const org = await registerOrg(request, 'dt1');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
+  const contactId = await createContact(request, org.token);
+  const dealId = await createDeal(request, org.token, contactId, pipelineId, stageId, 'Original Deal Title');
+  const patchRes = await request.patch('/api/v1/deals/' + dealId, {
+    headers: { Authorization: 'Bearer ' + org.token },
+    data: { title: 'Revised Deal Title' },
+  });
+  expect(patchRes.status()).toBe(200);
+  const getRes = await request.get('/api/v1/deals/' + dealId, { headers: { Authorization: 'Bearer ' + org.token } });
+  expect(getRes.status()).toBe(200);
+  expect(((await getRes.json()).data as { title: string }).title).toBe('Revised Deal Title');
+});
+
+test('POST /api/v1/deals/:id/lost with no reason body still succeeds — reason is optional', async ({ request }) => {
+  const org = await registerOrg(request, 'ln1');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
+  const contactId = await createContact(request, org.token);
+  const dealId = await createDeal(request, org.token, contactId, pipelineId, stageId, 'Lost No Reason Deal');
+  const res = await request.post('/api/v1/deals/' + dealId + '/lost', {
+    headers: { Authorization: 'Bearer ' + org.token },
+    data: {},
+  });
+  expect(res.status()).toBe(200);
+  expect(((await res.json()).data as { status: string }).status).toBe('lost');
+});
+
+test('Multiple deals for the same contact all appear in GET /api/v1/contacts/:id/deals', async ({ request }) => {
+  const org = await registerOrg(request, 'md1');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
+  const contactId = await createContact(request, org.token);
+  const deal1 = await createDeal(request, org.token, contactId, pipelineId, stageId, 'Multi Deal One');
+  const deal2 = await createDeal(request, org.token, contactId, pipelineId, stageId, 'Multi Deal Two');
+  const deal3 = await createDeal(request, org.token, contactId, pipelineId, stageId, 'Multi Deal Three');
+  const res = await request.get('/api/v1/contacts/' + contactId + '/deals', { headers: { Authorization: 'Bearer ' + org.token } });
+  expect(res.status()).toBe(200);
+  const ids = ((await res.json()).data as Array<{ id: string }>).map((d) => d.id);
+  expect(ids).toContain(deal1);
+  expect(ids).toContain(deal2);
+  expect(ids).toContain(deal3);
+});
+
+test('POST /api/v1/tasks/:id/cancel on a pending task returns status=cancelled', async ({ request }) => {
+  const org = await registerOrg(request, 'tc1');
+  const due = new Date(Date.now() + 86400 * 1000).toISOString();
+  const createRes = await request.post('/api/v1/tasks', {
+    headers: { Authorization: 'Bearer ' + org.token },
+    data: { title: 'Task To Cancel', assigned_to: org.userId, due_date: due },
+  });
+  expect(createRes.status()).toBe(201);
+  const taskId = ((await createRes.json()).data as { id: string }).id;
+  const cancelRes = await request.delete('/api/v1/tasks/' + taskId, {
+    headers: { Authorization: 'Bearer ' + org.token },
+  });
+  expect(cancelRes.status()).toBe(200);
+  expect(((await cancelRes.json()).data as { status: string }).status).toBe('cancelled');
+});

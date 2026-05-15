@@ -19,6 +19,8 @@ interface ContactRecord {
   first_name: string;
   type: string;
   status: string;
+  assigned_to: string | null;
+  tags?: string[];
 }
 
 interface ContactListMeta {
@@ -37,6 +39,8 @@ interface TaskRecord {
   title: string;
   status: string;
   priority: string;
+  assigned_to: string;
+  due_date: string | null;
 }
 
 interface TaskListResponse {
@@ -48,6 +52,8 @@ interface DealRecord {
   id: string;
   title: string;
   status: string;
+  pipeline_id: string;
+  stage_id: string;
 }
 
 interface DealListResponse {
@@ -91,6 +97,10 @@ function uniqueSuffix(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function daysFromNow(days: number): string {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
 interface AuthOrg {
   token: string;
   userId: string;
@@ -117,6 +127,7 @@ async function createContact(
   firstName: string,
   type: 'lead' | 'customer' | 'partner' | 'other' = 'lead',
   email?: string,
+  extra: Record<string, unknown> = {},
 ): Promise<ContactRecord> {
   const res = await request.post('/api/v1/contacts', {
     headers: authHeaders(token),
@@ -124,9 +135,19 @@ async function createContact(
       first_name: firstName,
       type,
       ...(email !== undefined ? { email } : {}),
+      ...extra,
     },
   });
   expect(res.status()).toBe(201);
+  const body = (await res.json()) as { data: ContactRecord };
+  return body.data;
+}
+
+async function getContact(request: APIRequestContext, token: string, contactId: string): Promise<ContactRecord> {
+  const res = await request.get(`/api/v1/contacts/${contactId}`, {
+    headers: authHeaders(token),
+  });
+  expect(res.status()).toBe(200);
   const body = (await res.json()) as { data: ContactRecord };
   return body.data;
 }
@@ -136,10 +157,11 @@ async function createTask(
   org: AuthOrg,
   title: string,
   priority: 'low' | 'medium' | 'high' | 'urgent' = 'medium',
+  extra: Record<string, unknown> = {},
 ): Promise<TaskRecord> {
   const res = await request.post('/api/v1/tasks', {
     headers: authHeaders(org.token),
-    data: { title, assigned_to: org.userId, priority },
+    data: { title, assigned_to: org.userId, priority, ...extra },
   });
   expect(res.status()).toBe(201);
   const body = (await res.json()) as { data: TaskRecord };
@@ -481,4 +503,223 @@ test('G18: POST /api/v1/notifications/register moves duplicate device token to t
   expect(oldOwnerSendRes.status()).toBe(422);
   const oldOwnerBody = (await oldOwnerSendRes.json()) as ErrorResponse;
   expect(oldOwnerBody.error.code).toBe('NO_PUSH_TOKEN');
+});
+
+test('G19: POST /api/v1/notifications/register with token="" returns 400 before controller validation', async ({ request }) => {
+  const org = await registerOrg(request, 'g19-empty-push-token');
+
+  const res = await request.post('/api/v1/notifications/register', {
+    headers: authHeaders(org.token),
+    data: { token: '' },
+  });
+
+  expect(res.status()).toBe(400);
+});
+
+test('G20: POST /api/v1/notifications/send with malformed user_id returns 400 before lookup', async ({ request }) => {
+  const org = await registerOrg(request, 'g20-bad-send-user-id');
+
+  const res = await request.post('/api/v1/notifications/send', {
+    headers: authHeaders(org.token),
+    data: {
+      user_id: 'not-a-uuid',
+      title: 'Bad user id',
+      body: 'Schema validation should reject this before org lookup',
+    },
+  });
+
+  expect(res.status()).toBe(400);
+});
+
+test('G21: POST /api/v1/notifications/register replaces the same user device token with duplicate count 0', async ({
+  request,
+}) => {
+  const org = await registerOrg(request, 'g21-replace-token');
+  const firstToken = `ExponentPushToken[g21-first-${Date.now()}]`;
+  const secondToken = `ExponentPushToken[g21-second-${Date.now()}]`;
+
+  const firstRes = await request.post('/api/v1/notifications/register', {
+    headers: authHeaders(org.token),
+    data: { token: firstToken },
+  });
+  expect(firstRes.status()).toBe(200);
+
+  const replaceRes = await request.post('/api/v1/notifications/register', {
+    headers: authHeaders(org.token),
+    data: { token: secondToken },
+  });
+  expect(replaceRes.status()).toBe(200);
+  const replaceBody = (await replaceRes.json()) as {
+    data: { message: string; already_registered: boolean; cleared_duplicate_count: number };
+  };
+  expect(replaceBody.data.message).toBe('Push token registered');
+  expect(replaceBody.data.already_registered).toBe(false);
+  expect(replaceBody.data.cleared_duplicate_count).toBe(0);
+
+  const repeatRes = await request.post('/api/v1/notifications/register', {
+    headers: authHeaders(org.token),
+    data: { token: secondToken },
+  });
+  expect(repeatRes.status()).toBe(200);
+  const repeatBody = (await repeatRes.json()) as {
+    data: { message: string; already_registered: boolean };
+  };
+  expect(repeatBody.data.message).toBe('Push token already registered');
+  expect(repeatBody.data.already_registered).toBe(true);
+});
+
+test('G22: POST /api/v1/contacts/bulk-tag with empty tags returns 400 (BulkTagSchema min(1))', async ({
+  request,
+}) => {
+  const org = await registerOrg(request, 'g22-bulk-tag-empty');
+  const contact = await createContact(request, org.token, 'G22 Empty Tags');
+
+  const res = await request.post('/api/v1/contacts/bulk-tag', {
+    headers: authHeaders(org.token),
+    data: { contact_ids: [contact.id], tags: [] },
+  });
+
+  expect(res.status()).toBe(400);
+});
+
+test('G23: POST /api/v1/contacts/bulk-tag rejects another-org contact_id and preserves requester tags', async ({
+  request,
+}) => {
+  const orgA = await registerOrg(request, 'g23-bulk-tag-a');
+  const orgB = await registerOrg(request, 'g23-bulk-tag-b');
+  const requester = await createContact(request, orgA.token, 'G23 Requester Tagged', 'lead', undefined, {
+    tags: ['original'],
+  });
+  const other = await createContact(request, orgB.token, 'G23 Other Tagged');
+
+  const res = await request.post('/api/v1/contacts/bulk-tag', {
+    headers: authHeaders(orgA.token),
+    data: { contact_ids: [requester.id, other.id], tags: ['blocked'] },
+  });
+
+  expect(res.status()).toBe(404);
+  const body = (await res.json()) as ErrorResponse;
+  expect(body.error.code).toBe('NOT_FOUND');
+
+  const stored = await getContact(request, orgA.token, requester.id);
+  expect(stored.tags).toEqual(['original']);
+});
+
+test('G24: GET /api/v1/contacts combines q, type, and assigned_to filters', async ({ request }) => {
+  const org = await registerOrg(request, 'g24-contact-combo');
+  const prefix = uniqueSuffix('G24Combo');
+  const target = await createContact(request, org.token, `${prefix} Target`, 'customer', undefined, {
+    assigned_to: org.userId,
+  });
+  const wrongType = await createContact(request, org.token, `${prefix} Lead`, 'lead', undefined, {
+    assigned_to: org.userId,
+  });
+  const unassigned = await createContact(request, org.token, `${prefix} Unassigned`, 'customer');
+  const wrongQuery = await createContact(request, org.token, 'G24 Different Customer', 'customer', undefined, {
+    assigned_to: org.userId,
+  });
+
+  const res = await request.get(
+    `/api/v1/contacts?q=${encodeURIComponent(prefix)}&type=customer&assigned_to=${org.userId}&per_page=20`,
+    { headers: authHeaders(org.token) },
+  );
+
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as ContactListResponse;
+  const ids = body.data.map((contact) => contact.id);
+  expect(ids).toContain(target.id);
+  expect(ids).not.toContain(wrongType.id);
+  expect(ids).not.toContain(unassigned.id);
+  expect(ids).not.toContain(wrongQuery.id);
+  expect(
+    body.data.every(
+      (contact) =>
+        contact.first_name.includes(prefix) &&
+        contact.type === 'customer' &&
+        contact.assigned_to === org.userId,
+    ),
+  ).toBe(true);
+});
+
+test('G25: GET /api/v1/tasks combines status, priority, due_after, and due_before filters', async ({ request }) => {
+  const org = await registerOrg(request, 'g25-task-combo');
+  const windowStart = daysFromNow(2);
+  const matchingDue = daysFromNow(3);
+  const windowEnd = daysFromNow(4);
+  const lateDue = daysFromNow(5);
+
+  const matching = await createTask(request, org, 'G25 Matching Task', 'high', { due_date: matchingDue });
+  const lowPriority = await createTask(request, org, 'G25 Low Priority Task', 'low', { due_date: matchingDue });
+  const lateTask = await createTask(request, org, 'G25 Late Task', 'high', { due_date: lateDue });
+  const pendingHigh = await createTask(request, org, 'G25 Pending High Task', 'high', { due_date: matchingDue });
+
+  for (const task of [matching, lowPriority, lateTask]) {
+    const startRes = await request.post(`/api/v1/tasks/${task.id}/start`, {
+      headers: authHeaders(org.token),
+    });
+    expect(startRes.status()).toBe(200);
+  }
+
+  const res = await request.get(
+    `/api/v1/tasks?status=in_progress&priority=high&due_after=${encodeURIComponent(windowStart)}&due_before=${encodeURIComponent(windowEnd)}&per_page=20`,
+    { headers: authHeaders(org.token) },
+  );
+
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as TaskListResponse;
+  const ids = body.data.map((task) => task.id);
+  expect(ids).toContain(matching.id);
+  expect(ids).not.toContain(lowPriority.id);
+  expect(ids).not.toContain(lateTask.id);
+  expect(ids).not.toContain(pendingHigh.id);
+  expect(
+    body.data.every(
+      (task) =>
+        task.status === 'in_progress' &&
+        task.priority === 'high' &&
+        task.due_date !== null &&
+        new Date(task.due_date).getTime() >= new Date(windowStart).getTime() &&
+        new Date(task.due_date).getTime() < new Date(windowEnd).getTime(),
+    ),
+  ).toBe(true);
+});
+
+test('G26: GET /api/v1/deals combines pipeline_id, stage_id, and status filters', async ({ request }) => {
+  const org = await registerOrg(request, 'g26-deal-combo');
+  const contact = await createContact(request, org.token, 'G26 Deal Contact');
+  const pipeline = await getDefaultPipeline(request, org.token);
+  const stageId = pipeline.stages[0].id;
+
+  const extraStageRes = await request.post(`/api/v1/deals/pipelines/${pipeline.id}/stages`, {
+    headers: authHeaders(org.token),
+    data: {
+      name: uniqueSuffix('G26 Extra Stage'),
+      position: pipeline.stages.length + 10,
+    },
+  });
+  expect(extraStageRes.status()).toBe(201);
+  const extraStageBody = (await extraStageRes.json()) as { data: PipelineStageRecord };
+  const extraStageId = extraStageBody.data.id;
+
+  const matching = await createDeal(request, org.token, 'G26 Matching Deal', contact.id, pipeline.id, stageId);
+  const otherStage = await createDeal(request, org.token, 'G26 Other Stage Deal', contact.id, pipeline.id, extraStageId);
+  const wonInStage = await createDeal(request, org.token, 'G26 Won In Stage Deal', contact.id, pipeline.id, stageId);
+
+  const wonRes = await request.post(`/api/v1/deals/${wonInStage.id}/won`, {
+    headers: authHeaders(org.token),
+    data: {},
+  });
+  expect(wonRes.status()).toBe(200);
+
+  const res = await request.get(`/api/v1/deals?pipeline_id=${pipeline.id}&stage_id=${stageId}&status=open&per_page=20`, {
+    headers: authHeaders(org.token),
+  });
+
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as DealListResponse;
+  const ids = body.data.map((deal) => deal.id);
+  expect(ids).toContain(matching.id);
+  expect(ids).not.toContain(otherStage.id);
+  expect(ids).not.toContain(wonInStage.id);
+  expect(body.data.every((deal) => deal.pipeline_id === pipeline.id && deal.stage_id === stageId && deal.status === 'open')).toBe(true);
 });

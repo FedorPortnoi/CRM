@@ -566,3 +566,351 @@ test('POST /tasks with a contact_id from another org returns 403 FORBIDDEN and d
   const listBody = (await listRes.json()) as { data: Array<{ id: string; title: string }> };
   expect(listBody.data).toHaveLength(0);
 });
+
+// ── New tests (gap coverage) ─────────────────────────────────────────────────
+
+test('POST /deals/:id/won with explicit actual_close date sets actual_close to that date', async ({ request }) => {
+  const org = await registerOrg(request, 'won-close-date');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
+  const contact = await createContact(request, org.token);
+  const deal = await createDeal(request, org.token, {
+    contactId: contact.id,
+    pipelineId,
+    stageId,
+    title: 'Won With Close Date',
+    value: 500,
+  });
+
+  const closeDate = '2026-01-15';
+  const res = await request.post(`/api/v1/deals/${deal.id}/won`, {
+    headers: authHeaders(org.token),
+    data: { actual_close: closeDate },
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as { data: { id: string; status: string; actual_close: string | null } };
+  expect(body.data.status).toBe('won');
+  expect(body.data.actual_close).not.toBeNull();
+  expect((body.data.actual_close as string).startsWith('2026-01-15')).toBe(true);
+});
+
+test('POST /deals/:id/lost twice — second call returns 422 DEAL_ALREADY_LOST', async ({ request }) => {
+  const org = await registerOrg(request, 'lost-twice');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
+  const contact = await createContact(request, org.token);
+  const deal = await createDeal(request, org.token, {
+    contactId: contact.id,
+    pipelineId,
+    stageId,
+    title: 'Lost Twice Test',
+    value: 200,
+  });
+
+  const first = await request.post(`/api/v1/deals/${deal.id}/lost`, {
+    headers: authHeaders(org.token),
+    data: { reason: 'First loss' },
+  });
+  expect(first.status()).toBe(200);
+
+  const second = await request.post(`/api/v1/deals/${deal.id}/lost`, {
+    headers: authHeaders(org.token),
+    data: { reason: 'Second loss attempt' },
+  });
+  expect(second.status()).toBe(422);
+  const body = (await second.json()) as ErrorResponse;
+  expect(body.error.code).toBe('DEAL_ALREADY_LOST');
+});
+
+test('PATCH /contacts/:id updates last_name field and readback confirms the change', async ({ request }) => {
+  const org = await registerOrg(request, 'contact-lastname');
+  const contact = await createContact(request, org.token, {
+    first_name: 'Readback',
+    last_name: 'OldLastName',
+  });
+
+  const res = await request.patch(`/api/v1/contacts/${contact.id}`, {
+    headers: authHeaders(org.token),
+    data: { last_name: 'NewLastName' },
+  });
+  expect(res.status()).toBe(200);
+
+  const readRes = await request.get(`/api/v1/contacts/${contact.id}`, {
+    headers: authHeaders(org.token),
+  });
+  expect(readRes.status()).toBe(200);
+  const readBody = (await readRes.json()) as { data: ContactRecord };
+  expect(readBody.data.last_name).toBe('NewLastName');
+  expect(readBody.data.first_name).toBe('Readback');
+});
+
+test('GET /contacts?q= with empty string returns all contacts without filtering', async ({ request }) => {
+  const org = await registerOrg(request, 'contact-empty-q');
+  const a = await createContact(request, org.token, { first_name: 'AlphaEmpty' });
+  const b = await createContact(request, org.token, { first_name: 'BetaEmpty' });
+
+  const res = await request.get('/api/v1/contacts?q=&per_page=50', {
+    headers: authHeaders(org.token),
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as ContactListResponse;
+  const ids = body.data.map((c) => c.id);
+  expect(ids).toContain(a.id);
+  expect(ids).toContain(b.id);
+});
+
+test('GET /deals with pipeline_id filter returns only deals in that pipeline', async ({ request }) => {
+  const org = await registerOrg(request, 'deals-pipeline-filter');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
+  const contact = await createContact(request, org.token);
+
+  // Create a deal in the target pipeline
+  const inPipeline = await createDeal(request, org.token, {
+    contactId: contact.id,
+    pipelineId,
+    stageId,
+    title: 'In Pipeline Deal',
+    value: 111,
+  });
+
+  // Create a second pipeline with its own deal
+  const otherStageId = await createSecondPipelineStage(request, org.token);
+  const otherPipelineRes = await request.get('/api/v1/deals/pipelines', {
+    headers: authHeaders(org.token),
+  });
+  const otherPipelinesBody = (await otherPipelineRes.json()) as { data: Pipeline[] };
+  const otherPipeline = otherPipelinesBody.data.find((p) =>
+    p.stages.some((s) => s.id === otherStageId),
+  );
+  if (otherPipeline) {
+    await createDeal(request, org.token, {
+      contactId: contact.id,
+      pipelineId: otherPipeline.id,
+      stageId: otherStageId,
+      title: 'Other Pipeline Deal',
+      value: 222,
+    });
+  }
+
+  const res = await request.get(`/api/v1/deals?pipeline_id=${pipelineId}&per_page=50`, {
+    headers: authHeaders(org.token),
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as { data: DealRecord[]; meta: Record<string, unknown> };
+  const ids = body.data.map((d) => d.id);
+  expect(ids).toContain(inPipeline.id);
+  // Every returned deal must belong to the requested pipeline
+  expect(body.data.every((d) => d.pipeline_id === pipelineId)).toBe(true);
+});
+
+test('GET /deals with page=1&per_page=1 limits results to exactly 1 deal', async ({ request }) => {
+  const org = await registerOrg(request, 'deals-pagination');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
+  const contact = await createContact(request, org.token);
+
+  await createDeal(request, org.token, {
+    contactId: contact.id,
+    pipelineId,
+    stageId,
+    title: 'Page Deal A',
+    value: 10,
+  });
+  await createDeal(request, org.token, {
+    contactId: contact.id,
+    pipelineId,
+    stageId,
+    title: 'Page Deal B',
+    value: 20,
+  });
+
+  const res = await request.get('/api/v1/deals?page=1&per_page=1', {
+    headers: authHeaders(org.token),
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as { data: DealRecord[]; meta: { total: number; page: number; per_page: number } };
+  expect(body.data).toHaveLength(1);
+  expect(body.meta.per_page).toBe(1);
+  expect(body.meta.page).toBe(1);
+  expect(body.meta.total).toBeGreaterThanOrEqual(2);
+});
+
+test('GET /tasks/overdue returns tasks past their due_date with status not done or cancelled', async ({ request }) => {
+  const org = await registerOrg(request, 'tasks-overdue');
+
+  // Past due date
+  const pastDate = new Date();
+  pastDate.setDate(pastDate.getDate() - 2);
+  pastDate.setUTCHours(12, 0, 0, 0);
+  const pastIso = pastDate.toISOString();
+
+  const overdueRes = await request.post('/api/v1/tasks', {
+    headers: authHeaders(org.token),
+    data: { title: 'Overdue Pending Task', assigned_to: org.userId, due_date: pastIso },
+  });
+  expect(overdueRes.status()).toBe(201);
+  const overdueTask = (await overdueRes.json()) as { data: { id: string } };
+
+  // A done task with a past due date — should NOT appear
+  const doneOverdueRes = await request.post('/api/v1/tasks', {
+    headers: authHeaders(org.token),
+    data: { title: 'Overdue Done Task', assigned_to: org.userId, due_date: pastIso },
+  });
+  expect(doneOverdueRes.status()).toBe(201);
+  const doneOverdueTask = (await doneOverdueRes.json()) as { data: { id: string } };
+  const completeRes = await request.post(`/api/v1/tasks/${doneOverdueTask.data.id}/complete`, {
+    headers: authHeaders(org.token),
+  });
+  expect(completeRes.status()).toBe(200);
+
+  const res = await request.get('/api/v1/tasks/overdue', {
+    headers: authHeaders(org.token),
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as { data: Array<{ id: string; status: string }> };
+  const ids = body.data.map((t) => t.id);
+  expect(ids).toContain(overdueTask.data.id);
+  expect(ids).not.toContain(doneOverdueTask.data.id);
+  // All returned tasks must be non-terminal
+  expect(body.data.every((t) => t.status !== 'done' && t.status !== 'cancelled')).toBe(true);
+});
+
+test('GET /tasks/today includes in_progress tasks (not only pending)', async ({ request }) => {
+  const org = await registerOrg(request, 'tasks-today-progress');
+  const dueDate = todayNoonIso();
+
+  const taskRes = await request.post('/api/v1/tasks', {
+    headers: authHeaders(org.token),
+    data: { title: 'Today In Progress Task', assigned_to: org.userId, due_date: dueDate },
+  });
+  expect(taskRes.status()).toBe(201);
+  const task = (await taskRes.json()) as { data: { id: string } };
+
+  const startRes = await request.post(`/api/v1/tasks/${task.data.id}/start`, {
+    headers: authHeaders(org.token),
+  });
+  expect(startRes.status()).toBe(200);
+
+  const res = await request.get('/api/v1/tasks/today', {
+    headers: authHeaders(org.token),
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as { data: Array<{ id: string; status: string }> };
+  const found = body.data.find((t) => t.id === task.data.id);
+  expect(found).toBeDefined();
+  expect(found?.status).toBe('in_progress');
+});
+
+test('POST /calendar with location field succeeds and readback confirms location is stored', async ({ request }) => {
+  const org = await registerOrg(request, 'calendar-location');
+
+  const res = await request.post('/api/v1/calendar', {
+    headers: authHeaders(org.token),
+    data: {
+      title: 'Meeting With Location',
+      start_time: '2026-06-10T10:00:00.000Z',
+      end_time: '2026-06-10T11:00:00.000Z',
+      event_type: 'meeting',
+      location: 'Conference Room A',
+    },
+  });
+  expect(res.status()).toBe(201);
+  const body = (await res.json()) as { data: { id: string; location: string; title: string } };
+  expect(body.data.title).toBe('Meeting With Location');
+  expect(body.data.location).toBe('Conference Room A');
+
+  const readRes = await request.get(`/api/v1/calendar/${body.data.id}`, {
+    headers: authHeaders(org.token),
+  });
+  expect(readRes.status()).toBe(200);
+  const readBody = (await readRes.json()) as { data: { id: string; location: string } };
+  expect(readBody.data.location).toBe('Conference Room A');
+});
+
+test('DELETE /contacts/:id twice — second DELETE still returns 200 and contact remains archived', async ({ request }) => {
+  const org = await registerOrg(request, 'contact-double-delete');
+  const contact = await createContact(request, org.token, { first_name: 'ToDeleteTwice' });
+
+  const first = await request.delete(`/api/v1/contacts/${contact.id}`, {
+    headers: authHeaders(org.token),
+  });
+  expect(first.status()).toBe(200);
+
+  const second = await request.delete(`/api/v1/contacts/${contact.id}`, {
+    headers: authHeaders(org.token),
+  });
+  expect(second.status()).toBe(200);
+  const body = (await second.json()) as { data: { status: string } };
+  expect(body.data.status).toBe('archived');
+});
+
+test('Concurrent: 3 simultaneous deal creates all return 201 with unique IDs', async ({ request }) => {
+  const org = await registerOrg(request, 'deals-concurrent');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
+  const contact = await createContact(request, org.token);
+
+  const [r1, r2, r3] = await Promise.all([
+    request.post('/api/v1/deals', {
+      headers: authHeaders(org.token),
+      data: {
+        title: 'Concurrent Deal 1',
+        contact_id: contact.id,
+        pipeline_id: pipelineId,
+        stage_id: stageId,
+        value: 101,
+      },
+    }),
+    request.post('/api/v1/deals', {
+      headers: authHeaders(org.token),
+      data: {
+        title: 'Concurrent Deal 2',
+        contact_id: contact.id,
+        pipeline_id: pipelineId,
+        stage_id: stageId,
+        value: 102,
+      },
+    }),
+    request.post('/api/v1/deals', {
+      headers: authHeaders(org.token),
+      data: {
+        title: 'Concurrent Deal 3',
+        contact_id: contact.id,
+        pipeline_id: pipelineId,
+        stage_id: stageId,
+        value: 103,
+      },
+    }),
+  ]);
+
+  expect(r1.status()).toBe(201);
+  expect(r2.status()).toBe(201);
+  expect(r3.status()).toBe(201);
+
+  const b1 = (await r1.json()) as DealResponse;
+  const b2 = (await r2.json()) as DealResponse;
+  const b3 = (await r3.json()) as DealResponse;
+
+  const ids = [b1.data.id, b2.data.id, b3.data.id];
+  expect(new Set(ids).size).toBe(3);
+});
+
+test('PATCH /deals/:id value=null clears the value field and readback confirms null', async ({ request }) => {
+  const org = await registerOrg(request, 'deal-null-value');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
+  const contact = await createContact(request, org.token);
+  const deal = await createDeal(request, org.token, {
+    contactId: contact.id,
+    pipelineId,
+    stageId,
+    title: 'Null Value Clear',
+    value: 350,
+  });
+
+  const res = await request.patch(`/api/v1/deals/${deal.id}`, {
+    headers: authHeaders(org.token),
+    data: { value: null },
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as DealResponse;
+  expect(body.data.value).toBeNull();
+
+  const readback = await getDeal(request, org.token, deal.id);
+  expect(readback.value).toBeNull();
+});

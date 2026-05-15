@@ -31,6 +31,29 @@ async function registerOrg(
   return { token: body.data.token, userId: body.data.user.id };
 }
 
+function authHeaders(token: string): { Authorization: string } {
+  return { Authorization: `Bearer ${token}` };
+}
+
+type PipelineSummary = {
+  id: string;
+  stages: { id: string }[];
+};
+
+async function getDefaultPipeline(
+  request: APIRequestContext,
+  token: string,
+): Promise<PipelineSummary> {
+  const res = await request.get('/api/v1/deals/pipelines', {
+    headers: authHeaders(token),
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as { data: PipelineSummary[] };
+  const pipeline = body.data.find((candidate) => candidate.stages.length > 0);
+  if (!pipeline) throw new Error('No pipeline with stages found');
+  return pipeline;
+}
+
 // Calendar tests
 
 test('GET /calendar/:id returns the event for the creating org', async ({ request }) => {
@@ -506,4 +529,77 @@ test('GET /analytics/export/:job_id/download returns 404 for absent async file',
   expect(res.status()).toBe(404);
   const body = (await res.json()) as { error: { code: string; message: string } };
   expect(body.error.code).toBe('EXPORT_NOT_FOUND');
+});
+
+test('POST /analytics/export with unsupported format returns 400 validation error', async ({ request }) => {
+  const { token } = getAuth();
+  const res = await request.post('/api/v1/analytics/export', {
+    headers: authHeaders(token),
+    data: { format: 'xlsx', report: 'revenue', period: 'month' },
+  });
+  expect(res.status()).toBe(400);
+});
+
+test('POST /analytics/export with unsupported report returns 400 validation error', async ({ request }) => {
+  const { token } = getAuth();
+  const res = await request.post('/api/v1/analytics/export', {
+    headers: authHeaders(token),
+    data: { format: 'csv', report: 'forecast', period: 'month' },
+  });
+  expect(res.status()).toBe(400);
+});
+
+test('GET /analytics/conversion-rates with another-org pipeline_id returns an empty scoped result', async ({ request }) => {
+  const orgA = await registerOrg(request, 'cvr-other-pipeline-a');
+  const orgB = await registerOrg(request, 'cvr-other-pipeline-b');
+  const otherPipeline = await getDefaultPipeline(request, orgA.token);
+
+  const res = await request.get(`/api/v1/analytics/conversion-rates?pipeline_id=${otherPipeline.id}`, {
+    headers: authHeaders(orgB.token),
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as { data: unknown[]; meta: Record<string, unknown> };
+  expect(body.data).toEqual([]);
+  expect(body.meta).toEqual({});
+});
+
+test('GET /analytics/stage-duration with another-org pipeline_id returns an empty scoped result', async ({ request }) => {
+  const orgA = await registerOrg(request, 'sd-other-pipeline-a');
+  const orgB = await registerOrg(request, 'sd-other-pipeline-b');
+  const otherPipeline = await getDefaultPipeline(request, orgA.token);
+
+  const res = await request.get(`/api/v1/analytics/stage-duration?pipeline_id=${otherPipeline.id}`, {
+    headers: authHeaders(orgB.token),
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as { data: unknown[]; meta: { note: string } };
+  expect(body.data).toEqual([]);
+  expect(typeof body.meta.note).toBe('string');
+});
+
+test('POST /messages/call with occurred_at stores created_at from the supplied timestamp', async ({ request }) => {
+  const org = await registerOrg(request, 'call-occurred-at');
+  const contactRes = await request.post('/api/v1/contacts', {
+    headers: authHeaders(org.token),
+    data: { first_name: 'OccurredAtContact' },
+  });
+  expect(contactRes.status()).toBe(201);
+  const contactId = ((await contactRes.json()) as { data: { id: string } }).data.id;
+  const occurredAt = '2026-06-15T12:34:56.000Z';
+
+  const callRes = await request.post('/api/v1/messages/call', {
+    headers: authHeaders(org.token),
+    data: {
+      contact_id: contactId,
+      direction: 'inbound',
+      duration_seconds: 45,
+      notes: 'Timestamped call',
+      occurred_at: occurredAt,
+    },
+  });
+  expect(callRes.status()).toBe(201);
+  const body = (await callRes.json()) as { data: { created_at: string; body: string; direction: string } };
+  expect(body.data.created_at).toBe(occurredAt);
+  expect(body.data.body).toBe('[45s] Timestamped call');
+  expect(body.data.direction).toBe('inbound');
 });

@@ -433,3 +433,338 @@ test('DELETE /api/v1/deals/stages/:id returns 409 STAGE_HAS_OPEN_DEALS when stag
   expect(body.error.code).toBe('STAGE_HAS_OPEN_DEALS');
   expect(typeof body.error.message).toBe('string');
 });
+
+// ─── New Rung 4/5 tests ───────────────────────────────────────────────────────
+
+async function registerOrg(request: APIRequestContext, suffix = ''): Promise<{ token: string; userId: string }> {
+  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}${suffix}`;
+  const res = await request.post('/api/v1/auth/', {
+    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
+  });
+  const body = await res.json();
+  return { token: body.data.token, userId: body.data.user.id };
+}
+
+// Gap 1 — Calendar event linked to contact appears in contact activity feed
+test('POST /calendar creates event linked to contact — GET /contacts/:id/activity includes the event', async ({ request }) => {
+  const { token } = await registerOrg(request, 'g1');
+
+  const cRes = await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'ActivityContact' },
+  });
+  expect(cRes.status()).toBe(201);
+  const contactId: string = (await cRes.json()).data.id;
+
+  const evRes = await request.post('/api/v1/calendar', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: {
+      title: 'Activity Feed Event',
+      start_time: futureTime(1),
+      end_time: futureTime(2),
+      contact_id: contactId,
+    },
+  });
+  expect(evRes.status()).toBe(201);
+  const eventId: string = (await evRes.json()).data.id;
+
+  const actRes = await request.get('/api/v1/contacts/' + contactId + '/activity', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(actRes.status()).toBe(200);
+  const actBody = await actRes.json();
+  const items: { id: string; type: string }[] = actBody.data.items;
+  const found = items.some((item) => item.id === eventId);
+  expect(found).toBe(true);
+});
+
+// Gap 2 — PATCH /calendar/:id with new title — readback confirms update
+test('PATCH /calendar/:id with updated title — GET /calendar/:id readback confirms new title', async ({ request }) => {
+  const { token } = await registerOrg(request, 'g2');
+
+  const evRes = await request.post('/api/v1/calendar', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Original Title', start_time: futureTime(1), end_time: futureTime(2) },
+  });
+  expect(evRes.status()).toBe(201);
+  const eventId: string = (await evRes.json()).data.id;
+
+  const patchRes = await request.patch('/api/v1/calendar/' + eventId, {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Updated Title' },
+  });
+  expect(patchRes.status()).toBe(200);
+
+  const getRes = await request.get('/api/v1/calendar/' + eventId, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(getRes.status()).toBe(200);
+  const event = (await getRes.json()).data;
+  expect(event.title).toBe('Updated Title');
+});
+
+// Gap 3 — POST /calendar with past start_time returns 201 (no past-date validation)
+test('POST /calendar with past start_time returns 201 (no validation on past dates)', async ({ request }) => {
+  const { token } = await registerOrg(request, 'g3');
+
+  const pastStart = new Date(Date.now() - 7200000).toISOString(); // 2 hours ago
+  const pastEnd = new Date(Date.now() - 3600000).toISOString();   // 1 hour ago
+
+  const res = await request.post('/api/v1/calendar', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Past Event', start_time: pastStart, end_time: pastEnd },
+  });
+  expect(res.status()).toBe(201);
+  const body = await res.json();
+  expect(typeof body.data.id).toBe('string');
+});
+
+// Gap 4 — POST /messages/send-in-app — message appears in GET /messages?contact_id=
+test('POST /messages/send-in-app — message appears in GET /messages?contact_id=', async ({ request }) => {
+  const { token } = await registerOrg(request, 'g4');
+
+  const cRes = await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'InAppContact' },
+  });
+  expect(cRes.status()).toBe(201);
+  const contactId: string = (await cRes.json()).data.id;
+
+  const msgRes = await request.post('/api/v1/messages/in-app', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { contact_id: contactId, body: 'Hello from test' },
+  });
+  expect(msgRes.status()).toBe(201);
+  const msgId: string = (await msgRes.json()).data.id;
+
+  const listRes = await request.get('/api/v1/messages?contact_id=' + contactId, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(listRes.status()).toBe(200);
+  const listBody = await listRes.json();
+  const messages: { id: string }[] = listBody.data;
+  expect(messages.some((m) => m.id === msgId)).toBe(true);
+});
+
+// Gap 5 — POST /messages/call creates a call entry with type=call
+test('POST /messages/call creates a call log entry with type=call', async ({ request }) => {
+  const { token } = await registerOrg(request, 'g5');
+
+  const cRes = await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'CallLogContact' },
+  });
+  expect(cRes.status()).toBe(201);
+  const contactId: string = (await cRes.json()).data.id;
+
+  const callRes = await request.post('/api/v1/messages/call', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { contact_id: contactId, direction: 'outbound', duration_seconds: 120, notes: 'Discussed proposal' },
+  });
+  expect(callRes.status()).toBe(201);
+  const call = (await callRes.json()).data;
+  expect(typeof call.id).toBe('string');
+  expect(call.contact_id).toBe(contactId);
+});
+
+// Gap 6 — GET /messages?contact_id pagination: per_page=1 returns exactly 1 result
+test('GET /messages?contact_id — per_page=1 returns exactly 1 result', async ({ request }) => {
+  const { token } = await registerOrg(request, 'g6');
+
+  const cRes = await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'PaginationContact' },
+  });
+  expect(cRes.status()).toBe(201);
+  const contactId: string = (await cRes.json()).data.id;
+
+  // Create two messages so pagination has something to truncate
+  for (let i = 0; i < 2; i++) {
+    await request.post('/api/v1/messages/in-app', {
+      headers: { Authorization: 'Bearer ' + token },
+      data: { contact_id: contactId, body: `Message ${i}` },
+    });
+  }
+
+  const res = await request.get('/api/v1/messages?contact_id=' + contactId + '&per_page=1&page=1', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  expect(body.data.length).toBe(1);
+  expect(body.meta.per_page).toBe(1);
+});
+
+// Gap 7 — Cross-org: Org B cannot GET Org A calendar event — returns 404
+test('cross-org isolation: Org B token cannot GET Org A calendar event — returns 404', async ({ request }) => {
+  const orgA = await registerOrg(request, 'g7a');
+  const orgB = await registerOrg(request, 'g7b');
+
+  const evRes = await request.post('/api/v1/calendar', {
+    headers: { Authorization: 'Bearer ' + orgA.token },
+    data: { title: 'OrgA Private Event', start_time: futureTime(1), end_time: futureTime(2) },
+  });
+  expect(evRes.status()).toBe(201);
+  const eventId: string = (await evRes.json()).data.id;
+
+  const res = await request.get('/api/v1/calendar/' + eventId, {
+    headers: { Authorization: 'Bearer ' + orgB.token },
+  });
+  expect(res.status()).toBe(404);
+});
+
+// Gap 8 — Cross-org: Org B cannot PATCH Org A calendar event — returns 404
+test('cross-org isolation: Org B token cannot PATCH Org A calendar event — returns 404', async ({ request }) => {
+  const orgA = await registerOrg(request, 'g8a');
+  const orgB = await registerOrg(request, 'g8b');
+
+  const evRes = await request.post('/api/v1/calendar', {
+    headers: { Authorization: 'Bearer ' + orgA.token },
+    data: { title: 'OrgA Patch Target', start_time: futureTime(1), end_time: futureTime(2) },
+  });
+  expect(evRes.status()).toBe(201);
+  const eventId: string = (await evRes.json()).data.id;
+
+  const res = await request.patch('/api/v1/calendar/' + eventId, {
+    headers: { Authorization: 'Bearer ' + orgB.token },
+    data: { title: 'Hostile Patch' },
+  });
+  expect(res.status()).toBe(404);
+});
+
+// Gap 9 — GET /contacts/:id/deals lists only deals belonging to that contact
+test('GET /contacts/:id/deals lists only deals for that contact, not deals from other contacts', async ({ request }) => {
+  const { token } = await registerOrg(request, 'g9');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, token);
+
+  const c1Res = await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'DealOwner' },
+  });
+  const contactId1: string = (await c1Res.json()).data.id;
+
+  const c2Res = await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'OtherDealOwner' },
+  });
+  const contactId2: string = (await c2Res.json()).data.id;
+
+  const d1Res = await request.post('/api/v1/deals', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Contact1 Deal', contact_id: contactId1, pipeline_id: pipelineId, stage_id: stageId },
+  });
+  expect(d1Res.status()).toBe(201);
+  const dealId1: string = (await d1Res.json()).data.id;
+
+  const d2Res = await request.post('/api/v1/deals', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Contact2 Deal', contact_id: contactId2, pipeline_id: pipelineId, stage_id: stageId },
+  });
+  expect(d2Res.status()).toBe(201);
+  const dealId2: string = (await d2Res.json()).data.id;
+
+  const res = await request.get('/api/v1/contacts/' + contactId1 + '/deals', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(res.status()).toBe(200);
+  const deals: { id: string }[] = (await res.json()).data;
+  expect(deals.some((d) => d.id === dealId1)).toBe(true);
+  expect(deals.some((d) => d.id === dealId2)).toBe(false);
+});
+
+// Gap 10 — GET /contacts/:id/messages returns message list for that contact
+test('GET /contacts/:id/messages returns message list scoped to that contact', async ({ request }) => {
+  const { token } = await registerOrg(request, 'g10');
+
+  const cRes = await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'MsgListContact' },
+  });
+  expect(cRes.status()).toBe(201);
+  const contactId: string = (await cRes.json()).data.id;
+
+  const msgRes = await request.post('/api/v1/messages/in-app', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { contact_id: contactId, body: 'Contact scoped message' },
+  });
+  expect(msgRes.status()).toBe(201);
+  const msgId: string = (await msgRes.json()).data.id;
+
+  const res = await request.get('/api/v1/contacts/' + contactId + '/messages', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(res.status()).toBe(200);
+  const messages: { id: string }[] = (await res.json()).data;
+  expect(Array.isArray(messages)).toBe(true);
+  expect(messages.some((m) => m.id === msgId)).toBe(true);
+});
+
+// Gap 11 — DELETE stage fails with 409 STAGE_HAS_OPEN_DEALS (independent pipeline)
+test('DELETE /deals/stages/:id returns 409 STAGE_HAS_OPEN_DEALS when open deal blocks deletion', async ({ request }) => {
+  const { token } = await registerOrg(request, 'g11');
+
+  const plRes = await request.post('/api/v1/deals/pipelines', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { name: 'Isolation Pipeline ' + Date.now(), is_default: false },
+  });
+  expect(plRes.status()).toBe(201);
+  const plId: string = (await plRes.json()).data.id;
+
+  const stRes = await request.post('/api/v1/deals/pipelines/' + plId + '/stages', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { name: 'Blocking Stage', position: 0, is_won_stage: false, is_lost_stage: false },
+  });
+  expect(stRes.status()).toBe(201);
+  const stId: string = (await stRes.json()).data.id;
+
+  const cRes = await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'BlockerContact' },
+  });
+  const contactId: string = (await cRes.json()).data.id;
+
+  const dRes = await request.post('/api/v1/deals', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Blocking Deal', contact_id: contactId, pipeline_id: plId, stage_id: stId },
+  });
+  expect(dRes.status()).toBe(201);
+
+  const res = await request.delete('/api/v1/deals/stages/' + stId, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(res.status()).toBe(409);
+  const body = await res.json();
+  expect(body.error.code).toBe('STAGE_HAS_OPEN_DEALS');
+});
+
+// Gap 12 — GET /deals response includes nested pipeline and stage objects
+test('GET /deals response — each deal has nested pipeline and stage objects when pipeline_id/stage_id set', async ({ request }) => {
+  const { token } = await registerOrg(request, 'g12');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, token);
+
+  const cRes = await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'NestedPipelineContact' },
+  });
+  expect(cRes.status()).toBe(201);
+  const contactId: string = (await cRes.json()).data.id;
+
+  const dRes = await request.post('/api/v1/deals', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Nested Pipeline Deal', contact_id: contactId, pipeline_id: pipelineId, stage_id: stageId },
+  });
+  expect(dRes.status()).toBe(201);
+  const dealId: string = (await dRes.json()).data.id;
+
+  const res = await request.get('/api/v1/deals', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(res.status()).toBe(200);
+  const deals: any[] = (await res.json()).data;
+  const deal = deals.find((d) => d.id === dealId);
+  expect(deal).toBeDefined();
+  expect(deal.pipeline).toBeDefined();
+  expect(typeof deal.pipeline.id).toBe('string');
+  expect(deal.stage).toBeDefined();
+  expect(typeof deal.stage.id).toBe('string');
+});

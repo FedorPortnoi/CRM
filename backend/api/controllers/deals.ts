@@ -573,6 +573,13 @@ async function deletePipeline(
     return;
   }
 
+  // Null out pipeline/stage refs on non-open deals so FK constraints don't block deletion
+  await db.deal.updateMany({
+    where: { pipeline_id: id },
+    data: { pipeline_id: null, stage_id: null },
+  });
+
+  await db.pipelineStage.deleteMany({ where: { pipeline_id: id } });
   await db.pipeline.delete({ where: { id } });
 
   reply.send({ data: { deleted: true }, meta: {} });

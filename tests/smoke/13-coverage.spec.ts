@@ -253,3 +253,274 @@ test('malformed Bearer token (non-JWT string) on protected endpoint returns 401 
   expect(typeof body.message).toBe('string');
   expect((body.message as string).length).toBeGreaterThan(0);
 });
+
+async function registerOrg(request: APIRequestContext, suffix = '') {
+  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}${suffix}`;
+  const res = await request.post('/api/v1/auth/', {
+    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
+  });
+  const body = await res.json();
+  return { token: body.data.token, userId: body.data.user.id };
+}
+
+test('POST /api/v1/tasks/:id/cancel on done task succeeds and sets status=cancelled (no done guard)', async ({ request }) => {
+  const { token, userId } = await registerOrg(request, 'cancelDone');
+  const createRes = await request.post('/api/v1/tasks', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Cancel Done Task', assigned_to: userId },
+  });
+  expect(createRes.status()).toBe(201);
+  const taskId: string = (await createRes.json()).data.id;
+
+  const completeRes = await request.post('/api/v1/tasks/' + taskId + '/complete', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(completeRes.status()).toBe(200);
+  expect((await completeRes.json()).data.status).toBe('done');
+
+  const cancelRes = await request.delete('/api/v1/tasks/' + taskId, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(cancelRes.status()).toBe(200);
+  expect((await cancelRes.json()).data.status).toBe('cancelled');
+});
+
+test('cancelled task GET readback shows status=cancelled', async ({ request }) => {
+  const { token, userId } = await registerOrg(request, 'cancelRead');
+  const createRes = await request.post('/api/v1/tasks', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Readback Cancel Task', assigned_to: userId },
+  });
+  expect(createRes.status()).toBe(201);
+  const taskId: string = (await createRes.json()).data.id;
+
+  await request.delete('/api/v1/tasks/' + taskId, { headers: { Authorization: 'Bearer ' + token } });
+
+  const getRes = await request.get('/api/v1/tasks/' + taskId, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(getRes.status()).toBe(200);
+  const body = await getRes.json();
+  expect(body.data.status).toBe('cancelled');
+});
+
+test('POST /api/v1/tasks/:id/complete on in_progress task succeeds and sets status=done', async ({ request }) => {
+  const { token, userId } = await registerOrg(request, 'completeInProg');
+  const createRes = await request.post('/api/v1/tasks', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'In Progress Complete Task', assigned_to: userId },
+  });
+  expect(createRes.status()).toBe(201);
+  const taskId: string = (await createRes.json()).data.id;
+
+  const startRes = await request.post('/api/v1/tasks/' + taskId + '/start', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(startRes.status()).toBe(200);
+  expect((await startRes.json()).data.status).toBe('in_progress');
+
+  const completeRes = await request.post('/api/v1/tasks/' + taskId + '/complete', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(completeRes.status()).toBe(200);
+  const body = await completeRes.json();
+  expect(body.data.status).toBe('done');
+  expect(typeof body.data.completed_at).toBe('string');
+});
+
+test('task created with priority=high reads back with priority=high', async ({ request }) => {
+  const { token, userId } = await registerOrg(request, 'priority');
+  const createRes = await request.post('/api/v1/tasks', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'High Priority Task', assigned_to: userId, priority: 'high' },
+  });
+  expect(createRes.status()).toBe(201);
+  const created = (await createRes.json()).data;
+  expect(created.priority).toBe('high');
+
+  const getRes = await request.get('/api/v1/tasks/' + created.id, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(getRes.status()).toBe(200);
+  expect((await getRes.json()).data.priority).toBe('high');
+});
+
+test('POST /api/v1/calendar creates event and GET readback confirms all fields', async ({ request }) => {
+  const { token } = await registerOrg(request, 'calCreate');
+  const start = futureTime(2);
+  const end = futureTime(3);
+  const createRes = await request.post('/api/v1/calendar', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Readback Event', start_time: start, end_time: end },
+  });
+  expect(createRes.status()).toBe(201);
+  const created = (await createRes.json()).data;
+  expect(created.id).toBeTruthy();
+
+  const getRes = await request.get('/api/v1/calendar/' + created.id, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(getRes.status()).toBe(200);
+  const body = await getRes.json();
+  expect(body.data.title).toBe('Readback Event');
+  expect(body.data.start_time).toBeTruthy();
+  expect(body.data.end_time).toBeTruthy();
+  expect(body.data.id).toBe(created.id);
+});
+
+test('PATCH /api/v1/calendar/:id updates title and readback confirms new value', async ({ request }) => {
+  const { token } = await registerOrg(request, 'calPatch');
+  const createRes = await request.post('/api/v1/calendar', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Original Title', start_time: futureTime(1), end_time: futureTime(2) },
+  });
+  expect(createRes.status()).toBe(201);
+  const eventId: string = (await createRes.json()).data.id;
+
+  const patchRes = await request.patch('/api/v1/calendar/' + eventId, {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Updated Title' },
+  });
+  expect(patchRes.status()).toBe(200);
+
+  const getRes = await request.get('/api/v1/calendar/' + eventId, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(getRes.status()).toBe(200);
+  expect((await getRes.json()).data.title).toBe('Updated Title');
+});
+
+test('DELETE /api/v1/calendar/:id cancels event and readback shows status=cancelled', async ({ request }) => {
+  const { token } = await registerOrg(request, 'calDelete');
+  const createRes = await request.post('/api/v1/calendar', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'To Be Cancelled', start_time: futureTime(1), end_time: futureTime(2) },
+  });
+  expect(createRes.status()).toBe(201);
+  const eventId: string = (await createRes.json()).data.id;
+
+  const delRes = await request.delete('/api/v1/calendar/' + eventId, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(delRes.status()).toBe(200);
+
+  const getRes = await request.get('/api/v1/calendar/' + eventId, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(getRes.status()).toBe(200);
+  expect((await getRes.json()).data.status).toBe('cancelled');
+});
+
+test('POST /api/v1/messages/in-app creates in-app message and GET /messages?contact_id= returns it', async ({ request }) => {
+  const { token } = await registerOrg(request, 'msgInApp');
+  const contactRes = await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'MsgContact' },
+  });
+  expect(contactRes.status()).toBe(201);
+  const contactId: string = (await contactRes.json()).data.id;
+
+  const sendRes = await request.post('/api/v1/messages/in-app', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { contact_id: contactId, body: 'Hello in-app' },
+  });
+  expect(sendRes.status()).toBe(201);
+  const msgId: string = (await sendRes.json()).data.id;
+
+  const listRes = await request.get('/api/v1/messages', {
+    headers: { Authorization: 'Bearer ' + token },
+    params: { contact_id: contactId },
+  });
+  expect(listRes.status()).toBe(200);
+  const messages = (await listRes.json()).data as { id: string }[];
+  expect(messages.some((m) => m.id === msgId)).toBe(true);
+});
+
+test('POST /api/v1/messages/call creates a call log entry for the contact', async ({ request }) => {
+  const { token } = await registerOrg(request, 'msgCall');
+  const contactRes = await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'CallContact' },
+  });
+  expect(contactRes.status()).toBe(201);
+  const contactId: string = (await contactRes.json()).data.id;
+
+  const logRes = await request.post('/api/v1/messages/call', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { contact_id: contactId, direction: 'outbound', duration_seconds: 120, notes: 'Discussed proposal' },
+  });
+  expect(logRes.status()).toBe(201);
+  const body = await logRes.json();
+  expect(body.data.id).toBeTruthy();
+  expect(body.data.contact_id).toBe(contactId);
+});
+
+test('GET /api/v1/analytics/funnel returns data with stages array', async ({ request }) => {
+  const { token } = await registerOrg(request, 'funnel');
+
+  const res = await request.get('/api/v1/analytics/funnel', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  expect(body.data).toBeDefined();
+  expect(Array.isArray(body.data.stages)).toBe(true);
+  expect(body.meta).toBeDefined();
+});
+
+test('GET /api/v1/contacts?assigned_to=<userId> returns only contacts assigned to that user', async ({ request }) => {
+  const { token, userId } = await registerOrg(request, 'assignedContacts');
+
+  await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'AssignedA', assigned_to: userId },
+  });
+  await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'AssignedB', assigned_to: userId },
+  });
+  await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'Unassigned' },
+  });
+
+  const res = await request.get('/api/v1/contacts?assigned_to=' + userId, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(res.status()).toBe(200);
+  const contacts = (await res.json()).data as { assigned_to: string | null }[];
+  expect(contacts.length).toBeGreaterThanOrEqual(2);
+  expect(contacts.every((c) => c.assigned_to === userId)).toBe(true);
+});
+
+test('GET /api/v1/deals?assigned_to=<userId> returns only deals assigned to that user', async ({ request }) => {
+  const { token, userId } = await registerOrg(request, 'assignedDeals');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, token);
+
+  const contactRes = await request.post('/api/v1/contacts', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { first_name: 'DealOwner' },
+  });
+  const contactId: string = (await contactRes.json()).data.id;
+
+  await request.post('/api/v1/deals', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Assigned Deal 1', contact_id: contactId, pipeline_id: pipelineId, stage_id: stageId, assigned_to: userId },
+  });
+  await request.post('/api/v1/deals', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Assigned Deal 2', contact_id: contactId, pipeline_id: pipelineId, stage_id: stageId, assigned_to: userId },
+  });
+  await request.post('/api/v1/deals', {
+    headers: { Authorization: 'Bearer ' + token },
+    data: { title: 'Unassigned Deal', contact_id: contactId, pipeline_id: pipelineId, stage_id: stageId },
+  });
+
+  const res = await request.get('/api/v1/deals?assigned_to=' + userId, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  expect(res.status()).toBe(200);
+  const deals = (await res.json()).data as { assigned_to: string | null }[];
+  expect(deals.length).toBeGreaterThanOrEqual(2);
+  expect(deals.every((d) => d.assigned_to === userId)).toBe(true);
+});

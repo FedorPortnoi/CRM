@@ -321,3 +321,230 @@ test('mobile calendar: event create, list, complete, notes, and cancel lifecycle
   expect(cancelled?.status).toBe('cancelled');
   expect(cancelled?.notes).toBe(postMeetingNotes);
 });
+
+// ── Ring 4/5 gap tests ────────────────────────────────────────────────────────
+
+test('mobile messaging: POST /messages/in-app with body exceeding 5000 chars returns 400', async ({ request }) => {
+  const org = await registerOrg(request, 'msg-body-too-long');
+  const contact = await createContact(request, org.token);
+  const oversizedBody = 'x'.repeat(5001);
+
+  const res = await request.post('/api/v1/messages/in-app', {
+    headers: authHeaders(org.token),
+    data: { contact_id: contact.id, body: oversizedBody },
+  });
+  expect(res.status()).toBe(400);
+});
+
+test('mobile messaging: POST /messages/in-app with missing body field returns 400', async ({ request }) => {
+  const org = await registerOrg(request, 'msg-no-body');
+  const contact = await createContact(request, org.token);
+
+  const res = await request.post('/api/v1/messages/in-app', {
+    headers: authHeaders(org.token),
+    data: { contact_id: contact.id },
+  });
+  expect(res.status()).toBe(400);
+});
+
+test('mobile messaging: POST /messages/in-app with missing contact_id returns 400', async ({ request }) => {
+  const org = await registerOrg(request, 'msg-no-contact');
+
+  const res = await request.post('/api/v1/messages/in-app', {
+    headers: authHeaders(org.token),
+    data: { body: 'No contact provided' },
+  });
+  expect(res.status()).toBe(400);
+});
+
+test('mobile messaging: POST /messages/call with missing direction field returns 400', async ({ request }) => {
+  const org = await registerOrg(request, 'call-no-dir');
+  const contact = await createContact(request, org.token);
+
+  const res = await request.post('/api/v1/messages/call', {
+    headers: authHeaders(org.token),
+    data: { contact_id: contact.id, duration_seconds: 120, notes: 'Missing direction' },
+  });
+  expect(res.status()).toBe(400);
+});
+
+test('mobile messaging: GET /messages?contact_id returns only messages for that contact', async ({ request }) => {
+  const org = await registerOrg(request, 'msg-isolation');
+  const contactA = await createContact(request, org.token);
+  const contactB = await createContact(request, org.token);
+
+  const bodyA = `Contact A note ${uniqueSuffix('iso')}`;
+  const bodyB = `Contact B note ${uniqueSuffix('iso')}`;
+
+  const resA = await request.post('/api/v1/messages/in-app', {
+    headers: authHeaders(org.token),
+    data: { contact_id: contactA.id, body: bodyA },
+  });
+  expect(resA.status()).toBe(201);
+
+  const resB = await request.post('/api/v1/messages/in-app', {
+    headers: authHeaders(org.token),
+    data: { contact_id: contactB.id, body: bodyB },
+  });
+  expect(resB.status()).toBe(201);
+
+  const listRes = await request.get(`/api/v1/messages?contact_id=${contactA.id}`, {
+    headers: authHeaders(org.token),
+  });
+  expect(listRes.status()).toBe(200);
+
+  const listBody = (await listRes.json()) as ListResponse<MessageRecord>;
+  expect(listBody.data.every((m) => m.contact_id === contactA.id)).toBe(true);
+  expect(listBody.data.some((m) => m.body === bodyA)).toBe(true);
+  expect(listBody.data.some((m) => m.contact_id === contactB.id)).toBe(false);
+});
+
+test('mobile messaging: GET /messages?channel=in_app returns only in_app channel messages', async ({ request }) => {
+  const org = await registerOrg(request, 'msg-channel-filter');
+  const contact = await createContact(request, org.token);
+
+  const inAppBody = `In-app note ${uniqueSuffix('chan')}`;
+  const inAppRes = await request.post('/api/v1/messages/in-app', {
+    headers: authHeaders(org.token),
+    data: { contact_id: contact.id, body: inAppBody },
+  });
+  expect(inAppRes.status()).toBe(201);
+
+  // also log a call so there is at least one non-sms message of a different subtype
+  const callRes = await request.post('/api/v1/messages/call', {
+    headers: authHeaders(org.token),
+    data: { contact_id: contact.id, direction: 'inbound', duration_seconds: 60, notes: 'quick check' },
+  });
+  expect(callRes.status()).toBe(201);
+
+  const listRes = await request.get(
+    `/api/v1/messages?contact_id=${contact.id}&channel=in_app`,
+    { headers: authHeaders(org.token) },
+  );
+  expect(listRes.status()).toBe(200);
+
+  const listBody = (await listRes.json()) as ListResponse<MessageRecord>;
+  expect(listBody.data.length).toBeGreaterThan(0);
+  expect(listBody.data.every((m) => m.channel === 'in_app')).toBe(true);
+});
+
+test('mobile calendar: GET /calendar?contact_id filter returns only events for that contact', async ({ request }) => {
+  const org = await registerOrg(request, 'cal-contact-filter');
+  const contactA = await createContact(request, org.token);
+  const contactB = await createContact(request, org.token);
+
+  const { startTime: startA, endTime: endA } = futureEventWindow(3);
+  const { startTime: startB, endTime: endB } = futureEventWindow(4);
+  const titleA = `Cal filter A ${uniqueSuffix('ev')}`;
+  const titleB = `Cal filter B ${uniqueSuffix('ev')}`;
+
+  const eventA = await createCalendarEvent(request, org.token, {
+    title: titleA,
+    contactId: contactA.id,
+    startTime: startA,
+    endTime: endA,
+  });
+  await createCalendarEvent(request, org.token, {
+    title: titleB,
+    contactId: contactB.id,
+    startTime: startB,
+    endTime: endB,
+  });
+
+  const bounds = { start: futureEventWindow(1).startTime, end: futureEventWindow(10).endTime };
+  const eventsForA = await listCalendarEventsForContact(request, org.token, contactA.id, bounds);
+
+  expect(eventsForA.some((e) => e.id === eventA.id)).toBe(true);
+  expect(eventsForA.every((e) => e.contact_id === contactA.id)).toBe(true);
+});
+
+test('mobile calendar: PATCH title update is confirmed on readback', async ({ request }) => {
+  const org = await registerOrg(request, 'cal-patch-title');
+  const contact = await createContact(request, org.token);
+  const { startTime, endTime } = futureEventWindow(6);
+  const originalTitle = `Original title ${uniqueSuffix('patch')}`;
+  const updatedTitle = `Updated title ${uniqueSuffix('patch')}`;
+
+  const event = await createCalendarEvent(request, org.token, {
+    title: originalTitle,
+    contactId: contact.id,
+    startTime,
+    endTime,
+  });
+
+  const patchRes = await request.patch(`/api/v1/calendar/${event.id}`, {
+    headers: authHeaders(org.token),
+    data: { title: updatedTitle },
+  });
+  expect(patchRes.status()).toBe(200);
+
+  const patchBody = (await patchRes.json()) as DataResponse<CalendarEventRecord>;
+  expect(patchBody.data.title).toBe(updatedTitle);
+  expect(patchBody.data.id).toBe(event.id);
+});
+
+test('mobile calendar: POST /calendar/:id/notes on a completed event stores notes', async ({ request }) => {
+  const org = await registerOrg(request, 'cal-completed-notes');
+  const contact = await createContact(request, org.token);
+  const { startTime, endTime } = futureEventWindow(7);
+  const title = `Notes on completed ${uniqueSuffix('ev')}`;
+  const postNotes = `Post-event notes ${uniqueSuffix('notes')}`;
+
+  const event = await createCalendarEvent(request, org.token, {
+    title,
+    contactId: contact.id,
+    startTime,
+    endTime,
+  });
+
+  const completeRes = await request.post(`/api/v1/calendar/${event.id}/complete`, {
+    headers: authHeaders(org.token),
+  });
+  expect(completeRes.status()).toBe(200);
+
+  const notesRes = await request.post(`/api/v1/calendar/${event.id}/notes`, {
+    headers: authHeaders(org.token),
+    data: { notes: postNotes },
+  });
+  expect(notesRes.status()).toBe(200);
+
+  const notesBody = (await notesRes.json()) as DataResponse<CalendarEventRecord>;
+  expect(notesBody.data.status).toBe('completed');
+  expect(notesBody.data.notes).toBe(postNotes);
+  expect(notesBody.data.post_meeting_prompted).toBe(true);
+  expect(notesBody.data.id).toBe(event.id);
+});
+
+test('mobile messaging: 3 concurrent in-app messages to same contact all return 201 with unique ids', async ({ request }) => {
+  const org = await registerOrg(request, 'msg-concurrent');
+  const contact = await createContact(request, org.token);
+
+  const payloads = [
+    `Concurrent note 1 ${uniqueSuffix('c')}`,
+    `Concurrent note 2 ${uniqueSuffix('c')}`,
+    `Concurrent note 3 ${uniqueSuffix('c')}`,
+  ];
+
+  const results = await Promise.all(
+    payloads.map((body) =>
+      request.post('/api/v1/messages/in-app', {
+        headers: authHeaders(org.token),
+        data: { contact_id: contact.id, body },
+      }),
+    ),
+  );
+
+  for (const res of results) {
+    expect(res.status()).toBe(201);
+  }
+
+  const ids = await Promise.all(
+    results.map(async (res) => {
+      const body = (await res.json()) as DataResponse<MessageRecord>;
+      return body.data.id;
+    }),
+  );
+
+  const uniqueIds = new Set(ids);
+  expect(uniqueIds.size).toBe(3);
+});

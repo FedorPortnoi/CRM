@@ -20,6 +20,7 @@ interface ContactRecord {
   first_name: string;
   type: string;
   status: string;
+  assigned_to: string | null;
 }
 
 interface ContactListMeta {
@@ -51,6 +52,7 @@ interface DealRecord {
   id: string;
   title: string;
   status: string;
+  contact_id: string;
 }
 
 interface DealListResponse {
@@ -70,6 +72,16 @@ interface PipelineRecord {
 
 interface PipelineListResponse {
   data: PipelineRecord[];
+}
+
+interface CalendarEventRecord {
+  id: string;
+  title: string;
+  status: string;
+  start_time: string;
+  end_time: string;
+  contact_id: string | null;
+  deal_id: string | null;
 }
 
 interface DataResponse<T> {
@@ -113,12 +125,22 @@ async function createContact(
   token: string,
   firstName: string,
   type: 'lead' | 'customer' | 'partner' | 'other' = 'lead',
+  extra: Record<string, unknown> = {},
 ): Promise<ContactRecord> {
   const res = await request.post('/api/v1/contacts', {
     headers: authHeaders(token),
-    data: { first_name: firstName, type },
+    data: { first_name: firstName, type, ...extra },
   });
   expect(res.status()).toBe(201);
+  const body = (await res.json()) as DataResponse<ContactRecord>;
+  return body.data;
+}
+
+async function getContact(request: APIRequestContext, token: string, contactId: string): Promise<ContactRecord> {
+  const res = await request.get(`/api/v1/contacts/${contactId}`, {
+    headers: authHeaders(token),
+  });
+  expect(res.status()).toBe(200);
   const body = (await res.json()) as DataResponse<ContactRecord>;
   return body.data;
 }
@@ -159,6 +181,23 @@ async function createDeal(
   });
   expect(res.status()).toBe(201);
   const body = (await res.json()) as DataResponse<DealRecord>;
+  return body.data;
+}
+
+async function createCalendarEvent(
+  request: APIRequestContext,
+  org: AuthOrg,
+  title: string,
+  startTime: string,
+  endTime: string,
+  extra: Record<string, unknown> = {},
+): Promise<CalendarEventRecord> {
+  const res = await request.post('/api/v1/calendar', {
+    headers: authHeaders(org.token),
+    data: { title, start_time: startTime, end_time: endTime, ...extra },
+  });
+  expect(res.status()).toBe(201);
+  const body = (await res.json()) as DataResponse<CalendarEventRecord>;
   return body.data;
 }
 
@@ -344,4 +383,194 @@ test('G12: POST /api/v1/calendar with end_time not after start_time returns 400'
   });
 
   expect(res.status()).toBe(400);
+});
+
+test('G13: POST /api/v1/notifications/send with body="" returns 400 before push token lookup', async ({ request }) => {
+  const org = await registerOrg(request, 'g13-empty-notification-body');
+
+  const res = await request.post('/api/v1/notifications/send', {
+    headers: authHeaders(org.token),
+    data: {
+      user_id: org.userId,
+      title: 'Empty body should fail',
+      body: '',
+    },
+  });
+
+  expect(res.status()).toBe(400);
+});
+
+test('G14: POST /api/v1/contacts/bulk-assign with 101 contact_ids returns 400 (BulkAssignSchema max(100))', async ({
+  request,
+}) => {
+  const org = await registerOrg(request, 'g14-bulk-assign-max');
+  const contactIds = Array.from({ length: 101 }, () => randomUUID());
+
+  const res = await request.post('/api/v1/contacts/bulk-assign', {
+    headers: authHeaders(org.token),
+    data: { contact_ids: contactIds, assigned_to: org.userId },
+  });
+
+  expect(res.status()).toBe(400);
+});
+
+test('G15: POST /api/v1/contacts/bulk-archive rejects an already archived id and preserves active contacts', async ({
+  request,
+}) => {
+  const org = await registerOrg(request, 'g15-archive-archived-contact');
+  const active = await createContact(request, org.token, 'G15 Active Contact');
+  const archived = await createContact(request, org.token, 'G15 Archived Contact');
+
+  const archiveOneRes = await request.delete(`/api/v1/contacts/${archived.id}`, {
+    headers: authHeaders(org.token),
+  });
+  expect(archiveOneRes.status()).toBe(200);
+
+  const res = await request.post('/api/v1/contacts/bulk-archive', {
+    headers: authHeaders(org.token),
+    data: { contact_ids: [active.id, archived.id] },
+  });
+
+  expect(res.status()).toBe(404);
+  const body = (await res.json()) as ErrorResponse;
+  expect(body.error.code).toBe('NOT_FOUND');
+
+  const storedActive = await getContact(request, org.token, active.id);
+  expect(storedActive.status).toBe('active');
+});
+
+test('G16: POST /api/v1/contacts/bulk-assign rejects an archived contact id and preserves assignment state', async ({
+  request,
+}) => {
+  const org = await registerOrg(request, 'g16-assign-archived-contact');
+  const active = await createContact(request, org.token, 'G16 Active Contact');
+  const archived = await createContact(request, org.token, 'G16 Archived Contact');
+
+  const archiveOneRes = await request.delete(`/api/v1/contacts/${archived.id}`, {
+    headers: authHeaders(org.token),
+  });
+  expect(archiveOneRes.status()).toBe(200);
+
+  const res = await request.post('/api/v1/contacts/bulk-assign', {
+    headers: authHeaders(org.token),
+    data: { contact_ids: [active.id, archived.id], assigned_to: org.userId },
+  });
+
+  expect(res.status()).toBe(404);
+  const body = (await res.json()) as ErrorResponse;
+  expect(body.error.code).toBe('NOT_FOUND');
+
+  const storedActive = await getContact(request, org.token, active.id);
+  expect(storedActive.assigned_to).toBeNull();
+});
+
+test('G17: GET /api/v1/tasks combines q, status, and priority filters', async ({ request }) => {
+  const org = await registerOrg(request, 'g17-task-q-status-priority');
+  const prefix = uniqueSuffix('G17TaskCombo');
+  const matching = await createTask(request, org, `${prefix} Matching`, { priority: 'urgent' });
+  const doneTask = await createTask(request, org, `${prefix} Done`, { priority: 'urgent' });
+  const wrongPriority = await createTask(request, org, `${prefix} Wrong Priority`, { priority: 'high' });
+  const wrongQuery = await createTask(request, org, 'G17 Different Urgent', { priority: 'urgent' });
+
+  const completeRes = await request.post(`/api/v1/tasks/${doneTask.id}/complete`, {
+    headers: authHeaders(org.token),
+  });
+  expect(completeRes.status()).toBe(200);
+
+  const res = await request.get(
+    `/api/v1/tasks?q=${encodeURIComponent(prefix)}&status=pending&priority=urgent&per_page=20`,
+    { headers: authHeaders(org.token) },
+  );
+
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as TaskListResponse;
+  const ids = body.data.map((task) => task.id);
+  expect(ids).toContain(matching.id);
+  expect(ids).not.toContain(doneTask.id);
+  expect(ids).not.toContain(wrongPriority.id);
+  expect(ids).not.toContain(wrongQuery.id);
+  expect(body.data.every((task) => task.title.includes(prefix) && task.status === 'pending' && task.priority === 'urgent')).toBe(true);
+});
+
+test('G18: GET /api/v1/deals combines q, contact_id, and status filters', async ({ request }) => {
+  const org = await registerOrg(request, 'g18-deal-q-contact-status');
+  const prefix = uniqueSuffix('G18DealCombo');
+  const contact = await createContact(request, org.token, 'G18 Deal Contact');
+  const otherContact = await createContact(request, org.token, 'G18 Other Deal Contact');
+  const pipeline = await getDefaultPipeline(request, org.token);
+  const stageId = pipeline.stages[0].id;
+  const matching = await createDeal(request, org.token, `${prefix} Matching`, contact.id, pipeline.id, stageId);
+  const wrongContact = await createDeal(request, org.token, `${prefix} Wrong Contact`, otherContact.id, pipeline.id, stageId);
+  const wonSameContact = await createDeal(request, org.token, `${prefix} Won Same Contact`, contact.id, pipeline.id, stageId);
+
+  const wonRes = await request.post(`/api/v1/deals/${wonSameContact.id}/won`, {
+    headers: authHeaders(org.token),
+    data: {},
+  });
+  expect(wonRes.status()).toBe(200);
+
+  const res = await request.get(
+    `/api/v1/deals?q=${encodeURIComponent(prefix)}&contact_id=${contact.id}&status=open&per_page=20`,
+    { headers: authHeaders(org.token) },
+  );
+
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as DealListResponse;
+  const ids = body.data.map((deal) => deal.id);
+  expect(ids).toContain(matching.id);
+  expect(ids).not.toContain(wrongContact.id);
+  expect(ids).not.toContain(wonSameContact.id);
+  expect(body.data.every((deal) => deal.title.includes(prefix) && deal.contact_id === contact.id && deal.status === 'open')).toBe(true);
+});
+
+test('G19: PATCH /api/v1/calendar/:id rejects start_time after the existing end_time and preserves times', async ({
+  request,
+}) => {
+  const org = await registerOrg(request, 'g19-calendar-start-only-invalid');
+  const originalStart = daysFromNow(2);
+  const originalEnd = daysFromNow(3);
+  const event = await createCalendarEvent(request, org, 'G19 Calendar Time Guard', originalStart, originalEnd);
+
+  const res = await request.patch(`/api/v1/calendar/${event.id}`, {
+    headers: authHeaders(org.token),
+    data: { start_time: daysFromNow(4) },
+  });
+
+  expect(res.status()).toBe(400);
+  const body = (await res.json()) as ErrorResponse;
+  expect(body.error.code).toBe('VALIDATION_ERROR');
+
+  const getRes = await request.get(`/api/v1/calendar/${event.id}`, {
+    headers: authHeaders(org.token),
+  });
+  expect(getRes.status()).toBe(200);
+  const stored = (await getRes.json()) as DataResponse<CalendarEventRecord>;
+  expect(stored.data.start_time).toBe(originalStart);
+  expect(stored.data.end_time).toBe(originalEnd);
+});
+
+test('G20: PATCH /api/v1/calendar/:id rejects end_time before the existing start_time and preserves times', async ({
+  request,
+}) => {
+  const org = await registerOrg(request, 'g20-calendar-end-only-invalid');
+  const originalStart = daysFromNow(5);
+  const originalEnd = daysFromNow(6);
+  const event = await createCalendarEvent(request, org, 'G20 Calendar Time Guard', originalStart, originalEnd);
+
+  const res = await request.patch(`/api/v1/calendar/${event.id}`, {
+    headers: authHeaders(org.token),
+    data: { end_time: daysFromNow(4) },
+  });
+
+  expect(res.status()).toBe(400);
+  const body = (await res.json()) as ErrorResponse;
+  expect(body.error.code).toBe('VALIDATION_ERROR');
+
+  const getRes = await request.get(`/api/v1/calendar/${event.id}`, {
+    headers: authHeaders(org.token),
+  });
+  expect(getRes.status()).toBe(200);
+  const stored = (await getRes.json()) as DataResponse<CalendarEventRecord>;
+  expect(stored.data.start_time).toBe(originalStart);
+  expect(stored.data.end_time).toBe(originalEnd);
 });

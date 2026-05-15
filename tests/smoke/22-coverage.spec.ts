@@ -693,3 +693,172 @@ test('POST /api/v1/contacts/import-csv with an empty array returns 400 and creat
   expect(listBody.data).toHaveLength(0);
   expect(listBody.meta.total).toBe(0);
 });
+
+test('POST /api/v1/contacts/bulk-archive deduplicates duplicate contact_ids before archiving', async ({ request }) => {
+  const org = await registerOrg(request, 'bulk-archive-dedupe');
+  const contact = await createContact(request, org.token);
+
+  const res = await request.post('/api/v1/contacts/bulk-archive', {
+    headers: authHeaders(org.token),
+    data: { contact_ids: [contact.id, contact.id] },
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as DataResponse<{ archived_count: number; contact_ids: string[] }>;
+  expect(body.data.archived_count).toBe(1);
+  expect(body.data.contact_ids).toEqual([contact.id]);
+
+  const stored = await getContact(request, org.token, contact.id);
+  expect(stored.status).toBe('archived');
+});
+
+test('POST /api/v1/contacts/bulk-assign deduplicates duplicate contact_ids before assigning', async ({ request }) => {
+  const org = await registerOrg(request, 'bulk-assign-dedupe');
+  const contact = await createContact(request, org.token);
+
+  const res = await request.post('/api/v1/contacts/bulk-assign', {
+    headers: authHeaders(org.token),
+    data: { contact_ids: [contact.id, contact.id], assigned_to: org.userId },
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as DataResponse<{ assigned_count: number; contact_ids: string[]; assigned_to: string }>;
+  expect(body.data.assigned_count).toBe(1);
+  expect(body.data.contact_ids).toEqual([contact.id]);
+  expect(body.data.assigned_to).toBe(org.userId);
+
+  const stored = await getContact(request, org.token, contact.id);
+  expect(stored.assigned_to).toBe(org.userId);
+});
+
+test('POST /api/v1/contacts/bulk-tag append mode keeps existing tags and deduplicates new tags', async ({ request }) => {
+  type TaggedContact = ContactRecord & { tags: string[] };
+
+  const org = await registerOrg(request, 'bulk-tag-append');
+  const createRes = await request.post('/api/v1/contacts', {
+    headers: authHeaders(org.token),
+    data: { first_name: uniqueSuffix('TaggedAppend'), tags: ['warm', 'vip'] },
+  });
+  expect(createRes.status()).toBe(201);
+  const contact = ((await createRes.json()) as DataResponse<TaggedContact>).data;
+
+  const tagRes = await request.post('/api/v1/contacts/bulk-tag', {
+    headers: authHeaders(org.token),
+    data: { contact_ids: [contact.id], tags: ['vip', 'renewal'] },
+  });
+  expect(tagRes.status()).toBe(200);
+  const tagBody = (await tagRes.json()) as DataResponse<{ tagged_count: number; tags: string[]; mode: string }>;
+  expect(tagBody.data.tagged_count).toBe(1);
+  expect(tagBody.data.tags).toEqual(['vip', 'renewal']);
+  expect(tagBody.data.mode).toBe('append');
+
+  const storedRes = await request.get(`/api/v1/contacts/${contact.id}`, {
+    headers: authHeaders(org.token),
+  });
+  expect(storedRes.status()).toBe(200);
+  const stored = ((await storedRes.json()) as DataResponse<TaggedContact>).data;
+  expect(stored.tags).toEqual(['warm', 'vip', 'renewal']);
+});
+
+test('POST /api/v1/contacts/bulk-tag replace mode replaces existing tags', async ({ request }) => {
+  type TaggedContact = ContactRecord & { tags: string[] };
+
+  const org = await registerOrg(request, 'bulk-tag-replace');
+  const createRes = await request.post('/api/v1/contacts', {
+    headers: authHeaders(org.token),
+    data: { first_name: uniqueSuffix('TaggedReplace'), tags: ['old', 'stale'] },
+  });
+  expect(createRes.status()).toBe(201);
+  const contact = ((await createRes.json()) as DataResponse<TaggedContact>).data;
+
+  const tagRes = await request.post('/api/v1/contacts/bulk-tag', {
+    headers: authHeaders(org.token),
+    data: { contact_ids: [contact.id], tags: ['fresh'], mode: 'replace' },
+  });
+  expect(tagRes.status()).toBe(200);
+
+  const storedRes = await request.get(`/api/v1/contacts/${contact.id}`, {
+    headers: authHeaders(org.token),
+  });
+  expect(storedRes.status()).toBe(200);
+  const stored = ((await storedRes.json()) as DataResponse<TaggedContact>).data;
+  expect(stored.tags).toEqual(['fresh']);
+});
+
+test('POST /api/v1/contacts/import/phone defaults source to phone_contacts and trims row fields', async ({ request }) => {
+  type PhoneImportContact = ContactRecord & {
+    phone: string | null;
+    mobile: string | null;
+    source: string | null;
+  };
+
+  const org = await registerOrg(request, 'contacts-phone-import');
+  const prefix = uniqueSuffix('PhoneImport');
+
+  const res = await request.post('/api/v1/contacts/import/phone', {
+    headers: authHeaders(org.token),
+    data: [
+      {
+        first_name: ` ${prefix} `,
+        phone: ' 555-0199 ',
+        mobile: ' 555-0200 ',
+      },
+    ],
+  });
+  expect(res.status()).toBe(201);
+  const body = (await res.json()) as DataResponse<{ imported_count: number }>;
+  expect(body.data.imported_count).toBe(1);
+
+  const listRes = await request.get(`/api/v1/contacts?q=${encodeURIComponent(prefix)}&per_page=10`, {
+    headers: authHeaders(org.token),
+  });
+  expect(listRes.status()).toBe(200);
+  const listBody = (await listRes.json()) as { data: PhoneImportContact[]; meta: { total: number } };
+  expect(listBody.meta.total).toBe(1);
+  expect(listBody.data[0].first_name).toBe(prefix);
+  expect(listBody.data[0].phone).toBe('555-0199');
+  expect(listBody.data[0].mobile).toBe('555-0200');
+  expect(listBody.data[0].source).toBe('phone_contacts');
+});
+
+test('POST /api/v1/contacts/business-card/scan parses text without creating a contact when create_contact is false', async ({ request }) => {
+  type BusinessCardScanResponse = {
+    data: {
+      raw_text: string;
+      extracted: {
+        first_name: string;
+        last_name?: string;
+        company?: string;
+        email?: string;
+        phone?: string;
+        source?: string;
+      };
+      contact: null;
+    };
+    meta: Record<string, unknown>;
+  };
+
+  const org = await registerOrg(request, 'business-card-no-create');
+  const email = `${uniqueSuffix('card').toLowerCase()}@example.com`;
+  const rawText = `Jordan Lee\nAcme Parse Co\n${email}\n+1 555 012 3456`;
+
+  const res = await request.post('/api/v1/contacts/business-card/scan', {
+    headers: authHeaders(org.token),
+    data: { text: rawText, create_contact: false },
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as BusinessCardScanResponse;
+  expect(body.data.raw_text).toBe(rawText);
+  expect(body.data.extracted.first_name).toBe('Jordan');
+  expect(body.data.extracted.last_name).toBe('Lee');
+  expect(body.data.extracted.company).toBe('Acme Parse Co');
+  expect(body.data.extracted.email).toBe(email);
+  expect(body.data.extracted.source).toBe('business_card');
+  expect(body.data.contact).toBeNull();
+
+  const listRes = await request.get(`/api/v1/contacts?q=${encodeURIComponent(email)}&per_page=10`, {
+    headers: authHeaders(org.token),
+  });
+  expect(listRes.status()).toBe(200);
+  const listBody = (await listRes.json()) as ContactListResponse;
+  expect(listBody.meta.total).toBe(0);
+  expect(listBody.data).toHaveLength(0);
+});

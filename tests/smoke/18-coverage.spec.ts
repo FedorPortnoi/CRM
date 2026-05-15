@@ -871,3 +871,184 @@ test('GET /analytics/dashboard keeps open deal totals and due-today task counts 
   expect(dashboard.data.open_deals.total_value).toBe(10);
   expect(dashboard.data.tasks_due_today).toBe(1);
 });
+
+test('GET /deals/:id with Org B token for Org A deal returns 404 DEAL_NOT_FOUND', async ({ request }) => {
+  const orgA = await registerOrg(request, 'deal-get-xorg-a');
+  const orgB = await registerOrg(request, 'deal-get-xorg-b');
+  const deal = await createBasicDealForOrg(request, orgA, 'Org A Deal Get Cross');
+
+  const res = await request.get(`/api/v1/deals/${deal.id}`, {
+    headers: authHeaders(orgB.token),
+  });
+  await expectError(res, 404, 'DEAL_NOT_FOUND');
+});
+
+test('DELETE /deals/:id with Org B token for Org A deal returns 404 DEAL_NOT_FOUND', async ({ request }) => {
+  const orgA = await registerOrg(request, 'deal-delete-xorg-a');
+  const orgB = await registerOrg(request, 'deal-delete-xorg-b');
+  const deal = await createBasicDealForOrg(request, orgA, 'Org A Deal Delete Cross');
+
+  const res = await request.delete(`/api/v1/deals/${deal.id}`, {
+    headers: authHeaders(orgB.token),
+  });
+  await expectError(res, 404, 'DEAL_NOT_FOUND');
+
+  const stillExists = await getDeal(request, orgA.token, deal.id);
+  expect(stillExists.id).toBe(deal.id);
+});
+
+test('PATCH /deals/:id with Org B token for Org A deal returns 404 DEAL_NOT_FOUND', async ({ request }) => {
+  const orgA = await registerOrg(request, 'deal-patch-xorg-a');
+  const orgB = await registerOrg(request, 'deal-patch-xorg-b');
+  const deal = await createBasicDealForOrg(request, orgA, 'Org A Deal Patch Cross');
+
+  const res = await request.patch(`/api/v1/deals/${deal.id}`, {
+    headers: authHeaders(orgB.token),
+    data: { title: 'Hijacked Title' },
+  });
+  await expectError(res, 404, 'DEAL_NOT_FOUND');
+
+  const unchanged = await getDeal(request, orgA.token, deal.id);
+  expect(unchanged.title).toBe(deal.title);
+});
+
+test('POST /deals/:id/won with Org B token for Org A deal returns 404 DEAL_NOT_FOUND', async ({ request }) => {
+  const orgA = await registerOrg(request, 'deal-won-xorg-a');
+  const orgB = await registerOrg(request, 'deal-won-xorg-b');
+  const deal = await createBasicDealForOrg(request, orgA, 'Org A Deal Won Cross');
+
+  const res = await request.post(`/api/v1/deals/${deal.id}/won`, {
+    headers: authHeaders(orgB.token),
+    data: { data: {} },
+  });
+  await expectError(res, 404, 'DEAL_NOT_FOUND');
+
+  const unchanged = await getDeal(request, orgA.token, deal.id);
+  expect(unchanged.status).not.toBe('won');
+});
+
+test('GET /tasks/:id with Org B token for Org A task returns 404 TASK_NOT_FOUND', async ({ request }) => {
+  const orgA = await registerOrg(request, 'task-get-xorg-a');
+  const orgB = await registerOrg(request, 'task-get-xorg-b');
+  const task = await createTask(request, orgA.token, {
+    assignedTo: orgA.userId,
+    title: uniqueSuffix('OrgATaskGetCross'),
+  });
+
+  const res = await request.get(`/api/v1/tasks/${task.id}`, {
+    headers: authHeaders(orgB.token),
+  });
+  await expectError(res, 404, 'TASK_NOT_FOUND');
+});
+
+test('PATCH /tasks/:id with Org B token for Org A task returns 404 TASK_NOT_FOUND', async ({ request }) => {
+  const orgA = await registerOrg(request, 'task-patch-xorg-a');
+  const orgB = await registerOrg(request, 'task-patch-xorg-b');
+  const task = await createTask(request, orgA.token, {
+    assignedTo: orgA.userId,
+    title: uniqueSuffix('OrgATaskPatchCross'),
+  });
+
+  const res = await request.patch(`/api/v1/tasks/${task.id}`, {
+    headers: authHeaders(orgB.token),
+    data: { title: 'Hijacked Task Title' },
+  });
+  await expectError(res, 404, 'TASK_NOT_FOUND');
+
+  const unchanged = await getTask(request, orgA.token, task.id);
+  expect(unchanged.title).toBe(task.title);
+});
+
+test('GET /calendar/:id with Org B token for Org A event returns 404', async ({ request }) => {
+  const orgA = await registerOrg(request, 'cal-get-xorg-a');
+  const orgB = await registerOrg(request, 'cal-get-xorg-b');
+  const event = await createCalendarEvent(request, orgA.token, {
+    title: uniqueSuffix('OrgAEventGetCross'),
+    daysFromNow: 4,
+  });
+
+  const res = await request.get(`/api/v1/calendar/${event.id}`, {
+    headers: authHeaders(orgB.token),
+  });
+  expect(res.status()).toBe(404);
+});
+
+test('DELETE /calendar/:id with Org B token for Org A event returns 404', async ({ request }) => {
+  const orgA = await registerOrg(request, 'cal-del-xorg-a');
+  const orgB = await registerOrg(request, 'cal-del-xorg-b');
+  const event = await createCalendarEvent(request, orgA.token, {
+    title: uniqueSuffix('OrgAEventDelCross'),
+    daysFromNow: 5,
+  });
+
+  const res = await request.delete(`/api/v1/calendar/${event.id}`, {
+    headers: authHeaders(orgB.token),
+  });
+  expect(res.status()).toBe(404);
+
+  const stillExists = await getCalendarEvent(request, orgA.token, event.id);
+  expect(stillExists.id).toBe(event.id);
+});
+
+test('GET /contacts/:id/activity with Org B token for Org A contact returns 404', async ({ request }) => {
+  const orgA = await registerOrg(request, 'contact-activity-xorg-a');
+  const orgB = await registerOrg(request, 'contact-activity-xorg-b');
+  const contact = await createContact(request, orgA.token, {
+    first_name: uniqueSuffix('OrgAContactActivity'),
+  });
+
+  const res = await request.get(`/api/v1/contacts/${contact.id}/activity`, {
+    headers: authHeaders(orgB.token),
+  });
+  expect(res.status()).toBe(404);
+});
+
+test('GET /contacts/:id/tasks with Org B token for Org A contact returns 404', async ({ request }) => {
+  const orgA = await registerOrg(request, 'contact-tasks-xorg-a');
+  const orgB = await registerOrg(request, 'contact-tasks-xorg-b');
+  const contact = await createContact(request, orgA.token, {
+    first_name: uniqueSuffix('OrgAContactTasks'),
+  });
+
+  const res = await request.get(`/api/v1/contacts/${contact.id}/tasks`, {
+    headers: authHeaders(orgB.token),
+  });
+  expect(res.status()).toBe(404);
+});
+
+test('GET /contacts/:id/deals with Org B token for Org A contact returns 404', async ({ request }) => {
+  const orgA = await registerOrg(request, 'contact-deals-xorg-a');
+  const orgB = await registerOrg(request, 'contact-deals-xorg-b');
+  const contact = await createContact(request, orgA.token, {
+    first_name: uniqueSuffix('OrgAContactDeals'),
+  });
+
+  const res = await request.get(`/api/v1/contacts/${contact.id}/deals`, {
+    headers: authHeaders(orgB.token),
+  });
+  expect(res.status()).toBe(404);
+});
+
+test('GET /analytics/stage-duration returns data array with each stage having stage_name and avg_days', async ({ request }) => {
+  const org = await registerOrg(request, 'analytics-stage-duration');
+  const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
+  const contact = await createContact(request, org.token);
+  await createDeal(request, org.token, {
+    contactId: contact.id,
+    pipelineId,
+    stageId,
+    title: uniqueSuffix('StageDurationDeal'),
+  });
+
+  const res = await request.get('/api/v1/analytics/stage-duration', {
+    headers: authHeaders(org.token),
+  });
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as { data: Array<{ stage_name: string; avg_days: number }> };
+  expect(Array.isArray(body.data)).toBe(true);
+  for (const entry of body.data) {
+    expect(typeof entry.stage_name).toBe('string');
+    expect(entry.stage_name.length).toBeGreaterThan(0);
+    expect(typeof entry.avg_days).toBe('number');
+  }
+});
