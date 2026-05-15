@@ -490,8 +490,9 @@ test('messages: log a call via POST /call returns 201 with id and channel=call',
   const c = await makeContact(request, org.token, 'CallC');
   const r = await request.post('/api/v1/messages/call', { headers: authHeaders(org.token), data: { contact_id: c.id, direction: 'outbound', duration_seconds: 120, notes: 'Test call' } });
   expect(r.status()).toBe(201);
-  const body = await r.json() as { data: { id: string } };
+  const body = await r.json() as { data: { id: string; channel: string } };
   expect(body.data.id).toBeTruthy();
+  expect(body.data.channel).toBe('call');
 });
 test('messages: sent in-app message appears in contact messages sub-route', async ({ request }) => {
   const org = await registerOrg(request, 'msg28sub');

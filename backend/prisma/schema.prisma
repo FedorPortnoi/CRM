@@ -71,6 +71,7 @@ enum MessageChannel {
   sms
   in_app
   email
+  call
 }
 
 enum MessageStatus {

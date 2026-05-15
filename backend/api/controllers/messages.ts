@@ -237,7 +237,7 @@ async function logCall(
       contact_id,
       user_id: request.user.sub,
       direction: direction as MessageDirection,
-      channel: MessageChannel.in_app,
+      channel: MessageChannel.call,
       body: callBody,
       status: MessageStatus.delivered,
       ...(occurred_at ? { created_at: new Date(occurred_at) } : {}),
