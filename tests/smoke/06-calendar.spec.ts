@@ -249,14 +249,8 @@ test('GET /api/v1/calendar/sync/google/auth returns OAuth URL when configured', 
   const res = await request.get('/api/v1/calendar/sync/google/auth', {
     headers: { Authorization: `Bearer ${token}` },
   });
-  expect([200, 501]).toContain(res.status());
-  const body = await res.json();
-  if (res.status() === 200) {
-    expect(body.data.auth_url).toContain('accounts.google.com');
-    expect(body.data.redirect_uri).toContain('/api/v1/calendar/sync/google/callback');
-  } else {
-    expect(body.error.code).toBe('GOOGLE_OAUTH_NOT_CONFIGURED');
-  }
+  // Google sync was replaced by Yandex; this route no longer exists
+  expect(res.status()).toBe(404);
 });
 
 // ─── Rung 4 & 5: 48 new tests ────────────────────────────────────────────────

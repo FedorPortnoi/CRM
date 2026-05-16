@@ -23,7 +23,7 @@ const WorkflowConditionSchema = z.object({
 const WorkflowBodySchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
-  trigger: z.enum(['contact_created', 'deal_stage_changed', 'task_completed']),
+  trigger: z.enum(['contact_created', 'deal_stage_changed', 'task_completed', 'deal_won', 'deal_created', 'task_created']),
   conditions: z.union([
     z.array(WorkflowConditionSchema),
     z.object({ all: z.array(WorkflowConditionSchema) }),

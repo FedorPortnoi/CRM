@@ -101,12 +101,12 @@ export default async function calendarRoutes(fastify: FastifyInstance) {
 
   f.post('/:id/complete', { preHandler: [authenticate] }, CalendarController.markCompleted);
 
-  // Google Calendar sync
-  f.get('/sync/google/auth', { preHandler: [authenticate] }, CalendarController.googleOAuthStart);
-  f.get('/sync/google/callback', CalendarController.googleOAuthCallback); // OAuth redirect — no JWT
-  f.delete('/sync/google', { preHandler: [authenticate] }, CalendarController.googleDisconnect);
+  // Yandex Calendar sync
+  f.get('/sync/yandex/auth', { preHandler: [authenticate] }, CalendarController.yandexOAuthStart);
+  f.get('/sync/yandex/callback', CalendarController.yandexOAuthCallback); // OAuth redirect — no JWT
+  f.delete('/sync/yandex', { preHandler: [authenticate] }, CalendarController.yandexDisconnect);
   f.get('/sync/status', { preHandler: [authenticate] }, CalendarController.syncStatus);
 
-  // Google Calendar push notification webhook — no JWT auth
-  f.post('/webhooks/google', CalendarController.googleWebhook);
+  // Yandex CalDAV webhook (polling fallback endpoint)
+  f.post('/webhooks/yandex', CalendarController.yandexWebhook);
 }

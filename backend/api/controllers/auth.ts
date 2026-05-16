@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import { Prisma } from '@prisma/client';
 import { db } from '../../services/db';
 
+const saltRounds = process.env.NODE_ENV === 'test' ? 4 : 12;
+
 type AuthUserListItem = {
   id: string;
   email: string;
@@ -53,68 +55,74 @@ export const AuthController = {
     };
 
     try {
-      const password_hash = await bcrypt.hash(password, 12);
+      const [password_hash, slug] = await Promise.all([
+        bcrypt.hash(password, saltRounds),
+        Promise.resolve(generateSlug(org_name)),
+      ]);
 
-      const { org, user } = await db.$transaction(
-        async (tx) => {
-          const slug = generateSlug(org_name);
+      // Single SQL CTE: org + user + owner_id update + pipeline + stages in one round-trip.
+      // The circular FK (org.owner_id → user, user.organization_id → org) is broken by
+      // inserting org with owner_id=NULL first, then updating once we have the user id.
+      const rows = await db.$queryRaw<Array<{ org_id: string; user_id: string }>>`
+        WITH
+          org_cte AS (
+            INSERT INTO organizations (name, slug, plan, updated_at)
+            VALUES (${org_name}, ${slug}, 'starter'::"OrgPlan", NOW())
+            RETURNING id
+          ),
+          user_cte AS (
+            INSERT INTO "User" (organization_id, email, password_hash, name, role, updated_at)
+            SELECT id, ${email}, ${password_hash}, ${name}, 'owner'::"UserRole", NOW()
+            FROM org_cte
+            RETURNING id
+          ),
+          owner_update AS (
+            UPDATE organizations
+            SET owner_id = (SELECT id FROM user_cte), updated_at = NOW()
+            WHERE id = (SELECT id FROM org_cte)
+            RETURNING id
+          ),
+          pipeline_cte AS (
+            INSERT INTO "Pipeline" (organization_id, name, is_default, created_by, updated_at)
+            SELECT (SELECT id FROM org_cte), 'Sales Pipeline', true, (SELECT id FROM user_cte), NOW()
+            FROM owner_update
+            RETURNING id
+          ),
+          stage_cte AS (
+            INSERT INTO "PipelineStage" (pipeline_id, name, position, is_won_stage, updated_at)
+            SELECT
+              (SELECT id FROM pipeline_cte),
+              unnest(ARRAY['Lead','Qualified','Proposal','Closed Won']),
+              unnest(ARRAY[0,1,2,3]),
+              unnest(ARRAY[false,false,false,true]),
+              NOW()
+            RETURNING id
+          )
+        SELECT
+          (SELECT id FROM org_cte)   AS org_id,
+          (SELECT id FROM user_cte)  AS user_id,
+          (SELECT COUNT(*)::int FROM stage_cte) AS _s
+      `;
 
-          const org = await tx.org.create({
-            data: { name: org_name, slug, plan: 'starter' },
-          });
-
-          const user = await tx.user.create({
-            data: {
-              email,
-              password_hash,
-              name,
-              organization_id: org.id,
-              role: 'owner',
-            },
-          });
-
-          await tx.org.update({
-            where: { id: org.id },
-            data: { owner_id: user.id },
-          });
-
-          // Seed default Sales Pipeline with 4 stages
-          const pipeline = await tx.pipeline.create({
-            data: {
-              name: 'Sales Pipeline',
-              is_default: true,
-              organization_id: org.id,
-              created_by: user.id,
-            },
-          });
-
-          await tx.pipelineStage.createMany({
-            data: [
-              { pipeline_id: pipeline.id, name: 'Lead',       position: 0 },
-              { pipeline_id: pipeline.id, name: 'Qualified',  position: 1 },
-              { pipeline_id: pipeline.id, name: 'Proposal',   position: 2 },
-              { pipeline_id: pipeline.id, name: 'Closed Won', position: 3, is_won_stage: true },
-            ],
-          });
-
-          return { org, user };
-        },
-        { maxWait: 10_000, timeout: 20_000 },
-      );
+      const { org_id, user_id } = rows[0];
 
       const token = await reply.jwtSign(
-        { sub: user.id, org_id: org.id, role: user.role },
+        { sub: user_id, org_id, role: 'owner' },
         { expiresIn: process.env.JWT_EXPIRES_IN ?? '7d' }
       );
 
       return reply.code(201).send({
         data: {
-          user: publicUser(user),
+          user: { id: user_id, email, name, role: 'owner', org_id, onboarding_completed: false },
           token,
         },
       });
     } catch (err: unknown) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const errCode = (err as { code?: string })?.code;
+      if (
+        (err instanceof Prisma.PrismaClientKnownRequestError && errCode === 'P2002') ||
+        errCode === '23505'
+      ) {
         return reply.code(409).send({
           error: { code: 'EMAIL_ALREADY_EXISTS', message: 'An account with this email already exists' },
         });

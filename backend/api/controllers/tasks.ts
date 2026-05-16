@@ -190,6 +190,14 @@ async function create(
     },
   });
 
+  await evaluateWorkflows({
+    organizationId: request.user.org_id,
+    trigger: WorkflowTrigger.task_created,
+    record: task as unknown as Record<string, unknown>,
+    userId: request.user.sub,
+    triggerRecordId: task.id,
+  });
+
   reply.status(201).send({ data: task, meta: {} });
 }
 

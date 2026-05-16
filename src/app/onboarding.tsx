@@ -8,19 +8,39 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
-import { CheckCircle2, ClipboardList, UserPlus, Workflow } from 'lucide-react-native';
+import { CheckCircle2, Kanban, Users, Zap } from 'lucide-react-native';
 import { useUserStore } from '../store/userStore';
 
-const steps = [
-  { icon: UserPlus, title: 'Add your first contact' },
-  { icon: Workflow, title: 'Move a deal through the board' },
-  { icon: ClipboardList, title: 'Set the next follow-up' },
+const slides = [
+  {
+    Icon: Zap,
+    title: 'Welcome to CRM',
+    subtitle: 'Your mobile sales command center',
+  },
+  {
+    Icon: Users,
+    title: 'Capture every lead',
+    subtitle: 'Add contacts and track conversations in one tap',
+  },
+  {
+    Icon: Kanban,
+    title: 'Close deals faster',
+    subtitle: 'Move deals through your pipeline with a swipe',
+  },
+  {
+    Icon: CheckCircle2,
+    title: "You're all set",
+    subtitle: "Let's build your pipeline",
+  },
 ];
 
 export default function OnboardingScreen(): JSX.Element {
   const completeOnboarding = useUserStore((s) => s.completeOnboarding);
+  const [step, setStep] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isLast = step === slides.length - 1;
 
   const finish = async (): Promise<void> => {
     try {
@@ -35,113 +55,85 @@ export default function OnboardingScreen(): JSX.Element {
     }
   };
 
+  const { Icon, title, subtitle } = slides[step]!;
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
-        <Text style={styles.title}>Start clean</Text>
-        <View style={styles.steps}>
-          {steps.map((step, index) => {
-            const Icon = step.icon;
-            return (
-              <View key={step.title} style={styles.step}>
-                <View style={styles.stepIcon}>
-                  <Icon size={22} color="#1A73E8" />
-                </View>
-                <Text style={styles.stepNumber}>{index + 1}</Text>
-                <Text style={styles.stepTitle}>{step.title}</Text>
-              </View>
-            );
-          })}
+        <View style={styles.slide}>
+          <View style={styles.iconWrap}>
+            <Icon size={56} color="#1A73E8" />
+          </View>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
+        </View>
+
+        <View style={styles.dots}>
+          {slides.map((_, i) => (
+            <View key={i} style={[styles.dot, i === step && styles.dotActive]} />
+          ))}
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() => { void finish(); }}
+          style={styles.primary}
+          onPress={() => {
+            if (isLast) { void finish(); }
+            else { setStep(step + 1); }
+          }}
           disabled={isSaving}
           accessibilityRole="button"
         >
           {isSaving ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <>
-              <CheckCircle2 size={20} color="#FFFFFF" />
-              <Text style={styles.primaryText}>Enter CRM</Text>
-            </>
+            <Text style={styles.primaryText}>{isLast ? 'Get Started' : 'Next'}</Text>
           )}
         </TouchableOpacity>
+
+        {!isLast && (
+          <TouchableOpacity
+            style={styles.skip}
+            onPress={() => { void finish(); }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.skipText}>Skip</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#F7F8FA',
-  },
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 24,
-  },
-  steps: {
-    gap: 12,
-  },
-  step: {
-    minHeight: 72,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  stepIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 8,
+  safe: { flex: 1, backgroundColor: '#F7F8FA' },
+  container: { flex: 1, padding: 24, justifyContent: 'flex-end', paddingBottom: 48 },
+  slide: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  iconWrap: {
+    width: 112,
+    height: 112,
+    borderRadius: 28,
     backgroundColor: '#E8F0FE',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginBottom: 32,
   },
-  stepNumber: {
-    width: 24,
-    color: '#6B7280',
-    fontWeight: '700',
-  },
-  stepTitle: {
-    flex: 1,
-    color: '#111827',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  error: {
-    marginTop: 16,
-    color: '#C5221F',
-  },
-  primaryButton: {
+  title: { fontSize: 28, fontWeight: '700', color: '#111827', textAlign: 'center', marginBottom: 12 },
+  subtitle: { fontSize: 16, color: '#6B7280', textAlign: 'center', lineHeight: 24 },
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 32 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#E5E7EB' },
+  dotActive: { backgroundColor: '#1A73E8', width: 24 },
+  error: { color: '#C5221F', textAlign: 'center', marginBottom: 12 },
+  primary: {
     height: 52,
     borderRadius: 8,
     backgroundColor: '#1A73E8',
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 24,
+    marginBottom: 12,
   },
-  primaryText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  primaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  skip: { alignItems: 'center', paddingVertical: 8 },
+  skipText: { color: '#6B7280', fontSize: 14 },
 });

@@ -9,4 +9,10 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:3000',
   },
+  webServer: {
+    command: 'npm run backend:dev',
+    url: 'http://localhost:3000/health',
+    reuseExistingServer: true,
+    env: { NODE_ENV: 'test' },
+  },
 });

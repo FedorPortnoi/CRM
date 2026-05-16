@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import formbody from '@fastify/formbody';
 import jwt from '@fastify/jwt';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import authRoutes from './api/routes/auth';
@@ -11,6 +12,7 @@ import calendarRoutes from './api/routes/calendar';
 import analyticsRoutes from './api/routes/analytics';
 import notificationsRoutes from './api/routes/notifications';
 import workflowsRoutes from './api/routes/workflows';
+import syncRoutes from './api/routes/sync';
 
 async function start() {
   const useMcp = process.env.ENABLE_MCP === 'true';
@@ -22,6 +24,7 @@ async function start() {
   server.setSerializerCompiler(serializerCompiler);
 
   await server.register(cors, { origin: true });
+  await server.register(formbody);
   await server.register(jwt, { secret: process.env.JWT_SECRET ?? '' });
 
   await server.register(authRoutes, { prefix: '/api/v1/auth' });
@@ -33,6 +36,7 @@ async function start() {
   await server.register(analyticsRoutes, { prefix: '/api/v1/analytics' });
   await server.register(notificationsRoutes, { prefix: '/api/v1/notifications' });
   await server.register(workflowsRoutes, { prefix: '/api/v1/workflows' });
+  await server.register(syncRoutes, { prefix: '/api/v1/sync' });
 
   server.get('/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() };

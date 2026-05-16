@@ -13,9 +13,9 @@ import { Save } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 
-type Trigger = 'contact_created' | 'deal_stage_changed' | 'task_completed';
+type Trigger = 'contact_created' | 'deal_stage_changed' | 'task_completed' | 'deal_won' | 'deal_created' | 'task_created';
 
-const triggers: Trigger[] = ['contact_created', 'deal_stage_changed', 'task_completed'];
+const triggers: Trigger[] = ['contact_created', 'deal_stage_changed', 'task_completed', 'deal_won', 'deal_created', 'task_created'];
 
 export default function NewWorkflowScreen(): JSX.Element {
   const token = useUserStore((s) => s.token);

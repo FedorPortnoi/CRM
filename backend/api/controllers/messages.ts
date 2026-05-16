@@ -1,7 +1,23 @@
+import crypto from 'crypto';
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { MessageDirection, MessageChannel, MessageStatus, Prisma } from '@prisma/client';
 import twilio from 'twilio';
 import { db } from '../../services/db';
+
+function verifyTwilioSignature(
+  authToken: string,
+  twilioSignature: string,
+  url: string,
+  params: Record<string, string>,
+): boolean {
+  const data = url + Object.keys(params).sort().map(k => k + params[k]).join('');
+  const expected = crypto.createHmac('sha1', authToken).update(data).digest('base64');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(twilioSignature));
+  } catch {
+    return false;
+  }
+}
 
 // --- Local request types ---
 
@@ -274,6 +290,20 @@ async function twilioInboundWebhook(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (authToken) {
+    const sig = request.headers['x-twilio-signature'] as string | undefined;
+    if (!sig) {
+      reply.status(403).send('Missing Twilio signature');
+      return;
+    }
+    const url = `${request.protocol}://${request.hostname}${request.url}`;
+    if (!verifyTwilioSignature(authToken, sig, url, request.body as Record<string, string>)) {
+      reply.status(403).send('Invalid Twilio signature');
+      return;
+    }
+  }
+
   try {
     const body = request.body as Record<string, unknown>;
     const from = body['From'];
@@ -301,13 +331,30 @@ async function twilioInboundWebhook(
     // silently ignore errors - Twilio requires 200 regardless
   }
 
-  reply.status(200).send({ received: true });
+  reply
+    .status(200)
+    .header('Content-Type', 'application/xml')
+    .send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
 }
 
 async function twilioStatusWebhook(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (authToken) {
+    const sig = request.headers['x-twilio-signature'] as string | undefined;
+    if (!sig) {
+      reply.status(403).send('Missing Twilio signature');
+      return;
+    }
+    const url = `${request.protocol}://${request.hostname}${request.url}`;
+    if (!verifyTwilioSignature(authToken, sig, url, request.body as Record<string, string>)) {
+      reply.status(403).send('Invalid Twilio signature');
+      return;
+    }
+  }
+
   try {
     const body = request.body as Record<string, unknown>;
     const sid = body['MessageSid'];

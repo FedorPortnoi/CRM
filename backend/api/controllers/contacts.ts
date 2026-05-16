@@ -212,7 +212,7 @@ export const ContactsController = {
       triggerRecordId: contact.id,
     });
 
-    return reply.code(201).send({ data: contact });
+    return reply.code(201).send({ data: contact, meta: {} });
   },
 
   getById: async (request: FastifyRequest, reply: FastifyReply) => {

@@ -43,25 +43,31 @@ type AvailabilityQuery = {
   duration_minutes: number;
 };
 
-type GoogleCallbackQuery = {
+type YandexCallbackQuery = {
   code?: string;
   state?: string;
   error?: string;
 };
 
-type GoogleOAuthState = {
+type OAuthState = {
   sub: string;
   org_id: string;
   exp: number;
 };
 
-type GoogleTokenResponse = {
+type YandexTokenResponse = {
   access_token: string;
   refresh_token?: string;
   expires_in?: number;
   token_type?: string;
-  scope?: string;
 };
+
+type YandexUserInfo = {
+  login: string;
+  id: string;
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function contactBelongsToOrg(contactId: string, orgId: string): Promise<boolean> {
   const contact = await db.contact.findFirst({
@@ -87,14 +93,14 @@ function base64Url(input: string | Buffer): string {
   return Buffer.from(input).toString('base64url');
 }
 
-function signState(payload: GoogleOAuthState): string {
+function signState(payload: OAuthState): string {
   const encoded = base64Url(JSON.stringify(payload));
   const secret = process.env.JWT_SECRET ?? '';
   const signature = crypto.createHmac('sha256', secret).update(encoded).digest('base64url');
   return `${encoded}.${signature}`;
 }
 
-function verifyState(state: string): GoogleOAuthState | null {
+function verifyState(state: string): OAuthState | null {
   const [encoded, signature] = state.split('.');
   if (!encoded || !signature) return null;
 
@@ -113,7 +119,7 @@ function verifyState(state: string): GoogleOAuthState | null {
   }
 
   try {
-    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as GoogleOAuthState;
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as OAuthState;
     if (payload.exp < Date.now()) return null;
     return payload;
   } catch {
@@ -121,35 +127,43 @@ function verifyState(state: string): GoogleOAuthState | null {
   }
 }
 
-function googleRedirectUri(request: FastifyRequest): string {
-  if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
+function yandexConfigured(): boolean {
+  return Boolean(process.env.YANDEX_CLIENT_ID && process.env.YANDEX_CLIENT_SECRET);
+}
+
+function yandexRedirectUri(request: FastifyRequest): string {
+  if (process.env.YANDEX_REDIRECT_URI) return process.env.YANDEX_REDIRECT_URI;
   const host = request.headers.host ?? `localhost:${process.env.PORT ?? '3000'}`;
-  return `${request.protocol}://${host}/api/v1/calendar/sync/google/callback`;
+  return `${request.protocol}://${host}/api/v1/calendar/sync/yandex/callback`;
 }
 
-function googleConfigured(): boolean {
-  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
-}
-
-async function exchangeGoogleToken(params: Record<string, string>): Promise<GoogleTokenResponse> {
-  const response = await fetch('https://oauth2.googleapis.com/token', {
+async function exchangeYandexToken(params: Record<string, string>): Promise<YandexTokenResponse> {
+  const response = await fetch('https://oauth.yandex.ru/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params).toString(),
   });
 
-  const body = await response.json() as GoogleTokenResponse & { error?: string; error_description?: string };
+  const body = await response.json() as YandexTokenResponse & { error?: string; error_description?: string };
 
   if (!response.ok) {
-    throw new Error(body.error_description ?? body.error ?? `Google token exchange failed with ${response.status}`);
+    throw new Error(body.error_description ?? body.error ?? `Yandex token exchange failed with ${response.status}`);
   }
 
   return body;
 }
 
-async function getValidGoogleSync(userId: string) {
+async function getYandexUsername(accessToken: string): Promise<string> {
+  const response = await fetch('https://login.yandex.ru/info?format=json', {
+    headers: { Authorization: `OAuth ${accessToken}` },
+  });
+  const body = await response.json() as YandexUserInfo;
+  return body.login;
+}
+
+async function getValidYandexSync(userId: string) {
   const sync = await db.userCalendarSync.findUnique({
-    where: { user_id_provider: { user_id: userId, provider: 'google' } },
+    where: { user_id_provider: { user_id: userId, provider: 'yandex' } },
   });
 
   if (!sync) return null;
@@ -159,15 +173,15 @@ async function getValidGoogleSync(userId: string) {
     return sync;
   }
 
-  const token = await exchangeGoogleToken({
-    client_id: process.env.GOOGLE_CLIENT_ID ?? '',
-    client_secret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+  const token = await exchangeYandexToken({
+    client_id: process.env.YANDEX_CLIENT_ID ?? '',
+    client_secret: process.env.YANDEX_CLIENT_SECRET ?? '',
     refresh_token: sync.refresh_token,
     grant_type: 'refresh_token',
   });
 
   return db.userCalendarSync.update({
-    where: { user_id_provider: { user_id: userId, provider: 'google' } },
+    where: { user_id_provider: { user_id: userId, provider: 'yandex' } },
     data: {
       access_token: token.access_token,
       expires_at: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : sync.expires_at,
@@ -175,72 +189,85 @@ async function getValidGoogleSync(userId: string) {
   });
 }
 
-async function syncGoogleEventForUser(userId: string | null | undefined, eventId: string): Promise<void> {
-  if (!userId || !googleConfigured()) return;
+function buildIcal(event: {
+  id: string;
+  title: string;
+  start_time: Date;
+  end_time: Date;
+  location?: string | null;
+  description?: string | null;
+}): string {
+  const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace('.000', '');
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//CRM//CRM//EN',
+    'BEGIN:VEVENT',
+    `UID:${event.id}`,
+    `DTSTART:${fmt(event.start_time)}`,
+    `DTEND:${fmt(event.end_time)}`,
+    `SUMMARY:${event.title}`,
+    event.location ? `LOCATION:${event.location}` : '',
+    event.description ? `DESCRIPTION:${event.description.replace(/\n/g, '\\n')}` : '',
+    `DTSTAMP:${fmt(new Date())}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].filter(Boolean);
+  return lines.join('\r\n');
+}
 
-  const sync = await getValidGoogleSync(userId);
+async function syncYandexEventForUser(userId: string | null | undefined, eventId: string): Promise<void> {
+  if (!userId || !yandexConfigured()) return;
+
+  const sync = await getValidYandexSync(userId);
   if (!sync) return;
 
-  const event = await db.calendarEvent.findUnique({
-    where: { id: eventId },
-    include: {
-      contact: { select: { first_name: true, last_name: true, email: true } },
-    },
-  });
-
+  const event = await db.calendarEvent.findUnique({ where: { id: eventId } });
   if (!event || event.status === CalendarEventStatus.cancelled) return;
 
-  const calendarId = sync.google_calendar_id ?? 'primary';
-  const payload = {
-    summary: event.title,
-    description: event.description ?? undefined,
-    location: event.location ?? undefined,
-    start: { dateTime: event.start_time.toISOString() },
-    end: { dateTime: event.end_time.toISOString() },
-    attendees: event.contact?.email ? [{ email: event.contact.email }] : undefined,
-  };
+  const username = sync.yandex_username;
+  const calendarSlug = sync.yandex_calendar_slug ?? 'home';
+  if (!username) return;
 
-  const url = event.google_event_id
-    ? `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(event.google_event_id)}`
-    : `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
+  const eventUid = event.ext_event_uid ?? event.id;
+  const caldavUrl = `https://caldav.yandex.ru/calendars/${username}/${calendarSlug}/${eventUid}.ics`;
 
-  const response = await fetch(url, {
-    method: event.google_event_id ? 'PATCH' : 'POST',
+  const icalContent = buildIcal(event);
+
+  const response = await fetch(caldavUrl, {
+    method: 'PUT',
     headers: {
-      Authorization: `Bearer ${sync.access_token}`,
-      'Content-Type': 'application/json',
+      Authorization: `OAuth ${sync.access_token}`,
+      'Content-Type': 'text/calendar; charset=utf-8',
     },
-    body: JSON.stringify(payload),
+    body: icalContent,
   });
 
-  if (!response.ok) return;
-
-  const googleEvent = await response.json() as { id?: string };
-  if (googleEvent.id && googleEvent.id !== event.google_event_id) {
+  if (response.ok && !event.ext_event_uid) {
     await db.calendarEvent.update({
       where: { id: event.id },
-      data: { google_event_id: googleEvent.id, google_calendar_id: calendarId },
+      data: { ext_event_uid: eventUid, ext_calendar_uid: `${username}/${calendarSlug}` },
     });
   }
 }
 
-async function deleteGoogleEventForUser(userId: string | null | undefined, eventId: string): Promise<void> {
-  if (!userId || !googleConfigured()) return;
+async function deleteYandexEventForUser(userId: string | null | undefined, eventId: string): Promise<void> {
+  if (!userId || !yandexConfigured()) return;
 
   const event = await db.calendarEvent.findUnique({ where: { id: eventId } });
-  if (!event?.google_event_id) return;
+  if (!event?.ext_event_uid) return;
 
-  const sync = await getValidGoogleSync(userId);
-  if (!sync) return;
+  const sync = await getValidYandexSync(userId);
+  if (!sync?.yandex_username) return;
 
-  const calendarId = event.google_calendar_id ?? sync.google_calendar_id ?? 'primary';
-  await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(event.google_event_id)}`,
-    {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${sync.access_token}` },
-    },
-  );
+  const username = sync.yandex_username;
+  const calendarSlug = sync.yandex_calendar_slug ?? 'home';
+  const caldavUrl = `https://caldav.yandex.ru/calendars/${username}/${calendarSlug}/${event.ext_event_uid}.ics`;
+
+  await fetch(caldavUrl, {
+    method: 'DELETE',
+    headers: { Authorization: `OAuth ${sync.access_token}` },
+  });
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -335,7 +362,7 @@ async function create(
     },
   });
 
-  await syncGoogleEventForUser(request.user.sub, event.id);
+  await syncYandexEventForUser(request.user.sub, event.id);
 
   reply.status(201).send({ data: event, meta: {} });
 }
@@ -427,7 +454,7 @@ async function update(
     },
   });
 
-  await syncGoogleEventForUser(request.user.sub, updated.id);
+  await syncYandexEventForUser(request.user.sub, updated.id);
 
   reply.send({ data: updated, meta: {} });
 }
@@ -457,7 +484,7 @@ async function cancel(
     data: { status: CalendarEventStatus.cancelled },
   });
 
-  await deleteGoogleEventForUser(request.user.sub, updated.id);
+  await deleteYandexEventForUser(request.user.sub, updated.id);
 
   reply.send({ data: updated, meta: {} });
 }
@@ -559,15 +586,15 @@ async function getAvailability(
   reply.send({ data: { busy_slots }, meta: {} });
 }
 
-async function googleOAuthStart(
+async function yandexOAuthStart(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  if (!googleConfigured()) {
+  if (!yandexConfigured()) {
     reply.status(501).send({
       error: {
-        code: 'GOOGLE_OAUTH_NOT_CONFIGURED',
-        message: 'Google Calendar sync requires OAuth credentials. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.',
+        code: 'YANDEX_OAUTH_NOT_CONFIGURED',
+        message: 'Yandex Calendar sync requires OAuth credentials. Set YANDEX_CLIENT_ID and YANDEX_CLIENT_SECRET in .env.',
       },
     });
     return;
@@ -578,40 +605,38 @@ async function googleOAuthStart(
     org_id: request.user.org_id,
     exp: Date.now() + 10 * 60 * 1000,
   });
-  const redirectUri = googleRedirectUri(request);
-  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-  authUrl.searchParams.set('client_id', process.env.GOOGLE_CLIENT_ID ?? '');
-  authUrl.searchParams.set('redirect_uri', redirectUri);
+  const redirectUri = yandexRedirectUri(request);
+  const authUrl = new URL('https://oauth.yandex.ru/authorize');
   authUrl.searchParams.set('response_type', 'code');
-  authUrl.searchParams.set('access_type', 'offline');
-  authUrl.searchParams.set('prompt', 'consent');
-  authUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.events');
+  authUrl.searchParams.set('client_id', process.env.YANDEX_CLIENT_ID ?? '');
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('force_confirm', 'yes');
   authUrl.searchParams.set('state', state);
 
   reply.send({ data: { auth_url: authUrl.toString(), redirect_uri: redirectUri }, meta: {} });
 }
 
-async function googleOAuthCallback(
+async function yandexOAuthCallback(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { code, state, error } = request.query as GoogleCallbackQuery;
+  const { code, state, error } = request.query as YandexCallbackQuery;
 
   if (error) {
-    reply.status(400).send({ error: { code: 'GOOGLE_OAUTH_DENIED', message: error } });
+    reply.status(400).send({ error: { code: 'YANDEX_OAUTH_DENIED', message: error } });
     return;
   }
 
   if (!code || !state) {
-    reply.status(400).send({ error: { code: 'GOOGLE_OAUTH_INVALID_CALLBACK', message: 'Missing code or state' } });
+    reply.status(400).send({ error: { code: 'YANDEX_OAUTH_INVALID_CALLBACK', message: 'Missing code or state' } });
     return;
   }
 
-  if (!googleConfigured()) {
+  if (!yandexConfigured()) {
     reply.status(501).send({
       error: {
-        code: 'GOOGLE_OAUTH_NOT_CONFIGURED',
-        message: 'Google Calendar OAuth callback requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.',
+        code: 'YANDEX_OAUTH_NOT_CONFIGURED',
+        message: 'Yandex Calendar OAuth callback requires YANDEX_CLIENT_ID and YANDEX_CLIENT_SECRET in .env.',
       },
     });
     return;
@@ -619,63 +644,67 @@ async function googleOAuthCallback(
 
   const payload = verifyState(state);
   if (!payload) {
-    reply.status(400).send({ error: { code: 'GOOGLE_OAUTH_INVALID_STATE', message: 'Invalid or expired OAuth state' } });
+    reply.status(400).send({ error: { code: 'YANDEX_OAUTH_INVALID_STATE', message: 'Invalid or expired OAuth state' } });
     return;
   }
 
-  const existing = await db.userCalendarSync.findUnique({
-    where: { user_id_provider: { user_id: payload.sub, provider: 'google' } },
-  });
-  const token = await exchangeGoogleToken({
+  const token = await exchangeYandexToken({
     code,
-    client_id: process.env.GOOGLE_CLIENT_ID ?? '',
-    client_secret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-    redirect_uri: googleRedirectUri(request),
+    client_id: process.env.YANDEX_CLIENT_ID ?? '',
+    client_secret: process.env.YANDEX_CLIENT_SECRET ?? '',
+    redirect_uri: yandexRedirectUri(request),
     grant_type: 'authorization_code',
   });
 
+  const yandexLogin = await getYandexUsername(token.access_token);
+
+  const existing = await db.userCalendarSync.findUnique({
+    where: { user_id_provider: { user_id: payload.sub, provider: 'yandex' } },
+  });
+
   await db.userCalendarSync.upsert({
-    where: { user_id_provider: { user_id: payload.sub, provider: 'google' } },
+    where: { user_id_provider: { user_id: payload.sub, provider: 'yandex' } },
     create: {
       user_id: payload.sub,
-      provider: 'google',
+      provider: 'yandex',
       access_token: token.access_token,
       refresh_token: token.refresh_token,
       expires_at: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined,
-      google_calendar_id: 'primary',
+      yandex_username: yandexLogin,
+      yandex_calendar_slug: existing?.yandex_calendar_slug ?? 'home',
     },
     update: {
       access_token: token.access_token,
       refresh_token: token.refresh_token ?? existing?.refresh_token,
       expires_at: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined,
-      google_calendar_id: existing?.google_calendar_id ?? 'primary',
+      yandex_username: yandexLogin,
     },
   });
 
-  const successUrl = process.env.GOOGLE_CALENDAR_SUCCESS_URL;
+  const successUrl = process.env.YANDEX_CALENDAR_SUCCESS_URL;
   if (successUrl) {
     reply.redirect(successUrl);
     return;
   }
 
-  reply.type('text/html').send('<html><body>Google Calendar connected. You can close this window.</body></html>');
+  reply.type('text/html').send('<html><body>Yandex Calendar connected. You can close this window.</body></html>');
 }
 
-async function googleDisconnect(
+async function yandexDisconnect(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
   const sync = await db.userCalendarSync.findUnique({
-    where: { user_id_provider: { user_id: request.user.sub, provider: 'google' } },
+    where: { user_id_provider: { user_id: request.user.sub, provider: 'yandex' } },
   });
 
   if (!sync) {
-    reply.status(404).send({ error: { code: 'GOOGLE_SYNC_NOT_CONNECTED', message: 'Google Calendar is not connected for this user' } });
+    reply.status(404).send({ error: { code: 'YANDEX_SYNC_NOT_CONNECTED', message: 'Yandex Calendar is not connected for this user' } });
     return;
   }
 
   await db.userCalendarSync.delete({
-    where: { user_id_provider: { user_id: request.user.sub, provider: 'google' } },
+    where: { user_id_provider: { user_id: request.user.sub, provider: 'yandex' } },
   });
 
   reply.send({ data: { disconnected: true }, meta: {} });
@@ -686,29 +715,24 @@ async function syncStatus(
   reply: FastifyReply,
 ): Promise<void> {
   const sync = await db.userCalendarSync.findUnique({
-    where: { user_id_provider: { user_id: request.user.sub, provider: 'google' } },
+    where: { user_id_provider: { user_id: request.user.sub, provider: 'yandex' } },
   });
 
   reply.send({
     data: {
       connected: sync !== null,
-      google_calendar_id: sync?.google_calendar_id ?? null,
+      yandex_username: sync?.yandex_username ?? null,
+      yandex_calendar_slug: sync?.yandex_calendar_slug ?? null,
       expires_at: sync?.expires_at ?? null,
-      webhook_expiry: sync?.webhook_expiry ?? null,
     },
     meta: {},
   });
 }
 
-async function googleWebhook(
-  request: FastifyRequest,
+async function yandexWebhook(
+  _request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const headers = request.headers as Record<string, string>;
-  request.log.info(
-    { channelId: headers['x-goog-channel-id'], resourceId: headers['x-goog-resource-id'] },
-    'Google Calendar push notification received',
-  );
   reply.send({ data: { received: true }, meta: {} });
 }
 
@@ -723,9 +747,9 @@ export const CalendarController = {
   addPostMeetingNotes,
   markCompleted,
   getAvailability,
-  googleOAuthStart,
-  googleOAuthCallback,
-  googleDisconnect,
+  yandexOAuthStart,
+  yandexOAuthCallback,
+  yandexDisconnect,
   syncStatus,
-  googleWebhook,
+  yandexWebhook,
 };

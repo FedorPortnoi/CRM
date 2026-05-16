@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import * as offlineQueue from './offlineQueue';
+import { useSyncStore } from '../store/syncStore';
 
 let previouslyOnline: boolean | null = null;
 
 NetInfo.addEventListener((state: NetInfoState) => {
   const isOnline: boolean = state.isConnected === true && state.isInternetReachable !== false;
+  const { setOffline, setSyncing, setSynced } = useSyncStore.getState();
 
   if (previouslyOnline === false && isOnline === true) {
-    void offlineQueue.flush();
+    setSyncing();
+    void offlineQueue.flush().then(() => setSynced());
+  } else if (!isOnline) {
+    setOffline();
   }
 
   previouslyOnline = isOnline;

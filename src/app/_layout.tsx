@@ -8,6 +8,7 @@ import { useUserStore } from '../store/userStore';
 import { registerDevicePushToken } from '../utils/notifications';
 import { queryClient, asyncStoragePersister } from '../utils/queryClient';
 import OfflineBanner from '../components/OfflineBanner';
+import { registerBackgroundSync } from '../utils/backgroundSync';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -27,6 +28,7 @@ export default function RootLayout() {
     void restoreSession().finally(() => {
       setIsRestoring(false);
     });
+    void registerBackgroundSync();
   }, []);
 
   useEffect(() => {

@@ -172,6 +172,14 @@ async function create(
     include: dealInclude,
   });
 
+  await evaluateWorkflows({
+    organizationId: request.user.org_id,
+    trigger: WorkflowTrigger.deal_created,
+    record: deal as unknown as Record<string, unknown>,
+    userId: request.user.sub,
+    triggerRecordId: deal.id,
+  });
+
   reply.status(201).send({ data: deal, meta: {} });
 }
 
@@ -405,6 +413,14 @@ async function markWon(
       actual_close: actual_close ? new Date(actual_close) : new Date(),
     },
     include: dealInclude,
+  });
+
+  await evaluateWorkflows({
+    organizationId: request.user.org_id,
+    trigger: WorkflowTrigger.deal_won,
+    record: updated as unknown as Record<string, unknown>,
+    userId: request.user.sub,
+    triggerRecordId: updated.id,
   });
 
   reply.send({ data: updated, meta: {} });

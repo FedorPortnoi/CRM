@@ -98,6 +98,9 @@ enum WorkflowTrigger {
   contact_created
   deal_stage_changed
   task_completed
+  deal_won
+  deal_created
+  task_created
 }
 
 enum WorkflowRunStatus {
@@ -325,8 +328,8 @@ model CalendarEvent {
   notes                 String?
   completed_at          DateTime?
   post_meeting_prompted Boolean             @default(false)
-  google_event_id       String?
-  google_calendar_id    String?
+  ext_event_uid         String?
+  ext_calendar_uid      String?
   is_example_data       Boolean             @default(false)
   created_at            DateTime            @default(now())
   updated_at            DateTime            @updatedAt
@@ -350,10 +353,9 @@ model UserCalendarSync {
   access_token        String
   refresh_token       String?
   expires_at          DateTime?
-  google_calendar_id  String?
-  webhook_channel_id  String?
-  webhook_resource_id String?
-  webhook_expiry      DateTime?
+  ext_calendar_uid    String?
+  yandex_username     String?
+  yandex_calendar_slug String?
   created_at          DateTime  @default(now())
   updated_at          DateTime  @updatedAt
 

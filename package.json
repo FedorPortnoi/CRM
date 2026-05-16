@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",
+    "@fastify/formbody": "^8.0.2",
     "@fastify/jwt": "^9.0.0",
     "@fastify/multipart": "^10.0.0",
     "@fastify/rate-limit": "^10.0.0",
@@ -40,6 +41,7 @@
     "date-fns": "^3.6.0",
     "expo": "~51.0.0",
     "expo-av": "~14.0.0",
+    "expo-background-fetch": "^55.0.16",
     "expo-calendar": "~13.0.0",
     "expo-camera": "~15.0.0",
     "expo-contacts": "~13.0.0",
@@ -51,6 +53,7 @@
     "expo-secure-store": "~13.0.0",
     "expo-server-sdk": "^6.1.0",
     "expo-speech": "~12.0.0",
+    "expo-task-manager": "^55.0.16",
     "fastify": "^5.0.0",
     "fastify-type-provider-zod": "^4.0.2",
     "lucide-react-native": "^1.14.0",
