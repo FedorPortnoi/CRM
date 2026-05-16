@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Plus } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 
@@ -129,20 +130,22 @@ function SkeletonRows(): JSX.Element {
 interface ErrorStateProps {
   message: string;
   onRetry: () => void;
+  retryLabel: string;
 }
 
-function ErrorState({ message, onRetry }: ErrorStateProps): JSX.Element {
+function ErrorState({ message, onRetry, retryLabel }: ErrorStateProps): JSX.Element {
   return (
     <View style={styles.centerState}>
       <Text style={styles.errorText}>{message}</Text>
       <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
-        <Text style={styles.retryText}>Retry</Text>
+        <Text style={styles.retryText}>{retryLabel}</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 export default function CalendarAgendaScreen(): JSX.Element {
+  const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -175,13 +178,13 @@ export default function CalendarAgendaScreen(): JSX.Element {
         const body = (await res.json()) as CalendarResponse;
         setEvents(body.data);
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Failed to load calendar');
+        setError(e instanceof Error ? e.message : t('errors.serverError'));
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
       }
     },
-    [token],
+    [token, t],
   );
 
   useEffect(() => {
@@ -198,14 +201,14 @@ export default function CalendarAgendaScreen(): JSX.Element {
     <>
       <Stack.Screen
         options={{
-          title: 'Calendar',
+          title: t('calendar.title'),
           headerShown: true,
           headerRight: (): JSX.Element => (
             <TouchableOpacity
               onPress={() => router.push('/calendar/new')}
               style={styles.headerButton}
               accessibilityRole="button"
-              accessibilityLabel="New calendar event"
+              accessibilityLabel={t('calendar.newEvent')}
             >
               <Plus size={24} color="#007AFF" />
             </TouchableOpacity>
@@ -226,32 +229,32 @@ export default function CalendarAgendaScreen(): JSX.Element {
       >
         <View style={styles.pageHeader}>
           <View>
-            <Text style={styles.pageTitle}>Agenda</Text>
-            <Text style={styles.pageSubtitle}>Next 90 days</Text>
+            <Text style={styles.pageTitle}>{t('calendar.agenda')}</Text>
+            <Text style={styles.pageSubtitle}>{t('calendar.next90Days')}</Text>
           </View>
           <TouchableOpacity
             style={styles.newButton}
             onPress={() => router.push('/calendar/new')}
             accessibilityRole="button"
           >
-            <Text style={styles.newButtonText}>New Event</Text>
+            <Text style={styles.newButtonText}>{t('calendar.newEvent')}</Text>
           </TouchableOpacity>
         </View>
 
         {isLoading ? (
           <SkeletonRows />
         ) : error ? (
-          <ErrorState message={error} onRetry={handleRetry} />
+          <ErrorState message={error} onRetry={handleRetry} retryLabel={t('common.retry')} />
         ) : sections.length === 0 ? (
           <View style={styles.centerState}>
-            <Text style={styles.emptyTitle}>No upcoming events</Text>
-            <Text style={styles.emptyText}>Create a meeting to start your agenda.</Text>
+            <Text style={styles.emptyTitle}>{t('calendar.noUpcoming')}</Text>
+            <Text style={styles.emptyText}>{t('calendar.createPrompt')}</Text>
             <TouchableOpacity
               style={styles.emptyButton}
               onPress={() => router.push('/calendar/new')}
               accessibilityRole="button"
             >
-              <Text style={styles.emptyButtonText}>Create Event</Text>
+              <Text style={styles.emptyButtonText}>{t('calendar.createEvent')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -297,7 +300,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
                       </Text>
                     ) : null}
                     {event.status === 'completed' && !event.notes ? (
-                      <Text style={styles.notesPrompt}>Notes needed</Text>
+                      <Text style={styles.notesPrompt}>{t('calendar.notesNeeded')}</Text>
                     ) : null}
                   </View>
                 </TouchableOpacity>

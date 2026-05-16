@@ -11,9 +11,11 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../store/userStore';
 
 export default function RegisterScreen() {
+  const { t } = useTranslation();
   const [name, setName] = useState<string>('');
   const [orgName, setOrgName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
@@ -42,11 +44,11 @@ export default function RegisterScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.card}>
-          <Text style={styles.title}>Create Account</Text>
+          <Text style={styles.title}>{t('auth.register')}</Text>
 
           <TextInput
             style={styles.input}
-            placeholder="Full Name"
+            placeholder={t('auth.name')}
             placeholderTextColor="#9CA3AF"
             value={name}
             onChangeText={setName}
@@ -55,7 +57,7 @@ export default function RegisterScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Company / Org Name"
+            placeholder={t('auth.orgName')}
             placeholderTextColor="#9CA3AF"
             value={orgName}
             onChangeText={setOrgName}
@@ -64,7 +66,7 @@ export default function RegisterScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Email"
+            placeholder={t('auth.email')}
             placeholderTextColor="#9CA3AF"
             value={email}
             onChangeText={setEmail}
@@ -75,7 +77,7 @@ export default function RegisterScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Password"
+            placeholder={t('auth.password')}
             placeholderTextColor="#9CA3AF"
             value={password}
             onChangeText={setPassword}
@@ -90,7 +92,7 @@ export default function RegisterScreen() {
             {isLoading ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.buttonText}>Create Account</Text>
+              <Text style={styles.buttonText}>{t('auth.registerButton')}</Text>
             )}
           </TouchableOpacity>
 
@@ -103,8 +105,8 @@ export default function RegisterScreen() {
             onPress={() => router.push('/login')}
           >
             <Text style={styles.linkText}>
-              Already have an account?{' '}
-              <Text style={styles.linkTextBold}>Sign In</Text>
+              {t('auth.hasAccount')}{' '}
+              <Text style={styles.linkTextBold}>{t('auth.loginButton')}</Text>
             </Text>
           </TouchableOpacity>
         </View>

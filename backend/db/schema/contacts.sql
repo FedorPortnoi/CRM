@@ -59,7 +59,7 @@ CREATE TABLE activity_log (
                     )),
     description     TEXT,
     metadata        JSONB NOT NULL DEFAULT '{}',
-    source_id       TEXT, -- external ID for idempotency (Twilio SID, Google event ID, etc.)
+    source_id       TEXT, -- external ID for idempotency (SMS.ru ID, Yandex event ID, etc.)
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

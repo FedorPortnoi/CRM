@@ -1,23 +1,6 @@
-import crypto from 'crypto';
-import { FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 import { MessageDirection, MessageChannel, MessageStatus, Prisma } from '@prisma/client';
-import twilio from 'twilio';
 import { db } from '../../services/db';
-
-function verifyTwilioSignature(
-  authToken: string,
-  twilioSignature: string,
-  url: string,
-  params: Record<string, string>,
-): boolean {
-  const data = url + Object.keys(params).sort().map(k => k + params[k]).join('');
-  const expected = crypto.createHmac('sha1', authToken).update(data).digest('base64');
-  try {
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(twilioSignature));
-  } catch {
-    return false;
-  }
-}
 
 // --- Local request types ---
 
@@ -42,6 +25,47 @@ type SendSmsBody = {
 type SendInAppBody = {
   contact_id: string;
   body: string;
+};
+
+type SmsWebhookBody = {
+  api_id?: unknown;
+  from?: unknown;
+  From?: unknown;
+  text?: unknown;
+  Body?: unknown;
+  sms_id?: unknown;
+  SmsId?: unknown;
+  status?: unknown;
+  Status?: unknown;
+};
+
+type SmsRuRecipientResult = {
+  status?: string;
+  status_code?: number;
+  sms_id?: string;
+  status_text?: string;
+};
+
+type SmsRuSendResponse = {
+  status?: string;
+  status_code?: number;
+  status_text?: string;
+  sms?: Record<string, SmsRuRecipientResult>;
+};
+
+type WebSocketClientLike = {
+  readyState?: number;
+  OPEN?: number;
+  send: (payload: string) => void;
+};
+
+type WebSocketServerLike = {
+  clients?: Iterable<WebSocketClientLike>;
+};
+
+type FastifyWithWebSocket = FastifyInstance & {
+  websocketServer?: WebSocketServerLike;
+  ws?: WebSocketServerLike;
 };
 
 type LogCallBody = {
@@ -75,6 +99,84 @@ async function contactBelongsToOrg(contactId: string, orgId: string): Promise<bo
   }
 
   return false;
+}
+
+function sendServiceNotConfigured(reply: FastifyReply, variableName: string): void {
+  reply.status(503).send({
+    error: {
+      code: 'SERVICE_NOT_CONFIGURED',
+      message: `${variableName} is not configured`,
+    },
+  });
+}
+
+function toRequiredString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function getSmsRuApiId(): string | undefined {
+  return toRequiredString(process.env.SMSRU_API_ID);
+}
+
+function getSmsRuSender(): string {
+  return toRequiredString(process.env.SMSRU_SENDER) ?? 'CRM';
+}
+
+function getSmsRuError(body: SmsRuSendResponse, to: string): string {
+  const recipient = body.sms?.[to];
+  return recipient?.status_text ?? body.status_text ?? 'SMS.ru send failed';
+}
+
+async function sendViaSmsRu(apiId: string, to: string, msg: string): Promise<SmsRuSendResponse> {
+  const params = new URLSearchParams({
+    api_id: apiId,
+    to,
+    msg,
+    from: getSmsRuSender(),
+    json: '1',
+  });
+
+  const response = await fetch('https://sms.ru/sms/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params,
+  });
+
+  const body = await response.json() as SmsRuSendResponse;
+  const recipient = body.sms?.[to];
+
+  if (!response.ok || body.status !== 'OK' || body.status_code !== 100 || recipient?.status !== 'OK') {
+    throw new Error(getSmsRuError(body, to));
+  }
+
+  return body;
+}
+
+function broadcastMessageIfAvailable(request: FastifyRequest, message: unknown): void {
+  const server = request.server as FastifyWithWebSocket;
+  const webSocketServer = server.websocketServer ?? server.ws;
+  if (!webSocketServer?.clients) {
+    return;
+  }
+
+  const payload = JSON.stringify({ type: 'message.created', data: message });
+  for (const client of webSocketServer.clients) {
+    const openState = client.OPEN ?? 1;
+    if (client.readyState !== undefined && client.readyState !== openState) {
+      continue;
+    }
+
+    try {
+      client.send(payload);
+    } catch {
+      // Broadcast is best-effort; webhook processing should not fail because a socket closed.
+    }
+  }
 }
 
 // --- Handlers ---
@@ -160,13 +262,11 @@ async function sendSms(
     },
   });
 
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_FROM_NUMBER ?? process.env.TWILIO_PHONE_NUMBER;
   const to = contact.mobile ?? contact.phone;
 
-  if (!accountSid || !authToken || !from || process.env.TWILIO_SEND_ENABLED !== 'true') {
-    reply.status(201).send({ data: message, meta: { delivery: 'queued_without_twilio_config' } });
+  const apiId = getSmsRuApiId();
+  if (!apiId) {
+    reply.status(201).send({ data: message, meta: { delivery: 'queued_without_smsru_config' } });
     return;
   }
 
@@ -180,26 +280,26 @@ async function sendSms(
   }
 
   try {
-    const client = twilio(accountSid, authToken);
-    const sent = await client.messages.create({ from, to, body });
+    const sent = await sendViaSmsRu(apiId, to, body);
+    const smsruId = sent.sms?.[to]?.sms_id;
     const updated = await db.message.update({
       where: { id: message.id },
       data: {
-        twilio_sid: sent.sid,
+        twilio_sid: smsruId,
         status: MessageStatus.sent,
       },
     });
 
-    reply.status(201).send({ data: updated, meta: { delivery: 'sent_to_twilio' } });
+    reply.status(201).send({ data: updated, meta: { delivery: 'sent_to_smsru' } });
   } catch (error) {
     const failed = await db.message.update({
       where: { id: message.id },
       data: {
         status: MessageStatus.failed,
-        error_message: error instanceof Error ? error.message : 'Twilio send failed',
+        error_message: error instanceof Error ? error.message : 'SMS.ru send failed',
       },
     });
-    reply.status(201).send({ data: failed, meta: { delivery: 'twilio_failed' } });
+    reply.status(201).send({ data: failed, meta: { delivery: 'smsru_failed' } });
   }
 }
 
@@ -286,105 +386,94 @@ async function markRead(
   reply.send({ data: updatedMessage, meta: {} });
 }
 
-async function twilioInboundWebhook(
+async function smsruInboundWebhook(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  if (authToken) {
-    const sig = request.headers['x-twilio-signature'] as string | undefined;
-    if (!sig) {
-      reply.status(403).send('Missing Twilio signature');
-      return;
-    }
-    const url = `${request.protocol}://${request.hostname}${request.url}`;
-    if (!verifyTwilioSignature(authToken, sig, url, request.body as Record<string, string>)) {
-      reply.status(403).send('Invalid Twilio signature');
-      return;
-    }
+  const body = request.body as SmsWebhookBody;
+  const query = request.query as SmsWebhookBody;
+  const configuredApiId = getSmsRuApiId();
+  const apiId = toRequiredString(body.api_id) ?? toRequiredString(query.api_id);
+  const from = toRequiredString(body.From) ?? toRequiredString(body.from) ?? toRequiredString(query.From) ?? toRequiredString(query.from);
+  const text = toRequiredString(body.Body) ?? toRequiredString(body.text) ?? toRequiredString(query.Body) ?? toRequiredString(query.text);
+  const smsId = toRequiredString(body.SmsId) ?? toRequiredString(body.sms_id) ?? toRequiredString(query.SmsId) ?? toRequiredString(query.sms_id);
+
+  if (!configuredApiId && process.env.NODE_ENV !== 'test') {
+    reply.status(200).send({ received: true });
+    return;
   }
 
-  try {
-    const body = request.body as Record<string, unknown>;
-    const from = body['From'];
-    const messageBody = body['Body'];
-    const smsSid = body['SmsSid'];
+  if (configuredApiId && apiId && apiId !== configuredApiId) {
+    reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Invalid SMS.ru api_id' } });
+    return;
+  }
 
-    const contact = await db.contact.findFirst({
-      where: { phone: String(from) },
+  if (!from || !text) {
+    reply.status(400).send({ error: { code: 'INVALID_WEBHOOK_PAYLOAD', message: 'from and text are required' } });
+    return;
+  }
+
+  const contact = await db.contact.findFirst({
+    where: {
+      OR: [
+        { phone: from },
+        { mobile: from },
+      ],
+    },
+  });
+
+  if (contact) {
+    const message = await db.message.create({
+      data: {
+        organization_id: contact.organization_id,
+        contact_id: contact.id,
+        direction: MessageDirection.inbound,
+        channel: MessageChannel.sms,
+        body: text,
+        status: MessageStatus.delivered,
+        twilio_sid: smsId,
+      },
     });
 
-    if (contact) {
-      await db.message.create({
-        data: {
-          organization_id: contact.organization_id,
-          contact_id: contact.id,
-          direction: MessageDirection.inbound,
-          channel: MessageChannel.sms,
-          body: String(messageBody),
-          status: MessageStatus.delivered,
-          twilio_sid: String(smsSid),
-        },
-      });
-    }
-  } catch {
-    // silently ignore errors - Twilio requires 200 regardless
+    broadcastMessageIfAvailable(request, message);
   }
 
-  reply
-    .status(200)
-    .header('Content-Type', 'application/xml')
-    .send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+  reply.status(200).send({ received: true });
 }
 
-async function twilioStatusWebhook(
+async function smsruStatusWebhook(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  if (authToken) {
-    const sig = request.headers['x-twilio-signature'] as string | undefined;
-    if (!sig) {
-      reply.status(403).send('Missing Twilio signature');
-      return;
-    }
-    const url = `${request.protocol}://${request.hostname}${request.url}`;
-    if (!verifyTwilioSignature(authToken, sig, url, request.body as Record<string, string>)) {
-      reply.status(403).send('Invalid Twilio signature');
-      return;
-    }
+  const body = request.body as SmsWebhookBody;
+  const query = request.query as SmsWebhookBody;
+  const configuredApiId = getSmsRuApiId();
+  const apiId = toRequiredString(body.api_id) ?? toRequiredString(query.api_id);
+  const smsId = toRequiredString(body.SmsId) ?? toRequiredString(body.sms_id) ?? toRequiredString(query.SmsId) ?? toRequiredString(query.sms_id);
+  const rawStatus = toRequiredString(body.Status) ?? toRequiredString(body.status) ?? toRequiredString(query.Status) ?? toRequiredString(query.status);
+
+  if (configuredApiId && apiId && apiId !== configuredApiId) {
+    reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Invalid SMS.ru api_id' } });
+    return;
   }
 
-  try {
-    const body = request.body as Record<string, unknown>;
-    const sid = body['MessageSid'];
-    const twilioStatus = body['MessageStatus'];
-
-    const existing = await db.message.findFirst({
-      where: { twilio_sid: String(sid) },
-    });
-
-    if (existing) {
-      let updateData: Prisma.MessageUpdateInput = {};
-
-      if (twilioStatus === 'sent') {
-        updateData = { status: MessageStatus.sent };
-      } else if (twilioStatus === 'delivered') {
-        updateData = { status: MessageStatus.delivered, delivered_at: new Date() };
-      } else if (twilioStatus === 'failed' || twilioStatus === 'undelivered') {
-        updateData = { status: MessageStatus.failed, error_message: String(twilioStatus) };
-      }
-
-      if (Object.keys(updateData).length > 0) {
-        await db.message.update({
-          where: { id: existing.id },
-          data: updateData,
-        });
-      }
-    }
-  } catch {
-    // silently ignore errors - Twilio requires 200 regardless
+  if (!smsId || !rawStatus) {
+    reply.status(400).send({ error: { code: 'INVALID_WEBHOOK_PAYLOAD', message: 'SmsId and Status are required' } });
+    return;
   }
+
+  const normalized = rawStatus.toLowerCase();
+  const status =
+    normalized === 'delivered'
+      ? MessageStatus.delivered
+      : normalized === 'not_delivered' || normalized === 'expired'
+        ? MessageStatus.failed
+        : MessageStatus.sent;
+
+  await db.message.updateMany({
+    where: { twilio_sid: smsId },
+    data: { status },
+  });
 
   reply.status(200).send({ received: true });
 }
@@ -398,6 +487,6 @@ export const MessagesController = {
   sendInApp,
   logCall,
   markRead,
-  twilioInboundWebhook,
-  twilioStatusWebhook,
+  smsruInboundWebhook,
+  smsruStatusWebhook,
 };

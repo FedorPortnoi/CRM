@@ -84,8 +84,8 @@ export const AuthController = {
           ),
           pipeline_cte AS (
             INSERT INTO "Pipeline" (organization_id, name, is_default, created_by, updated_at)
-            SELECT (SELECT id FROM org_cte), 'Sales Pipeline', true, (SELECT id FROM user_cte), NOW()
-            FROM owner_update
+            SELECT org_cte.id, 'Sales Pipeline', true, user_cte.id, NOW()
+            FROM org_cte, user_cte
             RETURNING id
           ),
           stage_cte AS (
@@ -119,9 +119,13 @@ export const AuthController = {
       });
     } catch (err: unknown) {
       const errCode = (err as { code?: string })?.code;
+      const rawQueryCode = (err as { meta?: { code?: string } })?.meta?.code;
+      const errMessage = (err as { message?: string })?.message ?? '';
       if (
         (err instanceof Prisma.PrismaClientKnownRequestError && errCode === 'P2002') ||
-        errCode === '23505'
+        errCode === '23505' ||
+        rawQueryCode === '23505' ||
+        (errCode === 'P2010' && (errMessage.includes('23505') || errMessage.includes('duplicate key')))
       ) {
         return reply.code(409).send({
           error: { code: 'EMAIL_ALREADY_EXISTS', message: 'An account with this email already exists' },

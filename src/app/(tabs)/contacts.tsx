@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Check } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
@@ -45,6 +46,7 @@ type OrgUsersResponse = {
 const PER_PAGE = 20;
 
 export default function ContactsScreen(): JSX.Element {
+  const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [page, setPage] = useState(1);
@@ -86,13 +88,13 @@ export default function ContactsScreen(): JSX.Element {
         setContacts((prev) => (reset ? json.data : [...prev, ...json.data]));
         setHasMore(json.data.length === PER_PAGE);
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Failed to load contacts');
+        setError(e instanceof Error ? e.message : t('errors.serverError'));
       } finally {
         setIsLoading(false);
         setIsFetchingMore(false);
       }
     },
-    [token],
+    [token, t],
   );
 
   useEffect(() => {
@@ -161,7 +163,7 @@ export default function ContactsScreen(): JSX.Element {
   const fetchOrgUsers = useCallback(async (): Promise<void> => {
     if (!token) {
       setOrgUsers([]);
-      setUsersError('You must be signed in to load users');
+      setUsersError(t('errors.unauthorized'));
       return;
     }
 
@@ -185,11 +187,11 @@ export default function ContactsScreen(): JSX.Element {
       );
     } catch (e: unknown) {
       setOrgUsers([]);
-      setUsersError(e instanceof Error ? e.message : 'Failed to load users');
+      setUsersError(e instanceof Error ? e.message : t('errors.serverError'));
     } finally {
       setIsLoadingUsers(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     if (!isAssignModalVisible) return;
@@ -201,7 +203,7 @@ export default function ContactsScreen(): JSX.Element {
       if (isAssigning) return;
 
       if (!token) {
-        setArchiveError('You must be signed in to archive contacts');
+        setArchiveError(t('errors.unauthorized'));
         return;
       }
 
@@ -232,27 +234,27 @@ export default function ContactsScreen(): JSX.Element {
         setSelectedUserId(null);
         setIsAssignModalVisible(false);
       } catch (e: unknown) {
-        setArchiveError(e instanceof Error ? e.message : 'Failed to archive contacts');
+        setArchiveError(e instanceof Error ? e.message : t('errors.serverError'));
       } finally {
         setIsArchiving(false);
       }
     },
-    [isAssigning, token],
+    [isAssigning, token, t],
   );
 
   const handleArchivePress = useCallback((): void => {
     if (isBulkActionRunning || selectedContactIds.length === 0) return;
 
     const contactIdsToArchive = [...selectedContactIds];
-    const contactLabel = contactIdsToArchive.length === 1 ? 'contact' : 'contacts';
+    const contactLabel = contactIdsToArchive.length === 1 ? t('contacts.name').toLowerCase() : t('contacts.title').toLowerCase();
 
     Alert.alert(
-      'Archive contacts',
-      `Archive ${contactIdsToArchive.length} selected ${contactLabel}?`,
+      t('contacts.archive'),
+      `${t('contacts.archive')} ${contactIdsToArchive.length} ${t('contacts.selected')} ${contactLabel}?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Archive',
+          text: t('contacts.archive'),
           style: 'destructive',
           onPress: () => {
             void archiveSelectedContacts(contactIdsToArchive);
@@ -260,7 +262,7 @@ export default function ContactsScreen(): JSX.Element {
         },
       ],
     );
-  }, [archiveSelectedContacts, isBulkActionRunning, selectedContactIds]);
+  }, [archiveSelectedContacts, isBulkActionRunning, selectedContactIds, t]);
 
   const handleAssignPress = useCallback((): void => {
     if (isBulkActionRunning || selectedContactIds.length === 0) return;
@@ -286,7 +288,7 @@ export default function ContactsScreen(): JSX.Element {
       if (isArchiving) return;
 
       if (!token) {
-        setAssignError('You must be signed in to assign contacts');
+        setAssignError(t('errors.unauthorized'));
         return;
       }
 
@@ -316,19 +318,19 @@ export default function ContactsScreen(): JSX.Element {
         setAssignError(null);
         setUsersError(null);
       } catch (e: unknown) {
-        setAssignError(e instanceof Error ? e.message : 'Failed to assign contacts');
+        setAssignError(e instanceof Error ? e.message : t('errors.serverError'));
       } finally {
         setIsAssigning(false);
       }
     },
-    [isArchiving, token],
+    [isArchiving, token, t],
   );
 
   const handleConfirmAssign = useCallback((): void => {
     if (isBulkActionRunning || selectedContactIds.length === 0) return;
 
     if (selectedUserId === null) {
-      setAssignError('Choose a user to assign contacts');
+      setAssignError(t('contacts.assignContacts'));
       return;
     }
 
@@ -339,6 +341,7 @@ export default function ContactsScreen(): JSX.Element {
     isBulkActionRunning,
     selectedContactIds,
     selectedUserId,
+    t,
   ]);
 
   const filtered: Contact[] = search.trim()
@@ -467,7 +470,7 @@ export default function ContactsScreen(): JSX.Element {
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
-          <Text style={styles.retryText}>Retry</Text>
+          <Text style={styles.retryText}>{t('common.retry')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -477,7 +480,7 @@ export default function ContactsScreen(): JSX.Element {
     <View style={styles.container}>
       <TextInput
         style={styles.searchInput}
-        placeholder="Search by name, email or phone..."
+        placeholder={t('contacts.searchPlaceholder')}
         placeholderTextColor="#9B9B9B"
         value={search}
         onChangeText={setSearch}
@@ -505,7 +508,7 @@ export default function ContactsScreen(): JSX.Element {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              {search.trim() ? 'No contacts match your search' : 'No contacts yet'}
+              {search.trim() ? t('contacts.noSearchResults') : t('contacts.noContacts')}
             </Text>
           </View>
         }
@@ -529,7 +532,7 @@ export default function ContactsScreen(): JSX.Element {
             accessibilityRole="button"
           >
             <Text style={styles.cancelSelectionText} numberOfLines={1}>
-              Cancel
+              {t('common.cancel')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -542,7 +545,7 @@ export default function ContactsScreen(): JSX.Element {
             accessibilityRole="button"
           >
             <Text style={styles.assignButtonText} numberOfLines={1}>
-              {`Assign (${selectedContactIds.length})`}
+              {`${t('contacts.assign')} (${selectedContactIds.length})`}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -559,8 +562,8 @@ export default function ContactsScreen(): JSX.Element {
             ) : null}
             <Text style={styles.archiveButtonText} numberOfLines={1}>
               {isArchiving
-                ? 'Archiving...'
-                : `Archive (${selectedContactIds.length})`}
+                ? t('common.loading')
+                : `${t('contacts.archive')} (${selectedContactIds.length})`}
             </Text>
           </TouchableOpacity>
         </View>
@@ -574,9 +577,9 @@ export default function ContactsScreen(): JSX.Element {
         <View style={styles.modalBackdrop}>
           <View style={styles.assignModal}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Assign contacts</Text>
+              <Text style={styles.modalTitle}>{t('contacts.assignContacts')}</Text>
               <Text style={styles.modalSubtitle} numberOfLines={1}>
-                {`${selectedContactIds.length} selected`}
+                {`${selectedContactIds.length} ${t('contacts.selected')}`}
               </Text>
             </View>
 
@@ -588,7 +591,7 @@ export default function ContactsScreen(): JSX.Element {
               {isLoadingUsers ? (
                 <View style={styles.modalStateContainer}>
                   <ActivityIndicator size="small" color="#1A73E8" />
-                  <Text style={styles.modalStateText}>Loading users...</Text>
+                  <Text style={styles.modalStateText}>{t('contacts.loadingUsers')}</Text>
                 </View>
               ) : usersError ? (
                 <View style={styles.modalStateContainer}>
@@ -601,12 +604,12 @@ export default function ContactsScreen(): JSX.Element {
                     disabled={isAssigning}
                     accessibilityRole="button"
                   >
-                    <Text style={styles.modalRetryText}>Retry</Text>
+                    <Text style={styles.modalRetryText}>{t('common.retry')}</Text>
                   </TouchableOpacity>
                 </View>
               ) : orgUsers.length === 0 ? (
                 <View style={styles.modalStateContainer}>
-                  <Text style={styles.modalStateText}>No users available</Text>
+                  <Text style={styles.modalStateText}>{t('contacts.noUsers')}</Text>
                 </View>
               ) : (
                 <FlatList
@@ -626,7 +629,7 @@ export default function ContactsScreen(): JSX.Element {
                 accessibilityRole="button"
               >
                 <Text style={styles.modalCancelText} numberOfLines={1}>
-                  Cancel
+                  {t('common.cancel')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -646,7 +649,7 @@ export default function ContactsScreen(): JSX.Element {
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : null}
                 <Text style={styles.modalConfirmText} numberOfLines={1}>
-                  {isAssigning ? 'Assigning...' : 'Assign'}
+                  {isAssigning ? t('common.loading') : t('contacts.assign')}
                 </Text>
               </TouchableOpacity>
             </View>

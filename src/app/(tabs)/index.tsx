@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 
@@ -69,20 +70,22 @@ function contactName(contact: RecentContact): string {
 interface SectionErrorProps {
   message: string;
   onRetry: () => void;
+  retryLabel: string;
 }
 
-function SectionError({ message, onRetry }: SectionErrorProps): JSX.Element {
+function SectionError({ message, onRetry, retryLabel }: SectionErrorProps): JSX.Element {
   return (
     <View style={styles.inlineError}>
       <Text style={styles.inlineErrorText}>{message}</Text>
       <TouchableOpacity style={styles.inlineRetryButton} onPress={onRetry}>
-        <Text style={styles.inlineRetryText}>Retry</Text>
+        <Text style={styles.inlineRetryText}>{retryLabel}</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 export default function DashboardScreen(): JSX.Element {
+  const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
   const [summary, setSummary] = useState<SectionState<DashboardData>>(initialSection<DashboardData>);
   const [tasks, setTasks] = useState<SectionState<TodayTask[]>>(initialSection<TodayTask[]>);
@@ -184,7 +187,7 @@ export default function DashboardScreen(): JSX.Element {
       contentContainerStyle={styles.contentContainer}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      <Text style={styles.pageTitle}>Dashboard</Text>
+      <Text style={styles.pageTitle}>{t('dashboard.title')}</Text>
 
       <View style={styles.summaryGrid}>
         {summary.isLoading ? (
@@ -195,24 +198,24 @@ export default function DashboardScreen(): JSX.Element {
           </>
         ) : summary.error ? (
           <View style={styles.fullWidth}>
-            <SectionError message={summary.error} onRetry={() => { void fetchSummary(true); }} />
+            <SectionError message={summary.error} onRetry={() => { void fetchSummary(true); }} retryLabel={t('common.retry')} />
           </View>
         ) : summary.data ? (
           <>
             <View style={styles.summaryCard}>
-              <Text style={styles.cardLabel}>Open Deals</Text>
+              <Text style={styles.cardLabel}>{t('dashboard.openDeals')}</Text>
               <Text style={styles.cardValue}>{summary.data.open_deals.count}</Text>
               <Text style={styles.cardSub}>{formatCurrency(summary.data.open_deals.total_value)}</Text>
             </View>
             <View style={styles.summaryCard}>
-              <Text style={styles.cardLabel}>Due Today</Text>
+              <Text style={styles.cardLabel}>{t('dashboard.dueToday')}</Text>
               <Text style={styles.cardValue}>{summary.data.tasks_due_today}</Text>
-              <Text style={styles.cardSub}>Tasks</Text>
+              <Text style={styles.cardSub}>{t('tabs.tasks')}</Text>
             </View>
             <View style={styles.summaryCard}>
-              <Text style={styles.cardLabel}>Pipeline Health</Text>
+              <Text style={styles.cardLabel}>{t('dashboard.pipelineHealth')}</Text>
               <Text style={styles.cardValue}>{formatPipelineHealth(summary.data.pipeline_health_score)}</Text>
-              <Text style={styles.cardSub}>Score</Text>
+              <Text style={styles.cardSub}>{t('dashboard.score')}</Text>
             </View>
           </>
         ) : null}
@@ -220,7 +223,7 @@ export default function DashboardScreen(): JSX.Element {
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Calendar</Text>
+          <Text style={styles.sectionTitle}>{t('calendar.title')}</Text>
         </View>
         <View style={styles.actionRow}>
           <TouchableOpacity
@@ -228,28 +231,28 @@ export default function DashboardScreen(): JSX.Element {
             onPress={() => router.push('/calendar')}
             accessibilityRole="button"
           >
-            <Text style={styles.actionButtonText}>Agenda</Text>
+            <Text style={styles.actionButtonText}>{t('calendar.agenda')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionButton, styles.actionButtonSecondary]}
             onPress={() => router.push('/calendar/new')}
             accessibilityRole="button"
           >
-            <Text style={styles.actionButtonSecondaryText}>New Event</Text>
+            <Text style={styles.actionButtonSecondaryText}>{t('calendar.newEvent')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionButton, styles.actionButtonSecondary]}
             onPress={() => router.push('/workflows' as never)}
             accessibilityRole="button"
           >
-            <Text style={styles.actionButtonSecondaryText}>Workflows</Text>
+            <Text style={styles.actionButtonSecondaryText}>{t('dashboard.workflows')}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Today's Tasks</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.todayTasks')}</Text>
         </View>
         {tasks.isLoading ? (
           <>
@@ -258,7 +261,7 @@ export default function DashboardScreen(): JSX.Element {
             <View style={styles.rowSkeleton} />
           </>
         ) : tasks.error ? (
-          <SectionError message={tasks.error} onRetry={() => { void fetchTasks(true); }} />
+          <SectionError message={tasks.error} onRetry={() => { void fetchTasks(true); }} retryLabel={t('common.retry')} />
         ) : tasks.data && tasks.data.length > 0 ? (
           tasks.data.map((task) => (
             <TouchableOpacity
@@ -269,19 +272,19 @@ export default function DashboardScreen(): JSX.Element {
             >
               <View style={styles.rowMain}>
                 <Text style={styles.rowTitle} numberOfLines={1}>{task.title}</Text>
-                <Text style={styles.rowSub}>{formatDueDate(task.due_date) || 'Today'}</Text>
+                <Text style={styles.rowSub}>{formatDueDate(task.due_date) || t('tasks.today')}</Text>
               </View>
               <Text style={styles.rowMeta}>{task.status.replace('_', ' ')}</Text>
             </TouchableOpacity>
           ))
         ) : (
-          <Text style={styles.emptyText}>No tasks due today</Text>
+          <Text style={styles.emptyText}>{t('tasks.noToday')}</Text>
         )}
       </View>
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Contacts</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.recentContacts')}</Text>
         </View>
         {contacts.isLoading ? (
           <>
@@ -290,7 +293,7 @@ export default function DashboardScreen(): JSX.Element {
             <View style={styles.rowSkeleton} />
           </>
         ) : contacts.error ? (
-          <SectionError message={contacts.error} onRetry={() => { void fetchContacts(true); }} />
+          <SectionError message={contacts.error} onRetry={() => { void fetchContacts(true); }} retryLabel={t('common.retry')} />
         ) : contacts.data && contacts.data.length > 0 ? (
           contacts.data.map((contact) => (
             <TouchableOpacity
@@ -306,14 +309,14 @@ export default function DashboardScreen(): JSX.Element {
                 ) : contact.email ? (
                   <Text style={styles.rowSub} numberOfLines={1}>{contact.email}</Text>
                 ) : (
-                  <Text style={styles.rowSub}>No company</Text>
+                  <Text style={styles.rowSub}>{t('contacts.company')}</Text>
                 )}
               </View>
               {contact.phone ? <Text style={styles.rowMeta}>{contact.phone}</Text> : null}
             </TouchableOpacity>
           ))
         ) : (
-          <Text style={styles.emptyText}>No contacts yet</Text>
+          <Text style={styles.emptyText}>{t('contacts.noContacts')}</Text>
         )}
       </View>
     </ScrollView>

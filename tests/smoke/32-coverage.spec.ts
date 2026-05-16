@@ -175,27 +175,27 @@ test.describe('export pdf', () => {
 
 // ── 3. TWILIO WEBHOOKS ────────────────────────────────────────────────────────
 
-test.describe('twilio webhooks', () => {
-  test('twilio: inbound webhook returns 200 for unknown phone', async ({ request }) => {
+test.describe('sms.ru webhooks', () => {
+  test('sms.ru: inbound webhook returns 200 for unknown phone', async ({ request }) => {
     // When phone doesn't match any contact, webhook still returns 200
-    const r = await request.post('/api/v1/messages/webhooks/twilio/inbound', {
+    const r = await request.post('/api/v1/messages/webhooks/sms/inbound', {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: 'From=%2B15559999999&Body=Hello+from+unknown&SmsSid=SMtest001&MessageSid=SMtest001&AccountSid=AC123',
+      data: 'From=%2B15559999999&Body=Hello+from+unknown&SmsId=SMtest001',
     });
     expect(r.status()).toBe(200);
   });
 
-  test('twilio: inbound webhook creates message when phone matches contact', async ({ request }) => {
-    const { token } = await registerOrg(request, 'twilio-inbound');
+  test('sms.ru: inbound webhook creates message when phone matches contact', async ({ request }) => {
+    const { token } = await registerOrg(request, 'smsru-inbound');
     const phone = `+1555${Math.floor(1000000 + Math.random() * 9000000)}`;
     // Create contact with that phone
-    const c = await makeContact(request, token, 'TwilioContact', { phone });
+    const c = await makeContact(request, token, 'SmsRuContact', { phone });
 
-    // Simulate Twilio sending an inbound SMS
+    // Simulate SMS.ru sending an inbound SMS
     const smsSid = `SM${Date.now()}test`;
-    const r = await request.post('/api/v1/messages/webhooks/twilio/inbound', {
+    const r = await request.post('/api/v1/messages/webhooks/sms/inbound', {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: `From=${encodeURIComponent(phone)}&Body=Hello+from+Twilio&SmsSid=${smsSid}&MessageSid=${smsSid}&AccountSid=AC123`,
+      data: `From=${encodeURIComponent(phone)}&Body=Hello+from+SMS.ru&SmsId=${smsSid}`,
     });
     expect(r.status()).toBe(200);
 
@@ -203,30 +203,24 @@ test.describe('twilio webhooks', () => {
     const conv = await request.get(`/api/v1/messages/conversation/${c.id}`, { headers: authHeaders(token) });
     expect(conv.status()).toBe(200);
     const convBody = await conv.json() as { data: Array<{ body: string; channel: string; direction: string }> };
-    const found = convBody.data.find(m => m.body === 'Hello from Twilio' && m.channel === 'sms' && m.direction === 'inbound');
+    const found = convBody.data.find(m => m.body === 'Hello from SMS.ru' && m.channel === 'sms' && m.direction === 'inbound');
     expect(found).toBeDefined();
   });
 
-  test('twilio: status webhook returns 200 for unknown SID', async ({ request }) => {
-    const r = await request.post('/api/v1/messages/webhooks/twilio/status', {
+  test('sms.ru: status webhook accepts delivery status for unknown SmsId', async ({ request }) => {
+    const r = await request.post('/api/v1/messages/webhooks/sms/status', {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: 'MessageSid=SMunknown999&MessageStatus=delivered&AccountSid=AC123',
+      data: 'SmsId=SMunknown999&Status=delivered',
     });
     expect(r.status()).toBe(200);
   });
 
-  test('twilio: status webhook updates message status to delivered', async ({ request }) => {
-    const { token, userId } = await registerOrg(request, 'twilio-status');
-    const c = await makeContact(request, token, 'StatusContact', { phone: '+15551112222' });
-
-    // Log an outbound SMS manually to create a message with twilio_sid
-    // Use the sendSms route to create it (requires TWILIO_ACCOUNT_SID to be set, may fail gracefully)
-    // Instead, directly verify that a known-SID status update returns 200
-    const r = await request.post('/api/v1/messages/webhooks/twilio/status', {
+  test('sms.ru: status webhook requires SmsId and Status', async ({ request }) => {
+    const r = await request.post('/api/v1/messages/webhooks/sms/status', {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: `MessageSid=SMstatus${Date.now()}&MessageStatus=sent&AccountSid=AC123`,
+      data: `SmsId=SMstatus${Date.now()}`,
     });
-    expect(r.status()).toBe(200);
+    expect(r.status()).toBe(400);
   });
 });
 

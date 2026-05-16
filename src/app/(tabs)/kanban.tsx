@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import KanbanBoard from '../../screens/KanbanBoard';
 import { useDealsStore } from '../../store/dealsStore';
 import { usePipelinesStore } from '../../store/pipelinesStore';
@@ -33,6 +34,7 @@ function formatValue(value: number | null): string {
 }
 
 function DealListView(): JSX.Element {
+  const { t } = useTranslation();
   const deals = useDealsStore((s) => s.deals) as Deal[];
   const isLoading = useDealsStore((s) => s.isLoading);
   const error = useDealsStore((s) => s.error);
@@ -88,7 +90,7 @@ function DealListView(): JSX.Element {
           style={listStyles.retryButton}
           onPress={() => void Promise.all([fetchDeals(), fetchPipelines()])}
         >
-          <Text style={listStyles.retryText}>Retry</Text>
+          <Text style={listStyles.retryText}>{t('common.retry')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -97,7 +99,7 @@ function DealListView(): JSX.Element {
   if (rows.length === 0) {
     return (
       <View style={listStyles.centered}>
-        <Text style={listStyles.emptyText}>No open deals</Text>
+        <Text style={listStyles.emptyText}>{t('deals.noOpenDeals')}</Text>
       </View>
     );
   }
@@ -147,6 +149,7 @@ function DealListView(): JSX.Element {
 }
 
 export default function PipelineScreen(): JSX.Element {
+  const { t } = useTranslation();
   const [viewMode, setViewMode] = useState<ViewMode>('board');
 
   return (
@@ -158,7 +161,7 @@ export default function PipelineScreen(): JSX.Element {
           activeOpacity={0.7}
         >
           <Text style={[styles.toggleText, viewMode === 'board' ? styles.toggleTextActive : null]}>
-            Board
+            {t('deals.board')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -167,7 +170,7 @@ export default function PipelineScreen(): JSX.Element {
           activeOpacity={0.7}
         >
           <Text style={[styles.toggleText, viewMode === 'list' ? styles.toggleTextActive : null]}>
-            List
+            {t('deals.list')}
           </Text>
         </TouchableOpacity>
       </View>

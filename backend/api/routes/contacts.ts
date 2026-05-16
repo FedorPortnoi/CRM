@@ -79,6 +79,14 @@ const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Prom
 };
 
 export default async function contactsRoutes(fastify: FastifyInstance) {
+  for (const contentType of ['application/octet-stream', 'audio/l16', 'audio/wav', 'audio/x-wav']) {
+    if (!fastify.hasContentTypeParser(contentType)) {
+      fastify.addContentTypeParser(contentType, { parseAs: 'buffer' }, (_request, body, done) => {
+        done(null, body);
+      });
+    }
+  }
+
   const f = fastify.withTypeProvider<ZodTypeProvider>();
 
   f.get('/', {
@@ -122,6 +130,9 @@ export default async function contactsRoutes(fastify: FastifyInstance) {
     preHandler: [authenticate],
     schema: { body: BusinessCardSchema },
   }, ContactsController.scanBusinessCard);
+  f.post('/transcribe-voice', {
+    preHandler: [authenticate],
+  }, ContactsController.transcribeVoice);
   f.post('/bulk-assign', {
     preHandler: [authenticate],
     schema: { body: BulkAssignSchema },

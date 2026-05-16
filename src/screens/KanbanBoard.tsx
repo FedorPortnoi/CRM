@@ -12,6 +12,7 @@ import DraggableFlatList, {
   RenderItemParams,
 } from 'react-native-draggable-flatlist';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useDealsStore } from '../store/dealsStore';
 import { usePipelinesStore } from '../store/pipelinesStore';
 
@@ -53,6 +54,7 @@ type StageWithDeals = {
 };
 
 const KanbanBoard: React.FC = () => {
+  const { t } = useTranslation();
   const deals = useDealsStore((s) => s.deals) as Deal[];
   const dealsLoading = useDealsStore((s) => s.isLoading);
   const dealsError = useDealsStore((s) => s.error);
@@ -94,12 +96,12 @@ const KanbanBoard: React.FC = () => {
 
   const handleLongPress = (deal: Deal, allStages: PipelineStage[]): void => {
     const otherStages = allStages.filter((s) => s.id !== deal.stage_id);
-    Alert.alert('Move Deal', deal.title, [
+    Alert.alert(t('deals.moveDeal'), deal.title, [
       ...otherStages.map((s) => ({
         text: s.name,
         onPress: () => void moveDeal(deal.id, s.id),
       })),
-      { text: 'Cancel', style: 'cancel' as const },
+      { text: t('common.cancel'), style: 'cancel' as const },
     ]);
   };
 

@@ -10,9 +10,11 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../store/userStore';
 
 export default function LoginScreen() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
 
@@ -35,11 +37,11 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.card}>
-        <Text style={styles.title}>Sign In</Text>
+        <Text style={styles.title}>{t('auth.login')}</Text>
 
         <TextInput
           style={styles.input}
-          placeholder="Email"
+          placeholder={t('auth.email')}
           placeholderTextColor="#999"
           keyboardType="email-address"
           autoCapitalize="none"
@@ -50,7 +52,7 @@ export default function LoginScreen() {
 
         <TextInput
           style={styles.input}
-          placeholder="Password"
+          placeholder={t('auth.password')}
           placeholderTextColor="#999"
           secureTextEntry
           value={password}
@@ -66,7 +68,7 @@ export default function LoginScreen() {
           {isLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>Sign In</Text>
+            <Text style={styles.buttonText}>{t('auth.loginButton')}</Text>
           )}
         </TouchableOpacity>
 
@@ -80,7 +82,7 @@ export default function LoginScreen() {
           activeOpacity={0.7}
         >
           <Text style={styles.registerLinkText}>
-            {"Don't have an account? Register"}
+            {`${t('auth.noAccount')} ${t('auth.registerButton')}`}
           </Text>
         </TouchableOpacity>
       </View>

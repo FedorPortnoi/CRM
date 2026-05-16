@@ -25,3 +25,5 @@ export default async function globalSetup() {
 
   await api.dispose();
 }
+process.env.SMSRU_API_ID = process.env.SMSRU_API_ID ?? 'test-smsru-api-id';
+process.env.SMSRU_SEND_ENABLED = process.env.SMSRU_SEND_ENABLED ?? 'false';

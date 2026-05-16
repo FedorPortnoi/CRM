@@ -9,6 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 
@@ -56,6 +57,7 @@ function badgeColor(status: TaskStatus): string {
 }
 
 export default function TasksScreen(): JSX.Element {
+  const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [allTasks, setAllTasks] = useState<Task[]>([]);
@@ -87,11 +89,11 @@ export default function TasksScreen(): JSX.Element {
         sortByDueAsc(allJson.data.filter((t) => t.status !== 'cancelled')),
       );
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load tasks');
+      setError(e instanceof Error ? e.message : t('errors.serverError'));
     } finally {
       setIsLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void fetchTasks();
@@ -132,14 +134,20 @@ export default function TasksScreen(): JSX.Element {
               style={[styles.badge, { backgroundColor: badgeColor(item.status) }]}
             >
               <Text style={styles.badgeText}>
-                {item.status.replace('_', ' ')}
+                {item.status === 'in_progress'
+                  ? t('tasks.inProgress')
+                  : item.status === 'done'
+                    ? t('tasks.completed')
+                    : item.status === 'cancelled'
+                      ? t('tasks.cancelled')
+                      : t('tasks.pending')}
               </Text>
             </View>
           </View>
         </View>
       </TouchableOpacity>
     );
-  }, []);
+  }, [t]);
 
   if (isLoading) {
     return (
@@ -156,7 +164,7 @@ export default function TasksScreen(): JSX.Element {
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
-          <Text style={styles.retryText}>Retry</Text>
+          <Text style={styles.retryText}>{t('common.retry')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -174,7 +182,7 @@ export default function TasksScreen(): JSX.Element {
           <Text
             style={[styles.tabText, activeTab === 'today' && styles.tabTextActive]}
           >
-            Today
+            {t('tasks.today')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -184,7 +192,7 @@ export default function TasksScreen(): JSX.Element {
           <Text
             style={[styles.tabText, activeTab === 'all' && styles.tabTextActive]}
           >
-            All
+            {t('tasks.all')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -204,7 +212,7 @@ export default function TasksScreen(): JSX.Element {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              {activeTab === 'today' ? 'No tasks due today' : 'No tasks'}
+              {activeTab === 'today' ? t('tasks.noToday') : t('tasks.noTasks')}
             </Text>
           </View>
         }

@@ -61,7 +61,7 @@ export default async function messagesRoutes(fastify: FastifyInstance) {
 
   f.post('/:id/read', { preHandler: [authenticate] }, MessagesController.markRead);
 
-  // Twilio webhooks — no JWT auth; validated via X-Twilio-Signature HMAC in the controller
-  f.post('/webhooks/twilio/inbound', MessagesController.twilioInboundWebhook);
-  f.post('/webhooks/twilio/status', MessagesController.twilioStatusWebhook);
+  // SMS.ru webhooks use provider payload fields and do not require JWT auth.
+  f.post('/webhooks/sms/inbound', MessagesController.smsruInboundWebhook);
+  f.post('/webhooks/sms/status', MessagesController.smsruStatusWebhook);
 }

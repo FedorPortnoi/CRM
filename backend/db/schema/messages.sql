@@ -9,7 +9,7 @@ CREATE TABLE messages (
     body            TEXT NOT NULL,
     status          TEXT NOT NULL DEFAULT 'sent' CHECK (status IN ('pending', 'sent', 'delivered', 'read', 'failed')),
     error_message   TEXT,
-    twilio_sid      TEXT UNIQUE, -- for SMS tracking and idempotency
+    smsru_id        TEXT UNIQUE, -- for SMS tracking and idempotency
     google_msg_id   TEXT, -- for email thread tracking
     read_at         TIMESTAMPTZ,
     delivered_at    TIMESTAMPTZ,
@@ -38,7 +38,7 @@ CREATE UNIQUE INDEX ON mv_unread_counts(organization_id, user_id);
 -- Inbound message queue (for webhook idempotency before processing)
 CREATE TABLE inbound_webhook_queue (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source          TEXT NOT NULL CHECK (source IN ('twilio', 'google', 'internal')),
+    source          TEXT NOT NULL CHECK (source IN ('smsru', 'yandex', 'internal')),
     payload         JSONB NOT NULL,
     processed       BOOLEAN NOT NULL DEFAULT FALSE,
     processed_at    TIMESTAMPTZ,

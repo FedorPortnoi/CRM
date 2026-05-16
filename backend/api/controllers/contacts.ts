@@ -49,6 +49,60 @@ type BusinessCardBody = {
   create_contact?: boolean;
 };
 
+type BusinessCardFields = {
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  company: string | null;
+};
+
+type VoiceFields = {
+  name: string | null;
+  phone: string | null;
+  notes: string | null;
+};
+
+type YandexVisionWord = {
+  text?: string;
+};
+
+type YandexVisionLine = {
+  text?: string;
+  words?: YandexVisionWord[];
+};
+
+type YandexVisionBlock = {
+  text?: string;
+  lines?: YandexVisionLine[];
+};
+
+type YandexVisionPage = {
+  blocks?: YandexVisionBlock[];
+};
+
+type YandexVisionResponse = {
+  results?: Array<{
+    results?: Array<{
+      textDetection?: {
+        pages?: YandexVisionPage[];
+      };
+    }>;
+  }>;
+  error?: { message?: string };
+};
+
+type YandexSpeechResponse = {
+  result?: string;
+  error?: { message?: string };
+};
+
+class ServiceNotConfiguredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ServiceNotConfiguredError';
+  }
+}
+
 function optionalTrimmedString(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined;
@@ -56,6 +110,25 @@ function optionalTrimmedString(value: string | undefined): string | undefined {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function getYandexConfig(serviceName: 'Vision' | 'SpeechKit'): { apiKey: string; folderId: string } {
+  const apiKey = process.env.YANDEX_API_KEY?.trim();
+  const folderId = process.env.YANDEX_FOLDER_ID?.trim();
+  if (!apiKey || !folderId) {
+    throw new ServiceNotConfiguredError(`Yandex ${serviceName} API not configured`);
+  }
+
+  return { apiKey, folderId };
+}
+
+function sendServiceNotConfigured(reply: FastifyReply, error: ServiceNotConfiguredError): void {
+  reply.code(503).send({
+    error: {
+      code: 'SERVICE_NOT_CONFIGURED',
+      message: error.message,
+    },
+  });
 }
 
 async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
@@ -66,66 +139,239 @@ async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean>
   return user !== null;
 }
 
-function parseBusinessCardText(text: string): ContactImportRow {
+function isAllCapsBusinessLine(line: string): boolean {
+  const letters = line.match(/[A-ZА-ЯЁ]/g);
+  if (!letters || letters.length < 2) {
+    return false;
+  }
+
+  return line === line.toLocaleUpperCase('ru-RU') && !/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(line);
+}
+
+function isTitleCaseWord(word: string): boolean {
+  const letters = word.replace(/[^A-Za-zА-Яа-яЁё-]/g, '');
+  if (!letters) {
+    return false;
+  }
+
+  const [firstLetter] = Array.from(letters);
+  const rest = Array.from(letters).slice(1).join('');
+  return firstLetter === firstLetter.toLocaleUpperCase('ru-RU') && rest === rest.toLocaleLowerCase('ru-RU');
+}
+
+function toTitleCase(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      const [firstLetter] = Array.from(word);
+      if (!firstLetter) {
+        return word;
+      }
+
+      return firstLetter.toLocaleUpperCase('ru-RU') + Array.from(word).slice(1).join('').toLocaleLowerCase('ru-RU');
+    })
+    .join(' ');
+}
+
+function isLikelyNameLine(line: string, email: string | null, phone: string | null): boolean {
+  if (line === email || line === phone || /https?:\/\/|www\.|@/i.test(line) || isAllCapsBusinessLine(line)) {
+    return false;
+  }
+
+  const words = line.split(/\s+/).filter(Boolean);
+  return line.length > 3 && words.length > 0 && words.length <= 4 && words.every(isTitleCaseWord);
+}
+
+function isLikelyCompanyLine(line: string, nameLine: string | null, email: string | null, phone: string | null): boolean {
+  return (
+    line !== nameLine &&
+    line !== email &&
+    line !== phone &&
+    !/https?:\/\/|www\.|@/i.test(line) &&
+    !/(?:\+?\d[\d\s().-]{7,}\d)/.test(line)
+  );
+}
+
+function parseBusinessCardFields(text: string): BusinessCardFields {
   const lines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
   const joined = lines.join(' ');
-  const email = joined.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
-  const phone = joined.match(/(?:\+?\d[\d\s().-]{7,}\d)/)?.[0]?.trim();
-  const websiteIndex = lines.findIndex((line) => /https?:\/\/|www\.|@/.test(line));
-  const nameLine = lines.find((line) => line !== email && line !== phone && !/https?:\/\/|www\./i.test(line)) ?? 'Unknown';
-  const [firstName, ...restName] = nameLine.split(/\s+/);
-  const company = lines.find((line, index) =>
-    index !== websiteIndex &&
-    line !== nameLine &&
-    line !== email &&
-    line !== phone &&
-    !/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(line) &&
-    !/(?:\+?\d[\d\s().-]{7,}\d)/.test(line),
-  );
+  const email = joined.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? null;
+  const phone = (
+    joined.match(/(?:\+7|8)[\s().-]*\d{3}[\s().-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}/)?.[0] ??
+    joined.match(/(?:\+?\d[\d\s().-]{7,}\d)/)?.[0] ??
+    null
+  )?.trim() ?? null;
+  const nameLine = lines.find((line) => isLikelyNameLine(line, email, phone)) ?? null;
+  const company =
+    lines.find((line) => isLikelyCompanyLine(line, nameLine, email, phone) && isAllCapsBusinessLine(line)) ??
+    lines.find((line) => isLikelyCompanyLine(line, nameLine, email, phone)) ??
+    null;
+
+  return {
+    name: nameLine ? toTitleCase(nameLine) : null,
+    phone,
+    email,
+    company,
+  };
+}
+
+function parseBusinessCardText(text: string): ContactImportRow {
+  const fields = parseBusinessCardFields(text);
+  const fullName = fields.name ?? 'Unknown';
+  const [firstName, ...restName] = fullName.split(/\s+/);
 
   return {
     first_name: firstName || 'Unknown',
     last_name: restName.length > 0 ? restName.join(' ') : undefined,
-    company,
-    email,
-    phone,
+    company: fields.company ?? undefined,
+    email: fields.email ?? undefined,
+    phone: fields.phone ?? undefined,
     source: 'business_card',
     notes: text,
   };
 }
 
-async function extractTextWithGoogleVision(imageBase64: string): Promise<string> {
-  const key = process.env.GOOGLE_VISION_API_KEY;
-  if (!key) {
-    throw new Error('GOOGLE_VISION_API_KEY is not configured');
+function collectYandexVisionText(body: YandexVisionResponse): string {
+  const texts: string[] = [];
+  for (const result of body.results ?? []) {
+    for (const analysis of result.results ?? []) {
+      for (const page of analysis.textDetection?.pages ?? []) {
+        for (const block of page.blocks ?? []) {
+          const blockTexts: string[] = [];
+          for (const line of block.lines ?? []) {
+            const words = (line.words ?? []).map((word) => word.text).filter((word): word is string => Boolean(word));
+            if (words.length > 0) {
+              blockTexts.push(words.join(' '));
+            } else if (line.text) {
+              blockTexts.push(line.text);
+            }
+          }
+
+          if (blockTexts.length > 0) {
+            texts.push(blockTexts.join('\n'));
+          } else if (block.text) {
+            texts.push(block.text);
+          }
+        }
+      }
+    }
   }
 
-  const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${encodeURIComponent(key)}`, {
+  return texts.join('\n').trim();
+}
+
+async function extractTextWithYandexVision(imageBase64: string): Promise<string> {
+  const { apiKey, folderId } = getYandexConfig('Vision');
+
+  const response = await fetch('https://vision.api.cloud.yandex.net/vision/v1/batchAnalyze', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      Authorization: `Api-Key ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({
-      requests: [
+      folderId,
+      analyzeSpecs: [
         {
-          image: { content: imageBase64 },
-          features: [{ type: 'TEXT_DETECTION' }],
+          content: imageBase64,
+          features: [
+            {
+              type: 'TEXT_DETECTION',
+              textDetectionConfig: { languageCodes: ['ru', 'en'] },
+            },
+          ],
         },
       ],
     }),
   });
 
-  const body = await response.json() as {
-    responses?: Array<{ fullTextAnnotation?: { text?: string }; error?: { message?: string } }>;
-    error?: { message?: string };
-  };
+  const body = await response.json() as YandexVisionResponse;
 
-  if (!response.ok || body.error || body.responses?.[0]?.error) {
-    throw new Error(body.error?.message ?? body.responses?.[0]?.error?.message ?? 'Google Vision OCR failed');
+  if (!response.ok || body.error) {
+    throw new Error(body.error?.message ?? 'Yandex Vision OCR failed');
   }
 
-  return body.responses?.[0]?.fullTextAnnotation?.text ?? '';
+  return collectYandexVisionText(body);
+}
+
+function audioBodyToBuffer(body: unknown): Buffer | null {
+  if (Buffer.isBuffer(body)) {
+    return body;
+  }
+
+  if (body instanceof ArrayBuffer) {
+    return Buffer.from(body);
+  }
+
+  if (typeof body === 'string' && body.length > 0) {
+    return Buffer.from(body, 'binary');
+  }
+
+  if (typeof body === 'object' && body !== null && 'audio_base64' in body) {
+    const audioBase64 = (body as { audio_base64?: unknown }).audio_base64;
+    if (typeof audioBase64 === 'string' && audioBase64.trim()) {
+      return Buffer.from(audioBase64, 'base64');
+    }
+  }
+
+  return null;
+}
+
+async function transcribeWithYandexSpeechKit(audioBytes: Buffer): Promise<string> {
+  const { apiKey, folderId } = getYandexConfig('SpeechKit');
+  const query = new URLSearchParams({
+    folderId,
+    lang: 'ru-RU',
+    format: 'lpcm',
+    sampleRateHertz: '16000',
+  });
+  const response = await fetch(`https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?${query.toString()}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Api-Key ${apiKey}`,
+      'Content-Type': 'audio/x-pcm;bit=16;rate=16000',
+    },
+    body: audioBytes,
+  });
+
+  const body = await response.json() as YandexSpeechResponse;
+  if (!response.ok || body.error) {
+    throw new Error(body.error?.message ?? 'Yandex SpeechKit transcription failed');
+  }
+
+  return body.result ?? '';
+}
+
+function extractKeywordValue(text: string, keywords: string[]): string | null {
+  const pattern = new RegExp(`(?:${keywords.join('|')})\\s*[:\\-]?\\s*([^,.\\n;]+)`, 'i');
+  return text.match(pattern)?.[1]?.trim() ?? null;
+}
+
+function extractVoiceFields(transcript: string): VoiceFields {
+  const phone = transcript.match(/(?:\+7|8)[\s().-]*\d{3}[\s().-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}/)?.[0]?.trim() ?? null;
+  const name = extractKeywordValue(transcript, ['имя', 'зовут', 'меня зовут']);
+  const company = extractKeywordValue(transcript, ['компания']);
+
+  return {
+    name: name ? toTitleCase(name) : null,
+    phone,
+    notes: company ? `Компания: ${company}. ${transcript}` : transcript || null,
+  };
+}
+
+function extractSpeechFields(transcript: string): VoiceFields {
+  const phone = transcript.match(/(?:\+7|8)[\s().-]*\d{3}[\s().-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}/)?.[0]?.trim() ?? null;
+  const name = extractKeywordValue(transcript, ['menya zovut', 'zovut', 'imya', 'menya', 'меня зовут', 'зовут', 'имя', 'меня']);
+
+  return {
+    name: name ? toTitleCase(name) : null,
+    phone,
+    notes: transcript || null,
+  };
 }
 
 export const ContactsController = {
@@ -609,17 +855,50 @@ export const ContactsController = {
       meta: {},
     });
   },
+  transcribeVoice: async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      getYandexConfig('SpeechKit');
+
+      const audioBytes = audioBodyToBuffer(request.body);
+      if (!audioBytes || audioBytes.byteLength === 0) {
+        return reply.code(400).send({
+          error: { code: 'AUDIO_INPUT_REQUIRED', message: 'Provide raw audio bytes' },
+        });
+      }
+
+      const transcript = await transcribeWithYandexSpeechKit(audioBytes);
+      return reply.send({
+        data: {
+          transcript,
+          fields: extractSpeechFields(transcript),
+        },
+        meta: {},
+      });
+    } catch (error) {
+      if (error instanceof ServiceNotConfiguredError) {
+        return sendServiceNotConfigured(reply, error);
+      }
+
+      return reply.code(502).send({
+        error: {
+          code: 'SPEECH_API_ERROR',
+          message: error instanceof Error ? error.message : 'Voice transcription failed',
+        },
+      });
+    }
+  },
   scanBusinessCard: async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as BusinessCardBody;
 
     try {
-      const rawText = body.text?.trim() || (body.image_base64 ? await extractTextWithGoogleVision(body.image_base64) : '');
+      const rawText = body.text?.trim() || (body.image_base64 ? await extractTextWithYandexVision(body.image_base64) : '');
       if (!rawText) {
         return reply.code(400).send({
           error: { code: 'OCR_INPUT_REQUIRED', message: 'Provide text or image_base64' },
         });
       }
 
+      const fields = parseBusinessCardFields(rawText);
       const extracted = parseBusinessCardText(rawText);
       let contact = null;
 
@@ -647,11 +926,15 @@ export const ContactsController = {
         });
       }
 
-      return reply.send({ data: { raw_text: rawText, extracted, contact }, meta: {} });
+      return reply.send({ data: { ...fields, raw_text: rawText, extracted, contact }, meta: {} });
     } catch (error) {
+      if (error instanceof ServiceNotConfiguredError) {
+        return sendServiceNotConfigured(reply, error);
+      }
+
       return reply.code(502).send({
         error: {
-          code: 'OCR_FAILED',
+          code: 'VISION_API_ERROR',
           message: error instanceof Error ? error.message : 'Business card OCR failed',
         },
       });
