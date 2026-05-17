@@ -1,0 +1,44 @@
+{
+  "_notes": [
+    "PLACEHOLDER VALUES: ascAppId and appleTeamId in submit.production.ios must be filled before first iOS build/submit.",
+    "google-play-service-account.json must be created from Google Play Console before Android submit.",
+    "ASSET WARNING: assets/icon.png is a 1x1 stub - replace with a 1024x1024 PNG before production build.",
+    "ASSET WARNING: assets/splash.png is a 1x1 stub - replace with a proper splash image before production build.",
+    "ASSET WARNING: assets/adaptive-icon.png is a 1x1 stub - replace with a 1024x1024 PNG before production build."
+  ],
+  "cli": {
+    "version": ">= 10.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": { "simulator": true },
+      "android": { "buildType": "apk" }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "ios": { "simulator": false }
+    },
+    "production": {
+      "autoIncrement": true,
+      "ios": { "resourceClass": "m-medium" },
+      "android": { "buildType": "app-bundle" }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "thiofedor@gmail.com",
+        "ascAppId": "PLACEHOLDER_APP_STORE_CONNECT_APP_ID",
+        "appleTeamId": "PLACEHOLDER_APPLE_TEAM_ID"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "production"
+      }
+    }
+  }
+}

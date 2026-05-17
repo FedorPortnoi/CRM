@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Российские доступы для CRM</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 16mm;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: #1f2430;
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.55;
+      background: #ffffff;
+    }
+
+    h1, h2, h3 {
+      color: #171a24;
+      line-height: 1.2;
+      margin: 0 0 10px;
+      page-break-after: avoid;
+    }
+
+    h1 {
+      font-size: 31px;
+      margin-bottom: 12px;
+    }
+
+    h2 {
+      font-size: 21px;
+      margin-top: 28px;
+      border-top: 2px solid #e4e8f0;
+      padding-top: 18px;
+    }
+
+    h3 {
+      font-size: 16px;
+      margin-top: 18px;
+    }
+
+    p {
+      margin: 7px 0;
+    }
+
+    a {
+      color: #1558b0;
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }
+
+    ol, ul {
+      margin: 7px 0 13px 22px;
+      padding: 0;
+    }
+
+    li {
+      margin: 5px 0;
+    }
+
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11.4px;
+      background: #f3f5f9;
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #f3f5f9;
+      border: 1px solid #d8deea;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11.3px;
+      line-height: 1.45;
+      margin: 9px 0 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 16px;
+      page-break-inside: avoid;
+    }
+
+    th, td {
+      border: 1px solid #d8deea;
+      padding: 8px 9px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: #eef2f8;
+      font-weight: 700;
+    }
+
+    .cover {
+      min-height: 92vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      page-break-after: always;
+    }
+
+    .subtitle {
+      font-size: 17px;
+      color: #505869;
+      max-width: 650px;
+      margin-bottom: 28px;
+    }
+
+    .box {
+      border: 1px solid #d8deea;
+      border-left: 5px solid #3867d6;
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: #f8faff;
+      margin: 12px 0 16px;
+      page-break-inside: avoid;
+    }
+
+    .warning {
+      border-left-color: #c0392b;
+      background: #fff8f7;
+    }
+
+    .green {
+      border-left-color: #148f63;
+      background: #f4fbf7;
+    }
+
+    .soft {
+      background: #fbfcff;
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    .muted {
+      color: #667085;
+    }
+
+    .big-number {
+      display: inline-block;
+      min-width: 25px;
+      height: 25px;
+      border-radius: 50%;
+      background: #171a24;
+      color: #ffffff;
+      text-align: center;
+      line-height: 25px;
+      font-weight: 700;
+      margin-right: 7px;
+      font-size: 13px;
+    }
+
+    .checklist li {
+      list-style: none;
+      margin-left: -18px;
+    }
+
+    .checklist li::before {
+      content: "□ ";
+      font-weight: 700;
+      color: #171a24;
+    }
+
+    .small {
+      font-size: 11.5px;
+    }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <h1>Российские доступы для CRM</h1>
+    <p class="subtitle">
+      Инструкция для человека без технической подготовки: что открыть, что нажать,
+      какие значения сохранить и что передать Федору.
+    </p>
+
+    <div class="box">
+      <h3>Для кого этот документ</h3>
+      <p>
+        Документ написан для взрослого делового пользователя, например для маркетинг-директора.
+        Здесь нет программирования и командной строки. Ваша задача - зарегистрировать нужные российские сервисы,
+        сохранить выданные ими значения и передать их Федору безопасным способом.
+      </p>
+    </div>
+
+    <div class="box warning">
+      <h3>Что нельзя делать</h3>
+      <p>
+        Не отправляйте секретные ключи обычным сообщением в Telegram, WhatsApp, email или чат.
+        Лучше передать их через менеджер паролей, во время созвона, или внести в файл на компьютере вместе с Федором.
+      </p>
+    </div>
+
+    <p class="muted">
+      Проект: CRM<br>
+      Папка проекта: <code>C:\Users\fedor\crm</code><br>
+      Нужный файл для Федора: <code>C:\Users\fedor\crm\.env</code><br>
+      Дата подготовки: 17 мая 2026
+    </p>
+  </section>
+
+  <h2>Что нужно получить</h2>
+  <p>
+    В этот документ включены только российские или Россия-ориентированные сервисы, которые нужны текущей версии CRM.
+    Google, Twilio, Sentry, обычная почта, WhatsApp и Telegram сюда не включены.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Сервис</th>
+        <th>Зачем нужен</th>
+        <th>Что должно быть у Федора в итоге</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Яндекс ID / OAuth</td>
+        <td>Подключение Яндекс Календаря к CRM.</td>
+        <td><code>YANDEX_CLIENT_ID</code>, <code>YANDEX_CLIENT_SECRET</code>, <code>YANDEX_REDIRECT_URI</code></td>
+      </tr>
+      <tr>
+        <td>SMS.ru</td>
+        <td>Отправка SMS клиентам и прием ответов.</td>
+        <td><code>SMSRU_API_ID</code>, <code>SMSRU_SENDER</code></td>
+      </tr>
+      <tr>
+        <td>Yandex Cloud: Vision и SpeechKit</td>
+        <td>Распознавание визиток и голосовых заметок.</td>
+        <td><code>YANDEX_API_KEY</code>, <code>YANDEX_FOLDER_ID</code></td>
+      </tr>
+      <tr>
+        <td>Yandex Cloud: PostgreSQL</td>
+        <td>Российская база данных для контактов, сделок, задач и встреч.</td>
+        <td><code>DATABASE_URL</code>, <code>DIRECT_URL</code></td>
+      </tr>
+      <tr>
+        <td>Yandex Object Storage</td>
+        <td>Хранилище файлов: вложения, аудио, выгрузки.</td>
+        <td><code>S3_BUCKET</code>, <code>S3_ENDPOINT</code>, <code>S3_REGION</code>, <code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SECRET_ACCESS_KEY</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="box green">
+    <h3>Как работать с инструкцией</h3>
+    <p>
+      Делайте строго по одному разделу. Не переходите к следующему, пока текущий сервис не создан,
+      значения не сохранены и не отмечены в чек-листе.
+    </p>
+  </div>
+
+  <h2>Как сохранять значения</h2>
+  <p>
+    Каждый сервис выдаст несколько строк. Их не нужно понимать. Их нужно аккуратно скопировать,
+    подписать понятным названием и сохранить.
+  </p>
+
+  <h3>Удобный формат заметки</h3>
+  <pre>CRM - доступы
+
+1. Яндекс Календарь
+YANDEX_CLIENT_ID = ...
+YANDEX_CLIENT_SECRET = ...
+YANDEX_REDIRECT_URI = ...
+
+2. SMS.ru
+SMSRU_API_ID = ...
+SMSRU_SENDER = ...
+
+3. Yandex Cloud
+YANDEX_API_KEY = ...
+YANDEX_FOLDER_ID = ...
+
+4. База данных Yandex PostgreSQL
+DATABASE_URL = ...
+DIRECT_URL = ...
+
+5. Yandex Object Storage
+S3_BUCKET = ...
+S3_ENDPOINT = ...
+S3_REGION = ...
+AWS_ACCESS_KEY_ID = ...
+AWS_SECRET_ACCESS_KEY = ...</pre>
+
+  <div class="box warning">
+    <p>
+      Если сервис показывает ключ только один раз, не закрывайте страницу, пока ключ не сохранен.
+      Если закрыли и ключ пропал, обычно проще удалить старый ключ и создать новый.
+    </p>
+  </div>
+
+  <h2 class="page-break"><span class="big-number">1</span>Яндекс Календарь</h2>
+  <p>
+    Это нужно, чтобы встречи из CRM попадали в Яндекс Календарь пользователя.
+    Здесь создается маленькое приложение в Яндексе. Через него пользователь дает CRM разрешение работать с календарем.
+  </p>
+
+  <h3>Куда зайти</h3>
+  <p>
+    Откройте: <a href="https://oauth.yandex.ru/">https://oauth.yandex.ru/</a>
+  </p>
+
+  <h3>Что нажимать</h3>
+  <ol>
+    <li>Войдите в Яндекс аккаунт, который будет владельцем CRM-доступов.</li>
+    <li>Нажмите создание нового приложения.</li>
+    <li>Если появится вопрос <strong>Какое приложение хотите создать?</strong>, выберите <strong>Для авторизации пользователей</strong>.</li>
+    <li>Название приложения: <strong>CRM Calendar</strong> или <strong>CRM Календарь</strong>.</li>
+    <li>Описание: <strong>Подключение Яндекс Календаря к CRM</strong>.</li>
+    <li>Тип приложения: выберите вариант для сайта, веб-сервиса или веб-приложения.</li>
+    <li>В поле адреса возврата вставьте:
+      <br><code>http://localhost:3000/api/v1/calendar/sync/yandex/callback</code>
+    </li>
+    <li>В правах доступа найдите календарь. Ищите слова <strong>Календарь</strong>, <strong>Calendar</strong> или <strong>CalDAV</strong>.</li>
+    <li>Выберите право, которое разрешает читать и изменять календарь.</li>
+    <li>Если отдельно попросят доступ к логину пользователя, разрешите минимальный доступ. CRM использует логин, чтобы понять адрес календаря.</li>
+    <li>Нажмите создать приложение.</li>
+  </ol>
+
+  <h3>Что скопировать</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Как называется на сайте</th>
+        <th>Как подписать для Федора</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Client ID / ID приложения</td>
+        <td><code>YANDEX_CLIENT_ID</code></td>
+      </tr>
+      <tr>
+        <td>Client secret / Пароль приложения / Секрет приложения</td>
+        <td><code>YANDEX_CLIENT_SECRET</code></td>
+      </tr>
+      <tr>
+        <td>Redirect URI / Callback URL / Адрес возврата</td>
+        <td><code>YANDEX_REDIRECT_URI</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Значение адреса возврата</h3>
+  <pre>YANDEX_REDIRECT_URI=http://localhost:3000/api/v1/calendar/sync/yandex/callback</pre>
+
+  <h3>Чек-лист</h3>
+  <ul class="checklist">
+    <li>Приложение в Яндексе создано.</li>
+    <li>Выбран вариант для авторизации пользователей.</li>
+    <li>Адрес возврата вставлен точно, без лишних символов.</li>
+    <li>Права календаря выбраны.</li>
+    <li><code>YANDEX_CLIENT_ID</code> сохранен.</li>
+    <li><code>YANDEX_CLIENT_SECRET</code> сохранен.</li>
+  </ul>
+
+  <h2 class="page-break"><span class="big-number">2</span>SMS.ru</h2>
+  <p>
+    Это российский сервис для SMS. Он нужен, чтобы CRM отправляла SMS клиентам и принимала ответы.
+    В старых материалах может встречаться Twilio. Для России сейчас нужен SMS.ru, не Twilio.
+  </p>
+
+  <h3>Куда зайти</h3>
+  <p>
+    Откройте: <a href="https://sms.ru/">https://sms.ru/</a>
+  </p>
+
+  <h3>Что нажимать</h3>
+  <ol>
+    <li>Зарегистрируйтесь или войдите в SMS.ru.</li>
+    <li>Подтвердите телефон и email, если сервис попросит.</li>
+    <li>Откройте личный кабинет.</li>
+    <li>Найдите раздел <strong>API</strong>, <strong>Настройки API</strong>, <strong>Программистам</strong> или <strong>Интеграция</strong>.</li>
+    <li>Найдите значение <strong>api_id</strong>. Это главный код для CRM.</li>
+    <li>Скопируйте <strong>api_id</strong>.</li>
+    <li>Пополните баланс на небольшую сумму для тестовых SMS.</li>
+    <li>Если нужна отправка от имени бренда, найдите раздел с именем отправителя и подайте имя на согласование.</li>
+  </ol>
+
+  <h3>Что скопировать</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Как называется на сайте</th>
+        <th>Как подписать для Федора</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>api_id</td>
+        <td><code>SMSRU_API_ID</code></td>
+      </tr>
+      <tr>
+        <td>Имя отправителя, если согласовано</td>
+        <td><code>SMSRU_SENDER</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Если имя отправителя еще не готово</h3>
+  <p>
+    Это не блокирует начало работы. Для тестов можно оставить:
+  </p>
+  <pre>SMSRU_SENDER=CRM</pre>
+
+  <h3>Про входящие SMS</h3>
+  <p>
+    Когда CRM будет размещена на настоящем сервере, в SMS.ru нужно будет указать адрес,
+    куда отправлять входящие SMS. Сейчас, на этапе получения доступов, достаточно сохранить <code>SMSRU_API_ID</code>.
+  </p>
+
+  <h3>Чек-лист</h3>
+  <ul class="checklist">
+    <li>Аккаунт SMS.ru создан.</li>
+    <li>Телефон/email подтверждены.</li>
+    <li><code>SMSRU_API_ID</code> сохранен.</li>
+    <li>Баланс пополнен для теста.</li>
+    <li>Если нужно брендированное имя отправителя, заявка отправлена.</li>
+  </ul>
+
+  <h2 class="page-break"><span class="big-number">3</span>Yandex Cloud: визитки и голос</h2>
+  <p>
+    Этот пункт нужен для двух функций CRM:
+    загрузить фото визитки и получить текст, а также записать голосовую заметку и получить текст.
+    Для обеих функций нужен один и тот же ключ Яндекс Облака.
+  </p>
+
+  <h3>Куда зайти</h3>
+  <p>
+    Откройте: <a href="https://console.yandex.cloud/">https://console.yandex.cloud/</a>
+  </p>
+
+  <h3>Сначала подготовьте Яндекс Облако</h3>
+  <ol>
+    <li>Войдите в Яндекс Облако.</li>
+    <li>Если облака еще нет, создайте облако.</li>
+    <li>Если Яндекс просит подключить оплату, подключите платежный аккаунт. Без этого многие сервисы не заработают.</li>
+    <li>Создайте или выберите папку для CRM. Удобное название: <strong>crm</strong> или <strong>crm-prod</strong>.</li>
+    <li>Скопируйте ID папки. Он виден на странице папки под названием или в информации о папке.</li>
+  </ol>
+
+  <h3>Потом создайте отдельного пользователя для CRM внутри Яндекс Облака</h3>
+  <p>
+    В Яндексе это называется сервисный аккаунт. Можно думать о нем как о служебном пользователе,
+    который работает не руками человека, а от имени CRM.
+  </p>
+
+  <ol>
+    <li>В Яндекс Облаке откройте <strong>Identity and Access Management</strong>.</li>
+    <li>Откройте <strong>Сервисные аккаунты</strong>.</li>
+    <li>Нажмите <strong>Создать сервисный аккаунт</strong>.</li>
+    <li>Название: <strong>crm-api</strong>.</li>
+    <li>Создайте аккаунт.</li>
+    <li>Назначьте ему права для распознавания изображений и речи. Ищите роли, связанные с Vision и SpeechKit.</li>
+    <li>Если интерфейс непонятен, остановитесь и позовите Федора. Роли лучше выбрать аккуратно.</li>
+  </ol>
+
+  <h3>Создайте API-ключ</h3>
+  <ol>
+    <li>Откройте сервисный аккаунт <strong>crm-api</strong>.</li>
+    <li>Найдите кнопку <strong>Создать новый ключ</strong>.</li>
+    <li>Выберите <strong>API-ключ</strong>.</li>
+    <li>Описание: <strong>CRM Vision Speech</strong>.</li>
+    <li>Если есть выбор ограничений, добавьте доступ к распознаванию изображений и речи.</li>
+    <li>Создайте ключ.</li>
+    <li>Сразу скопируйте ключ. Яндекс показывает его полностью только при создании.</li>
+  </ol>
+
+  <h3>Что скопировать</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Что вы видите</th>
+        <th>Как подписать для Федора</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>API-ключ</td>
+        <td><code>YANDEX_API_KEY</code></td>
+      </tr>
+      <tr>
+        <td>ID папки</td>
+        <td><code>YANDEX_FOLDER_ID</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Чек-лист</h3>
+  <ul class="checklist">
+    <li>В Яндекс Облаке есть платежный аккаунт.</li>
+    <li>Создана папка CRM.</li>
+    <li><code>YANDEX_FOLDER_ID</code> сохранен.</li>
+    <li>Создан сервисный аккаунт <strong>crm-api</strong>.</li>
+    <li>Создан API-ключ.</li>
+    <li><code>YANDEX_API_KEY</code> сохранен.</li>
+  </ul>
+
+  <h2 class="page-break"><span class="big-number">4</span>Yandex Cloud: база данных</h2>
+  <p>
+    База данных - это место, где CRM хранит всю рабочую информацию:
+    контакты, сделки, задачи, встречи и сообщения. Для русской версии база должна быть в российской инфраструктуре.
+  </p>
+
+  <h3>Куда зайти</h3>
+  <p>
+    Откройте: <a href="https://console.yandex.cloud/">https://console.yandex.cloud/</a>
+  </p>
+
+  <h3>Что нажимать</h3>
+  <ol>
+    <li>Откройте папку CRM в Яндекс Облаке.</li>
+    <li>Найдите сервис <strong>Managed Service for PostgreSQL</strong>.</li>
+    <li>Нажмите создание нового кластера.</li>
+    <li>Название: <strong>crm-postgres</strong>.</li>
+    <li>Выберите российский регион, который предлагает Яндекс.</li>
+    <li>Для начала выберите небольшой тариф. На старте не нужен большой сервер.</li>
+    <li>Создайте пользователя базы. Имя: <strong>crm_user</strong>.</li>
+    <li>Создайте сложный пароль. Сохраните его отдельно.</li>
+    <li>Создайте базу данных. Имя: <strong>crm</strong>.</li>
+    <li>На странице подключения скопируйте адрес сервера и порт.</li>
+  </ol>
+
+  <h3>Что нужно передать Федору</h3>
+  <p>
+    Федору нужны не отдельные куски, а две готовые строки подключения. Если вам неудобно собирать их самой,
+    передайте Федору четыре значения: адрес сервера, порт, имя базы, имя пользователя и пароль.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Что найти в Яндексе</th>
+        <th>Пример</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Адрес сервера</td>
+        <td><code>rc1a-...mdb.yandexcloud.net</code></td>
+      </tr>
+      <tr>
+        <td>Порт</td>
+        <td><code>6432</code> или тот, который показывает Яндекс</td>
+      </tr>
+      <tr>
+        <td>Имя базы</td>
+        <td><code>crm</code></td>
+      </tr>
+      <tr>
+        <td>Пользователь</td>
+        <td><code>crm_user</code></td>
+      </tr>
+      <tr>
+        <td>Пароль</td>
+        <td>тот, который вы создали</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Как будут выглядеть строки для Федора</h3>
+  <pre>DATABASE_URL="postgresql://crm_user:ПАРОЛЬ@АДРЕС:ПОРТ/crm?sslmode=require"
+DIRECT_URL="postgresql://crm_user:ПАРОЛЬ@АДРЕС:ПОРТ/crm?sslmode=require"</pre>
+
+  <h3>Чек-лист</h3>
+  <ul class="checklist">
+    <li>Кластер PostgreSQL создан.</li>
+    <li>База <strong>crm</strong> создана.</li>
+    <li>Пользователь <strong>crm_user</strong> создан.</li>
+    <li>Пароль сохранен.</li>
+    <li>Адрес сервера и порт сохранены.</li>
+    <li>Старые значения базы не удалялись без копии.</li>
+  </ul>
+
+  <div class="box warning">
+    <p>
+      Это самый чувствительный пункт. Если Яндекс спрашивает про сеть, SSL, доступ снаружи или белые IP-адреса,
+      лучше остановиться и позвать Федора.
+    </p>
+  </div>
+
+  <h2 class="page-break"><span class="big-number">5</span>Yandex Object Storage</h2>
+  <p>
+    Это хранилище файлов. В CRM туда можно складывать вложения, выгрузки, аудио и другие файлы.
+    В настройках проекта названия полей похожи на Amazon, но использовать будем Яндекс.
+  </p>
+
+  <h3>Куда зайти</h3>
+  <p>
+    Откройте: <a href="https://console.yandex.cloud/">https://console.yandex.cloud/</a>
+  </p>
+
+  <h3>Создайте хранилище</h3>
+  <ol>
+    <li>Откройте папку CRM в Яндекс Облаке.</li>
+    <li>Найдите сервис <strong>Object Storage</strong>.</li>
+    <li>Нажмите <strong>Создать бакет</strong>.</li>
+    <li>Имя: <strong>crm-uploads</strong>. Если имя занято, добавьте короткое окончание, например <strong>crm-uploads-fedor</strong>.</li>
+    <li>Не включайте публичный доступ, если Яндекс это предлагает. Файлы CRM не должны быть открыты всем.</li>
+    <li>Создайте бакет.</li>
+  </ol>
+
+  <h3>Создайте ключи для доступа к файлам</h3>
+  <ol>
+    <li>Откройте <strong>Identity and Access Management</strong>.</li>
+    <li>Создайте или откройте сервисный аккаунт, например <strong>crm-storage</strong>.</li>
+    <li>Дайте ему права на Object Storage для папки или нужного бакета.</li>
+    <li>Откройте сервисный аккаунт.</li>
+    <li>Нажмите <strong>Создать новый ключ</strong>.</li>
+    <li>Выберите <strong>Статический ключ доступа</strong>.</li>
+    <li>Сразу скопируйте обе части ключа.</li>
+  </ol>
+
+  <h3>Что скопировать</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Что вы видите</th>
+        <th>Как подписать для Федора</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Имя бакета</td>
+        <td><code>S3_BUCKET</code></td>
+      </tr>
+      <tr>
+        <td>Endpoint Яндекса</td>
+        <td><code>S3_ENDPOINT=https://storage.yandexcloud.net</code></td>
+      </tr>
+      <tr>
+        <td>Регион</td>
+        <td><code>S3_REGION=ru-central1</code></td>
+      </tr>
+      <tr>
+        <td>Идентификатор статического ключа</td>
+        <td><code>AWS_ACCESS_KEY_ID</code></td>
+      </tr>
+      <tr>
+        <td>Секрет статического ключа</td>
+        <td><code>AWS_SECRET_ACCESS_KEY</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Чек-лист</h3>
+  <ul class="checklist">
+    <li>Бакет создан.</li>
+    <li>Публичный доступ не включен.</li>
+    <li><code>S3_BUCKET</code> сохранен.</li>
+    <li><code>AWS_ACCESS_KEY_ID</code> сохранен.</li>
+    <li><code>AWS_SECRET_ACCESS_KEY</code> сохранен.</li>
+    <li><code>S3_ENDPOINT=https://storage.yandexcloud.net</code> записан.</li>
+    <li><code>S3_REGION=ru-central1</code> записан.</li>
+  </ul>
+
+  <h2 class="page-break">Что не нужно получать сейчас</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Сервис</th>
+        <th>Почему не нужен сейчас</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Google Calendar</td>
+        <td>Заменен на Яндекс Календарь.</td>
+      </tr>
+      <tr>
+        <td>Twilio</td>
+        <td>Заменен на SMS.ru для России.</td>
+      </tr>
+      <tr>
+        <td>Sentry</td>
+        <td>Не российский обязательный доступ. Можно настроить позже.</td>
+      </tr>
+      <tr>
+        <td>Обычная email-рассылка / SMTP</td>
+        <td>Не входит в список российских обязательных доступов для первого запуска.</td>
+      </tr>
+      <tr>
+        <td>WhatsApp Business</td>
+        <td>Отложено на следующую версию.</td>
+      </tr>
+      <tr>
+        <td>Telegram Bot</td>
+        <td>Отложено на следующую версию.</td>
+      </tr>
+      <tr>
+        <td>Оплата</td>
+        <td>Будет отдельным шагом, когда будет готова юридическая часть.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Итоговый лист для Федора</h2>
+  <p>
+    Когда все готово, у вас должен быть заполнен такой список. Пустые места заполняются реальными значениями.
+  </p>
+
+  <pre>YANDEX_CLIENT_ID=
+YANDEX_CLIENT_SECRET=
+YANDEX_REDIRECT_URI=http://localhost:3000/api/v1/calendar/sync/yandex/callback
+
+SMSRU_API_ID=
+SMSRU_SENDER=
+
+YANDEX_API_KEY=
+YANDEX_FOLDER_ID=
+
+DATABASE_URL=
+DIRECT_URL=
+
+S3_BUCKET=
+S3_ENDPOINT=https://storage.yandexcloud.net
+S3_REGION=ru-central1
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=</pre>
+
+  <div class="box green">
+    <h3>Когда писать Федору</h3>
+    <p>
+      После каждого раздела можно написать: "Готово: Яндекс Календарь", "Готово: SMS.ru" и так далее.
+      Сами секретные значения лучше не отправлять обычным сообщением.
+    </p>
+  </div>
+
+  <h2 class="page-break">Официальные страницы</h2>
+  <p class="muted">
+    Эти ссылки нужны только если интерфейс изменился или хочется проверить источник.
+  </p>
+
+  <ul class="small">
+    <li>Яндекс OAuth: <a href="https://oauth.yandex.ru/">https://oauth.yandex.ru/</a></li>
+    <li>Яндекс OAuth кабинет: <a href="https://yandex.ru/dev/id/doc/en/oauth-cabinet">https://yandex.ru/dev/id/doc/en/oauth-cabinet</a></li>
+    <li>SMS.ru API: <a href="https://sms.ru/docs/api">https://sms.ru/docs/api</a></li>
+    <li>Yandex Cloud: ID папки: <a href="https://yandex.cloud/docs/resource-manager/operations/folder/get-id">https://yandex.cloud/docs/resource-manager/operations/folder/get-id</a></li>
+    <li>Yandex Cloud: API-ключи: <a href="https://yandex.cloud/ru/docs/iam/concepts/authorization/api-key">https://yandex.cloud/ru/docs/iam/concepts/authorization/api-key</a></li>
+    <li>Yandex Cloud: сервисный аккаунт: <a href="https://yandex.cloud/ru/docs/iam/operations/sa/create">https://yandex.cloud/ru/docs/iam/operations/sa/create</a></li>
+    <li>Yandex Cloud: база PostgreSQL: <a href="https://yandex.cloud/en/docs/managed-postgresql/operations/connect">https://yandex.cloud/en/docs/managed-postgresql/operations/connect</a></li>
+    <li>Yandex Cloud: Object Storage бакет: <a href="https://yandex.cloud/ru/docs/storage/operations/buckets/create">https://yandex.cloud/ru/docs/storage/operations/buckets/create</a></li>
+    <li>Yandex Cloud: статические ключи доступа: <a href="https://yandex.cloud/ru/docs/iam/concepts/authorization/access-key">https://yandex.cloud/ru/docs/iam/concepts/authorization/access-key</a></li>
+  </ul>
+</body>
+</html>

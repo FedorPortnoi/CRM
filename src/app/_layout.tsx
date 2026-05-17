@@ -8,10 +8,13 @@ import { useUserStore } from '../store/userStore';
 import { registerDevicePushToken } from '../utils/notifications';
 import { queryClient, asyncStoragePersister } from '../utils/queryClient';
 import OfflineBanner from '../components/OfflineBanner';
+import { ConflictToast } from '../components/ConflictToast';
+import { OnboardingWalkthrough } from '../components/OnboardingWalkthrough';
 import { registerBackgroundSync } from '../utils/backgroundSync';
 import { initI18n } from '../i18n';
 import { getStoredLanguage, hasSelectedLanguage } from '../i18n/storage';
 import { initCallCapture } from '../utils/callCapture';
+import { useOnboardingStore } from '../store/onboardingStore';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -25,6 +28,7 @@ export default function RootLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const { token, user, restoreSession } = useUserStore();
+  const fetchOnboarding = useOnboardingStore((s) => s.fetch);
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
   const [languageStatus, setLanguageStatus] = useState<'checking' | 'selecting' | 'ready'>('checking');
   const pushRegistrationAttemptRef = useRef<string | null>(null);
@@ -120,6 +124,12 @@ export default function RootLayout() {
   }, [token]);
 
   useEffect(() => {
+    if (token !== null && languageStatus === 'ready' && !isRestoring) {
+      void fetchOnboarding(token);
+    }
+  }, [token, languageStatus, isRestoring, fetchOnboarding]);
+
+  useEffect(() => {
     if (token === null) {
       callCaptureCleanupRef.current?.();
       callCaptureCleanupRef.current = null;
@@ -155,6 +165,8 @@ export default function RootLayout() {
           <Stack.Screen name="register" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         </Stack>
+        <OnboardingWalkthrough />
+        <ConflictToast />
       </GestureHandlerRootView>
     </PersistQueryClientProvider>
   );

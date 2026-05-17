@@ -267,6 +267,19 @@ const en = {
     noteBody: 'Note content',
     stageId: 'Stage ID',
   },
+  onboarding: {
+    stepOf: 'Step {{step}} of {{total}}',
+    gotIt: 'Got it',
+    skipAll: 'Skip all',
+    step_contacts_title: 'Add your first contact',
+    step_contacts_desc: 'Go to Contacts and tap + to add someone you work with.',
+    step_deals_title: 'Create a deal',
+    step_deals_desc: 'Open Pipeline and create a deal linked to a contact.',
+    step_tasks_title: 'Set a task',
+    step_tasks_desc: 'Go to Tasks, tap +, and set a due date.',
+    step_calendar_title: 'Schedule a meeting',
+    step_calendar_desc: 'Open Calendar and create your first event.',
+  },
 };
 
 export default en;

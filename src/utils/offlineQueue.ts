@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import { useSyncStore } from '../store/syncStore';
 
 const STORAGE_KEY = 'crm-offline-queue';
 
@@ -81,6 +82,21 @@ export async function dequeue(): Promise<QueuedMutation | null> {
   return mutation ?? null;
 }
 
+function entityFromUrl(url: string): string {
+  const parts = url.replace(/\?.*$/, '').split('/').filter(Boolean);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (!/^[0-9a-f-]{8,}$/i.test(parts[i])) return parts[i];
+  }
+  return 'record';
+}
+
+function idFromUrl(url: string, fallback: string): string {
+  const last = url.replace(/\?.*$/, '').split('/').pop() ?? '';
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(last)
+    ? last
+    : fallback;
+}
+
 export async function flush(): Promise<void> {
   const queue: QueuedMutation[] = await readQueue();
   const remaining: QueuedMutation[] = [...queue];
@@ -102,6 +118,19 @@ export async function flush(): Promise<void> {
         },
         body: mutation.body,
       });
+
+      if (response.status === 409) {
+        const serverValue: unknown = await response.json().catch(() => null);
+        useSyncStore.getState().addConflict({
+          entity: entityFromUrl(mutation.url),
+          id: idFromUrl(mutation.url, mutation.id),
+          localValue: JSON.parse(mutation.body) as unknown,
+          serverValue,
+          resolvedAt: new Date().toISOString(),
+        });
+        remaining.shift();
+        continue;
+      }
 
       if (!response.ok) {
         break;

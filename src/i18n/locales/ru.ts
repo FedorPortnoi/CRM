@@ -267,6 +267,19 @@ const ru = {
     noteBody: 'Текст заметки',
     stageId: 'ID этапа',
   },
+  onboarding: {
+    stepOf: 'Шаг {{step}} из {{total}}',
+    gotIt: 'Понятно',
+    skipAll: 'Пропустить',
+    step_contacts_title: 'Добавьте первый контакт',
+    step_contacts_desc: 'Перейдите в Контакты и нажмите +, чтобы добавить человека.',
+    step_deals_title: 'Создайте сделку',
+    step_deals_desc: 'Откройте Воронку и создайте сделку, привязав её к контакту.',
+    step_tasks_title: 'Поставьте задачу',
+    step_tasks_desc: 'Перейдите в Задачи, нажмите + и укажите срок выполнения.',
+    step_calendar_title: 'Запланируйте встречу',
+    step_calendar_desc: 'Откройте Календарь и создайте первое событие.',
+  },
 };
 
 export default ru;

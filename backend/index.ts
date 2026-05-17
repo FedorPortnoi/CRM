@@ -14,6 +14,7 @@ import notificationsRoutes from './api/routes/notifications';
 import workflowsRoutes from './api/routes/workflows';
 import syncRoutes from './api/routes/sync';
 import capturesRoutes from './api/routes/captures';
+import onboardingRoutes from './api/routes/onboarding';
 
 async function start() {
   const useMcp = process.env.ENABLE_MCP === 'true';
@@ -39,6 +40,7 @@ async function start() {
   await server.register(workflowsRoutes, { prefix: '/api/v1/workflows' });
   await server.register(syncRoutes, { prefix: '/api/v1/sync' });
   await server.register(capturesRoutes, { prefix: '/api/v1/captures' });
+  await server.register(onboardingRoutes, { prefix: '/api/v1/onboarding' });
 
   server.get('/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() };
