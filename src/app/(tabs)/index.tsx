@@ -94,6 +94,7 @@ export default function DashboardScreen(): JSX.Element {
   const [tasks, setTasks] = useState<SectionState<TodayTask[]>>(initialSection<TodayTask[]>);
   const [contacts, setContacts] = useState<SectionState<RecentContact[]>>(initialSection<RecentContact[]>);
   const [captureCount, setCaptureCount] = useState<number>(0);
+  const [workflowCount, setWorkflowCount] = useState<SectionState<number>>(initialSection<number>);
   const [refreshing, setRefreshing] = useState(false);
   const previousCaptureCountRef = useRef<number | null>(null);
 
@@ -166,6 +167,26 @@ export default function DashboardScreen(): JSX.Element {
     [token],
   );
 
+  const fetchWorkflowCount = useCallback(async (showSkeleton: boolean): Promise<void> => {
+    if (!token) return;
+    if (showSkeleton) setWorkflowCount((prev) => ({ ...prev, isLoading: true }));
+    try {
+      setWorkflowCount((prev) => ({ ...prev, error: null }));
+      const res = await fetch(`${API_URL}/workflows?status=active`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`Workflows failed with status ${res.status}`);
+      const json = (await res.json()) as { meta: { total: number } };
+      setWorkflowCount({ data: json.meta.total, isLoading: false, error: null });
+    } catch (e: unknown) {
+      setWorkflowCount((prev) => ({
+        data: prev.data,
+        isLoading: false,
+        error: errorMessage(e, 'Failed to load workflows'),
+      }));
+    }
+  }, [token]);
+
   const fetchCaptureCount = useCallback(async (): Promise<void> => {
     if (!token) return;
     try {
@@ -197,9 +218,10 @@ export default function DashboardScreen(): JSX.Element {
         fetchTasks(showSkeleton),
         fetchContacts(showSkeleton),
         fetchCaptureCount(),
+        fetchWorkflowCount(showSkeleton),
       ]);
     },
-    [fetchSummary, fetchTasks, fetchContacts, fetchCaptureCount],
+    [fetchSummary, fetchTasks, fetchContacts, fetchCaptureCount, fetchWorkflowCount],
   );
 
   useEffect(() => {
@@ -242,6 +264,7 @@ export default function DashboardScreen(): JSX.Element {
             <View style={styles.summarySkeleton} />
             <View style={styles.summarySkeleton} />
             <View style={styles.summarySkeleton} />
+            <View style={styles.summarySkeleton} />
           </>
         ) : summary.error ? (
           <View style={styles.fullWidth}>
@@ -264,6 +287,11 @@ export default function DashboardScreen(): JSX.Element {
               <Text style={styles.cardValue}>{formatPipelineHealth(summary.data.pipeline_health_score)}</Text>
               <Text style={styles.cardSub}>{t('dashboard.score')}</Text>
             </View>
+            <TouchableOpacity style={styles.summaryCard} onPress={() => router.push('/workflows' as never)} accessibilityRole="button">
+              <Text style={styles.cardLabel}>{t('dashboard.workflows')}</Text>
+              <Text style={styles.cardValue}>{workflowCount.error ? '—' : (workflowCount.data ?? 0)}</Text>
+              <Text style={styles.cardSub}>{t('workflows.enabled')}</Text>
+            </TouchableOpacity>
           </>
         ) : null}
       </View>
