@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
@@ -13,14 +13,42 @@ interface ErrorResponse {
   error: { code: string; message: string };
 }
 
+type RouteParamValue = string | string[] | undefined;
+
+type NewContactParams = {
+  phone?: string | string[];
+  capture_id?: string | string[];
+};
+
+function firstRouteParam(value: RouteParamValue): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+async function matchCaptureToContact(captureId: string, contactId: string, authToken: string): Promise<void> {
+  try {
+    await fetch(`${API_URL}/captures/${captureId}/match`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ contact_id: contactId }),
+    });
+  } catch {
+    // Matching the capture is best-effort after contact creation.
+  }
+}
+
 export default function NewContactScreen(): JSX.Element {
   const token = useUserStore((s) => s.token);
+  const { phone: routePhone, capture_id: routeCaptureId } = useLocalSearchParams<NewContactParams>();
+  const captureId = firstRouteParam(routeCaptureId)?.trim() || null;
 
   const [firstName, setFirstName] = useState<string>('');
   const [lastName, setLastName] = useState<string>('');
   const [company, setCompany] = useState<string>('');
   const [email, setEmail] = useState<string>('');
-  const [phone, setPhone] = useState<string>('');
+  const [phone, setPhone] = useState<string>(() => firstRouteParam(routePhone) ?? '');
   const [notes, setNotes] = useState<string>('');
   const [showFirstNameError, setShowFirstNameError] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -57,7 +85,11 @@ export default function NewContactScreen(): JSX.Element {
       const response = result.response;
       if (response.ok) {
         const responseBody = (await response.json()) as CreateContactResponse;
-        router.replace({ pathname: '/contact/[id]', params: { id: responseBody.data.id } });
+        const newContactId = responseBody.data.id;
+        if (captureId && token) {
+          await matchCaptureToContact(captureId, newContactId, token);
+        }
+        router.replace({ pathname: '/contact/[id]', params: { id: newContactId } });
       } else {
         const parsedBody = (await response.json()) as ErrorResponse;
         setApiError(parsedBody?.error?.message ?? 'Failed to create contact');

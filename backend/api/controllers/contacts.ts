@@ -112,6 +112,36 @@ function optionalTrimmedString(value: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function phoneMatchKeys(value: string | null | undefined): Set<string> {
+  const digits = value?.replace(/\D/g, '') ?? '';
+  const keys = new Set<string>();
+
+  if (!digits) {
+    return keys;
+  }
+
+  keys.add(digits);
+
+  if (digits.length === 10) {
+    keys.add(`7${digits}`);
+    keys.add(`8${digits}`);
+  }
+
+  if (digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8'))) {
+    const nationalNumber = digits.slice(1);
+    keys.add(nationalNumber);
+    keys.add(`7${nationalNumber}`);
+    keys.add(`8${nationalNumber}`);
+  }
+
+  return keys;
+}
+
+function hasMatchingPhone(contact: { phone: string | null; mobile: string | null }, searchKeys: Set<string>): boolean {
+  const contactKeys = new Set<string>([...phoneMatchKeys(contact.phone), ...phoneMatchKeys(contact.mobile)]);
+  return [...contactKeys].some((key) => searchKeys.has(key));
+}
+
 function getYandexConfig(serviceName: 'Vision' | 'SpeechKit'): { apiKey: string; folderId: string } {
   const apiKey = process.env.YANDEX_API_KEY?.trim();
   const folderId = process.env.YANDEX_FOLDER_ID?.trim();
@@ -376,12 +406,13 @@ function extractSpeechFields(transcript: string): VoiceFields {
 
 export const ContactsController = {
   list: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { q, status, type, assigned_to, tag, page, per_page, sort, order } = request.query as {
+    const { q, status, type, assigned_to, tag, phone, page, per_page, sort, order } = request.query as {
       q?: string;
       status?: 'active' | 'inactive' | 'archived';
       type?: 'lead' | 'customer' | 'partner' | 'other';
       assigned_to?: string;
       tag?: string;
+      phone?: string;
       source?: string;
       page: number;
       per_page: number;
@@ -405,6 +436,24 @@ export const ContactsController = {
         ],
       }),
     };
+
+    if (phone !== undefined) {
+      const searchKeys = phoneMatchKeys(phone);
+
+      if (searchKeys.size === 0) {
+        return reply.send({ data: [], meta: { total: 0, page, per_page } });
+      }
+
+      const contacts = await db.contact.findMany({
+        where,
+        orderBy: { [sort]: order },
+      });
+      const matchedContacts = contacts.filter((contact) => hasMatchingPhone(contact, searchKeys));
+      const start = (page - 1) * per_page;
+      const paginatedContacts = matchedContacts.slice(start, start + per_page);
+
+      return reply.send({ data: paginatedContacts, meta: { total: matchedContacts.length, page, per_page } });
+    }
 
     const [contacts, total] = await Promise.all([
       db.contact.findMany({

@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -10,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
@@ -46,6 +51,7 @@ type ErrorResponse = {
 };
 
 type ActionName = 'complete' | 'cancel' | 'notes';
+type MutationResult = { queued: true } | { queued: false; response: Response };
 
 function formatDateTime(dateString: string): string {
   return new Date(dateString).toLocaleString('en-US', {
@@ -75,6 +81,16 @@ function contactName(contact: CalendarContact): string {
   return [contact.first_name, contact.last_name].filter(Boolean).join(' ');
 }
 
+async function parseEventResponse(res: Response, fallbackMessage: string): Promise<CalendarEvent> {
+  if (!res.ok) {
+    const body = (await res.json()) as ErrorResponse;
+    throw new Error(body.error?.message ?? `${fallbackMessage} with status ${res.status}`);
+  }
+
+  const body = (await res.json()) as { data: CalendarEvent };
+  return body.data;
+}
+
 interface SkeletonBoxProps {
   height: number;
   width?: number | '75%' | '100%';
@@ -97,6 +113,7 @@ function SkeletonBox({ height, width = '100%', marginBottom = 0 }: SkeletonBoxPr
 
 export default function CalendarEventDetailScreen(): JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
   const [event, setEvent] = useState<CalendarEvent | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -106,6 +123,9 @@ export default function CalendarEventDetailScreen(): JSX.Element {
   const [activeAction, setActiveAction] = useState<ActionName | null>(null);
   const [postMeetingNotes, setPostMeetingNotes] = useState<string>('');
   const [notesFieldError, setNotesFieldError] = useState<string | null>(null);
+  const [isCompletionNotesPromptVisible, setIsCompletionNotesPromptVisible] =
+    useState<boolean>(false);
+  const [completionNotesDraft, setCompletionNotesDraft] = useState<string>('');
 
   const fetchEvent = useCallback(
     async (refreshing: boolean): Promise<void> => {
@@ -146,7 +166,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
 
   async function runAction(
     action: ActionName,
-    request: () => Promise<{ queued: true } | { queued: false; response: Response }>,
+    request: () => Promise<MutationResult>,
     onSuccess: (updated: CalendarEvent) => void,
   ): Promise<void> {
     if (activeAction) return;
@@ -160,14 +180,8 @@ export default function CalendarEventDetailScreen(): JSX.Element {
         return;
       }
 
-      const res = result.response;
-      if (!res.ok) {
-        const body = (await res.json()) as ErrorResponse;
-        throw new Error(body.error?.message ?? `Action failed with status ${res.status}`);
-      }
-
-      const body = (await res.json()) as { data: CalendarEvent };
-      onSuccess(body.data);
+      const updated = await parseEventResponse(result.response, 'Action failed');
+      onSuccess(updated);
     } catch (e: unknown) {
       setActionError(e instanceof Error ? e.message : 'Action failed. Please try again.');
     } finally {
@@ -175,7 +189,106 @@ export default function CalendarEventDetailScreen(): JSX.Element {
     }
   }
 
+  async function completeEventWithOptionalNotes(notes: string): Promise<void> {
+    if (activeAction) return;
+    setActiveAction('complete');
+    setActionError(null);
+
+    const trimmedNotes = notes.trim();
+
+    try {
+      const completionResult = await sendOrQueueMutation({
+        url: `${API_URL}/calendar/${id}/complete`,
+        method: 'POST',
+        token: token ?? '',
+      });
+
+      if (completionResult.queued) {
+        router.back();
+        return;
+      }
+
+      const completed = await parseEventResponse(
+        completionResult.response,
+        'Complete event failed',
+      );
+      setEvent(completed);
+      setPostMeetingNotes(completed.notes ?? '');
+
+      if (trimmedNotes === '') {
+        return;
+      }
+
+      const notesResult = await sendOrQueueMutation({
+        url: `${API_URL}/calendar/${id}/notes`,
+        method: 'POST',
+        token: token ?? '',
+        body: { notes: trimmedNotes },
+      });
+
+      if (notesResult.queued) {
+        router.back();
+        return;
+      }
+
+      const updated = await parseEventResponse(notesResult.response, 'Save notes failed');
+      setEvent(updated);
+      setPostMeetingNotes(updated.notes ?? '');
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : 'Action failed. Please try again.');
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  function handleCompletionNotesPromptSave(notes: string): void {
+    setIsCompletionNotesPromptVisible(false);
+    setCompletionNotesDraft('');
+    void completeEventWithOptionalNotes(notes);
+  }
+
+  function handleCompletionNotesPromptSkip(): void {
+    handleCompletionNotesPromptSave('');
+  }
+
+  function showCompletionNotesPrompt(): void {
+    if (activeAction) return;
+
+    setActionError(null);
+
+    if (Platform.OS === 'ios' && typeof Alert.prompt === 'function') {
+      Alert.prompt(
+        t('calendar.completeNotesPromptTitle'),
+        t('calendar.completeNotesPromptMessage'),
+        [
+          {
+            text: t('calendar.completeNotesPromptSkip'),
+            onPress: (): void => {
+              void completeEventWithOptionalNotes('');
+            },
+          },
+          {
+            text: t('calendar.completeNotesPromptSave'),
+            onPress: (text?: string): void => {
+              void completeEventWithOptionalNotes(text ?? '');
+            },
+          },
+        ],
+        'plain-text',
+      );
+      return;
+    }
+
+    setCompletionNotesDraft('');
+    setIsCompletionNotesPromptVisible(true);
+  }
+
   async function handleToggleComplete(): Promise<void> {
+    if (event?.status === 'scheduled') {
+      showCompletionNotesPrompt();
+      return;
+    }
+
     await runAction(
       'complete',
       () =>
@@ -464,6 +577,63 @@ export default function CalendarEventDetailScreen(): JSX.Element {
           </View>
         ) : null}
       </ScrollView>
+
+      <Modal
+        visible={isCompletionNotesPromptVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCompletionNotesPromptSkip}
+      >
+        <KeyboardAvoidingView
+          style={styles.promptOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.promptCard}>
+            <Text style={styles.promptTitle}>{t('calendar.completeNotesPromptTitle')}</Text>
+            <Text style={styles.promptMessage}>{t('calendar.completeNotesPromptMessage')}</Text>
+            <TextInput
+              style={styles.promptInput}
+              value={completionNotesDraft}
+              onChangeText={setCompletionNotesDraft}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              placeholder={t('calendar.completeNotesPromptPlaceholder')}
+              placeholderTextColor="#6B6B6B"
+              editable={!isActionDisabled}
+              autoFocus
+            />
+            <View style={styles.promptActions}>
+              <TouchableOpacity
+                style={[styles.promptButton, styles.promptButtonSecondary]}
+                onPress={handleCompletionNotesPromptSkip}
+                disabled={isActionDisabled}
+                accessibilityRole="button"
+              >
+                <Text style={styles.promptButtonSecondaryText}>
+                  {t('calendar.completeNotesPromptSkip')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.promptButton,
+                  styles.promptButtonPrimary,
+                  isActionDisabled && styles.buttonDisabled,
+                ]}
+                onPress={() => {
+                  handleCompletionNotesPromptSave(completionNotesDraft);
+                }}
+                disabled={isActionDisabled}
+                accessibilityRole="button"
+              >
+                <Text style={styles.promptButtonPrimaryText}>
+                  {t('calendar.completeNotesPromptSave')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </>
   );
 }
@@ -655,6 +825,75 @@ const styles = StyleSheet.create({
   headerEditText: {
     color: '#1A73E8',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  promptOverlay: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.36)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 16,
+  },
+  promptCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    maxWidth: 420,
+    padding: 16,
+    width: '100%',
+  },
+  promptTitle: {
+    color: '#1A1A1A',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  promptMessage: {
+    color: '#6B6B6B',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  promptInput: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    borderWidth: 1,
+    color: '#1A1A1A',
+    fontSize: 15,
+    minHeight: 104,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  promptActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  promptButton: {
+    alignItems: 'center',
+    borderRadius: 8,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  promptButtonPrimary: {
+    backgroundColor: '#1A73E8',
+  },
+  promptButtonSecondary: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#1A73E8',
+    borderWidth: 1,
+  },
+  promptButtonPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  promptButtonSecondaryText: {
+    color: '#1A73E8',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

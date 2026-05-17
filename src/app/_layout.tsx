@@ -11,6 +11,7 @@ import OfflineBanner from '../components/OfflineBanner';
 import { registerBackgroundSync } from '../utils/backgroundSync';
 import { initI18n } from '../i18n';
 import { getStoredLanguage, hasSelectedLanguage } from '../i18n/storage';
+import { initCallCapture } from '../utils/callCapture';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -27,6 +28,7 @@ export default function RootLayout() {
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
   const [languageStatus, setLanguageStatus] = useState<'checking' | 'selecting' | 'ready'>('checking');
   const pushRegistrationAttemptRef = useRef<string | null>(null);
+  const callCaptureCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -115,6 +117,19 @@ export default function RootLayout() {
         }
       }
     })();
+  }, [token]);
+
+  useEffect(() => {
+    if (token === null) {
+      callCaptureCleanupRef.current?.();
+      callCaptureCleanupRef.current = null;
+      return;
+    }
+    callCaptureCleanupRef.current = initCallCapture(() => token);
+    return () => {
+      callCaptureCleanupRef.current?.();
+      callCaptureCleanupRef.current = null;
+    };
   }, [token]);
 
   if (languageStatus === 'checking' || (languageStatus === 'ready' && isRestoring)) {

@@ -108,6 +108,18 @@ enum WorkflowRunStatus {
   failed
 }
 
+enum PendingCaptureType {
+  call
+  sms
+  email
+}
+
+enum PendingCaptureStatus {
+  pending
+  matched
+  dismissed
+}
+
 // ---------------------------------------------------------------------------
 // Models
 // ---------------------------------------------------------------------------
@@ -170,8 +182,9 @@ model Org {
   tasks          Task[]
   messages       Message[]
   calendarEvents CalendarEvent[]
-  pipelines      Pipeline[]
-  workflows      Workflow[]
+  pipelines       Pipeline[]
+  workflows       Workflow[]
+  pendingCaptures PendingCapture[]
 
   @@map("organizations")
 }
@@ -204,10 +217,11 @@ model Contact {
   organization Org      @relation(fields: [organization_id], references: [id])
   assignee     User?    @relation("ContactAssignedTo", fields: [assigned_to], references: [id])
   creator      User?    @relation("ContactCreatedBy", fields: [created_by], references: [id])
-  deals          Deal[]
-  tasks          Task[]
-  messages       Message[]
-  calendarEvents CalendarEvent[]
+  deals           Deal[]
+  tasks           Task[]
+  messages        Message[]
+  calendarEvents  CalendarEvent[]
+  pendingCaptures PendingCapture[]
 
   @@index([organization_id, status])
   @@index([organization_id, created_at])
@@ -431,4 +445,21 @@ model WorkflowRun {
 
   @@index([organization_id, created_at])
   @@index([workflow_id, created_at])
+}
+
+model PendingCapture {
+  id           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org_id       String                @db.Uuid
+  type         PendingCaptureType
+  raw_data     Json
+  phone_number String?
+  status       PendingCaptureStatus  @default(pending)
+  contact_id   String?               @db.Uuid
+  created_at   DateTime              @default(now())
+
+  org     Org      @relation(fields: [org_id], references: [id])
+  contact Contact? @relation(fields: [contact_id], references: [id])
+
+  @@index([org_id, status])
+  @@index([org_id, created_at])
 }

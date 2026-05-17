@@ -1,6 +1,33 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 
 type Auth = { token: string; userId: string };
+type CaptureType = 'call' | 'sms' | 'email';
+type CaptureStatus = 'pending' | 'matched' | 'dismissed';
+type CaptureStatusQuery = CaptureStatus | 'all';
+type Envelope<T, M extends Record<string, unknown> = Record<string, unknown>> = { data: T; meta: M };
+type Capture = {
+  id: string;
+  type: CaptureType;
+  status: CaptureStatus;
+  raw_data: Record<string, unknown>;
+  phone_number: string | null;
+  contact_id: string | null;
+};
+type Contact = {
+  id: string;
+  first_name: string;
+  phone: string | null;
+  mobile: string | null;
+};
+type Message = {
+  id: string;
+  body: string;
+  channel: string;
+  direction: string;
+  status: string;
+  twilio_sid?: string | null;
+};
+type ErrorBody = { error: { code: string; message: string } };
 
 async function registerOrg(request: APIRequestContext, suffix: string): Promise<Auth> {
   const unique = `${suffix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -44,6 +71,113 @@ async function makeTask(request: APIRequestContext, token: string, userId: strin
   const res = await request.post('/api/v1/tasks', { headers: authHeaders(token), data: { title, assigned_to: userId, ...extra } });
   expect(res.status()).toBe(201);
   return ((await res.json()) as { data: { id: string } }).data;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function decodeOrgId(token: string): string {
+  const payloadPart = token.split('.')[1];
+  expect(payloadPart).toBeTruthy();
+  const base64 = payloadPart!
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+    .padEnd(Math.ceil(payloadPart!.length / 4) * 4, '=');
+  const decoded = JSON.parse(Buffer.from(base64, 'base64').toString('utf8')) as unknown;
+  expect(isRecord(decoded)).toBe(true);
+  const orgId = (decoded as Record<string, unknown>).org_id;
+  expect(typeof orgId).toBe('string');
+  return orgId as string;
+}
+
+function uniqueDigits(length: number): string {
+  let digits = `${Date.now()}${Math.floor(Math.random() * 1_000_000_000)}`;
+  while (digits.length < length) {
+    digits += Math.floor(Math.random() * 10).toString();
+  }
+  return digits.slice(-length);
+}
+
+function uniquePhone(): string {
+  return `+1555${uniqueDigits(7)}`;
+}
+
+function uniqueNationalPhone(): string {
+  return `9${uniqueDigits(9)}`;
+}
+
+function formatPhoneVariant(digits: string): string {
+  return `+7 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 8)}-${digits.slice(8)}`;
+}
+
+function formBody(fields: Record<string, string>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(fields)) {
+    params.set(key, value);
+  }
+  return params.toString();
+}
+
+async function createCapture(
+  request: APIRequestContext,
+  token: string,
+  type: CaptureType,
+  rawData: Record<string, unknown>,
+  phoneNumber?: string,
+): Promise<Capture> {
+  const data: { type: CaptureType; raw_data: Record<string, unknown>; phone_number?: string } = {
+    type,
+    raw_data: rawData,
+  };
+  if (phoneNumber !== undefined) {
+    data.phone_number = phoneNumber;
+  }
+
+  const res = await request.post('/api/v1/captures', { headers: authHeaders(token), data });
+  expect(res.status()).toBe(201);
+  return ((await res.json()) as Envelope<Capture>).data;
+}
+
+async function listCaptures(
+  request: APIRequestContext,
+  token: string,
+  status?: CaptureStatusQuery,
+): Promise<Envelope<Capture[], { total: number }>> {
+  const path = status ? `/api/v1/captures?status=${status}` : '/api/v1/captures';
+  const res = await request.get(path, { headers: authHeaders(token) });
+  expect(res.status()).toBe(200);
+  return await res.json() as Envelope<Capture[], { total: number }>;
+}
+
+async function conversation(request: APIRequestContext, token: string, contactId: string): Promise<Message[]> {
+  const res = await request.get(`/api/v1/messages/conversation/${contactId}`, { headers: authHeaders(token) });
+  expect(res.status()).toBe(200);
+  return ((await res.json()) as Envelope<Message[]>).data;
+}
+
+async function seedCaptureStates(
+  request: APIRequestContext,
+  token: string,
+  suffix: string,
+): Promise<{ pending: Capture; matched: Capture; dismissed: Capture }> {
+  const contact = await makeContact(request, token, `Capture ${suffix}`, { phone: uniquePhone() });
+  const pending = await createCapture(request, token, 'call', { phone: uniquePhone(), notes: `${suffix} pending` });
+  const matched = await createCapture(request, token, 'sms', { from: uniquePhone(), Body: `${suffix} matched` });
+  const dismissed = await createCapture(request, token, 'email', { from: uniquePhone(), subject: `${suffix} dismissed` });
+
+  const matchRes = await request.post(`/api/v1/captures/${matched.id}/match`, {
+    headers: authHeaders(token),
+    data: { contact_id: contact.id },
+  });
+  expect(matchRes.status()).toBe(200);
+
+  const dismissRes = await request.post(`/api/v1/captures/${dismissed.id}/dismiss`, {
+    headers: authHeaders(token),
+  });
+  expect(dismissRes.status()).toBe(200);
+
+  return { pending, matched, dismissed };
 }
 
 test.describe.configure({ timeout: 30000 });
@@ -372,5 +506,311 @@ test.describe('onboarding', () => {
     const body = await res.json() as { data: { user: { onboarding_completed?: boolean } } };
     // New users should have onboarding_completed = false (or undefined treated as false)
     expect(body.data.user.onboarding_completed === false || body.data.user.onboarding_completed === undefined).toBe(true);
+  });
+});
+
+test.describe('auto-capture', () => {
+  test('captures: POST creates pending call capture with response envelope', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-create-call');
+    const phone = uniquePhone();
+    const r = await request.post('/api/v1/captures', {
+      headers: authHeaders(token),
+      data: {
+        type: 'call',
+        raw_data: { phone, direction: 'inbound', duration_seconds: 42, notes: 'Initial call' },
+      },
+    });
+    expect(r.status()).toBe(201);
+    const body = await r.json() as Envelope<Capture>;
+    expect(body.meta).toEqual({});
+    expect(body.data.type).toBe('call');
+    expect(body.data.status).toBe('pending');
+    expect(body.data.phone_number).toBe(phone);
+    expect(body.data.raw_data.phone).toBe(phone);
+  });
+
+  test('captures: POST backfills phone_number from raw_data phone fields', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-phone-backfill');
+    const phoneValue = uniquePhone();
+    const fromValue = uniquePhone();
+    const upperFromValue = uniquePhone();
+
+    const fromPhone = await createCapture(request, token, 'sms', { phone: phoneValue, Body: 'phone field' });
+    const fromLower = await createCapture(request, token, 'sms', { from: fromValue, Body: 'from field' });
+    const fromUpper = await createCapture(request, token, 'sms', { From: upperFromValue, Body: 'From field' });
+
+    expect(fromPhone.phone_number).toBe(phoneValue);
+    expect(fromLower.phone_number).toBe(fromValue);
+    expect(fromUpper.phone_number).toBe(upperFromValue);
+  });
+
+  test('captures: GET defaults to pending only and returns meta.total', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-list-pending');
+    const seeded = await seedCaptureStates(request, token, 'default');
+
+    const body = await listCaptures(request, token);
+    expect(body.meta.total).toBe(1);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]!.id).toBe(seeded.pending.id);
+    expect(body.data[0]!.status).toBe('pending');
+  });
+
+  test('captures: GET status=all includes pending matched and dismissed', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-list-all');
+    const seeded = await seedCaptureStates(request, token, 'all');
+
+    const body = await listCaptures(request, token, 'all');
+    expect(body.meta.total).toBe(3);
+    expect(body.data.map(c => c.id)).toEqual(expect.arrayContaining([seeded.pending.id, seeded.matched.id, seeded.dismissed.id]));
+    expect(body.data.map(c => c.status)).toEqual(expect.arrayContaining(['pending', 'matched', 'dismissed']));
+  });
+
+  test('captures: GET status=matched returns matched captures only', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-list-matched');
+    const seeded = await seedCaptureStates(request, token, 'matched');
+
+    const body = await listCaptures(request, token, 'matched');
+    expect(body.meta.total).toBe(1);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]!.id).toBe(seeded.matched.id);
+    expect(body.data[0]!.status).toBe('matched');
+  });
+
+  test('captures: GET status=dismissed returns dismissed captures only', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-list-dismissed');
+    const seeded = await seedCaptureStates(request, token, 'dismissed');
+
+    const body = await listCaptures(request, token, 'dismissed');
+    expect(body.meta.total).toBe(1);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]!.id).toBe(seeded.dismissed.id);
+    expect(body.data[0]!.status).toBe('dismissed');
+  });
+
+  test('captures: dismiss marks pending capture dismissed and removes it from default list', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-dismiss');
+    const capture = await createCapture(request, token, 'call', { phone: uniquePhone(), notes: 'Dismiss me' });
+
+    const dismissRes = await request.post(`/api/v1/captures/${capture.id}/dismiss`, { headers: authHeaders(token) });
+    expect(dismissRes.status()).toBe(200);
+    const dismissed = await dismissRes.json() as Envelope<Capture>;
+    expect(dismissed.data.status).toBe('dismissed');
+    expect(dismissed.meta).toEqual({});
+
+    const pending = await listCaptures(request, token);
+    expect(pending.data.find(c => c.id === capture.id)).toBeUndefined();
+    const dismissedList = await listCaptures(request, token, 'dismissed');
+    expect(dismissedList.data.find(c => c.id === capture.id)?.status).toBe('dismissed');
+  });
+
+  test('captures: dismissing an already resolved capture returns CAPTURE_ALREADY_RESOLVED', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-dismiss-resolved');
+    const capture = await createCapture(request, token, 'call', { phone: uniquePhone(), notes: 'Resolve once' });
+
+    const firstDismiss = await request.post(`/api/v1/captures/${capture.id}/dismiss`, { headers: authHeaders(token) });
+    expect(firstDismiss.status()).toBe(200);
+
+    const secondDismiss = await request.post(`/api/v1/captures/${capture.id}/dismiss`, { headers: authHeaders(token) });
+    expect(secondDismiss.status()).toBe(422);
+    const body = await secondDismiss.json() as ErrorBody;
+    expect(body.error.code).toBe('CAPTURE_ALREADY_RESOLVED');
+  });
+
+  test('captures: match rejects a contact from another org and leaves capture pending', async ({ request }) => {
+    const orgA = await registerOrg(request, 'cap-cross-contact-a');
+    const orgB = await registerOrg(request, 'cap-cross-contact-b');
+    const capture = await createCapture(request, orgA.token, 'sms', { from: uniquePhone(), Body: 'Cross org candidate' });
+    const otherContact = await makeContact(request, orgB.token, 'OtherOrgContact', { phone: uniquePhone() });
+
+    const matchRes = await request.post(`/api/v1/captures/${capture.id}/match`, {
+      headers: authHeaders(orgA.token),
+      data: { contact_id: otherContact.id },
+    });
+    expect(matchRes.status()).toBe(404);
+    const error = await matchRes.json() as ErrorBody;
+    expect(error.error.code).toBe('NOT_FOUND');
+
+    const pending = await listCaptures(request, orgA.token);
+    expect(pending.data.find(c => c.id === capture.id)?.status).toBe('pending');
+  });
+
+  test('captures: match creates a call message linked to the matched contact', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-match-message');
+    const contact = await makeContact(request, token, 'CallContact', { phone: uniquePhone() });
+    const capture = await createCapture(request, token, 'call', {
+      phone: uniquePhone(),
+      direction: 'outbound',
+      duration_seconds: 123,
+      notes: 'Qualified lead call',
+    });
+
+    const matchRes = await request.post(`/api/v1/captures/${capture.id}/match`, {
+      headers: authHeaders(token),
+      data: { contact_id: contact.id },
+    });
+    expect(matchRes.status()).toBe(200);
+    const matchBody = await matchRes.json() as Envelope<Capture>;
+    expect(matchBody.data.status).toBe('matched');
+    expect(matchBody.data.contact_id).toBe(contact.id);
+
+    const messages = await conversation(request, token, contact.id);
+    const message = messages.find(m => m.body === '[123s] Qualified lead call');
+    expect(message).toBeDefined();
+    expect(message?.channel).toBe('call');
+    expect(message?.direction).toBe('outbound');
+    expect(message?.status).toBe('delivered');
+  });
+
+  test('captures: org A capture is not visible or actionable from org B', async ({ request }) => {
+    const orgA = await registerOrg(request, 'cap-scope-a');
+    const orgB = await registerOrg(request, 'cap-scope-b');
+    const capture = await createCapture(request, orgA.token, 'call', { phone: uniquePhone(), notes: 'Private capture' });
+    const orgBContact = await makeContact(request, orgB.token, 'OrgBContact', { phone: uniquePhone() });
+
+    const orgBList = await listCaptures(request, orgB.token, 'all');
+    expect(orgBList.data.find(c => c.id === capture.id)).toBeUndefined();
+
+    const orgBMatch = await request.post(`/api/v1/captures/${capture.id}/match`, {
+      headers: authHeaders(orgB.token),
+      data: { contact_id: orgBContact.id },
+    });
+    expect(orgBMatch.status()).toBe(404);
+
+    const orgBDismiss = await request.post(`/api/v1/captures/${capture.id}/dismiss`, {
+      headers: authHeaders(orgB.token),
+    });
+    expect(orgBDismiss.status()).toBe(404);
+
+    const orgAPending = await listCaptures(request, orgA.token);
+    expect(orgAPending.data.find(c => c.id === capture.id)?.status).toBe('pending');
+  });
+
+  test('captures: create-contact creates a contact, matches the capture, and creates a message', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-create-contact');
+    const phone = uniquePhone();
+    const capture = await createCapture(request, token, 'sms', {
+      first_name: 'Captured',
+      phone,
+      Body: 'Imported from pending capture',
+    });
+
+    const createRes = await request.post(`/api/v1/captures/${capture.id}/create-contact`, {
+      headers: authHeaders(token),
+    });
+    expect(createRes.status()).toBe(201);
+    const created = await createRes.json() as Envelope<Contact>;
+    expect(created.meta).toEqual({});
+    expect(created.data.first_name).toBe('Captured');
+    expect(created.data.phone).toBe(phone);
+
+    const allCaptures = await listCaptures(request, token, 'all');
+    const matched = allCaptures.data.find(c => c.id === capture.id);
+    expect(matched?.status).toBe('matched');
+    expect(matched?.contact_id).toBe(created.data.id);
+
+    const messages = await conversation(request, token, created.data.id);
+    expect(messages.find(m => m.channel === 'sms' && m.body === 'Imported from pending capture')).toBeDefined();
+  });
+
+  test('captures: create-contact falls back to Unknown and uses the raw phone', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-create-contact-fallback');
+    const phone = uniquePhone();
+    const capture = await createCapture(request, token, 'sms', {
+      From: phone,
+      Body: 'Nameless capture body',
+    });
+
+    const createRes = await request.post(`/api/v1/captures/${capture.id}/create-contact`, {
+      headers: authHeaders(token),
+    });
+    expect(createRes.status()).toBe(201);
+    const created = await createRes.json() as Envelope<Contact>;
+    expect(created.data.first_name).toBe('Unknown');
+    expect(created.data.phone).toBe(phone);
+
+    const messages = await conversation(request, token, created.data.id);
+    expect(messages.find(m => m.channel === 'sms' && m.body === 'Nameless capture body')).toBeDefined();
+  });
+
+  test('captures: unauthenticated GET is rejected', async ({ request }) => {
+    const r = await request.get('/api/v1/captures');
+    expect(r.status()).toBe(401);
+  });
+
+  test('captures: invalid status query returns 400', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-bad-status');
+    const r = await request.get('/api/v1/captures?status=resolved', { headers: authHeaders(token) });
+    expect(r.status()).toBe(400);
+  });
+
+  test('captures: invalid type on POST returns 400', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-bad-type');
+    const r = await request.post('/api/v1/captures', {
+      headers: authHeaders(token),
+      data: { type: 'fax', raw_data: { phone: uniquePhone() } },
+    });
+    expect(r.status()).toBe(400);
+  });
+
+  test('sms.ru: unmatched inbound with valid org_id creates a pending sms capture', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-sms-unmatched');
+    const orgId = decodeOrgId(token);
+    const phone = uniquePhone();
+    const text = 'Unmatched SMS capture';
+    const smsId = `SMcap${Date.now()}${uniqueDigits(4)}`;
+
+    const webhook = await request.post('/api/v1/messages/webhooks/sms/inbound', {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      data: formBody({ From: phone, Body: text, SmsId: smsId, org_id: orgId }),
+    });
+    expect(webhook.status()).toBe(200);
+
+    const captures = await listCaptures(request, token, 'all');
+    const capture = captures.data.find(c => c.type === 'sms' && c.phone_number === phone);
+    expect(capture).toBeDefined();
+    expect(capture?.status).toBe('pending');
+    expect(capture?.raw_data.Body).toBe(text);
+    expect(capture?.raw_data.text).toBe(text);
+    expect(capture?.raw_data.SmsId).toBe(smsId);
+    expect(capture?.raw_data.org_id).toBe(orgId);
+  });
+
+  test('sms.ru: matched inbound with valid org_id creates message and no pending capture', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-sms-matched');
+    const orgId = decodeOrgId(token);
+    const phone = uniquePhone();
+    const text = 'Matched SMS message';
+    const contact = await makeContact(request, token, 'SmsMatchedContact', { phone });
+
+    const webhook = await request.post('/api/v1/messages/webhooks/sms/inbound', {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      data: formBody({ From: phone, Body: text, SmsId: `SMcap${Date.now()}${uniqueDigits(4)}`, org_id: orgId }),
+    });
+    expect(webhook.status()).toBe(200);
+
+    const messages = await conversation(request, token, contact.id);
+    const message = messages.find(m => m.body === text && m.channel === 'sms' && m.direction === 'inbound');
+    expect(message).toBeDefined();
+    expect(message?.status).toBe('delivered');
+
+    const captures = await listCaptures(request, token, 'all');
+    expect(captures.data.find(c => c.phone_number === phone && c.status === 'pending')).toBeUndefined();
+  });
+
+  test('contacts: phone filter matches normalized phone and mobile variants only', async ({ request }) => {
+    const { token } = await registerOrg(request, 'cap-phone-filter');
+    const digits = uniqueNationalPhone();
+    const phoneContact = await makeContact(request, token, 'PhoneVariant', { phone: formatPhoneVariant(digits) });
+    const mobileContact = await makeContact(request, token, 'MobileVariant', { mobile: `8 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 8)} ${digits.slice(8)}` });
+    const unrelated = await makeContact(request, token, 'UnrelatedPhone', { phone: formatPhoneVariant(uniqueNationalPhone()) });
+
+    const r = await request.get(`/api/v1/contacts?phone=${digits}`, { headers: authHeaders(token) });
+    expect(r.status()).toBe(200);
+    const body = await r.json() as Envelope<Contact[], { total: number; page: number; per_page: number }>;
+    const ids = body.data.map(c => c.id);
+    expect(ids).toContain(phoneContact.id);
+    expect(ids).toContain(mobileContact.id);
+    expect(ids).not.toContain(unrelated.id);
+    expect(body.meta.total).toBe(2);
   });
 });

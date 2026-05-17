@@ -39,6 +39,48 @@ export async function registerDevicePushToken(authToken: string): Promise<boolea
   return response.ok;
 }
 
+export async function notifyUnknownCallCapture(phone: string): Promise<void> {
+  try {
+    await ensureDefaultNotificationChannel();
+
+    const existingPermission = await Notifications.getPermissionsAsync();
+    if (existingPermission.status !== 'granted') return;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Unknown call',
+        body: `Unknown caller ${phone} - add to CRM?`,
+        data: { type: 'call_capture', phone },
+        sound: 'default',
+      },
+      trigger: null,
+    });
+  } catch {
+    // Local call-capture notifications are best-effort.
+  }
+}
+
+export async function notifyPendingCaptureCount(title: string, body: string): Promise<void> {
+  try {
+    await ensureDefaultNotificationChannel();
+
+    const existingPermission = await Notifications.getPermissionsAsync();
+    if (existingPermission.status !== 'granted') return;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: { type: 'pending_captures' },
+        sound: 'default',
+      },
+      trigger: null,
+    });
+  } catch {
+    // Pending capture notifications are best-effort.
+  }
+}
+
 function taskReminderIdentifier(taskId: string): string {
   return `task-due-${taskId}`;
 }

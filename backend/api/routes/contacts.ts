@@ -63,6 +63,7 @@ const BulkTagSchema = BulkArchiveSchema.extend({
 
 const ContactFilterSchema = z.object({
   q: z.string().optional(),
+  phone: z.string().trim().min(1).max(30).optional(),
   status: z.enum(['active', 'inactive', 'archived']).optional(),
   type: z.enum(['lead', 'customer', 'partner', 'other']).optional(),
   assigned_to: z.string().uuid().optional(),

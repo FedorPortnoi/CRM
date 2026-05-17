@@ -1,5 +1,12 @@
 import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
-import { MessageDirection, MessageChannel, MessageStatus, Prisma } from '@prisma/client';
+import {
+  MessageDirection,
+  MessageChannel,
+  MessageStatus,
+  PendingCaptureStatus,
+  PendingCaptureType,
+  Prisma,
+} from '@prisma/client';
 import { db } from '../../services/db';
 
 // --- Local request types ---
@@ -27,7 +34,7 @@ type SendInAppBody = {
   body: string;
 };
 
-type SmsWebhookBody = {
+type SmsWebhookBody = Record<string, unknown> & {
   api_id?: unknown;
   from?: unknown;
   From?: unknown;
@@ -37,6 +44,8 @@ type SmsWebhookBody = {
   SmsId?: unknown;
   status?: unknown;
   Status?: unknown;
+  org_id?: unknown;
+  organization_id?: unknown;
 };
 
 type SmsRuRecipientResult = {
@@ -74,6 +83,16 @@ type LogCallBody = {
   duration_seconds?: number;
   notes?: string;
   occurred_at?: string;
+};
+
+type SmsWebhookContact = {
+  id: string;
+  organization_id: string;
+};
+
+type WebhookOrgContext = {
+  provided: boolean;
+  orgId?: string;
 };
 
 const contactOrgCache = new Set<string>();
@@ -119,6 +138,18 @@ function toRequiredString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function toUnknownRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function toSmsWebhookBody(value: unknown): SmsWebhookBody {
+  return toUnknownRecord(value);
+}
+
 function getSmsRuApiId(): string | undefined {
   return toRequiredString(process.env.SMSRU_API_ID);
 }
@@ -130,6 +161,80 @@ function getSmsRuSender(): string {
 function getSmsRuError(body: SmsRuSendResponse, to: string): string {
   const recipient = body.sms?.[to];
   return recipient?.status_text ?? body.status_text ?? 'SMS.ru send failed';
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+function getWebhookOrgContext(body: SmsWebhookBody, query: SmsWebhookBody): WebhookOrgContext {
+  const orgId = toRequiredString(body.org_id)
+    ?? toRequiredString(body.organization_id)
+    ?? toRequiredString(query.org_id)
+    ?? toRequiredString(query.organization_id);
+
+  if (!orgId) {
+    return { provided: false };
+  }
+
+  return isUuid(orgId) ? { provided: true, orgId } : { provided: true };
+}
+
+function buildSmsInboundCaptureRawData(
+  from: string,
+  text: string,
+  smsId: string | undefined,
+  apiId: string | undefined,
+  orgId: string,
+): Prisma.InputJsonObject {
+  return {
+    provider: 'smsru',
+    direction: 'inbound',
+    from,
+    From: from,
+    text,
+    Body: text,
+    org_id: orgId,
+    organization_id: orgId,
+    ...(smsId ? { sms_id: smsId, SmsId: smsId } : {}),
+    ...(apiId ? { api_id: apiId } : {}),
+  };
+}
+
+async function findSmsWebhookContact(from: string, orgId: string | undefined): Promise<SmsWebhookContact | null> {
+  const phoneWhere = {
+    OR: [
+      { phone: from },
+      { mobile: from },
+    ],
+  };
+
+  if (orgId) {
+    return db.contact.findFirst({
+      where: {
+        organization_id: orgId,
+        ...phoneWhere,
+      },
+      select: { id: true, organization_id: true },
+    });
+  }
+
+  const contacts = await db.contact.findMany({
+    where: phoneWhere,
+    select: { id: true, organization_id: true },
+    take: 2,
+  });
+
+  return contacts.length === 1 ? contacts[0] : null;
+}
+
+async function orgExists(orgId: string): Promise<boolean> {
+  const org = await db.org.findUnique({
+    where: { id: orgId },
+    select: { id: true },
+  });
+
+  return Boolean(org);
 }
 
 async function sendViaSmsRu(apiId: string, to: string, msg: string): Promise<SmsRuSendResponse> {
@@ -390,18 +495,15 @@ async function smsruInboundWebhook(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const body = request.body as SmsWebhookBody;
-  const query = request.query as SmsWebhookBody;
+  const body = toSmsWebhookBody(request.body);
+  const query = toSmsWebhookBody(request.query);
   const configuredApiId = getSmsRuApiId();
   const apiId = toRequiredString(body.api_id) ?? toRequiredString(query.api_id);
   const from = toRequiredString(body.From) ?? toRequiredString(body.from) ?? toRequiredString(query.From) ?? toRequiredString(query.from);
   const text = toRequiredString(body.Body) ?? toRequiredString(body.text) ?? toRequiredString(query.Body) ?? toRequiredString(query.text);
   const smsId = toRequiredString(body.SmsId) ?? toRequiredString(body.sms_id) ?? toRequiredString(query.SmsId) ?? toRequiredString(query.sms_id);
-
-  if (!configuredApiId && process.env.NODE_ENV !== 'test') {
-    reply.status(200).send({ received: true });
-    return;
-  }
+  const orgContext = getWebhookOrgContext(body, query);
+  const orgId = orgContext.orgId;
 
   if (configuredApiId && apiId && apiId !== configuredApiId) {
     reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Invalid SMS.ru api_id' } });
@@ -413,14 +515,12 @@ async function smsruInboundWebhook(
     return;
   }
 
-  const contact = await db.contact.findFirst({
-    where: {
-      OR: [
-        { phone: from },
-        { mobile: from },
-      ],
-    },
-  });
+  if (orgContext.provided && !orgId) {
+    reply.status(200).send({ received: true });
+    return;
+  }
+
+  const contact = await findSmsWebhookContact(from, orgId);
 
   if (contact) {
     const message = await db.message.create({
@@ -436,6 +536,16 @@ async function smsruInboundWebhook(
     });
 
     broadcastMessageIfAvailable(request, message);
+  } else if (orgId && (await orgExists(orgId))) {
+    await db.pendingCapture.create({
+      data: {
+        org_id: orgId,
+        type: PendingCaptureType.sms,
+        raw_data: buildSmsInboundCaptureRawData(from, text, smsId, apiId, orgId),
+        phone_number: from,
+        status: PendingCaptureStatus.pending,
+      },
+    });
   }
 
   reply.status(200).send({ received: true });
@@ -445,8 +555,8 @@ async function smsruStatusWebhook(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const body = request.body as SmsWebhookBody;
-  const query = request.query as SmsWebhookBody;
+  const body = toSmsWebhookBody(request.body);
+  const query = toSmsWebhookBody(request.query);
   const configuredApiId = getSmsRuApiId();
   const apiId = toRequiredString(body.api_id) ?? toRequiredString(query.api_id);
   const smsId = toRequiredString(body.SmsId) ?? toRequiredString(body.sms_id) ?? toRequiredString(query.SmsId) ?? toRequiredString(query.sms_id);

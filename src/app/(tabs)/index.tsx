@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,9 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { notifyPendingCaptureCount } from '../../utils/notifications';
+
+const CAPTURE_COUNT_POLL_INTERVAL_MS = 60000;
 
 type DashboardData = {
   open_deals: { count: number; total_value: number };
@@ -90,7 +93,9 @@ export default function DashboardScreen(): JSX.Element {
   const [summary, setSummary] = useState<SectionState<DashboardData>>(initialSection<DashboardData>);
   const [tasks, setTasks] = useState<SectionState<TodayTask[]>>(initialSection<TodayTask[]>);
   const [contacts, setContacts] = useState<SectionState<RecentContact[]>>(initialSection<RecentContact[]>);
+  const [captureCount, setCaptureCount] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
+  const previousCaptureCountRef = useRef<number | null>(null);
 
   const fetchSummary = useCallback(
     async (showSkeleton: boolean): Promise<void> => {
@@ -161,20 +166,62 @@ export default function DashboardScreen(): JSX.Element {
     [token],
   );
 
+  const fetchCaptureCount = useCallback(async (): Promise<void> => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/captures`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const json = (await res.json()) as { meta: { total: number } };
+      const nextCount = json.meta.total;
+      const previousCount = previousCaptureCountRef.current;
+      previousCaptureCountRef.current = nextCount;
+      setCaptureCount(nextCount);
+
+      if (previousCount !== null && nextCount > previousCount) {
+        void notifyPendingCaptureCount(
+          t('dashboard.pendingCapturesNotificationTitle'),
+          t('dashboard.pendingCapturesNotificationBody', { count: nextCount }),
+        );
+      }
+    } catch {
+      // non-critical
+    }
+  }, [token, t]);
+
   const fetchAll = useCallback(
     async (showSkeleton: boolean): Promise<void> => {
       await Promise.all([
         fetchSummary(showSkeleton),
         fetchTasks(showSkeleton),
         fetchContacts(showSkeleton),
+        fetchCaptureCount(),
       ]);
     },
-    [fetchSummary, fetchTasks, fetchContacts],
+    [fetchSummary, fetchTasks, fetchContacts, fetchCaptureCount],
   );
 
   useEffect(() => {
     void fetchAll(true);
   }, [fetchAll]);
+
+  useEffect(() => {
+    previousCaptureCountRef.current = null;
+    setCaptureCount(0);
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return undefined;
+
+    const interval = setInterval(() => {
+      void fetchCaptureCount();
+    }, CAPTURE_COUNT_POLL_INTERVAL_MS);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [token, fetchCaptureCount]);
 
   const onRefresh = useCallback((): void => {
     setRefreshing(true);
@@ -247,6 +294,15 @@ export default function DashboardScreen(): JSX.Element {
           >
             <Text style={styles.actionButtonSecondaryText}>{t('dashboard.workflows')}</Text>
           </TouchableOpacity>
+          {captureCount > 0 ? (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.actionButtonAlert]}
+              onPress={() => router.push('/captures' as never)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.actionButtonText}>{captureCount} {t('dashboard.pendingCaptures')}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 
@@ -428,30 +484,38 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
   actionButton: {
     flex: 1,
+    minWidth: 120,
     backgroundColor: '#1A73E8',
     borderRadius: 8,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 8,
   },
   actionButtonSecondary: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#1A73E8',
   },
+  actionButtonAlert: {
+    backgroundColor: '#E37400',
+  },
   actionButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+    textAlign: 'center',
   },
   actionButtonSecondaryText: {
     color: '#1A73E8',
     fontSize: 14,
     fontWeight: '600',
+    textAlign: 'center',
   },
   inlineError: {
     backgroundColor: '#FFF4F2',
