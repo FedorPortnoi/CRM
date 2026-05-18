@@ -59,7 +59,7 @@
     },
     "extra": {
       "apiUrls": {
-        "development": "http://localhost:3000/api/v1",
+        "development": "http://192.168.5.249:3000/api/v1",
         "staging": "https://staging.railway.app/api/v1",
         "production": "https://api.railway.app/api/v1"
       }
