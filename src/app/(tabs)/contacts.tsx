@@ -488,6 +488,15 @@ export default function ContactsScreen(): JSX.Element {
         autoCorrect={false}
         clearButtonMode="while-editing"
       />
+      {!isSelectionMode ? (
+        <TouchableOpacity
+          style={styles.importRow}
+          onPress={() => router.push('/contacts/import' as never)}
+          accessibilityRole="button"
+        >
+          <Text style={styles.importRowText}>{t('contacts.importCsv')}</Text>
+        </TouchableOpacity>
+      ) : null}
       {archiveError ? (
         <Text style={styles.archiveErrorText}>{archiveError}</Text>
       ) : null}
@@ -716,6 +725,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E0E0E0',
     minHeight: 44,
+  },
+  importRow: {
+    marginHorizontal: 12,
+    marginBottom: 4,
+    alignItems: 'flex-end',
+  },
+  importRowText: {
+    fontSize: 13,
+    color: '#1A73E8',
+    fontWeight: '500',
+    paddingVertical: 4,
   },
   row: {
     backgroundColor: '#FFFFFF',

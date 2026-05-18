@@ -1,4 +1,4 @@
-const en = {
+﻿const en = {
   auth: {
     login: 'Log in',
     register: 'Register',
@@ -53,6 +53,18 @@ const en = {
     loadingUsers: 'Loading users...',
     new: 'New contact',
     importCsv: 'Import CSV',
+    importHint: 'Select a CSV file. Required column: first_name. Optional: last_name, company, email, phone, notes.',
+    importPickFile: 'Choose CSV file',
+    importNoRows: 'No valid rows found in this file.',
+    importReadError: 'Could not read the file.',
+    importRowCount: '{{count}} contacts found',
+    importMoreRows: '+{{count}} more rows',
+    importStart: 'Import',
+    importQueued: 'Import queued',
+    importQueuedDesc: 'Contacts will be imported when the device is back online.',
+    importDone: 'Import complete',
+    importCreated: '{{count}} contacts imported',
+    importSkipped: '{{count}} skipped (missing first name)',
     importPhone: 'Import from phone',
     scanCard: 'Scan business card',
     firstName: 'First name',
@@ -196,6 +208,9 @@ const en = {
     save: 'Save',
     profile: 'Profile',
     notifications: 'Notifications',
+    organisation: 'Organisation',
+    notificationsComingSoon: 'Coming soon',
+    logout: 'Log out',
     sync: 'Sync',
   },
   common: {
@@ -227,7 +242,7 @@ const en = {
   },
   workflows: {
     title: 'Workflows',
-    empty: 'No workflows yet — tap + to create your first',
+    empty: 'No workflows yet â€” tap + to create your first',
     enabled: 'Enabled',
     disabled: 'Disabled',
     trigger_contact_created: 'Contact created',
@@ -283,3 +298,4 @@ const en = {
 };
 
 export default en;
+
