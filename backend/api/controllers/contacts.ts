@@ -365,7 +365,7 @@ async function transcribeWithYandexSpeechKit(audioBytes: Buffer): Promise<string
       Authorization: `Api-Key ${apiKey}`,
       'Content-Type': 'audio/x-pcm;bit=16;rate=16000',
     },
-    body: audioBytes,
+    body: new Uint8Array(audioBytes),
   });
 
   const body = await response.json() as YandexSpeechResponse;

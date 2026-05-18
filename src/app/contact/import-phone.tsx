@@ -43,8 +43,8 @@ type UserStoreTokenState = {
   token: string | null;
 };
 
-function mapToPhoneContact(contact: Contacts.Contact): PhoneContact {
-  const id: string = contact.id as string;
+function mapToPhoneContact(contact: Contacts.ExistingContact): PhoneContact {
+  const id: string = contact.id;
   const firstName: string = contact.firstName ?? '';
   const lastName: string = contact.lastName ?? '';
   const phone: string | null = contact.phoneNumbers?.[0]?.number?.trim() ?? null;
@@ -130,7 +130,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
         fields: [Contacts.Fields.Name, Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails],
       });
       const mappedContacts: PhoneContact[] = contactResponse.data
-        .map((contact: Contacts.Contact): PhoneContact => mapToPhoneContact(contact))
+        .map((contact: Contacts.ExistingContact): PhoneContact => mapToPhoneContact(contact))
         .filter(
           (contact: PhoneContact): boolean =>
             !(contact.displayName === 'Unknown' && contact.phone === null),

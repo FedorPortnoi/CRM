@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { Stack, usePathname, useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
@@ -11,8 +11,6 @@ import OfflineBanner from '../components/OfflineBanner';
 import { ConflictToast } from '../components/ConflictToast';
 import { OnboardingWalkthrough } from '../components/OnboardingWalkthrough';
 import { registerBackgroundSync } from '../utils/backgroundSync';
-import { initI18n } from '../i18n';
-import { getStoredLanguage, hasSelectedLanguage } from '../i18n/storage';
 import { initCallCapture } from '../utils/callCapture';
 import { useOnboardingStore } from '../store/onboardingStore';
 
@@ -21,65 +19,18 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
 export default function RootLayout() {
   const router = useRouter();
-  const pathname = usePathname();
   const { token, user, restoreSession } = useUserStore();
   const fetchOnboarding = useOnboardingStore((s) => s.fetch);
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
-  const [languageStatus, setLanguageStatus] = useState<'checking' | 'selecting' | 'ready'>('checking');
   const pushRegistrationAttemptRef = useRef<string | null>(null);
   const callCaptureCleanupRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-
-    void (async () => {
-      const selected = await hasSelectedLanguage();
-      if (!mounted) return;
-
-      if (!selected) {
-        setLanguageStatus('selecting');
-        router.replace('/language-select' as never);
-        return;
-      }
-
-      const lang = await getStoredLanguage();
-      await initI18n(lang ?? 'ru');
-      if (mounted) {
-        setLanguageStatus('ready');
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (languageStatus !== 'selecting' || pathname === '/language-select') {
-      return;
-    }
-
-    let mounted = true;
-    void (async () => {
-      const selected = await hasSelectedLanguage();
-      if (!selected) return;
-
-      const lang = await getStoredLanguage();
-      await initI18n(lang ?? 'ru');
-      if (mounted) {
-        setLanguageStatus('ready');
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [languageStatus, pathname]);
 
   useEffect(() => {
     void restoreSession().finally(() => {
@@ -89,26 +40,24 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (languageStatus === 'ready' && !isRestoring && token === null) {
+    if (!isRestoring && token === null) {
       router.replace('/login');
     }
-  }, [token, isRestoring, languageStatus]);
+  }, [token, isRestoring]);
 
   useEffect(() => {
-    if (languageStatus === 'ready' && !isRestoring && token !== null && user?.onboarding_completed === false) {
+    if (!isRestoring && token !== null && user?.onboarding_completed === false) {
       router.replace('/onboarding' as never);
     }
-  }, [token, user?.onboarding_completed, isRestoring, languageStatus]);
+  }, [token, user?.onboarding_completed, isRestoring]);
 
   useEffect(() => {
     if (token === null) {
       pushRegistrationAttemptRef.current = null;
       return;
     }
-
     if (pushRegistrationAttemptRef.current === token) return;
     pushRegistrationAttemptRef.current = token;
-
     void (async () => {
       try {
         const registered = await registerDevicePushToken(token);
@@ -124,10 +73,10 @@ export default function RootLayout() {
   }, [token]);
 
   useEffect(() => {
-    if (token !== null && languageStatus === 'ready' && !isRestoring) {
+    if (token !== null && !isRestoring) {
       void fetchOnboarding(token);
     }
-  }, [token, languageStatus, isRestoring, fetchOnboarding]);
+  }, [token, isRestoring, fetchOnboarding]);
 
   useEffect(() => {
     if (token === null) {
@@ -142,7 +91,7 @@ export default function RootLayout() {
     };
   }, [token]);
 
-  if (languageStatus === 'checking' || (languageStatus === 'ready' && isRestoring)) {
+  if (isRestoring) {
     return (
       <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: asyncStoragePersister }}>
         <GestureHandlerRootView style={{ flex: 1 }}>
@@ -160,7 +109,6 @@ export default function RootLayout() {
         <OfflineBanner />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="language-select" options={{ headerShown: false, gestureEnabled: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="register" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ headerShown: false }} />
