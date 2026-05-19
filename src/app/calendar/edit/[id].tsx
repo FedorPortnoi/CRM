@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
 import { sendOrQueueMutation } from '../../../utils/offlineMutation';
@@ -174,6 +175,7 @@ function buildPatch(
 }
 
 export default function EditCalendarEventScreen(): JSX.Element {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
 
@@ -299,7 +301,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
     const end = buildLocalDate(endDate.trim(), endTime.trim());
 
     if (trimmedTitle === '') {
-      nextErrors.title = 'Title is required';
+      nextErrors.title = t('calendar.titleRequired');
     }
 
     if (!start) {
@@ -350,10 +352,10 @@ export default function EditCalendarEventScreen(): JSX.Element {
         router.back();
       } else {
         const parsedBody = (await response.json()) as ErrorApiResponse;
-        setApiError(parsedBody.error?.message ?? 'Failed to update event');
+        setApiError(parsedBody.error?.message ?? t('calendar.failedToUpdate'));
       }
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Network error');
+      setApiError(err instanceof Error ? err.message : t('errors.networkError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -389,7 +391,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator color="#10b981" size="large" />
+            <ActivityIndicator color="#065f46" size="large" />
           </View>
         ) : original !== null ? (
           <>
@@ -402,7 +404,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                   setTitle(value);
                   setFieldErrors((prev) => ({ ...prev, title: undefined }));
                 }}
-                placeholder="Client meeting"
+                placeholder={t('calendar.titlePlaceholder')}
                 placeholderTextColor="#6b7280"
                 autoCapitalize="sentences"
               />
@@ -486,7 +488,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                 style={styles.notesInput}
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Prep notes or agenda"
+                placeholder={t('calendar.notesPlaceholder')}
                 placeholderTextColor="#6b7280"
                 multiline
                 numberOfLines={5}
@@ -518,7 +520,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     style={styles.input}
                     value={contactQuery}
                     onChangeText={setContactQuery}
-                    placeholder="Search contacts by name..."
+                    placeholder={t('contacts.searchByName')}
                     placeholderTextColor="#6b7280"
                   />
                   {visibleContactResults.length > 0 ? (
@@ -547,7 +549,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
               {isSubmitting ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.submitButtonText}>Save Changes</Text>
+                <Text style={styles.submitButtonText}>{t('common.save')}</Text>
               )}
             </TouchableOpacity>
           </>
@@ -569,7 +571,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
     flex: 1,
   },
   scrollView: {
@@ -649,7 +651,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   previewLabel: {
-    color: '#10b981',
+    color: '#065f46',
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 4,
@@ -678,7 +680,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   contactChipRemove: {
-    color: '#10b981',
+    color: '#065f46',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -701,7 +703,7 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     alignItems: 'center',
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     borderRadius: 12,
     justifyContent: 'center',
     marginBottom: 32,
@@ -719,7 +721,7 @@ const styles = StyleSheet.create({
   retryButton: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     borderRadius: 12,
     justifyContent: 'center',
     marginTop: 16,

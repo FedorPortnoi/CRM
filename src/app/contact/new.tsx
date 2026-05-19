@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
@@ -40,6 +41,7 @@ async function matchCaptureToContact(captureId: string, contactId: string, authT
 }
 
 export default function NewContactScreen(): JSX.Element {
+  const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
   const { phone: routePhone, capture_id: routeCaptureId } = useLocalSearchParams<NewContactParams>();
   const captureId = firstRouteParam(routeCaptureId)?.trim() || null;
@@ -92,10 +94,10 @@ export default function NewContactScreen(): JSX.Element {
         router.replace({ pathname: '/contact/[id]', params: { id: newContactId } });
       } else {
         const parsedBody = (await response.json()) as ErrorResponse;
-        setApiError(parsedBody?.error?.message ?? 'Failed to create contact');
+        setApiError(parsedBody?.error?.message ?? t('contacts.failedToCreate'));
       }
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Network error');
+      setApiError(err instanceof Error ? err.message : t('errors.networkError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -115,7 +117,7 @@ export default function NewContactScreen(): JSX.Element {
         )}
 
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>First Name *</Text>
+          <Text style={styles.label}>{t('contacts.firstName')} *</Text>
           <TextInput
             style={styles.input}
             value={firstName}
@@ -123,12 +125,12 @@ export default function NewContactScreen(): JSX.Element {
             autoCapitalize="words"
           />
           {showFirstNameError && (
-            <Text style={styles.fieldError}>First name is required</Text>
+            <Text style={styles.fieldError}>{t('contacts.firstNameRequired')}</Text>
           )}
         </View>
 
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Last Name</Text>
+          <Text style={styles.label}>{t('contacts.lastName')}</Text>
           <TextInput
             style={styles.input}
             value={lastName}
@@ -138,12 +140,12 @@ export default function NewContactScreen(): JSX.Element {
         </View>
 
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Company</Text>
+          <Text style={styles.label}>{t('contacts.company')}</Text>
           <TextInput style={styles.input} value={company} onChangeText={setCompany} />
         </View>
 
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>{t('contacts.email')}</Text>
           <TextInput
             style={styles.input}
             value={email}
@@ -154,7 +156,7 @@ export default function NewContactScreen(): JSX.Element {
         </View>
 
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Phone</Text>
+          <Text style={styles.label}>{t('contacts.phone')}</Text>
           <TextInput
             style={styles.input}
             value={phone}
@@ -164,7 +166,7 @@ export default function NewContactScreen(): JSX.Element {
         </View>
 
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Notes</Text>
+          <Text style={styles.label}>{t('contacts.notes')}</Text>
           <TextInput
             style={styles.notesInput}
             value={notes}
@@ -183,7 +185,7 @@ export default function NewContactScreen(): JSX.Element {
           {isSubmitting ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Text style={styles.submitButtonText}>Create Contact</Text>
+            <Text style={styles.submitButtonText}>{t('contacts.new')}</Text>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -192,7 +194,7 @@ export default function NewContactScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0fdf8' },
+  container: { flex: 1, backgroundColor: '#ffffff' },
   scrollView: { flex: 1 },
   content: { padding: 16 },
   errorBanner: {
@@ -228,7 +230,7 @@ const styles = StyleSheet.create({
   },
   fieldError: { color: '#ef4444', fontSize: 12, marginTop: 4 },
   submitButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     borderRadius: 12,
     minHeight: 48,
     justifyContent: 'center',

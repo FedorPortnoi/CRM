@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Calendar } from 'react-native-calendars';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
@@ -27,6 +28,7 @@ interface ErrorApiResponse {
 }
 
 export default function NewTaskScreen(): JSX.Element | null {
+  const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
   const user = useUserStore((s) => s.user);
 
@@ -109,10 +111,10 @@ export default function NewTaskScreen(): JSX.Element | null {
           params: { id: taskId },
         });
       } else {
-        setApiError((parsed as ErrorApiResponse)?.error?.message ?? 'Failed to create task');
+        setApiError((parsed as ErrorApiResponse)?.error?.message ?? t('tasks.failedToCreate'));
       }
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Network error');
+      setApiError(err instanceof Error ? err.message : t('errors.networkError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -126,18 +128,18 @@ export default function NewTaskScreen(): JSX.Element | null {
         </View>
       )}
 
-      <Text style={styles.label}>Task Title *</Text>
+      <Text style={styles.label}>{t('tasks.taskTitle')} *</Text>
       <TextInput
         style={styles.input}
         value={title}
-        onChangeText={(t) => {
-          setTitle(t);
+        onChangeText={(text) => {
+          setTitle(text);
           setShowTitleError(false);
         }}
-        placeholder="Enter task title"
+        placeholder={t('tasks.titlePlaceholder')}
         placeholderTextColor="#6b7280"
       />
-      {showTitleError && <Text style={styles.fieldError}>Title is required</Text>}
+      {showTitleError && <Text style={styles.fieldError}>{t('tasks.titleRequired')}</Text>}
 
       <Text style={styles.label}>Due Date (optional)</Text>
       <TouchableOpacity style={styles.input} onPress={() => setShowCalendar(true)}>
@@ -164,7 +166,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           markedDates={
             dueDate
               ? ({
-                  [dueDate]: { selected: true, selectedColor: '#10b981' },
+                  [dueDate]: { selected: true, selectedColor: '#065f46' },
                 } as Record<string, { selected?: boolean; selectedColor?: string }>)
               : {}
           }
@@ -196,7 +198,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           style={styles.input}
           value={contactQuery}
           onChangeText={setContactQuery}
-          placeholder="Search contacts by name..."
+          placeholder={t('contacts.searchByName')}
           placeholderTextColor="#6b7280"
         />
       )}
@@ -228,14 +230,14 @@ export default function NewTaskScreen(): JSX.Element | null {
         }}
         disabled={isSubmitting}
       >
-        {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitText}>Create Task</Text>}
+        {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitText}>{t('tasks.createTask')}</Text>}
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, backgroundColor: '#f0fdf8', flexGrow: 1 },
+  container: { padding: 16, backgroundColor: '#ffffff', flexGrow: 1 },
   errorBanner: {
     backgroundColor: '#fef2f2',
     padding: 12,
@@ -262,7 +264,7 @@ const styles = StyleSheet.create({
   inputText: { color: '#111827', fontSize: 16 },
   placeholderText: { color: '#6b7280', fontSize: 16 },
   fieldError: { color: '#ef4444', fontSize: 12, marginTop: 4 },
-  clearLink: { color: '#10b981', fontSize: 12, marginTop: 4 },
+  clearLink: { color: '#065f46', fontSize: 12, marginTop: 4 },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -273,9 +275,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
   },
   modalTitle: { fontSize: 18, fontWeight: '600', color: '#111827' },
-  modalDone: { fontSize: 16, color: '#10b981', fontWeight: '600' },
+  modalDone: { fontSize: 16, color: '#065f46', fontWeight: '600' },
   disabledInput: {
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
     borderColor: '#e5e7eb',
     borderWidth: 1,
     borderRadius: 12,
@@ -292,8 +294,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     alignSelf: 'flex-start',
   },
-  chipText: { color: '#10b981', fontSize: 14, marginRight: 8 },
-  chipRemove: { color: '#10b981', fontSize: 14, fontWeight: '600' },
+  chipText: { color: '#065f46', fontSize: 14, marginRight: 8 },
+  chipRemove: { color: '#065f46', fontSize: 14, fontWeight: '600' },
   dropdown: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -311,7 +313,7 @@ const styles = StyleSheet.create({
   },
   dropdownText: { color: '#111827', fontSize: 14 },
   submitButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',

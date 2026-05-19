@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
 import { Calendar } from 'react-native-calendars';
@@ -124,6 +125,7 @@ function buildPatch(current: TaskForm, original: TaskForm): TaskPatch {
 }
 
 export default function EditTaskScreen(): JSX.Element {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
 
@@ -271,7 +273,7 @@ export default function EditTaskScreen(): JSX.Element {
         setApiError(parsedBody.error.message);
       }
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Network error');
+      setApiError(err instanceof Error ? err.message : t('errors.networkError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -313,12 +315,12 @@ export default function EditTaskScreen(): JSX.Element {
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#10b981" />
+            <ActivityIndicator size="large" color="#065f46" />
           </View>
         ) : original !== null ? (
           <>
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Task Title *</Text>
+              <Text style={styles.label}>{t('tasks.taskTitle')} *</Text>
               <TextInput
                 style={styles.input}
                 value={title}
@@ -326,11 +328,11 @@ export default function EditTaskScreen(): JSX.Element {
                   setTitle(text);
                   setShowTitleError(false);
                 }}
-                placeholder="Enter task title"
+                placeholder={t('tasks.titlePlaceholder')}
                 placeholderTextColor="#6b7280"
                 autoCapitalize="sentences"
               />
-              {showTitleError ? <Text style={styles.fieldError}>Title is required</Text> : null}
+              {showTitleError ? <Text style={styles.fieldError}>{t('tasks.titleRequired')}</Text> : null}
             </View>
 
             <View style={styles.fieldGroup}>
@@ -362,7 +364,7 @@ export default function EditTaskScreen(): JSX.Element {
                 markedDates={
                   dueDate !== ''
                     ? ({
-                        [dueDate]: { selected: true, selectedColor: '#10b981' },
+                        [dueDate]: { selected: true, selectedColor: '#065f46' },
                       } as Record<string, { selected?: boolean; selectedColor?: string }>)
                     : {}
                 }
@@ -407,7 +409,7 @@ export default function EditTaskScreen(): JSX.Element {
                     style={styles.input}
                     value={contactQuery}
                     onChangeText={setContactQuery}
-                    placeholder="Search contacts by name..."
+                    placeholder={t('contacts.searchByName')}
                     placeholderTextColor="#6b7280"
                   />
                   {contactResults.slice(0, 5).length > 0 ? (
@@ -435,7 +437,7 @@ export default function EditTaskScreen(): JSX.Element {
               {isSubmitting ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.submitButtonText}>Save Changes</Text>
+                <Text style={styles.submitButtonText}>{t('tasks.saveTask')}</Text>
               )}
             </TouchableOpacity>
           </>
@@ -446,7 +448,7 @@ export default function EditTaskScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0fdf8' },
+  container: { flex: 1, backgroundColor: '#ffffff' },
   scrollView: { flex: 1 },
   content: { padding: 16 },
   loadingContainer: { paddingTop: 48 },
@@ -458,7 +460,7 @@ const styles = StyleSheet.create({
   },
   errorBannerText: { color: '#ef4444' },
   bannerRetry: { marginTop: 8, alignSelf: 'flex-start' },
-  bannerRetryText: { color: '#10b981', fontWeight: '600' },
+  bannerRetryText: { color: '#065f46', fontWeight: '600' },
   fieldGroup: { marginBottom: 16 },
   label: { fontSize: 14, fontWeight: '600', color: '#111827', marginBottom: 6 },
   input: {
@@ -475,7 +477,7 @@ const styles = StyleSheet.create({
   },
   inputText: { color: '#111827', fontSize: 16 },
   placeholderText: { color: '#6b7280', fontSize: 16 },
-  clearLink: { color: '#10b981', fontSize: 12, marginTop: 4 },
+  clearLink: { color: '#065f46', fontSize: 12, marginTop: 4 },
   notesInput: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -498,7 +500,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
   },
   modalTitle: { fontSize: 18, fontWeight: '600', color: '#111827' },
-  modalDone: { fontSize: 16, color: '#10b981', fontWeight: '600' },
+  modalDone: { fontSize: 16, color: '#065f46', fontWeight: '600' },
   contactChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -517,7 +519,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
     flexShrink: 1,
   },
-  contactChipRemove: { fontSize: 14, color: '#10b981', fontWeight: '600' },
+  contactChipRemove: { fontSize: 14, color: '#065f46', fontWeight: '600' },
   contactResultsContainer: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -533,7 +535,7 @@ const styles = StyleSheet.create({
   },
   contactResultText: { fontSize: 15, color: '#111827' },
   submitButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     borderRadius: 12,
     minHeight: 48,
     justifyContent: 'center',

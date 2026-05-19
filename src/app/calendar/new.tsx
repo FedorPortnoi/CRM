@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
@@ -77,6 +78,7 @@ function formatPreview(date: Date): string {
 }
 
 export default function NewCalendarEventScreen(): JSX.Element {
+  const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
   const defaultStart = useMemo(() => roundedNextHour(), []);
   const defaultEnd = useMemo(() => {
@@ -111,7 +113,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
     const end = buildLocalDate(endDate.trim(), endTime.trim());
 
     if (trimmedTitle === '') {
-      nextErrors.title = 'Title is required';
+      nextErrors.title = t('calendar.titleRequired');
     }
 
     if (!start) {
@@ -176,10 +178,10 @@ export default function NewCalendarEventScreen(): JSX.Element {
         });
       } else {
         const parsed = (await res.json()) as ErrorResponse;
-        setApiError(parsed.error?.message ?? 'Failed to create event');
+        setApiError(parsed.error?.message ?? t('calendar.failedToCreate'));
       }
     } catch (e: unknown) {
-      setApiError(e instanceof Error ? e.message : 'Network error');
+      setApiError(e instanceof Error ? e.message : t('errors.networkError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -208,7 +210,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
               setTitle(value);
               setFieldErrors((prev) => ({ ...prev, title: undefined }));
             }}
-            placeholder="Client meeting"
+            placeholder={t('calendar.titlePlaceholder')}
             placeholderTextColor="#6b7280"
             autoCapitalize="sentences"
           />
@@ -303,7 +305,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
             style={styles.notesInput}
             value={notes}
             onChangeText={setNotes}
-            placeholder="Prep notes or agenda"
+            placeholder={t('calendar.notesPlaceholder')}
             placeholderTextColor="#6b7280"
             multiline
             numberOfLines={5}
@@ -322,7 +324,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
           {isSubmitting ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.submitButtonText}>Create Event</Text>
+            <Text style={styles.submitButtonText}>{t('calendar.createEvent')}</Text>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -333,7 +335,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
   },
   content: {
     padding: 16,
@@ -405,7 +407,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   previewLabel: {
-    color: '#10b981',
+    color: '#065f46',
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 4,
@@ -417,7 +419,7 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     alignItems: 'center',
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     borderRadius: 12,
     justifyContent: 'center',
     marginTop: 12,

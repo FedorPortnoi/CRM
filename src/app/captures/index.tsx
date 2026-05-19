@@ -72,7 +72,7 @@ export default function CapturesScreen(): JSX.Element {
       const json = (await res.json()) as { data: PendingCapture[]; meta: { total: number } };
       setCaptures(json.data);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load captures');
+      setError(e instanceof Error ? e.message : t('errors.failedToLoadCaptures'));
     } finally {
       setIsLoading(false);
     }

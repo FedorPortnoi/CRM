@@ -121,7 +121,7 @@ export default function DashboardScreen(): JSX.Element {
         setSummary((prev) => ({
           data: prev.data,
           isLoading: false,
-          error: errorMessage(e, 'Failed to load dashboard summary'),
+          error: errorMessage(e, t('errors.failedToLoadDashboard')),
         }));
       }
     },
@@ -144,7 +144,7 @@ export default function DashboardScreen(): JSX.Element {
         setTasks((prev) => ({
           data: prev.data,
           isLoading: false,
-          error: errorMessage(e, 'Failed to load today tasks'),
+          error: errorMessage(e, t('errors.failedToLoadTasks')),
         }));
       }
     },
@@ -167,7 +167,7 @@ export default function DashboardScreen(): JSX.Element {
         setContacts((prev) => ({
           data: prev.data,
           isLoading: false,
-          error: errorMessage(e, 'Failed to load recent contacts'),
+          error: errorMessage(e, t('errors.failedToLoadContacts')),
         }));
       }
     },
@@ -189,7 +189,7 @@ export default function DashboardScreen(): JSX.Element {
       setWorkflowCount((prev) => ({
         data: prev.data,
         isLoading: false,
-        error: errorMessage(e, 'Failed to load workflows'),
+        error: errorMessage(e, t('errors.failedToLoadWorkflows')),
       }));
     }
   }, [token]);

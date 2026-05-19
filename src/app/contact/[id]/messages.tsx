@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Check, MessageCircle, PhoneCall, Send } from 'lucide-react-native';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
@@ -148,6 +149,7 @@ function submitErrorMessage(error: unknown, fallback: string): string {
 }
 
 export default function ContactMessagesScreen(): JSX.Element {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
 
@@ -494,7 +496,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                   style={styles.noteInput}
                   value={noteBody}
                   onChangeText={setNoteBody}
-                  placeholder="Write an in-app note"
+                  placeholder={t('contacts.writeInAppNote')}
                   placeholderTextColor="#9ca3af"
                   multiline
                   textAlignVertical="top"
@@ -569,7 +571,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                     style={[styles.callInput, styles.callNotesInput]}
                     value={callNotes}
                     onChangeText={setCallNotes}
-                    placeholder="Call notes"
+                    placeholder={t('contacts.callNotes')}
                     placeholderTextColor="#9ca3af"
                     multiline
                     textAlignVertical="top"

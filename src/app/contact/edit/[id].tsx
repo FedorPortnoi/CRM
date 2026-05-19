@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
 import { sendOrQueueMutation } from '../../../utils/offlineMutation';
@@ -65,6 +66,7 @@ function changedFields(current: ContactForm, original: ContactForm): ContactPatc
 }
 
 export default function EditContactScreen(): JSX.Element {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
 
@@ -194,12 +196,12 @@ export default function EditContactScreen(): JSX.Element {
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#10b981" />
+            <ActivityIndicator size="large" color="#065f46" />
           </View>
         ) : (
           <>
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>First Name *</Text>
+              <Text style={styles.label}>{t('contacts.firstName')} *</Text>
               <TextInput
                 style={styles.input}
                 value={firstName}
@@ -207,12 +209,12 @@ export default function EditContactScreen(): JSX.Element {
                 autoCapitalize="words"
               />
               {showFirstNameError && (
-                <Text style={styles.fieldError}>First name is required</Text>
+                <Text style={styles.fieldError}>{t('contacts.firstNameRequired')}</Text>
               )}
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Last Name</Text>
+              <Text style={styles.label}>{t('contacts.lastName')}</Text>
               <TextInput
                 style={styles.input}
                 value={lastName}
@@ -222,12 +224,12 @@ export default function EditContactScreen(): JSX.Element {
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Company</Text>
+              <Text style={styles.label}>{t('contacts.company')}</Text>
               <TextInput style={styles.input} value={company} onChangeText={setCompany} />
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.label}>{t('contacts.email')}</Text>
               <TextInput
                 style={styles.input}
                 value={email}
@@ -238,7 +240,7 @@ export default function EditContactScreen(): JSX.Element {
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Phone</Text>
+              <Text style={styles.label}>{t('contacts.phone')}</Text>
               <TextInput
                 style={styles.input}
                 value={phone}
@@ -248,7 +250,7 @@ export default function EditContactScreen(): JSX.Element {
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Notes</Text>
+              <Text style={styles.label}>{t('contacts.notes')}</Text>
               <TextInput
                 style={styles.notesInput}
                 value={notes}
@@ -267,7 +269,7 @@ export default function EditContactScreen(): JSX.Element {
               {isSubmitting ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.submitButtonText}>Save Changes</Text>
+                <Text style={styles.submitButtonText}>{t('common.save')}</Text>
               )}
             </TouchableOpacity>
           </>
@@ -278,7 +280,7 @@ export default function EditContactScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0fdf8' },
+  container: { flex: 1, backgroundColor: '#ffffff' },
   scrollView: { flex: 1 },
   content: { padding: 16 },
   loadingContainer: { paddingTop: 48 },
@@ -290,7 +292,7 @@ const styles = StyleSheet.create({
   },
   errorBannerText: { color: '#ef4444' },
   bannerRetry: { marginTop: 8, alignSelf: 'flex-start' },
-  bannerRetryText: { color: '#10b981', fontWeight: '600' },
+  bannerRetryText: { color: '#065f46', fontWeight: '600' },
   fieldGroup: { marginBottom: 16 },
   label: { fontSize: 13, fontWeight: '600', color: '#111827', marginBottom: 4 },
   input: {
@@ -317,7 +319,7 @@ const styles = StyleSheet.create({
   },
   fieldError: { color: '#ef4444', fontSize: 12, marginTop: 4 },
   submitButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     borderRadius: 12,
     minHeight: 48,
     justifyContent: 'center',

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import * as Contacts from 'expo-contacts';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
@@ -97,6 +98,7 @@ function buildContactBody(contact: PhoneContact): ContactCreateBody {
 }
 
 export default function ImportPhoneContactsScreen(): React.ReactElement {
+  const { t } = useTranslation();
   const token: string | null = useUserStore((state: UserStoreTokenState): string | null => state.token);
   const [phase, setPhase] = useState<Phase>('permission');
   const [isRequestingPermission, setIsRequestingPermission] = useState<boolean>(true);
@@ -321,7 +323,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
           style={styles.searchInput}
           value={search}
           onChangeText={handleSearchChange}
-          placeholder="Search contacts"
+          placeholder={t('contacts.searchImportPhone')}
           placeholderTextColor="#9ca3af"
           autoCapitalize="none"
           autoCorrect={false}

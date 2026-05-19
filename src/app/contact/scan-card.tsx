@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Camera, ScanText } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
@@ -30,6 +31,7 @@ type ScanResponse = {
 };
 
 export default function ScanCardScreen(): JSX.Element {
+  const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -105,7 +107,7 @@ export default function ScanCardScreen(): JSX.Element {
         <TextInput
           value={manualText}
           onChangeText={setManualText}
-          placeholder="Paste card text"
+          placeholder={t('contacts.pasteCardText')}
           style={styles.input}
           multiline
           textAlignVertical="top"

@@ -12,6 +12,7 @@ import {
   ListRenderItemInfo,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { usePipelinesStore } from '../../store/pipelinesStore';
 import { API_URL } from '../../utils/api';
@@ -47,6 +48,7 @@ interface ErrorApiResponse {
 }
 
 export default function NewDealScreen(): JSX.Element {
+  const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
   const { pipelines, isLoading, fetchPipelines } = usePipelinesStore() as {
     pipelines: Pipeline[];
@@ -153,10 +155,10 @@ export default function NewDealScreen(): JSX.Element {
         router.replace({ pathname: '/deal/[id]', params: { id: data.data.id } });
       } else {
         const errData = (await res.json()) as ErrorApiResponse;
-        setApiError(errData?.error?.message ?? 'Failed to create deal');
+        setApiError(errData?.error?.message ?? t('deals.failedToCreate'));
       }
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Network error');
+      setApiError(err instanceof Error ? err.message : t('errors.networkError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -229,7 +231,7 @@ export default function NewDealScreen(): JSX.Element {
         </View>
       )}
 
-      <Text style={styles.label}>Deal Title *</Text>
+      <Text style={styles.label}>{t('deals.name')} *</Text>
       <TextInput
         style={styles.input}
         value={title}
@@ -237,12 +239,12 @@ export default function NewDealScreen(): JSX.Element {
           setTitle(text);
           setShowTitleError(false);
         }}
-        placeholder="Enter deal title"
+        placeholder={t('deals.titlePlaceholder')}
         placeholderTextColor="#6b7280"
       />
-      {showTitleError && <Text style={styles.fieldError}>Title is required</Text>}
+      {showTitleError && <Text style={styles.fieldError}>{t('deals.titleRequired')}</Text>}
 
-      <Text style={styles.label}>Value ($)</Text>
+      <Text style={styles.label}>{t('deals.valueUsd')}</Text>
       <TextInput
         style={styles.input}
         value={valueStr}
@@ -252,15 +254,15 @@ export default function NewDealScreen(): JSX.Element {
         placeholderTextColor="#6b7280"
       />
 
-      <Text style={styles.label}>Pipeline *</Text>
+      <Text style={styles.label}>{t('deals.pipeline')} *</Text>
       <TouchableOpacity style={styles.pickerButton} onPress={() => setShowPipelineModal(true)}>
         {isLoading ? (
-          <ActivityIndicator color="#10b981" />
+          <ActivityIndicator color="#065f46" />
         ) : (
           <Text style={styles.pickerButtonText}>
             {selectedPipelineId
-              ? pipelines.find((p) => p.id === selectedPipelineId)?.name ?? 'Select pipeline...'
-              : 'Select pipeline...'}
+              ? pipelines.find((p) => p.id === selectedPipelineId)?.name ?? t('deals.selectPipelinePlaceholder')
+              : t('deals.selectPipelinePlaceholder')}
           </Text>
         )}
       </TouchableOpacity>
@@ -273,7 +275,7 @@ export default function NewDealScreen(): JSX.Element {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Pipeline</Text>
+            <Text style={styles.modalTitle}>{t('deals.selectPipeline')}</Text>
             <TouchableOpacity onPress={() => setShowPipelineModal(false)}>
               <Text style={styles.modalClose}>✕</Text>
             </TouchableOpacity>
@@ -286,7 +288,7 @@ export default function NewDealScreen(): JSX.Element {
         </View>
       </Modal>
 
-      <Text style={styles.label}>Stage *</Text>
+      <Text style={styles.label}>{t('deals.stage')} *</Text>
       <TouchableOpacity
         style={[styles.pickerButton, stagePickerDisabled && styles.pickerButtonDisabled]}
         onPress={() => {
@@ -296,12 +298,12 @@ export default function NewDealScreen(): JSX.Element {
       >
         <Text style={styles.pickerButtonText}>
           {selectedStageId
-            ? filteredStages.find((s) => s.id === selectedStageId)?.name ?? 'Select stage...'
-            : 'Select stage...'}
+            ? filteredStages.find((s) => s.id === selectedStageId)?.name ?? t('deals.selectStagePlaceholder')
+            : t('deals.selectStagePlaceholder')}
         </Text>
       </TouchableOpacity>
       {showPipelineStageError && (
-        <Text style={styles.fieldError}>Pipeline and stage are required</Text>
+        <Text style={styles.fieldError}>{t('deals.pipelineStageRequired')}</Text>
       )}
 
       <Modal
@@ -312,7 +314,7 @@ export default function NewDealScreen(): JSX.Element {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Stage</Text>
+            <Text style={styles.modalTitle}>{t('deals.selectStage')}</Text>
             <TouchableOpacity onPress={() => setShowStageModal(false)}>
               <Text style={styles.modalClose}>✕</Text>
             </TouchableOpacity>
@@ -325,7 +327,7 @@ export default function NewDealScreen(): JSX.Element {
         </View>
       </Modal>
 
-      <Text style={styles.label}>Contact (optional)</Text>
+      <Text style={styles.label}>{t('deals.contactOptional')}</Text>
       {selectedContactId !== '' ? (
         <View style={styles.contactChip}>
           <Text style={styles.contactChipText}>{selectedContactName}</Text>
@@ -346,7 +348,7 @@ export default function NewDealScreen(): JSX.Element {
             style={styles.input}
             value={contactQuery}
             onChangeText={setContactQuery}
-            placeholder="Search contacts by name..."
+            placeholder={t('deals.searchContactsPlaceholder')}
             placeholderTextColor="#6b7280"
           />
           {contactResults.slice(0, 5).length > 0 && (
@@ -370,7 +372,7 @@ export default function NewDealScreen(): JSX.Element {
         {isSubmitting ? (
           <ActivityIndicator color="#FFFFFF" />
         ) : (
-          <Text style={styles.submitButtonText}>Create Deal</Text>
+          <Text style={styles.submitButtonText}>{t('deals.createDeal')}</Text>
         )}
       </TouchableOpacity>
     </ScrollView>
@@ -380,7 +382,7 @@ export default function NewDealScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
   },
   content: {
     padding: 16,
@@ -465,7 +467,7 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   modalItemTextSelected: {
-    color: '#10b981',
+    color: '#065f46',
     fontWeight: '600',
   },
   contactChip: {
@@ -506,7 +508,7 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   submitButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',

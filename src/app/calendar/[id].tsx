@@ -502,7 +502,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               multiline
               numberOfLines={5}
               textAlignVertical="top"
-              placeholder="Add outcomes, follow-ups, and context"
+              placeholder={t('calendar.outcomesPlaceholder')}
               placeholderTextColor="#6b7280"
             />
             {notesFieldError ? <Text style={styles.fieldError}>{notesFieldError}</Text> : null}

@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { usePipelinesStore } from '../../../store/pipelinesStore';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
@@ -119,6 +120,7 @@ function buildPatch(current: DealForm, original: DealForm): DealPatch {
 }
 
 export default function EditDealScreen(): JSX.Element {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
   const pipelines = usePipelinesStore((s) => s.pipelines) as Pipeline[];
@@ -217,9 +219,9 @@ export default function EditDealScreen(): JSX.Element {
   );
 
   const selectedPipelineName =
-    pipelines.find((p) => p.id === selectedPipelineId)?.name ?? 'Select pipeline...';
+    pipelines.find((p) => p.id === selectedPipelineId)?.name ?? t('deals.selectPipelinePlaceholder');
   const selectedStageName =
-    filteredStages.find((s) => s.id === selectedStageId)?.name ?? 'Select stage...';
+    filteredStages.find((s) => s.id === selectedStageId)?.name ?? t('deals.selectStagePlaceholder');
   const stagePickerDisabled = selectedPipelineId === '' || filteredStages.length === 0;
 
   const handleSubmit = async (): Promise<void> => {
@@ -355,11 +357,11 @@ export default function EditDealScreen(): JSX.Element {
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator color="#10b981" size="large" />
+          <ActivityIndicator color="#065f46" size="large" />
         </View>
       ) : (
         <>
-          <Text style={styles.label}>Deal Title *</Text>
+          <Text style={styles.label}>{t('deals.name')} *</Text>
           <TextInput
             style={styles.input}
             value={title}
@@ -367,12 +369,12 @@ export default function EditDealScreen(): JSX.Element {
               setTitle(text);
               setShowTitleError(false);
             }}
-            placeholder="Enter deal title"
+            placeholder={t('deals.titlePlaceholder')}
             placeholderTextColor="#6b7280"
           />
-          {showTitleError && <Text style={styles.fieldError}>Title is required</Text>}
+          {showTitleError && <Text style={styles.fieldError}>{t('deals.titleRequired')}</Text>}
 
-          <Text style={styles.label}>Value ($)</Text>
+          <Text style={styles.label}>{t('deals.valueUsd')}</Text>
           <TextInput
             style={styles.input}
             value={valueStr}
@@ -386,10 +388,10 @@ export default function EditDealScreen(): JSX.Element {
           />
           {showValueError && <Text style={styles.fieldError}>Value must be positive</Text>}
 
-          <Text style={styles.label}>Pipeline *</Text>
+          <Text style={styles.label}>{t('deals.pipeline')} *</Text>
           <TouchableOpacity style={styles.pickerButton} onPress={() => setShowPipelineModal(true)}>
             {pipelinesLoading ? (
-              <ActivityIndicator color="#10b981" />
+              <ActivityIndicator color="#065f46" />
             ) : (
               <Text style={styles.pickerButtonText}>{selectedPipelineName}</Text>
             )}
@@ -403,9 +405,9 @@ export default function EditDealScreen(): JSX.Element {
           >
             <View style={styles.modalContainer}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Pipeline</Text>
+                <Text style={styles.modalTitle}>{t('deals.selectPipeline')}</Text>
                 <TouchableOpacity onPress={() => setShowPipelineModal(false)}>
-                  <Text style={styles.modalClose}>Close</Text>
+                  <Text style={styles.modalClose}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
               </View>
               <FlatList<Pipeline>
@@ -416,7 +418,7 @@ export default function EditDealScreen(): JSX.Element {
             </View>
           </Modal>
 
-          <Text style={styles.label}>Stage *</Text>
+          <Text style={styles.label}>{t('deals.stage')} *</Text>
           <TouchableOpacity
             style={[styles.pickerButton, stagePickerDisabled && styles.pickerButtonDisabled]}
             onPress={() => {
@@ -427,7 +429,7 @@ export default function EditDealScreen(): JSX.Element {
             <Text style={styles.pickerButtonText}>{selectedStageName}</Text>
           </TouchableOpacity>
           {showPipelineStageError && (
-            <Text style={styles.fieldError}>Pipeline and stage are required</Text>
+            <Text style={styles.fieldError}>{t('deals.pipelineStageRequired')}</Text>
           )}
 
           <Modal
@@ -438,9 +440,9 @@ export default function EditDealScreen(): JSX.Element {
           >
             <View style={styles.modalContainer}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Stage</Text>
+                <Text style={styles.modalTitle}>{t('deals.selectStage')}</Text>
                 <TouchableOpacity onPress={() => setShowStageModal(false)}>
-                  <Text style={styles.modalClose}>Close</Text>
+                  <Text style={styles.modalClose}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
               </View>
               <FlatList<PipelineStage>
@@ -451,7 +453,7 @@ export default function EditDealScreen(): JSX.Element {
             </View>
           </Modal>
 
-          <Text style={styles.label}>Contact</Text>
+          <Text style={styles.label}>{t('deals.contactOptional')}</Text>
           {selectedContactId !== '' ? (
             <View style={styles.contactChip}>
               <Text style={styles.contactChipText}>{selectedContactName}</Text>
@@ -472,7 +474,7 @@ export default function EditDealScreen(): JSX.Element {
                 style={styles.input}
                 value={contactQuery}
                 onChangeText={setContactQuery}
-                placeholder="Search contacts by name..."
+                placeholder={t('deals.searchContactsPlaceholder')}
                 placeholderTextColor="#6b7280"
               />
               {contactResults.slice(0, 5).length > 0 && (
@@ -496,7 +498,7 @@ export default function EditDealScreen(): JSX.Element {
             {isSubmitting ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.submitButtonText}>Save Changes</Text>
+              <Text style={styles.submitButtonText}>{t('common.save')}</Text>
             )}
           </TouchableOpacity>
         </>
@@ -508,7 +510,7 @@ export default function EditDealScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
   },
   content: {
     padding: 16,
@@ -582,7 +584,7 @@ const styles = StyleSheet.create({
   },
   modalClose: {
     fontSize: 14,
-    color: '#10b981',
+    color: '#065f46',
     fontWeight: '600',
     paddingHorizontal: 8,
   },
@@ -597,7 +599,7 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   modalItemTextSelected: {
-    color: '#10b981',
+    color: '#065f46',
     fontWeight: '600',
   },
   contactChip: {
@@ -618,7 +620,7 @@ const styles = StyleSheet.create({
   },
   contactChipRemove: {
     fontSize: 14,
-    color: '#10b981',
+    color: '#065f46',
     fontWeight: '600',
   },
   contactResultsContainer: {
@@ -639,7 +641,7 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   submitButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
