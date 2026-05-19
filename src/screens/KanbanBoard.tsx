@@ -114,27 +114,29 @@ const KanbanBoard: React.FC = () => {
           onLongPress={() => handleLongPress(item, allStages)}
           disabled={isActive}
           style={{
-            backgroundColor: '#fff',
-            borderRadius: 8,
+            backgroundColor: '#FFFFFF',
+            borderRadius: 12,
             padding: 12,
             marginVertical: 6,
             marginHorizontal: 4,
+            borderWidth: 1,
+            borderColor: '#e5e7eb',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.1,
+            shadowOpacity: 0.05,
             shadowRadius: 2,
-            elevation: 2,
+            elevation: 1,
           }}
         >
-          <Text style={{ fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>
+          <Text style={{ fontWeight: '600', fontSize: 14, marginBottom: 4, color: '#111827' }}>
             {item.title}
           </Text>
-          <Text style={{ marginBottom: 4 }}>
+          <Text style={{ marginBottom: 4, color: '#10b981', fontWeight: '600', fontSize: 13 }}>
             {item.value != null
               ? '$' + item.value.toLocaleString('en-US')
               : '--'}
           </Text>
-          <Text style={{ color: '#888' }}>
+          <Text style={{ color: '#6b7280', fontSize: 12 }}>
             {item.contact.first_name + ' ' + item.contact.last_name}
           </Text>
         </TouchableOpacity>
@@ -144,7 +146,7 @@ const KanbanBoard: React.FC = () => {
   if (dealsLoading || pipelinesLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#10b981" />
       </View>
     );
   }
@@ -170,7 +172,7 @@ const KanbanBoard: React.FC = () => {
           style={{
             width: 280,
             margin: 8,
-            backgroundColor: '#f5f5f5',
+            backgroundColor: '#ecfdf5',
             borderRadius: 12,
             padding: 8,
           }}
@@ -184,10 +186,10 @@ const KanbanBoard: React.FC = () => {
               paddingHorizontal: 4,
             }}
           >
-            <Text style={{ fontWeight: 'bold', fontSize: 15 }}>
+            <Text style={{ fontWeight: '700', fontSize: 15, color: '#111827' }}>
               {stage.name}
             </Text>
-            <Text style={{ color: '#666', fontSize: 13 }}>
+            <Text style={{ color: '#9ca3af', fontSize: 13, fontWeight: '600' }}>
               {stageDeals.length}
             </Text>
           </View>

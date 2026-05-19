@@ -77,7 +77,7 @@ function DealListView(): JSX.Element {
   if (isLoading || pipelinesLoading) {
     return (
       <View style={listStyles.centered}>
-        <ActivityIndicator size="large" color="#1A73E8" />
+        <ActivityIndicator size="large" color="#10b981" />
       </View>
     );
   }
@@ -114,8 +114,8 @@ function DealListView(): JSX.Element {
         <RefreshControl
           refreshing={isRefreshing}
           onRefresh={handleRefresh}
-          colors={['#1A73E8']}
-          tintColor="#1A73E8"
+          colors={['#10b981']}
+          tintColor="#10b981"
         />
       }
       renderItem={({ item }) => {
@@ -182,12 +182,12 @@ export default function PipelineScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#f0fdf8' },
   toggleBar: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E8E8E8',
+    borderBottomColor: '#f3f4f6',
     paddingHorizontal: 16,
     paddingVertical: 8,
     gap: 8,
@@ -196,10 +196,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: '#f3f4f6',
   },
-  toggleActive: { backgroundColor: '#1A73E8' },
-  toggleText: { fontSize: 14, fontWeight: '600', color: '#6B6B6B' },
+  toggleActive: { backgroundColor: '#10b981' },
+  toggleText: { fontSize: 14, fontWeight: '600', color: '#6b7280' },
   toggleTextActive: { color: '#FFFFFF' },
   content: { flex: 1 },
 });
@@ -208,23 +208,23 @@ const listStyles = StyleSheet.create({
   list: { flex: 1 },
   listContent: { paddingBottom: 24 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  errorText: { fontSize: 14, color: '#D93025', textAlign: 'center', marginBottom: 12 },
-  retryButton: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#1A73E8', borderRadius: 6 },
+  errorText: { fontSize: 14, color: '#ef4444', textAlign: 'center', marginBottom: 12 },
+  retryButton: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#10b981', borderRadius: 12 },
   retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
-  emptyText: { fontSize: 15, color: '#9B9B9B' },
+  emptyText: { fontSize: 15, color: '#9ca3af' },
   stageHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
     borderBottomWidth: 1,
-    borderBottomColor: '#E8E8E8',
+    borderBottomColor: '#e5e7eb',
     marginTop: 8,
   },
-  stageHeaderText: { fontSize: 13, fontWeight: '700', color: '#1A1A1A', textTransform: 'uppercase', letterSpacing: 0.5 },
-  stageCount: { fontSize: 12, color: '#9B9B9B', fontWeight: '600' },
+  stageHeaderText: { fontSize: 13, fontWeight: '700', color: '#111827', textTransform: 'uppercase', letterSpacing: 0.5 },
+  stageCount: { fontSize: 12, color: '#9ca3af', fontWeight: '600' },
   dealRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -232,10 +232,10 @@ const listStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#f3f4f6',
   },
   dealMain: { flex: 1, marginRight: 12 },
-  dealTitle: { fontSize: 15, fontWeight: '500', color: '#1A1A1A', marginBottom: 2 },
-  dealContact: { fontSize: 13, color: '#9B9B9B' },
-  dealValue: { fontSize: 14, fontWeight: '600', color: '#1A73E8' },
+  dealTitle: { fontSize: 15, fontWeight: '500', color: '#111827', marginBottom: 2 },
+  dealContact: { fontSize: 13, color: '#9ca3af' },
+  dealValue: { fontSize: 14, fontWeight: '600', color: '#10b981' },
 });

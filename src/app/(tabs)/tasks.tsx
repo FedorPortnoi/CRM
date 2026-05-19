@@ -46,13 +46,13 @@ function formatDue(due: string | null): string {
 function badgeColor(status: TaskStatus): string {
   switch (status) {
     case 'done':
-      return '#34A853';
+      return '#10b981';
     case 'in_progress':
-      return '#1A73E8';
+      return '#f59e0b';
     case 'pending':
       return '#E8A000';
     default:
-      return '#9B9B9B';
+      return '#9ca3af';
   }
 }
 
@@ -205,8 +205,8 @@ export default function TasksScreen(): JSX.Element {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={['#1A73E8']}
-            tintColor="#1A73E8"
+            colors={['#10b981']}
+            tintColor="#10b981"
           />
         }
         ListEmptyComponent={
@@ -227,18 +227,18 @@ export default function TasksScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   skeletonContainer: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
     padding: 12,
     paddingTop: 16,
   },
   skeletonRow: {
     height: 64,
-    backgroundColor: '#E8E8E8',
-    borderRadius: 8,
+    backgroundColor: '#d1fae5',
+    borderRadius: 12,
     marginBottom: 8,
   },
   errorContainer: {
@@ -246,19 +246,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   errorText: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     minHeight: 44,
     justifyContent: 'center',
   },
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#f3f4f6',
   },
   tab: {
     flex: 1,
@@ -281,15 +281,15 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabActive: {
-    borderBottomColor: '#1A73E8',
+    borderBottomColor: '#10b981',
   },
   tabText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6B6B6B',
+    color: '#9ca3af',
   },
   tabTextActive: {
-    color: '#1A73E8',
+    color: '#10b981',
     fontWeight: '600',
   },
   listContent: {
@@ -306,13 +306,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#9B9B9B',
+    color: '#9ca3af',
   },
   row: {
     backgroundColor: '#FFFFFF',
     marginHorizontal: 12,
     marginTop: 8,
-    borderRadius: 8,
+    borderRadius: 12,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -326,11 +326,11 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#111827',
     marginBottom: 6,
   },
   rowTitleOverdue: {
-    color: '#D93025',
+    color: '#ef4444',
   },
   rowMeta: {
     flexDirection: 'row',
@@ -339,10 +339,10 @@ const styles = StyleSheet.create({
   },
   rowDate: {
     fontSize: 12,
-    color: '#6B6B6B',
+    color: '#6b7280',
   },
   rowDateOverdue: {
-    color: '#D93025',
+    color: '#ef4444',
   },
   badge: {
     paddingHorizontal: 8,

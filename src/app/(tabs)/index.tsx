@@ -9,10 +9,12 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { TrendingUp, CheckSquare, Activity, Zap, UserPlus, PlusCircle, ListChecks, ChevronRight } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { notifyPendingCaptureCount } from '../../utils/notifications';
 
+const TEAL = '#10b981';
 const CAPTURE_COUNT_POLL_INTERVAL_MS = 60000;
 
 type DashboardData = {
@@ -53,7 +55,7 @@ function errorMessage(e: unknown, fallback: string): string {
 }
 
 function formatCurrency(value: number): string {
-  return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 function formatPipelineHealth(score: number): string {
@@ -68,6 +70,10 @@ function formatDueDate(date: string | null): string {
 
 function contactName(contact: RecentContact): string {
   return [contact.first_name, contact.last_name].filter(Boolean).join(' ');
+}
+
+function getInitials(name: string): string {
+  return name.split(' ').map(w => w[0] ?? '').slice(0, 2).join('').toUpperCase();
 }
 
 interface SectionErrorProps {
@@ -90,6 +96,7 @@ function SectionError({ message, onRetry, retryLabel }: SectionErrorProps): JSX.
 export default function DashboardScreen(): JSX.Element {
   const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
+  const user = useUserStore((s) => s.user);
   const [summary, setSummary] = useState<SectionState<DashboardData>>(initialSection<DashboardData>);
   const [tasks, setTasks] = useState<SectionState<TodayTask[]>>(initialSection<TodayTask[]>);
   const [contacts, setContacts] = useState<SectionState<RecentContact[]>>(initialSection<RecentContact[]>);
@@ -199,7 +206,6 @@ export default function DashboardScreen(): JSX.Element {
       const previousCount = previousCaptureCountRef.current;
       previousCaptureCountRef.current = nextCount;
       setCaptureCount(nextCount);
-
       if (previousCount !== null && nextCount > previousCount) {
         void notifyPendingCaptureCount(
           t('dashboard.pendingCapturesNotificationTitle'),
@@ -235,14 +241,10 @@ export default function DashboardScreen(): JSX.Element {
 
   useEffect(() => {
     if (!token) return undefined;
-
     const interval = setInterval(() => {
       void fetchCaptureCount();
     }, CAPTURE_COUNT_POLL_INTERVAL_MS);
-
-    return () => {
-      clearInterval(interval);
-    };
+    return () => { clearInterval(interval); };
   }, [token, fetchCaptureCount]);
 
   const onRefresh = useCallback((): void => {
@@ -250,21 +252,36 @@ export default function DashboardScreen(): JSX.Element {
     void fetchAll(false).finally(() => setRefreshing(false));
   }, [fetchAll]);
 
+  const firstName = user?.name?.split(' ')[0] ?? 'there';
+  const initials = user?.name ? getInitials(user.name) : '?';
+
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={TEAL} />}
     >
-      <Text style={styles.pageTitle}>{t('dashboard.title')}</Text>
+      <View style={styles.circle1} pointerEvents="none" />
+      <View style={styles.circle2} pointerEvents="none" />
 
-      <View style={styles.summaryGrid}>
+      {/* Header greeting */}
+      <View style={styles.headerRow}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.greetingText}>{t('dashboard.greeting', { name: firstName })}</Text>
+          <Text style={styles.greetingSub}>{t('dashboard.workspaceToday')}</Text>
+        </View>
+        <View style={styles.avatarCircle}>
+          <Text style={styles.avatarInitials}>{initials}</Text>
+        </View>
+      </View>
+
+      {/* Metric cards */}
+      <View style={styles.metricsRow}>
         {summary.isLoading ? (
           <>
-            <View style={styles.summarySkeleton} />
-            <View style={styles.summarySkeleton} />
-            <View style={styles.summarySkeleton} />
-            <View style={styles.summarySkeleton} />
+            <View style={styles.metricSkeleton} />
+            <View style={styles.metricSkeleton} />
+            <View style={styles.metricSkeleton} />
           </>
         ) : summary.error ? (
           <View style={styles.fullWidth}>
@@ -272,75 +289,81 @@ export default function DashboardScreen(): JSX.Element {
           </View>
         ) : summary.data ? (
           <>
-            <View style={styles.summaryCard}>
-              <Text style={styles.cardLabel}>{t('dashboard.openDeals')}</Text>
-              <Text style={styles.cardValue}>{summary.data.open_deals.count}</Text>
-              <Text style={styles.cardSub}>{formatCurrency(summary.data.open_deals.total_value)}</Text>
+            <View style={styles.metricCard}>
+              <View style={[styles.metricIconBox, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+                <TrendingUp size={18} color={TEAL} />
+              </View>
+              <Text style={styles.metricNumber}>{summary.data.open_deals.count}</Text>
+              <Text style={styles.metricLabel}>{t('dashboard.openDeals')}</Text>
+              <Text style={styles.metricSub}>{formatCurrency(summary.data.open_deals.total_value)}</Text>
             </View>
-            <View style={styles.summaryCard}>
-              <Text style={styles.cardLabel}>{t('dashboard.dueToday')}</Text>
-              <Text style={styles.cardValue}>{summary.data.tasks_due_today}</Text>
-              <Text style={styles.cardSub}>{t('tabs.tasks')}</Text>
+            <View style={styles.metricCard}>
+              <View style={[styles.metricIconBox, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
+                <CheckSquare size={18} color="#f59e0b" />
+              </View>
+              <Text style={styles.metricNumber}>{summary.data.tasks_due_today}</Text>
+              <Text style={styles.metricLabel}>{t('dashboard.dueToday')}</Text>
+              <Text style={styles.metricSub}>{t('tabs.tasks')}</Text>
             </View>
-            <View style={styles.summaryCard}>
-              <Text style={styles.cardLabel}>{t('dashboard.pipelineHealth')}</Text>
-              <Text style={styles.cardValue}>{formatPipelineHealth(summary.data.pipeline_health_score)}</Text>
-              <Text style={styles.cardSub}>{t('dashboard.score')}</Text>
+            <View style={styles.metricCard}>
+              <View style={[styles.metricIconBox, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+                <Activity size={18} color={TEAL} />
+              </View>
+              <Text style={styles.metricNumber}>{formatPipelineHealth(summary.data.pipeline_health_score)}</Text>
+              <Text style={styles.metricLabel}>{t('dashboard.pipelineHealth')}</Text>
+              <Text style={styles.metricSub}>{t('dashboard.score')}</Text>
             </View>
-            <TouchableOpacity style={styles.summaryCard} onPress={() => router.push('/workflows' as never)} accessibilityRole="button">
-              <Text style={styles.cardLabel}>{t('dashboard.workflows')}</Text>
-              <Text style={styles.cardValue}>{workflowCount.error ? '—' : (workflowCount.data ?? 0)}</Text>
-              <Text style={styles.cardSub}>{t('workflows.enabled')}</Text>
-            </TouchableOpacity>
           </>
         ) : null}
       </View>
 
+      {/* Quick actions */}
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t('calendar.title')}</Text>
-        </View>
-        <View style={styles.actionRow}>
+        <Text style={styles.sectionHeader}>{t('dashboard.quickActions')}</Text>
+        <View style={styles.quickActionsRow}>
           <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => router.push('/calendar')}
+            style={styles.quickAction}
+            onPress={() => { router.push('/contact/new'); }}
             accessibilityRole="button"
           >
-            <Text style={styles.actionButtonText}>{t('calendar.agenda')}</Text>
+            <View style={styles.quickActionIcon}>
+              <UserPlus size={18} color={TEAL} />
+            </View>
+            <Text style={styles.quickActionLabel}>{t('contacts.add')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, styles.actionButtonSecondary]}
-            onPress={() => router.push('/calendar/new')}
+            style={styles.quickAction}
+            onPress={() => { router.push('/deal/new'); }}
             accessibilityRole="button"
           >
-            <Text style={styles.actionButtonSecondaryText}>{t('calendar.newEvent')}</Text>
+            <View style={styles.quickActionIcon}>
+              <PlusCircle size={18} color={TEAL} />
+            </View>
+            <Text style={styles.quickActionLabel}>{t('deals.add')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, styles.actionButtonSecondary]}
-            onPress={() => router.push('/workflows' as never)}
+            style={styles.quickAction}
+            onPress={() => { router.push('/task/new'); }}
             accessibilityRole="button"
           >
-            <Text style={styles.actionButtonSecondaryText}>{t('dashboard.workflows')}</Text>
+            <View style={styles.quickActionIcon}>
+              <ListChecks size={18} color={TEAL} />
+            </View>
+            <Text style={styles.quickActionLabel}>{t('tasks.add')}</Text>
           </TouchableOpacity>
-          {captureCount > 0 ? (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.actionButtonAlert]}
-              onPress={() => router.push('/captures' as never)}
-              accessibilityRole="button"
-            >
-              <Text style={styles.actionButtonText}>{captureCount} {t('dashboard.pendingCaptures')}</Text>
-            </TouchableOpacity>
-          ) : null}
         </View>
       </View>
 
+      {/* Today's focus (tasks) */}
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t('dashboard.todayTasks')}</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionHeader}>{t('dashboard.todayFocus')}</Text>
+          <TouchableOpacity onPress={() => { router.push('/(tabs)/tasks'); }} accessibilityRole="button">
+            <Text style={styles.viewAllText}>{t('dashboard.viewAll')}</Text>
+          </TouchableOpacity>
         </View>
         {tasks.isLoading ? (
           <>
-            <View style={styles.rowSkeleton} />
             <View style={styles.rowSkeleton} />
             <View style={styles.rowSkeleton} />
           </>
@@ -350,15 +373,16 @@ export default function DashboardScreen(): JSX.Element {
           tasks.data.map((task) => (
             <TouchableOpacity
               key={task.id}
-              style={styles.row}
-              onPress={() => router.push({ pathname: '/task/[id]', params: { id: task.id } })}
+              style={styles.listCard}
+              onPress={() => { router.push({ pathname: '/task/[id]', params: { id: task.id } }); }}
               accessibilityRole="button"
             >
-              <View style={styles.rowMain}>
-                <Text style={styles.rowTitle} numberOfLines={1}>{task.title}</Text>
-                <Text style={styles.rowSub}>{formatDueDate(task.due_date) || t('tasks.today')}</Text>
+              <View style={[styles.statusDot, { backgroundColor: task.status === 'done' ? TEAL : task.status === 'in_progress' ? '#f59e0b' : '#d1d5db' }]} />
+              <View style={styles.listCardContent}>
+                <Text style={styles.listCardTitle} numberOfLines={1}>{task.title}</Text>
+                <Text style={styles.listCardSub}>{formatDueDate(task.due_date) || t('tasks.today')}</Text>
               </View>
-              <Text style={styles.rowMeta}>{task.status.replace('_', ' ')}</Text>
+              <ChevronRight size={16} color="#9ca3af" />
             </TouchableOpacity>
           ))
         ) : (
@@ -366,13 +390,16 @@ export default function DashboardScreen(): JSX.Element {
         )}
       </View>
 
+      {/* Recent contacts */}
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t('dashboard.recentContacts')}</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionHeader}>{t('dashboard.recentContacts')}</Text>
+          <TouchableOpacity onPress={() => { router.push('/(tabs)/contacts'); }} accessibilityRole="button">
+            <Text style={styles.viewAllText}>{t('dashboard.viewAll')}</Text>
+          </TouchableOpacity>
         </View>
         {contacts.isLoading ? (
           <>
-            <View style={styles.rowSkeleton} />
             <View style={styles.rowSkeleton} />
             <View style={styles.rowSkeleton} />
           </>
@@ -382,27 +409,53 @@ export default function DashboardScreen(): JSX.Element {
           contacts.data.map((contact) => (
             <TouchableOpacity
               key={contact.id}
-              style={styles.row}
-              onPress={() => router.push({ pathname: '/contact/[id]', params: { id: contact.id } })}
+              style={styles.listCard}
+              onPress={() => { router.push({ pathname: '/contact/[id]', params: { id: contact.id } }); }}
               accessibilityRole="button"
             >
-              <View style={styles.rowMain}>
-                <Text style={styles.rowTitle} numberOfLines={1}>{contactName(contact)}</Text>
-                {contact.company ? (
-                  <Text style={styles.rowSub} numberOfLines={1}>{contact.company}</Text>
-                ) : contact.email ? (
-                  <Text style={styles.rowSub} numberOfLines={1}>{contact.email}</Text>
-                ) : (
-                  <Text style={styles.rowSub}>{t('contacts.company')}</Text>
-                )}
+              <View style={styles.contactAvatar}>
+                <Text style={styles.contactAvatarText}>{getInitials(contactName(contact))}</Text>
               </View>
-              {contact.phone ? <Text style={styles.rowMeta}>{contact.phone}</Text> : null}
+              <View style={styles.listCardContent}>
+                <Text style={styles.listCardTitle} numberOfLines={1}>{contactName(contact)}</Text>
+                <Text style={styles.listCardSub} numberOfLines={1}>{contact.company ?? contact.email ?? ''}</Text>
+              </View>
+              <ChevronRight size={16} color="#9ca3af" />
             </TouchableOpacity>
           ))
         ) : (
           <Text style={styles.emptyText}>{t('contacts.noContacts')}</Text>
         )}
       </View>
+
+      {/* Workflows + captures */}
+      {(workflowCount.data !== null || captureCount > 0) && (
+        <View style={styles.section}>
+          <View style={styles.quickActionsRow}>
+            <TouchableOpacity
+              style={[styles.outlineButton, { flex: 1 }]}
+              onPress={() => { router.push('/workflows' as never); }}
+              accessibilityRole="button"
+            >
+              <Zap size={16} color={TEAL} />
+              <Text style={styles.outlineButtonText}>
+                {`${workflowCount.data ?? 0} ${t('dashboard.workflows')}`}
+              </Text>
+            </TouchableOpacity>
+            {captureCount > 0 && (
+              <TouchableOpacity
+                style={[styles.outlineButton, { flex: 1, borderColor: '#f59e0b' }]}
+                onPress={() => { router.push('/captures' as never); }}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.outlineButtonText, { color: '#f59e0b' }]}>
+                  {`${captureCount} ${t('dashboard.pendingCaptures')}`}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -410,146 +463,243 @@ export default function DashboardScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   contentContainer: {
-    paddingBottom: 24,
+    paddingBottom: 40,
   },
-  pageTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    paddingHorizontal: 16,
-    paddingTop: 16,
+  circle1: {
+    position: 'absolute',
+    width: 350,
+    height: 350,
+    borderRadius: 175,
+    backgroundColor: 'rgba(16,185,129,0.06)',
+    top: -80,
+    right: -100,
+  },
+  circle2: {
+    position: 'absolute',
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: 'rgba(16,185,129,0.04)',
+    top: 300,
+    left: -80,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 20,
     paddingBottom: 8,
   },
-  summaryGrid: {
+  headerLeft: {
+    flex: 1,
+  },
+  greetingText: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  greetingSub: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  avatarCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#10b981',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  avatarInitials: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  metricsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingHorizontal: 12,
-    marginTop: 4,
+    gap: 10,
+    paddingHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 4,
   },
   fullWidth: {
     width: '100%',
   },
-  summaryCard: {
+  metricCard: {
     flex: 1,
-    minWidth: 105,
     backgroundColor: '#FFFFFF',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ECECEC',
-    minHeight: 104,
+    borderRadius: 16,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  cardLabel: {
-    fontSize: 12,
-    color: '#6B6B6B',
-    fontWeight: '600',
-    marginBottom: 6,
+  metricSkeleton: {
+    flex: 1,
+    height: 110,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 16,
   },
-  cardValue: {
-    fontSize: 26,
+  metricIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  metricNumber: {
+    fontSize: 22,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#111827',
   },
-  cardSub: {
-    fontSize: 12,
-    color: '#6B6B6B',
-    marginTop: 4,
+  metricLabel: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  metricSub: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginTop: 2,
   },
   section: {
-    marginHorizontal: 12,
-    marginTop: 20,
+    marginHorizontal: 16,
+    marginTop: 24,
   },
-  sectionHeader: {
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 16,
+  sectionHeader: {
+    fontSize: 13,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#6b7280',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 12,
   },
-  row: {
+  viewAllText: {
+    fontSize: 13,
+    color: '#10b981',
+    fontWeight: '500',
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  quickAction: {
+    flex: 1,
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#10b981',
+    paddingVertical: 14,
+    alignItems: 'center',
+    gap: 6,
+  },
+  quickActionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(16,185,129,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quickActionLabel: {
+    fontSize: 11,
+    color: '#10b981',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  listCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#ECECEC',
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 64,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+    gap: 12,
   },
-  rowMain: {
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  listCardContent: {
     flex: 1,
-    paddingRight: 12,
   },
-  rowTitle: {
+  listCardTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#111827',
   },
-  rowSub: {
+  listCardSub: {
     fontSize: 12,
-    color: '#6B6B6B',
-    marginTop: 3,
+    color: '#9ca3af',
+    marginTop: 2,
   },
-  rowMeta: {
+  contactAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(16,185,129,0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contactAvatarText: {
     fontSize: 12,
-    color: '#6B6B6B',
-    maxWidth: 120,
+    fontWeight: '700',
+    color: '#10b981',
   },
   emptyText: {
-    color: '#9B9B9B',
+    color: '#9ca3af',
     fontSize: 14,
+    paddingVertical: 8,
+  },
+  rowSkeleton: {
+    height: 60,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  outlineButton: {
+    borderWidth: 1.5,
+    borderColor: '#10b981',
+    borderRadius: 12,
     paddingVertical: 12,
-  },
-  actionRow: {
+    paddingHorizontal: 14,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  actionButton: {
-    flex: 1,
-    minWidth: 120,
-    backgroundColor: '#1A73E8',
-    borderRadius: 8,
-    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    gap: 8,
   },
-  actionButtonSecondary: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#1A73E8',
-  },
-  actionButtonAlert: {
-    backgroundColor: '#E37400',
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
+  outlineButtonText: {
+    color: '#10b981',
+    fontSize: 13,
     fontWeight: '600',
-    textAlign: 'center',
-  },
-  actionButtonSecondaryText: {
-    color: '#1A73E8',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
   },
   inlineError: {
-    backgroundColor: '#FFF4F2',
+    backgroundColor: '#fef2f2',
     borderWidth: 1,
-    borderColor: '#F5C3BD',
-    borderRadius: 8,
+    borderColor: '#fecaca',
+    borderRadius: 12,
     padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -557,14 +707,14 @@ const styles = StyleSheet.create({
   },
   inlineErrorText: {
     flex: 1,
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 13,
   },
   inlineRetryButton: {
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 6,
+    borderRadius: 8,
     minHeight: 36,
     justifyContent: 'center',
   },
@@ -572,18 +722,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
-  },
-  summarySkeleton: {
-    flex: 1,
-    minWidth: 105,
-    height: 104,
-    backgroundColor: '#E8E8E8',
-    borderRadius: 8,
-  },
-  rowSkeleton: {
-    height: 64,
-    backgroundColor: '#E8E8E8',
-    borderRadius: 8,
-    marginBottom: 8,
   },
 });

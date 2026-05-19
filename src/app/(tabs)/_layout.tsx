@@ -1,7 +1,10 @@
 import { Alert, TouchableOpacity } from 'react-native';
 import { Tabs, router } from 'expo-router';
-import { CalendarDays, Kanban, LayoutDashboard, Users, CheckSquare, Plus, MoreVertical } from 'lucide-react-native';
+import { CalendarDays, Kanban, LayoutDashboard, Users, CheckSquare, Plus, MoreVertical, Settings } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+
+const TEAL = '#10b981';
+const INACTIVE = '#9ca3af';
 
 export default function TabsLayout() {
   const { t } = useTranslation();
@@ -9,9 +12,16 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: '#8E8E93',
+        tabBarActiveTintColor: TEAL,
+        tabBarInactiveTintColor: INACTIVE,
+        tabBarStyle: {
+          backgroundColor: '#ffffff',
+          borderTopColor: '#f3f4f6',
+          borderTopWidth: 1,
+        },
         headerShown: true,
+        headerTintColor: TEAL,
+        headerStyle: { backgroundColor: '#ffffff' },
       }}
     >
       <Tabs.Screen
@@ -47,7 +57,7 @@ export default function TabsLayout() {
               accessibilityRole="button"
               accessibilityLabel={t('contacts.add')}
             >
-              <MoreVertical size={24} color="#007AFF" />
+              <MoreVertical size={24} color={TEAL} />
             </TouchableOpacity>
           ),
         }}
@@ -67,7 +77,7 @@ export default function TabsLayout() {
               accessibilityRole="button"
               accessibilityLabel={t('deals.add')}
             >
-              <Plus size={24} color="#007AFF" />
+              <Plus size={24} color={TEAL} />
             </TouchableOpacity>
           ),
         }}
@@ -87,7 +97,7 @@ export default function TabsLayout() {
               accessibilityRole="button"
               accessibilityLabel={t('tasks.add')}
             >
-              <Plus size={24} color="#007AFF" />
+              <Plus size={24} color={TEAL} />
             </TouchableOpacity>
           ),
         }}
@@ -107,8 +117,18 @@ export default function TabsLayout() {
               accessibilityRole="button"
               accessibilityLabel={t('calendar.newEvent')}
             >
-              <Plus size={24} color="#007AFF" />
+              <Plus size={24} color={TEAL} />
             </TouchableOpacity>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: t('tabs.settings'),
+          tabBarLabel: t('tabs.settings'),
+          tabBarIcon: ({ color, size }: { color: string; size: number }): JSX.Element => (
+            <Settings color={color} size={size} />
           ),
         }}
       />

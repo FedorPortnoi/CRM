@@ -13,7 +13,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
-import { Check } from 'lucide-react-native';
+import { Check, Search } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
@@ -44,6 +44,20 @@ type OrgUsersResponse = {
 };
 
 const PER_PAGE = 20;
+
+const AVATAR_COLORS = ['#10b981', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
+
+function getInitials(firstName: string, lastName: string | null): string {
+  const f = firstName.charAt(0).toUpperCase();
+  const l = lastName ? lastName.charAt(0).toUpperCase() : '';
+  return f + l;
+}
+
+function avatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
 
 export default function ContactsScreen(): JSX.Element {
   const { t } = useTranslation();
@@ -360,6 +374,8 @@ export default function ContactsScreen(): JSX.Element {
     ({ item }: ListRenderItemInfo<Contact>): JSX.Element => {
       const name = [item.first_name, item.last_name].filter(Boolean).join(' ');
       const isSelected = selectedContactIdSet.has(item.id);
+      const initials = getInitials(item.first_name, item.last_name);
+      const bgColor = avatarColor(item.first_name);
       return (
         <TouchableOpacity
           style={styles.row}
@@ -387,7 +403,11 @@ export default function ContactsScreen(): JSX.Element {
             >
               {isSelected ? <Check size={16} color="#FFFFFF" strokeWidth={3} /> : null}
             </View>
-          ) : null}
+          ) : (
+            <View style={[styles.avatar, { backgroundColor: bgColor }]}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
+          )}
           <View style={styles.rowMain}>
             <Text style={styles.rowName} numberOfLines={1}>
               {name}
@@ -478,16 +498,19 @@ export default function ContactsScreen(): JSX.Element {
 
   return (
     <View style={styles.container}>
-      <TextInput
-        style={styles.searchInput}
-        placeholder={t('contacts.searchPlaceholder')}
-        placeholderTextColor="#9B9B9B"
-        value={search}
-        onChangeText={setSearch}
-        autoCapitalize="none"
-        autoCorrect={false}
-        clearButtonMode="while-editing"
-      />
+      <View style={styles.searchWrapper}>
+        <Search size={16} color="#9ca3af" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={t('contacts.searchPlaceholder')}
+          placeholderTextColor="#9ca3af"
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+        />
+      </View>
       {!isSelectionMode ? (
         <TouchableOpacity
           style={styles.importRow}
@@ -508,8 +531,8 @@ export default function ContactsScreen(): JSX.Element {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={['#1A73E8']}
-            tintColor="#1A73E8"
+            colors={['#10b981']}
+            tintColor="#10b981"
           />
         }
         onEndReached={search.trim() ? undefined : loadMore}
@@ -524,7 +547,7 @@ export default function ContactsScreen(): JSX.Element {
         ListFooterComponent={
           isFetchingMore ? (
             <View style={styles.footer}>
-              <ActivityIndicator size="small" color="#1A73E8" />
+              <ActivityIndicator size="small" color="#10b981" />
             </View>
           ) : null
         }
@@ -599,7 +622,7 @@ export default function ContactsScreen(): JSX.Element {
             <View style={styles.userListContainer}>
               {isLoadingUsers ? (
                 <View style={styles.modalStateContainer}>
-                  <ActivityIndicator size="small" color="#1A73E8" />
+                  <ActivityIndicator size="small" color="#10b981" />
                   <Text style={styles.modalStateText}>{t('contacts.loadingUsers')}</Text>
                 </View>
               ) : usersError ? (
@@ -672,18 +695,18 @@ export default function ContactsScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   skeletonContainer: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
     padding: 12,
     paddingTop: 16,
   },
   skeletonRow: {
     height: 64,
-    backgroundColor: '#E8E8E8',
-    borderRadius: 8,
+    backgroundColor: '#d1fae5',
+    borderRadius: 12,
     marginBottom: 8,
   },
   errorContainer: {
@@ -691,19 +714,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   errorText: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     minHeight: 44,
     justifyContent: 'center',
   },
@@ -712,19 +735,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  searchInput: {
+  searchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     marginHorizontal: 12,
     marginTop: 12,
     marginBottom: 8,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    fontSize: 14,
-    color: '#1A1A1A',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#e5e7eb',
     minHeight: 44,
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111827',
+    paddingVertical: 10,
   },
   importRow: {
     marginHorizontal: 12,
@@ -733,9 +762,23 @@ const styles = StyleSheet.create({
   },
   importRowText: {
     fontSize: 13,
-    color: '#1A73E8',
+    color: '#10b981',
     fontWeight: '500',
     paddingVertical: 4,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    flexShrink: 0,
+  },
+  avatarText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   row: {
     backgroundColor: '#FFFFFF',
@@ -743,7 +786,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000000',
@@ -762,13 +805,13 @@ const styles = StyleSheet.create({
   },
   checkboxEmpty: {
     borderWidth: 1.5,
-    borderColor: '#9B9B9B',
+    borderColor: '#9ca3af',
     backgroundColor: '#FFFFFF',
   },
   checkboxSelected: {
     borderWidth: 1.5,
-    borderColor: '#1A73E8',
-    backgroundColor: '#1A73E8',
+    borderColor: '#10b981',
+    backgroundColor: '#10b981',
   },
   rowMain: {
     flex: 1,
@@ -778,16 +821,16 @@ const styles = StyleSheet.create({
   rowName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#111827',
   },
   rowSub: {
     fontSize: 12,
-    color: '#6B6B6B',
+    color: '#6b7280',
     marginTop: 2,
   },
   rowPhone: {
     fontSize: 13,
-    color: '#6B6B6B',
+    color: '#6b7280',
     maxWidth: '38%',
   },
   emptyContainer: {
@@ -797,7 +840,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#9B9B9B',
+    color: '#9ca3af',
   },
   emptyContent: {
     flexGrow: 1,
@@ -807,7 +850,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   archiveErrorText: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 13,
     marginHorizontal: 12,
     marginBottom: 8,
@@ -821,19 +864,19 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#f3f4f6',
   },
   cancelSelectionButton: {
     minHeight: 44,
     paddingHorizontal: 14,
-    borderRadius: 8,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#DADCE0',
+    borderColor: '#e5e7eb',
   },
   cancelSelectionText: {
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -841,8 +884,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 96,
     minHeight: 44,
-    borderRadius: 8,
-    backgroundColor: '#1A73E8',
+    borderRadius: 12,
+    backgroundColor: '#10b981',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -859,8 +902,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 96,
     minHeight: 44,
-    borderRadius: 8,
-    backgroundColor: '#D93025',
+    borderRadius: 12,
+    backgroundColor: '#ef4444',
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
@@ -893,17 +936,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   modalTitle: {
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 18,
     fontWeight: '700',
   },
   modalSubtitle: {
-    color: '#6B6B6B',
+    color: '#6b7280',
     fontSize: 13,
     marginTop: 4,
   },
   assignErrorText: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 13,
     marginBottom: 10,
   },
@@ -918,13 +961,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   modalStateText: {
-    color: '#6B6B6B',
+    color: '#6b7280',
     fontSize: 14,
     marginTop: 10,
     textAlign: 'center',
   },
   modalErrorText: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 12,
@@ -932,8 +975,8 @@ const styles = StyleSheet.create({
   modalRetryButton: {
     minHeight: 40,
     paddingHorizontal: 18,
-    borderRadius: 8,
-    backgroundColor: '#1A73E8',
+    borderRadius: 12,
+    backgroundColor: '#10b981',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -944,9 +987,9 @@ const styles = StyleSheet.create({
   },
   userRow: {
     minHeight: 64,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#e5e7eb',
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 8,
@@ -955,8 +998,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   userRowSelected: {
-    borderColor: '#1A73E8',
-    backgroundColor: '#EAF2FE',
+    borderColor: '#10b981',
+    backgroundColor: '#ecfdf5',
   },
   userRowText: {
     flex: 1,
@@ -964,12 +1007,12 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   userName: {
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 15,
     fontWeight: '600',
   },
   userEmail: {
-    color: '#6B6B6B',
+    color: '#6b7280',
     fontSize: 13,
     marginTop: 3,
   },
@@ -982,13 +1025,13 @@ const styles = StyleSheet.create({
   },
   userSelectionIndicatorEmpty: {
     borderWidth: 1.5,
-    borderColor: '#9B9B9B',
+    borderColor: '#9ca3af',
     backgroundColor: '#FFFFFF',
   },
   userSelectionIndicatorSelected: {
     borderWidth: 1.5,
-    borderColor: '#1A73E8',
-    backgroundColor: '#1A73E8',
+    borderColor: '#10b981',
+    backgroundColor: '#10b981',
   },
   modalActions: {
     flexDirection: 'row',
@@ -998,22 +1041,22 @@ const styles = StyleSheet.create({
   modalCancelButton: {
     minHeight: 44,
     paddingHorizontal: 18,
-    borderRadius: 8,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#DADCE0',
+    borderColor: '#e5e7eb',
   },
   modalCancelText: {
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 14,
     fontWeight: '600',
   },
   modalConfirmButton: {
     flex: 1,
     minHeight: 44,
-    borderRadius: 8,
-    backgroundColor: '#1A73E8',
+    borderRadius: 12,
+    backgroundColor: '#10b981',
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',

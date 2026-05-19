@@ -96,9 +96,9 @@ function contactName(contact: CalendarContact): string {
 }
 
 function statusColor(status: CalendarEventStatus): string {
-  if (status === 'completed') return '#34A853';
-  if (status === 'cancelled') return '#9B9B9B';
-  return '#1A73E8';
+  if (status === 'completed') return '#10b981';
+  if (status === 'cancelled') return '#9ca3af';
+  return '#6366f1';
 }
 
 function buildSections(events: CalendarEvent[]): AgendaSection[] {
@@ -210,7 +210,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
               accessibilityRole="button"
               accessibilityLabel={t('calendar.newEvent')}
             >
-              <Plus size={24} color="#007AFF" />
+              <Plus size={24} color="#10b981" />
             </TouchableOpacity>
           ),
         }}
@@ -224,6 +224,8 @@ export default function CalendarAgendaScreen(): JSX.Element {
             onRefresh={() => {
               void fetchEvents(true);
             }}
+            colors={['#10b981']}
+            tintColor="#10b981"
           />
         }
       >
@@ -311,7 +313,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
 
         {isRefreshing ? (
           <View style={styles.refreshIndicator}>
-            <ActivityIndicator color="#1A73E8" />
+            <ActivityIndicator color="#10b981" />
           </View>
         ) : null}
       </ScrollView>
@@ -322,7 +324,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   content: {
     padding: 16,
@@ -341,16 +343,16 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#111827',
   },
   pageSubtitle: {
     fontSize: 13,
-    color: '#6B6B6B',
+    color: '#6b7280',
     marginTop: 2,
   },
   newButton: {
-    backgroundColor: '#1A73E8',
-    borderRadius: 8,
+    backgroundColor: '#10b981',
+    borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
     minHeight: 40,
@@ -366,8 +368,8 @@ const styles = StyleSheet.create({
   },
   skeletonRow: {
     height: 88,
-    borderRadius: 8,
-    backgroundColor: '#E8E8E8',
+    borderRadius: 12,
+    backgroundColor: '#d1fae5',
   },
   centerState: {
     minHeight: 360,
@@ -378,17 +380,17 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#111827',
     marginBottom: 6,
   },
   emptyText: {
     fontSize: 14,
-    color: '#6B6B6B',
+    color: '#6b7280',
     textAlign: 'center',
   },
   emptyButton: {
-    backgroundColor: '#1A73E8',
-    borderRadius: 8,
+    backgroundColor: '#10b981',
+    borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginTop: 18,
@@ -401,14 +403,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   errorText: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 14,
   },
   retryButton: {
-    backgroundColor: '#1A73E8',
-    borderRadius: 8,
+    backgroundColor: '#10b981',
+    borderRadius: 12,
     paddingHorizontal: 18,
     paddingVertical: 10,
     minHeight: 44,
@@ -424,7 +426,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 13,
-    color: '#6B6B6B',
+    color: '#6b7280',
     fontWeight: '700',
     textTransform: 'uppercase',
     marginBottom: 8,
@@ -440,21 +442,21 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 12,
-    color: '#6B6B6B',
+    color: '#6b7280',
     fontWeight: '600',
   },
   timeLine: {
     width: 1,
     flex: 1,
-    backgroundColor: '#DADCE0',
+    backgroundColor: '#d1fae5',
     marginTop: 8,
   },
   eventBody: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#ECECEC',
+    borderColor: '#e5e7eb',
     padding: 12,
     minHeight: 92,
   },
@@ -467,17 +469,17 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#111827',
     lineHeight: 20,
   },
   eventMeta: {
     fontSize: 12,
-    color: '#6B6B6B',
+    color: '#6b7280',
     marginTop: 4,
   },
   eventSub: {
     fontSize: 12,
-    color: '#6B6B6B',
+    color: '#6b7280',
     marginTop: 4,
   },
   statusBadge: {
@@ -492,7 +494,7 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   notesPrompt: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 12,
     fontWeight: '600',
     marginTop: 8,

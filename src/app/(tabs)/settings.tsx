@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ScrollView,
   View,
@@ -88,7 +88,7 @@ export default function SettingsScreen(): JSX.Element {
           <Switch
             value={notificationsEnabled}
             onValueChange={setNotificationsEnabled}
-            trackColor={{ false: '#D0D0D0', true: '#1A73E8' }}
+            trackColor={{ false: '#e5e7eb', true: '#10b981' }}
             thumbColor='#FFFFFF'
           />
         </View>
@@ -104,7 +104,7 @@ export default function SettingsScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   contentContainer: {
     paddingBottom: 40,
@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#111111',
+    color: '#111827',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 8,
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#666666',
+    color: '#6b7280',
     paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: 6,
@@ -130,9 +130,9 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
     marginHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#ECECEC',
+    borderColor: '#e5e7eb',
     overflow: 'hidden',
   },
   profileRow: {
@@ -147,15 +147,15 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111111',
+    color: '#111827',
   },
   profileEmail: {
     fontSize: 13,
-    color: '#666666',
+    color: '#6b7280',
     marginTop: 2,
   },
   roleBadge: {
-    backgroundColor: '#E8F0FE',
+    backgroundColor: '#ecfdf5',
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
   roleBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#1A73E8',
+    color: '#10b981',
     textTransform: 'capitalize',
   },
   row: {
@@ -179,12 +179,12 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     fontSize: 15,
-    color: '#111111',
+    color: '#111827',
     fontWeight: '500',
   },
   rowValue: {
     fontSize: 14,
-    color: '#666666',
+    color: '#6b7280',
     marginLeft: 8,
     flex: 1,
     textAlign: 'right',
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   languageChip: {
-    backgroundColor: '#E8F0FE',
+    backgroundColor: '#ecfdf5',
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -203,23 +203,23 @@ const styles = StyleSheet.create({
   languageChipText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1A73E8',
+    color: '#10b981',
   },
   chevron: {
     fontSize: 20,
-    color: '#666666',
+    color: '#9ca3af',
     lineHeight: 22,
   },
   comingSoon: {
     fontSize: 12,
-    color: '#666666',
+    color: '#9ca3af',
     marginTop: 2,
   },
   logoutButton: {
     marginHorizontal: 12,
     marginTop: 28,
-    backgroundColor: '#D93025',
-    borderRadius: 10,
+    backgroundColor: '#ef4444',
+    borderRadius: 12,
     minHeight: 50,
     alignItems: 'center',
     justifyContent: 'center',

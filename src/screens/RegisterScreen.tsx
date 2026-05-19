@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { Mail, Lock, Eye, EyeOff, User, Building2, Sparkles } from 'lucide-react-native';
 import { useUserStore } from '../store/userStore';
 
 export default function RegisterScreen() {
@@ -20,6 +21,7 @@ export default function RegisterScreen() {
   const [orgName, setOrgName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const router = useRouter();
@@ -57,75 +59,112 @@ export default function RegisterScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <View style={styles.circle1} pointerEvents="none" />
+      <View style={styles.circle2} pointerEvents="none" />
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
+        <View style={styles.logoContainer}>
+          <View style={styles.logoCircle}>
+            <Sparkles size={34} color="#FFFFFF" strokeWidth={2.5} />
+          </View>
+        </View>
+
+        <Text style={styles.title}>{t('auth.createAccountTitle')}</Text>
+        <Text style={styles.subtitle}>{t('auth.createAccountSubtext')}</Text>
+
         <View style={styles.card}>
-          <Text style={styles.title}>{t('auth.register')}</Text>
+          <View style={styles.fieldWrapper}>
+            <User size={18} color="#9ca3af" />
+            <TextInput
+              style={styles.input}
+              placeholder={t('auth.name')}
+              placeholderTextColor="#9ca3af"
+              value={name}
+              onChangeText={(v) => { setName(v); setValidationError(null); }}
+              autoCapitalize="words"
+            />
+          </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder={t('auth.name')}
-            placeholderTextColor="#9CA3AF"
-            value={name}
-            onChangeText={(v) => { setName(v); setValidationError(null); }}
-            autoCapitalize="words"
-          />
+          <View style={styles.fieldWrapper}>
+            <Building2 size={18} color="#9ca3af" />
+            <TextInput
+              style={styles.input}
+              placeholder={t('auth.orgName')}
+              placeholderTextColor="#9ca3af"
+              value={orgName}
+              onChangeText={(v) => { setOrgName(v); setValidationError(null); }}
+              autoCapitalize="words"
+            />
+          </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder={t('auth.orgName')}
-            placeholderTextColor="#9CA3AF"
-            value={orgName}
-            onChangeText={(v) => { setOrgName(v); setValidationError(null); }}
-            autoCapitalize="words"
-          />
+          <View style={styles.fieldWrapper}>
+            <Mail size={18} color="#9ca3af" />
+            <TextInput
+              style={styles.input}
+              placeholder={t('auth.email')}
+              placeholderTextColor="#9ca3af"
+              value={email}
+              onChangeText={(v) => { setEmail(v); setValidationError(null); }}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder={t('auth.email')}
-            placeholderTextColor="#9CA3AF"
-            value={email}
-            onChangeText={(v) => { setEmail(v); setValidationError(null); }}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder={t('auth.password')}
-            placeholderTextColor="#9CA3AF"
-            value={password}
-            onChangeText={(v) => { setPassword(v); setValidationError(null); }}
-            secureTextEntry
-          />
+          <View style={styles.fieldWrapper}>
+            <Lock size={18} color="#9ca3af" />
+            <TextInput
+              style={[styles.input, styles.inputFlex]}
+              placeholder={t('auth.password')}
+              placeholderTextColor="#9ca3af"
+              value={password}
+              onChangeText={(v) => { setPassword(v); setValidationError(null); }}
+              secureTextEntry={!showPassword}
+            />
+            <TouchableOpacity
+              onPress={() => { setShowPassword(prev => !prev); }}
+              style={styles.eyeButton}
+              accessibilityRole="button"
+            >
+              {showPassword
+                ? <EyeOff size={18} color="#9ca3af" />
+                : <Eye size={18} color="#9ca3af" />}
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
-            onPress={handleRegister}
+            onPress={() => { void handleRegister(); }}
             disabled={isLoading}
+            activeOpacity={0.8}
+            accessibilityRole="button"
           >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.buttonText}>{t('auth.registerButton')}</Text>
-            )}
+            {isLoading
+              ? <ActivityIndicator color="#FFFFFF" />
+              : <Text style={styles.buttonText}>{t('auth.createAccountButton')}</Text>}
           </TouchableOpacity>
 
           {(validationError !== null || error !== null) && (
             <Text style={styles.errorText}>{validationError ?? error}</Text>
           )}
 
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>{t('auth.orDivider')}</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
           <TouchableOpacity
-            style={styles.linkButton}
-            onPress={() => router.push('/login')}
+            style={styles.loginLink}
+            onPress={() => { router.push('/login'); }}
+            activeOpacity={0.7}
+            accessibilityRole="button"
           >
-            <Text style={styles.linkText}>
-              {t('auth.hasAccount')}{' '}
-              <Text style={styles.linkTextBold}>{t('auth.loginButton')}</Text>
-            </Text>
+            <Text style={styles.loginLinkText}>{t('auth.alreadyHaveAccountSignIn')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -136,48 +175,107 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F4F7',
+    backgroundColor: '#f0fdf8',
+  },
+  circle1: {
+    position: 'absolute',
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: 'rgba(16,185,129,0.08)',
+    top: -60,
+    left: -80,
+  },
+  circle2: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(16,185,129,0.05)',
+    bottom: 80,
+    right: -60,
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 24,
+    paddingTop: 48,
+    paddingBottom: 40,
+  },
+  logoContainer: {
+    marginBottom: 24,
+  },
+  logoCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#10b981',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 20,
+    paddingHorizontal: 12,
   },
   card: {
+    width: '100%',
+    maxWidth: 400,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 24,
-    shadowColor: '#000000',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 24,
-    textAlign: 'center',
+  fieldWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 14,
+    marginBottom: 14,
+    height: 52,
+    gap: 10,
   },
   input: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    fontSize: 16,
+    flex: 1,
+    fontSize: 15,
     color: '#111827',
-    backgroundColor: '#FAFAFA',
-    marginBottom: 14,
+  },
+  inputFlex: {
+    flex: 1,
+  },
+  eyeButton: {
+    padding: 4,
   },
   button: {
-    height: 48,
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    alignItems: 'center',
+    height: 52,
+    backgroundColor: '#10b981',
+    borderRadius: 12,
     justifyContent: 'center',
-    marginTop: 8,
+    alignItems: 'center',
+    marginTop: 4,
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -188,23 +286,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   errorText: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 14,
     textAlign: 'center',
     marginTop: 12,
   },
-  linkButton: {
-    marginTop: 20,
+  dividerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e5e7eb',
+  },
+  dividerText: {
+    color: '#9ca3af',
+    fontSize: 13,
+    marginHorizontal: 12,
+  },
+  loginLink: {
     minHeight: 44,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  linkText: {
+  loginLinkText: {
+    color: '#10b981',
     fontSize: 14,
-    color: '#6B7280',
-  },
-  linkTextBold: {
-    color: '#007AFF',
-    fontWeight: '600',
+    fontWeight: '500',
   },
 });
