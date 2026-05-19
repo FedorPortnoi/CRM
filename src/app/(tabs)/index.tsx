@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
   metricIconBox: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -612,7 +612,7 @@ const styles = StyleSheet.create({
   quickActionIcon: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: 12,
     backgroundColor: 'rgba(16,185,129,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -714,7 +714,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 12,
     minHeight: 36,
     justifyContent: 'center',
   },

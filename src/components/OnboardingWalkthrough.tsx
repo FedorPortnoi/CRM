@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#DDD',
   },
   dotActive: {
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
     width: 16,
   },
   title: {
@@ -138,10 +138,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   gotItBtn: {
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
     paddingHorizontal: 20,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   gotItText: {
     fontSize: 14,

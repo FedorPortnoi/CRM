@@ -38,7 +38,7 @@ interface SkeletonBoxProps {
 }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: '#E8E8E8', borderRadius, marginBottom }} />;
+  return <View style={{ width, height, backgroundColor: '#d1fae5', borderRadius, marginBottom }} />;
 }
 
 const TRIGGER_KEY_MAP: Record<string, string> = {
@@ -203,7 +203,7 @@ export default function WorkflowsScreen(): JSX.Element {
           return (
             <View style={styles.row}>
               <View style={styles.iconBox}>
-                <WorkflowIcon size={20} color='#1A73E8' />
+                <WorkflowIcon size={20} color='#10b981' />
               </View>
               <TouchableOpacity
                 style={styles.rowBody}
@@ -221,7 +221,7 @@ export default function WorkflowsScreen(): JSX.Element {
                   value={isEnabled}
                   onValueChange={(val) => { handleToggle(item, val); }}
                   trackColor={{ false: '#D1D5DB', true: '#93C5FD' }}
-                  thumbColor={isEnabled ? '#1A73E8' : '#9CA3AF'}
+                  thumbColor={isEnabled ? '#10b981' : '#9CA3AF'}
                 />
               </View>
             </View>
@@ -245,8 +245,8 @@ const styles = StyleSheet.create({
   addButton: {
     width: 40,
     height: 40,
-    borderRadius: 8,
-    backgroundColor: '#1A73E8',
+    borderRadius: 12,
+    backgroundColor: '#10b981',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   row: {
     minHeight: 72,
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     padding: 12,
@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
   skeletonRow: {
     minHeight: 72,
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     padding: 12,
@@ -279,8 +279,8 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 42,
     height: 42,
-    borderRadius: 8,
-    backgroundColor: '#E8F0FE',
+    borderRadius: 12,
+    backgroundColor: '#ecfdf5',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -293,18 +293,18 @@ const styles = StyleSheet.create({
     minWidth: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#E8F0FE',
+    backgroundColor: '#ecfdf5',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
-  badgeText: { fontSize: 12, fontWeight: '700', color: '#1A73E8' },
+  badgeText: { fontSize: 12, fontWeight: '700', color: '#10b981' },
   errorText: { color: '#C5221F', marginBottom: 12, textAlign: 'center' },
   retryButton: {
     paddingHorizontal: 16,
     height: 40,
-    borderRadius: 8,
-    backgroundColor: '#1A73E8',
+    borderRadius: 12,
+    backgroundColor: '#10b981',
     justifyContent: 'center',
   },
   retryText: { color: '#FFFFFF', fontWeight: '700' },

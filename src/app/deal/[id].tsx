@@ -46,7 +46,7 @@ interface ErrorApiResponse {
 }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: '#E8E8E8', borderRadius, marginBottom }} />;
+  return <View style={{ width, height, backgroundColor: '#d1fae5', borderRadius, marginBottom }} />;
 }
 
 function formatValue(value: number | null, _currency: string | null): string {
@@ -55,8 +55,8 @@ function formatValue(value: number | null, _currency: string | null): string {
 }
 
 function getStatusColor(status: Deal['status']): string {
-  if (status === 'lost') return '#D93025';
-  if (status === 'archived') return '#9B9B9B';
+  if (status === 'lost') return '#ef4444';
+  if (status === 'archived') return '#9ca3af';
   return '#34A853';
 }
 
@@ -262,7 +262,7 @@ export default function DealDetailScreen(): JSX.Element {
         <Text style={styles.value}>{formatValue(deal.value, deal.currency)}</Text>
         <View style={styles.badgeRow}>
           {deal.stage !== null && (
-            <View style={[styles.badge, { backgroundColor: '#1A73E8' }]}>
+            <View style={[styles.badge, { backgroundColor: '#10b981' }]}>
               <Text style={styles.badgeText}>{deal.stage.name}</Text>
             </View>
           )}
@@ -356,7 +356,7 @@ export default function DealDetailScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   card: {
     backgroundColor: '#fff',
@@ -381,13 +381,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#111827',
     marginBottom: 8,
   },
   value: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#111827',
     marginBottom: 12,
   },
   badgeRow: {
@@ -408,18 +408,18 @@ const styles = StyleSheet.create({
   },
   mutedText: {
     fontSize: 13,
-    color: '#6B6B6B',
+    color: '#6b7280',
   },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#6B6B6B',
+    color: '#6b7280',
     letterSpacing: 0.5,
     marginBottom: 8,
   },
   linkText: {
     fontSize: 15,
-    color: '#1A73E8',
+    color: '#10b981',
     fontWeight: '500',
   },
   detailRow: {
@@ -429,26 +429,26 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 14,
-    color: '#6B6B6B',
+    color: '#6b7280',
   },
   detailValue: {
     fontSize: 14,
-    color: '#1A1A1A',
+    color: '#111827',
     fontWeight: '500',
     flexShrink: 1,
     textAlign: 'right',
   },
   button: {
-    borderRadius: 10,
+    borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     marginBottom: 10,
   },
   buttonPrimary: {
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
   },
   buttonDestructive: {
-    backgroundColor: '#D93025',
+    backgroundColor: '#ef4444',
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   actionError: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 13,
     marginBottom: 10,
     textAlign: 'center',
@@ -468,18 +468,18 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
     padding: 24,
   },
   errorText: {
     fontSize: 15,
-    color: '#D93025',
+    color: '#ef4444',
     textAlign: 'center',
     marginBottom: 16,
   },
   retryText: {
     fontSize: 15,
-    color: '#1A73E8',
+    color: '#10b981',
     fontWeight: '600',
   },
   headerEditButton: {
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   headerEditText: {
-    color: '#1A73E8',
+    color: '#10b981',
     fontSize: 16,
     fontWeight: '600',
   },

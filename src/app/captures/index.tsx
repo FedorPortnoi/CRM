@@ -276,7 +276,7 @@ export default function CapturesScreen(): JSX.Element {
 
       {isLoading && captures.length === 0 ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#1A73E8" />
+          <ActivityIndicator size="large" color="#10b981" />
         </View>
       ) : error ? (
         <View style={styles.centered}>
@@ -321,13 +321,13 @@ export default function CapturesScreen(): JSX.Element {
             value={contactSearch}
             onChangeText={handleSearchContacts}
             placeholder={t('captures.searchPlaceholder')}
-            placeholderTextColor="#9B9B9B"
+            placeholderTextColor="#9ca3af"
             autoFocus
             returnKeyType="search"
           />
 
           {isSearching ? (
-            <ActivityIndicator style={styles.searchSpinner} color="#1A73E8" />
+            <ActivityIndicator style={styles.searchSpinner} color="#10b981" />
           ) : (
             <FlatList
               data={contactResults}
@@ -346,7 +346,7 @@ export default function CapturesScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   centered: {
     flex: 1,
@@ -359,9 +359,9 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#ECECEC',
+    borderColor: '#e5e7eb',
     marginBottom: 10,
     padding: 12,
   },
@@ -373,13 +373,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   typeBadge: {
-    backgroundColor: '#E8F0FE',
+    backgroundColor: '#ecfdf5',
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   typeBadgeText: {
-    color: '#1A73E8',
+    color: '#10b981',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -387,11 +387,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#111827',
   },
   timestampText: {
     fontSize: 12,
-    color: '#9B9B9B',
+    color: '#9ca3af',
   },
   cardActions: {
     flexDirection: 'row',
@@ -406,17 +406,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   cardButtonPrimary: {
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
   },
   cardButtonSecondary: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#1A73E8',
+    borderColor: '#10b981',
   },
   cardButtonDanger: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#D93025',
+    borderColor: '#ef4444',
   },
   cardButtonDisabled: {
     opacity: 0.5,
@@ -427,32 +427,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   cardButtonSecondaryText: {
-    color: '#1A73E8',
+    color: '#10b981',
     fontSize: 13,
     fontWeight: '600',
   },
   cardButtonDangerText: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 13,
     fontWeight: '600',
   },
   emptyText: {
-    color: '#9B9B9B',
+    color: '#9ca3af',
     fontSize: 14,
     textAlign: 'center',
     paddingVertical: 24,
   },
   errorText: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 12,
   },
   retryButton: {
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   retryButtonText: {
     color: '#FFFFFF',
@@ -462,7 +462,7 @@ const styles = StyleSheet.create({
   // Modal
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
     paddingTop: 16,
   },
   modalHeader: {
@@ -475,26 +475,26 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#111827',
   },
   closeButton: {
     padding: 8,
   },
   closeButtonText: {
-    color: '#1A73E8',
+    color: '#10b981',
     fontSize: 15,
     fontWeight: '600',
   },
   searchInput: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#ECECEC',
-    borderRadius: 8,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
     marginHorizontal: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 15,
-    color: '#1A1A1A',
+    color: '#111827',
     marginBottom: 12,
   },
   searchSpinner: {
@@ -505,9 +505,9 @@ const styles = StyleSheet.create({
   },
   contactRow: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#ECECEC',
+    borderColor: '#e5e7eb',
     marginBottom: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -521,15 +521,15 @@ const styles = StyleSheet.create({
   contactRowName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#111827',
   },
   contactRowPhone: {
     fontSize: 12,
-    color: '#6B6B6B',
+    color: '#6b7280',
     marginTop: 2,
   },
   selectLabel: {
-    color: '#1A73E8',
+    color: '#10b981',
     fontSize: 13,
     fontWeight: '600',
   },

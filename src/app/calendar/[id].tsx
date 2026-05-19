@@ -73,8 +73,8 @@ function formatTime(dateString: string): string {
 
 function statusColor(status: CalendarEventStatus): string {
   if (status === 'completed') return '#34A853';
-  if (status === 'cancelled') return '#9B9B9B';
-  return '#1A73E8';
+  if (status === 'cancelled') return '#9ca3af';
+  return '#10b981';
 }
 
 function contactName(contact: CalendarContact): string {
@@ -104,8 +104,8 @@ function SkeletonBox({ height, width = '100%', marginBottom = 0 }: SkeletonBoxPr
         height,
         width,
         marginBottom,
-        borderRadius: 8,
-        backgroundColor: '#E8E8E8',
+        borderRadius: 12,
+        backgroundColor: '#d1fae5',
       }}
     />
   );
@@ -503,7 +503,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               numberOfLines={5}
               textAlignVertical="top"
               placeholder="Add outcomes, follow-ups, and context"
-              placeholderTextColor="#6B6B6B"
+              placeholderTextColor="#6b7280"
             />
             {notesFieldError ? <Text style={styles.fieldError}>{notesFieldError}</Text> : null}
             <TouchableOpacity
@@ -599,7 +599,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               numberOfLines={4}
               textAlignVertical="top"
               placeholder={t('calendar.completeNotesPromptPlaceholder')}
-              placeholderTextColor="#6B6B6B"
+              placeholderTextColor="#6b7280"
               editable={!isActionDisabled}
               autoFocus
             />
@@ -641,7 +641,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   content: {
     padding: 16,
@@ -650,19 +650,19 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#ECECEC',
+    borderColor: '#e5e7eb',
     padding: 16,
   },
   title: {
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 22,
     fontWeight: '700',
     marginBottom: 8,
   },
   timeRange: {
-    color: '#6B6B6B',
+    color: '#6b7280',
     fontSize: 13,
     lineHeight: 19,
     marginBottom: 12,
@@ -680,14 +680,14 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   cancelledBanner: {
-    backgroundColor: '#FEE8E6',
-    borderLeftColor: '#D93025',
+    backgroundColor: '#fef2f2',
+    borderLeftColor: '#ef4444',
     borderLeftWidth: 3,
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
   },
   cancelledText: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -700,80 +700,80 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   detailLabel: {
-    color: '#6B6B6B',
+    color: '#6b7280',
     fontSize: 13,
     fontWeight: '600',
     width: 82,
   },
   detailValue: {
-    color: '#1A1A1A',
+    color: '#111827',
     flex: 1,
     fontSize: 14,
     textAlign: 'right',
   },
   emptyValue: {
-    color: '#9B9B9B',
+    color: '#9ca3af',
     flex: 1,
     fontSize: 14,
     textAlign: 'right',
   },
   linkText: {
-    color: '#1A73E8',
+    color: '#10b981',
     fontSize: 14,
     fontWeight: '600',
     maxWidth: 220,
     textAlign: 'right',
   },
   sectionLabel: {
-    color: '#6B6B6B',
+    color: '#6b7280',
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 8,
     textTransform: 'uppercase',
   },
   bodyText: {
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 14,
     lineHeight: 20,
   },
   notesInput: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
     borderWidth: 1,
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 15,
     minHeight: 116,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   fieldError: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 12,
     marginTop: 6,
   },
   infoBox: {
-    backgroundColor: '#E8F0FE',
-    borderRadius: 8,
+    backgroundColor: '#ecfdf5',
+    borderRadius: 12,
     padding: 12,
   },
   infoText: {
-    color: '#1A73E8',
+    color: '#10b981',
     fontSize: 13,
     fontWeight: '600',
   },
   button: {
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 12,
     justifyContent: 'center',
     minHeight: 46,
     paddingVertical: 12,
   },
   buttonPrimary: {
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
   },
   buttonDestructive: {
-    backgroundColor: '#D93025',
+    backgroundColor: '#ef4444',
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -787,27 +787,27 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   actionError: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 13,
     marginBottom: 12,
     textAlign: 'center',
   },
   errorContainer: {
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
     flex: 1,
     justifyContent: 'center',
     padding: 24,
   },
   errorText: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 14,
     marginBottom: 14,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#1A73E8',
-    borderRadius: 8,
+    backgroundColor: '#10b981',
+    borderRadius: 12,
     justifyContent: 'center',
     minHeight: 44,
     paddingHorizontal: 18,
@@ -823,7 +823,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   headerEditText: {
-    color: '#1A73E8',
+    color: '#10b981',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -836,29 +836,29 @@ const styles = StyleSheet.create({
   },
   promptCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 12,
     maxWidth: 420,
     padding: 16,
     width: '100%',
   },
   promptTitle: {
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 8,
   },
   promptMessage: {
-    color: '#6B6B6B',
+    color: '#6b7280',
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 12,
   },
   promptInput: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
     borderWidth: 1,
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 15,
     minHeight: 104,
     paddingHorizontal: 12,
@@ -871,7 +871,7 @@ const styles = StyleSheet.create({
   },
   promptButton: {
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 12,
     flex: 1,
     justifyContent: 'center',
     minHeight: 44,
@@ -879,11 +879,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   promptButtonPrimary: {
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
   },
   promptButtonSecondary: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#1A73E8',
+    borderColor: '#10b981',
     borderWidth: 1,
   },
   promptButtonPrimaryText: {
@@ -892,7 +892,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   promptButtonSecondaryText: {
-    color: '#1A73E8',
+    color: '#10b981',
     fontSize: 14,
     fontWeight: '600',
   },

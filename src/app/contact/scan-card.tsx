@@ -99,7 +99,7 @@ export default function ScanCardScreen(): JSX.Element {
       <View style={styles.container}>
         <Text style={styles.title}>Business card</Text>
         <TouchableOpacity style={styles.imageButton} onPress={() => { void pickImage(); }} accessibilityRole="button">
-          {imageUri ? <Image source={{ uri: imageUri }} style={styles.image} /> : <Camera size={28} color="#1A73E8" />}
+          {imageUri ? <Image source={{ uri: imageUri }} style={styles.image} /> : <Camera size={28} color="#10b981" />}
           <Text style={styles.imageText}>{imageUri ? 'Change image' : 'Choose image'}</Text>
         </TouchableOpacity>
         <TextInput
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontWeight: '700', color: '#111827', marginBottom: 12 },
   imageButton: {
     minHeight: 160,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#D1D5DB',
@@ -140,11 +140,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   image: { width: '100%', height: 180 },
-  imageText: { marginTop: 8, color: '#1A73E8', fontWeight: '700' },
+  imageText: { marginTop: 8, color: '#10b981', fontWeight: '700' },
   input: {
     minHeight: 160,
     marginTop: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#D1D5DB',
     backgroundColor: '#FFFFFF',
@@ -154,8 +154,8 @@ const styles = StyleSheet.create({
   error: { color: '#C5221F', marginTop: 12 },
   button: {
     height: 52,
-    borderRadius: 8,
-    backgroundColor: '#1A73E8',
+    borderRadius: 12,
+    backgroundColor: '#10b981',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',

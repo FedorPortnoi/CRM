@@ -135,7 +135,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           setShowTitleError(false);
         }}
         placeholder="Enter task title"
-        placeholderTextColor="#6B6B6B"
+        placeholderTextColor="#6b7280"
       />
       {showTitleError && <Text style={styles.fieldError}>Title is required</Text>}
 
@@ -164,7 +164,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           markedDates={
             dueDate
               ? ({
-                  [dueDate]: { selected: true, selectedColor: '#1A73E8' },
+                  [dueDate]: { selected: true, selectedColor: '#10b981' },
                 } as Record<string, { selected?: boolean; selectedColor?: string }>)
               : {}
           }
@@ -197,7 +197,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           value={contactQuery}
           onChangeText={setContactQuery}
           placeholder="Search contacts by name..."
-          placeholderTextColor="#6B6B6B"
+          placeholderTextColor="#6b7280"
         />
       )}
       {contactResults.length > 0 && selectedContactId === '' && (
@@ -235,34 +235,34 @@ export default function NewTaskScreen(): JSX.Element | null {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, backgroundColor: '#F5F5F5', flexGrow: 1 },
+  container: { padding: 16, backgroundColor: '#f0fdf8', flexGrow: 1 },
   errorBanner: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: '#fef2f2',
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 16,
   },
-  errorBannerText: { color: '#D93025' },
+  errorBannerText: { color: '#ef4444' },
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#111827',
     marginBottom: 6,
     marginTop: 16,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
     padding: 12,
     minHeight: 44,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
   },
-  inputText: { color: '#1A1A1A', fontSize: 16 },
-  placeholderText: { color: '#6B6B6B', fontSize: 16 },
-  fieldError: { color: '#D93025', fontSize: 12, marginTop: 4 },
-  clearLink: { color: '#1A73E8', fontSize: 12, marginTop: 4 },
+  inputText: { color: '#111827', fontSize: 16 },
+  placeholderText: { color: '#6b7280', fontSize: 16 },
+  fieldError: { color: '#ef4444', fontSize: 12, marginTop: 4 },
+  clearLink: { color: '#10b981', fontSize: 12, marginTop: 4 },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -270,15 +270,15 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#e5e7eb',
   },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: '#1A1A1A' },
-  modalDone: { fontSize: 16, color: '#1A73E8', fontWeight: '600' },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: '#111827' },
+  modalDone: { fontSize: 16, color: '#10b981', fontWeight: '600' },
   disabledInput: {
-    backgroundColor: '#F5F5F5',
-    borderColor: '#E0E0E0',
+    backgroundColor: '#f0fdf8',
+    borderColor: '#e5e7eb',
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     minHeight: 44,
     justifyContent: 'center',
@@ -286,17 +286,17 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E8F0FE',
+    backgroundColor: '#ecfdf5',
     borderRadius: 20,
     paddingVertical: 6,
     paddingHorizontal: 12,
     alignSelf: 'flex-start',
   },
-  chipText: { color: '#1A73E8', fontSize: 14, marginRight: 8 },
-  chipRemove: { color: '#1A73E8', fontSize: 14, fontWeight: '600' },
+  chipText: { color: '#10b981', fontSize: 14, marginRight: 8 },
+  chipRemove: { color: '#10b981', fontSize: 14, fontWeight: '600' },
   dropdown: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 12,
     marginTop: 4,
     elevation: 2,
     shadowColor: '#000000',
@@ -307,13 +307,13 @@ const styles = StyleSheet.create({
   dropdownRow: {
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#e5e7eb',
   },
-  dropdownText: { color: '#1A1A1A', fontSize: 14 },
+  dropdownText: { color: '#111827', fontSize: 14 },
   submitButton: {
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
     marginTop: 24,
     marginBottom: 32,

@@ -274,7 +274,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
     if (isRequestingPermission || !permissionDenied) {
       return (
         <View style={styles.centeredContainer}>
-          <ActivityIndicator size="large" color="#1A73E8" />
+          <ActivityIndicator size="large" color="#10b981" />
         </View>
       );
     }
@@ -298,7 +298,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
   if (phase === 'loading') {
     return (
       <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color="#1A73E8" />
+        <ActivityIndicator size="large" color="#10b981" />
       </View>
     );
   }
@@ -306,7 +306,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
   if (phase === 'importing') {
     return (
       <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color="#1A73E8" />
+        <ActivityIndicator size="large" color="#10b981" />
         <Text style={styles.progressText}>
           Importing {progress.done} of {progress.total}...
         </Text>
@@ -322,7 +322,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
           value={search}
           onChangeText={handleSearchChange}
           placeholder="Search contacts"
-          placeholderTextColor="#9B9B9B"
+          placeholderTextColor="#9ca3af"
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -372,17 +372,17 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   centeredContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   errorText: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 16,
     lineHeight: 22,
     marginBottom: 16,
@@ -393,8 +393,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
-    backgroundColor: '#1A73E8',
+    borderRadius: 12,
+    backgroundColor: '#10b981',
   },
   settingsButtonText: {
     color: '#FFFFFF',
@@ -403,22 +403,22 @@ const styles = StyleSheet.create({
   },
   progressText: {
     marginTop: 16,
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 16,
     fontWeight: '600',
   },
   searchContainer: {
     padding: 16,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   searchInput: {
     minHeight: 44,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 16,
   },
   listContent: {
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyStateText: {
-    color: '#6B6B6B',
+    color: '#6b7280',
     fontSize: 16,
   },
   contactRow: {
@@ -447,8 +447,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
   },
   checkboxArea: {
@@ -462,24 +462,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#1A73E8',
+    borderColor: '#10b981',
     borderRadius: 4,
     backgroundColor: '#FFFFFF',
   },
   checkboxSelected: {
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
   },
   contactTextArea: {
     flex: 1,
   },
   contactName: {
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 16,
     fontWeight: '700',
   },
   contactSubtitle: {
     marginTop: 2,
-    color: '#6B6B6B',
+    color: '#6b7280',
     fontSize: 14,
   },
   actionBar: {
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#e5e7eb',
     backgroundColor: '#FFFFFF',
   },
   cancelButton: {
@@ -496,12 +496,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
   },
   cancelButtonText: {
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -510,8 +510,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
-    backgroundColor: '#1A73E8',
+    borderRadius: 12,
+    backgroundColor: '#10b981',
   },
   importButtonDisabled: {
     opacity: 0.5,

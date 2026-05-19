@@ -54,20 +54,20 @@ function activityIcon(type: 'message' | 'task' | 'meeting'): string {
 function statusBadgeColor(status: string): string {
   if (status === 'active') return '#34A853';
   if (status === 'inactive') return '#E8A000';
-  return '#9B9B9B';
+  return '#9ca3af';
 }
 
 function taskBadgeColor(status: 'pending' | 'in_progress' | 'done' | 'cancelled'): string {
   if (status === 'done') return '#34A853';
-  if (status === 'in_progress') return '#1A73E8';
+  if (status === 'in_progress') return '#10b981';
   if (status === 'pending') return '#E8A000';
-  return '#9B9B9B';
+  return '#9ca3af';
 }
 
 interface SkeletonBoxProps { width: number; height: number; borderRadius?: number; marginRight?: number; marginBottom?: number; }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginRight = 0, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: '#E8E8E8', borderRadius, marginRight, marginBottom }} />;
+  return <View style={{ width, height, backgroundColor: '#d1fae5', borderRadius, marginRight, marginBottom }} />;
 }
 
 export default function ContactDetailScreen(): JSX.Element {
@@ -349,46 +349,46 @@ export default function ContactDetailScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#f0fdf8' },
   content: { padding: 16, paddingBottom: 32 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 8, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   section: { marginTop: 20 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#6B6B6B', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
-  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#1A73E8', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   avatarText: { color: '#FFFFFF', fontSize: 22, fontWeight: '700' },
-  contactName: { fontSize: 20, fontWeight: '700', color: '#1A1A1A', marginBottom: 4 },
-  secondaryText: { fontSize: 14, color: '#6B6B6B', marginBottom: 6 },
+  contactName: { fontSize: 20, fontWeight: '700', color: '#111827', marginBottom: 4 },
+  secondaryText: { fontSize: 14, color: '#6b7280', marginBottom: 6 },
   statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, marginTop: 4 },
   badgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600', textTransform: 'capitalize' },
   detailRows: { marginTop: 14, borderTopWidth: 1, borderTopColor: '#F0F0F0', paddingTop: 12 },
   detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  detailLabel: { fontSize: 13, color: '#9B9B9B', width: 64 },
-  detailValue: { fontSize: 13, color: '#1A1A1A', flex: 1 },
+  detailLabel: { fontSize: 13, color: '#9ca3af', width: 64 },
+  detailValue: { fontSize: 13, color: '#111827', flex: 1 },
   conversationButton: {
     marginTop: 14,
     minHeight: 44,
-    borderRadius: 8,
-    backgroundColor: '#1A73E8',
+    borderRadius: 12,
+    backgroundColor: '#10b981',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   conversationButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  activitySummary: { fontSize: 14, color: '#1A1A1A', marginBottom: 2 },
-  activityDate: { fontSize: 12, color: '#9B9B9B' },
-  dealTitle: { fontSize: 15, fontWeight: '600', color: '#1A1A1A', marginBottom: 8 },
-  stageBadge: { backgroundColor: '#1A73E8', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
+  activitySummary: { fontSize: 14, color: '#111827', marginBottom: 2 },
+  activityDate: { fontSize: 12, color: '#9ca3af' },
+  dealTitle: { fontSize: 15, fontWeight: '600', color: '#111827', marginBottom: 8 },
+  stageBadge: { backgroundColor: '#10b981', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
   stageBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
-  dealValue: { fontSize: 13, color: '#6B6B6B' },
-  taskTitle: { fontSize: 15, fontWeight: '500', color: '#1A1A1A', marginBottom: 8 },
+  dealValue: { fontSize: 13, color: '#6b7280' },
+  taskTitle: { fontSize: 15, fontWeight: '500', color: '#111827', marginBottom: 8 },
   taskBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
-  taskDueDate: { fontSize: 12, color: '#6B6B6B' },
-  overdueText: { color: '#D93025', fontWeight: '500' },
-  errorText: { fontSize: 14, color: '#D93025', marginBottom: 8 },
-  retryButton: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#1A73E8', borderRadius: 6 },
+  taskDueDate: { fontSize: 12, color: '#6b7280' },
+  overdueText: { color: '#ef4444', fontWeight: '500' },
+  errorText: { fontSize: 14, color: '#ef4444', marginBottom: 8 },
+  retryButton: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#10b981', borderRadius: 6 },
   retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
-  emptyText: { fontSize: 14, color: '#9B9B9B', textAlign: 'center', paddingVertical: 8 },
+  emptyText: { fontSize: 14, color: '#9ca3af', textAlign: 'center', paddingVertical: 8 },
   headerEditButton: { paddingHorizontal: 8, paddingVertical: 4 },
-  headerEditText: { color: '#1A73E8', fontSize: 16, fontWeight: '600' },
+  headerEditText: { color: '#10b981', fontSize: 16, fontWeight: '600' },
 });

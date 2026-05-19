@@ -62,7 +62,7 @@ export default function OnboardingScreen(): JSX.Element {
       <View style={styles.container}>
         <View style={styles.slide}>
           <View style={styles.iconWrap}>
-            <Icon size={56} color="#1A73E8" />
+            <Icon size={56} color="#10b981" />
           </View>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     width: 112,
     height: 112,
     borderRadius: 28,
-    backgroundColor: '#E8F0FE',
+    backgroundColor: '#ecfdf5',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 32,
@@ -123,12 +123,12 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 16, color: '#6B7280', textAlign: 'center', lineHeight: 24 },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 32 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#E5E7EB' },
-  dotActive: { backgroundColor: '#1A73E8', width: 24 },
+  dotActive: { backgroundColor: '#10b981', width: 24 },
   error: { color: '#C5221F', textAlign: 'center', marginBottom: 12 },
   primary: {
     height: 52,
-    borderRadius: 8,
-    backgroundColor: '#1A73E8',
+    borderRadius: 12,
+    backgroundColor: '#10b981',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,

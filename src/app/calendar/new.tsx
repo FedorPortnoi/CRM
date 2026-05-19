@@ -209,7 +209,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
               setFieldErrors((prev) => ({ ...prev, title: undefined }));
             }}
             placeholder="Client meeting"
-            placeholderTextColor="#6B6B6B"
+            placeholderTextColor="#6b7280"
             autoCapitalize="sentences"
           />
           {fieldErrors.title ? <Text style={styles.fieldError}>{fieldErrors.title}</Text> : null}
@@ -226,7 +226,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
                 setFieldErrors((prev) => ({ ...prev, start: undefined }));
               }}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor="#6B6B6B"
+              placeholderTextColor="#6b7280"
               keyboardType="numbers-and-punctuation"
             />
           </View>
@@ -240,7 +240,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
                 setFieldErrors((prev) => ({ ...prev, start: undefined }));
               }}
               placeholder="HH:mm"
-              placeholderTextColor="#6B6B6B"
+              placeholderTextColor="#6b7280"
               keyboardType="numbers-and-punctuation"
             />
           </View>
@@ -258,7 +258,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
                 setFieldErrors((prev) => ({ ...prev, end: undefined }));
               }}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor="#6B6B6B"
+              placeholderTextColor="#6b7280"
               keyboardType="numbers-and-punctuation"
             />
           </View>
@@ -272,7 +272,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
                 setFieldErrors((prev) => ({ ...prev, end: undefined }));
               }}
               placeholder="HH:mm"
-              placeholderTextColor="#6B6B6B"
+              placeholderTextColor="#6b7280"
               keyboardType="numbers-and-punctuation"
             />
           </View>
@@ -293,7 +293,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
             value={location}
             onChangeText={setLocation}
             placeholder="Office, phone, or video link"
-            placeholderTextColor="#6B6B6B"
+            placeholderTextColor="#6b7280"
           />
         </View>
 
@@ -304,7 +304,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
             value={notes}
             onChangeText={setNotes}
             placeholder="Prep notes or agenda"
-            placeholderTextColor="#6B6B6B"
+            placeholderTextColor="#6b7280"
             multiline
             numberOfLines={5}
             textAlignVertical="top"
@@ -333,20 +333,20 @@ export default function NewCalendarEventScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   content: {
     padding: 16,
     paddingBottom: 32,
   },
   errorBanner: {
-    backgroundColor: '#FFEBEE',
-    borderRadius: 8,
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
     padding: 12,
     marginBottom: 16,
   },
   errorBannerText: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 14,
   },
   fieldGroup: {
@@ -355,15 +355,15 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#111827',
     marginBottom: 5,
   },
   input: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
     borderWidth: 1,
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 15,
     minHeight: 44,
     paddingHorizontal: 12,
@@ -371,10 +371,10 @@ const styles = StyleSheet.create({
   },
   notesInput: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
     borderWidth: 1,
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 15,
     height: 112,
     paddingHorizontal: 12,
@@ -392,33 +392,33 @@ const styles = StyleSheet.create({
     width: 108,
   },
   fieldError: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 12,
     marginBottom: 10,
     marginTop: -2,
   },
   previewBox: {
-    backgroundColor: '#E8F0FE',
-    borderRadius: 8,
+    backgroundColor: '#ecfdf5',
+    borderRadius: 12,
     padding: 12,
     marginTop: 4,
     marginBottom: 16,
   },
   previewLabel: {
-    color: '#1A73E8',
+    color: '#10b981',
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 4,
     textTransform: 'uppercase',
   },
   previewText: {
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 14,
   },
   submitButton: {
     alignItems: 'center',
-    backgroundColor: '#1A73E8',
-    borderRadius: 8,
+    backgroundColor: '#10b981',
+    borderRadius: 12,
     justifyContent: 'center',
     marginTop: 12,
     minHeight: 48,

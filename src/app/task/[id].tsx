@@ -43,17 +43,17 @@ function isOverdue(due_date: string | null, status: string): boolean {
 }
 
 function priorityBadgeColor(priority: string): string {
-  if (priority === 'urgent') return '#D93025';
+  if (priority === 'urgent') return '#ef4444';
   if (priority === 'high') return '#E8A000';
-  if (priority === 'medium') return '#1A73E8';
-  return '#9B9B9B';
+  if (priority === 'medium') return '#10b981';
+  return '#9ca3af';
 }
 
 function statusBadgeColor(status: string): string {
   if (status === 'done') return '#34A853';
-  if (status === 'in_progress') return '#1A73E8';
+  if (status === 'in_progress') return '#10b981';
   if (status === 'pending') return '#E8A000';
-  return '#9B9B9B';
+  return '#9ca3af';
 }
 
 interface SkeletonBoxProps {
@@ -69,7 +69,7 @@ function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: Skel
       style={{
         width,
         height,
-        backgroundColor: '#E8E8E8',
+        backgroundColor: '#d1fae5',
         borderRadius,
         marginBottom,
       }}
@@ -373,11 +373,11 @@ export default function TaskDetailScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#f0fdf8' },
   content: { padding: 16, paddingBottom: 40 },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -388,11 +388,11 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#111827',
     marginBottom: 6,
   },
-  dueDate: { fontSize: 13, color: '#6B6B6B' },
-  dueDateOverdue: { color: '#D93025', fontWeight: '500' },
+  dueDate: { fontSize: 13, color: '#6b7280' },
+  dueDateOverdue: { color: '#ef4444', fontWeight: '500' },
   badge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 8,
@@ -407,44 +407,44 @@ const styles = StyleSheet.create({
   },
   cancelledBanner: {
     marginTop: 12,
-    backgroundColor: '#FEE8E6',
-    borderRadius: 8,
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
     padding: 12,
     borderLeftWidth: 3,
-    borderLeftColor: '#D93025',
+    borderLeftColor: '#ef4444',
   },
-  cancelledText: { fontSize: 13, color: '#D93025', fontWeight: '500' },
+  cancelledText: { fontSize: 13, color: '#ef4444', fontWeight: '500' },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  detailLabel: { fontSize: 13, color: '#9B9B9B', width: 72 },
-  detailValue: { fontSize: 13, color: '#1A1A1A', flex: 1, textAlign: 'right' },
+  detailLabel: { fontSize: 13, color: '#9ca3af', width: 72 },
+  detailValue: { fontSize: 13, color: '#111827', flex: 1, textAlign: 'right' },
   linkText: {
     fontSize: 13,
-    color: '#1A73E8',
+    color: '#10b981',
     fontWeight: '500',
     textAlign: 'right',
   },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#9B9B9B',
+    color: '#9ca3af',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
   },
-  notesText: { fontSize: 14, color: '#1A1A1A', lineHeight: 20 },
-  emptyText: { fontSize: 14, color: '#9B9B9B' },
+  notesText: { fontSize: 14, color: '#111827', lineHeight: 20 },
+  emptyText: { fontSize: 14, color: '#9ca3af' },
   button: {
-    borderRadius: 8,
+    borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  buttonPrimary: { backgroundColor: '#1A73E8' },
-  buttonDestructive: { backgroundColor: '#D93025' },
+  buttonPrimary: { backgroundColor: '#10b981' },
+  buttonDestructive: { backgroundColor: '#ef4444' },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   errorContainer: {
@@ -455,14 +455,14 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 14,
-    color: '#D93025',
+    color: '#ef4444',
     textAlign: 'center',
     marginBottom: 8,
   },
   retryButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
     borderRadius: 6,
   },
   retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   headerEditText: {
-    color: '#1A73E8',
+    color: '#10b981',
     fontSize: 16,
     fontWeight: '600',
   },

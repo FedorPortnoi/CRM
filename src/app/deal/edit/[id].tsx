@@ -355,7 +355,7 @@ export default function EditDealScreen(): JSX.Element {
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator color="#1A73E8" size="large" />
+          <ActivityIndicator color="#10b981" size="large" />
         </View>
       ) : (
         <>
@@ -368,7 +368,7 @@ export default function EditDealScreen(): JSX.Element {
               setShowTitleError(false);
             }}
             placeholder="Enter deal title"
-            placeholderTextColor="#6B6B6B"
+            placeholderTextColor="#6b7280"
           />
           {showTitleError && <Text style={styles.fieldError}>Title is required</Text>}
 
@@ -382,14 +382,14 @@ export default function EditDealScreen(): JSX.Element {
             }}
             keyboardType="numeric"
             placeholder="0.00"
-            placeholderTextColor="#6B6B6B"
+            placeholderTextColor="#6b7280"
           />
           {showValueError && <Text style={styles.fieldError}>Value must be positive</Text>}
 
           <Text style={styles.label}>Pipeline *</Text>
           <TouchableOpacity style={styles.pickerButton} onPress={() => setShowPipelineModal(true)}>
             {pipelinesLoading ? (
-              <ActivityIndicator color="#1A73E8" />
+              <ActivityIndicator color="#10b981" />
             ) : (
               <Text style={styles.pickerButtonText}>{selectedPipelineName}</Text>
             )}
@@ -473,7 +473,7 @@ export default function EditDealScreen(): JSX.Element {
                 value={contactQuery}
                 onChangeText={setContactQuery}
                 placeholder="Search contacts by name..."
-                placeholderTextColor="#6B6B6B"
+                placeholderTextColor="#6b7280"
               />
               {contactResults.slice(0, 5).length > 0 && (
                 <View style={styles.contactResultsContainer}>
@@ -508,7 +508,7 @@ export default function EditDealScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f0fdf8',
   },
   content: {
     padding: 16,
@@ -517,41 +517,41 @@ const styles = StyleSheet.create({
     paddingTop: 48,
   },
   errorBanner: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: '#fef2f2',
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 16,
   },
   errorBannerText: {
-    color: '#D93025',
+    color: '#ef4444',
   },
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#111827',
     marginTop: 16,
     marginBottom: 6,
   },
   input: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    color: '#1A1A1A',
+    color: '#111827',
   },
   fieldError: {
-    color: '#D93025',
+    color: '#ef4444',
     fontSize: 13,
     marginTop: 4,
   },
   pickerButton: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
     justifyContent: 'center',
@@ -561,7 +561,7 @@ const styles = StyleSheet.create({
   },
   pickerButtonText: {
     fontSize: 16,
-    color: '#1A1A1A',
+    color: '#111827',
   },
   modalContainer: {
     flex: 1,
@@ -573,16 +573,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#e5e7eb',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#111827',
   },
   modalClose: {
     fontSize: 14,
-    color: '#1A73E8',
+    color: '#10b981',
     fontWeight: '600',
     paddingHorizontal: 8,
   },
@@ -590,14 +590,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#e5e7eb',
   },
   modalItemText: {
     fontSize: 16,
-    color: '#1A1A1A',
+    color: '#111827',
   },
   modalItemTextSelected: {
-    color: '#1A73E8',
+    color: '#10b981',
     fontWeight: '600',
   },
   contactChip: {
@@ -605,7 +605,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#e5e7eb',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -613,34 +613,34 @@ const styles = StyleSheet.create({
   },
   contactChipText: {
     fontSize: 14,
-    color: '#1A1A1A',
+    color: '#111827',
     marginRight: 8,
   },
   contactChipRemove: {
     fontSize: 14,
-    color: '#1A73E8',
+    color: '#10b981',
     fontWeight: '600',
   },
   contactResultsContainer: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
     marginTop: 4,
   },
   contactResultItem: {
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#e5e7eb',
   },
   contactResultText: {
     fontSize: 15,
-    color: '#1A1A1A',
+    color: '#111827',
   },
   submitButton: {
-    backgroundColor: '#1A73E8',
-    borderRadius: 8,
+    backgroundColor: '#10b981',
+    borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 32,

@@ -393,7 +393,7 @@ export default function ContactMessagesScreen(): JSX.Element {
             ) : null}
             <Text style={[styles.messageText, bubbleTextStyle]}>{bodyParts.bodyText}</Text>
             <View style={styles.statusRow}>
-              {item.status === 'read' ? <Check size={12} color={isOutbound ? '#D8E8FF' : '#6B6B6B'} /> : null}
+              {item.status === 'read' ? <Check size={12} color={isOutbound ? '#D8E8FF' : '#6b7280'} /> : null}
               <Text style={[styles.statusText, mutedTextStyle]}>{statusText(item)}</Text>
             </View>
           </View>
@@ -415,7 +415,7 @@ export default function ContactMessagesScreen(): JSX.Element {
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#1A73E8" />
+          <ActivityIndicator size="large" color="#10b981" />
         </View>
       ) : fetchError !== null ? (
         <View style={styles.errorContainer}>
@@ -449,7 +449,7 @@ export default function ContactMessagesScreen(): JSX.Element {
             }
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <MessageCircle size={34} color="#9B9B9B" />
+                <MessageCircle size={34} color="#9ca3af" />
                 <Text style={styles.emptyTitle}>No conversation yet</Text>
                 <Text style={styles.emptyText}>Start with a note or log the latest call.</Text>
               </View>
@@ -470,7 +470,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                 disabled={isSubmitting}
                 activeOpacity={0.7}
               >
-                <MessageCircle size={16} color={mode === 'note' ? '#FFFFFF' : '#1A73E8'} />
+                <MessageCircle size={16} color={mode === 'note' ? '#FFFFFF' : '#10b981'} />
                 <Text style={[styles.modeButtonText, mode === 'note' ? styles.modeButtonTextActive : null]}>
                   Note
                 </Text>
@@ -481,7 +481,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                 disabled={isSubmitting}
                 activeOpacity={0.7}
               >
-                <PhoneCall size={16} color={mode === 'call' ? '#FFFFFF' : '#1A73E8'} />
+                <PhoneCall size={16} color={mode === 'call' ? '#FFFFFF' : '#10b981'} />
                 <Text style={[styles.modeButtonText, mode === 'call' ? styles.modeButtonTextActive : null]}>
                   Call
                 </Text>
@@ -495,7 +495,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                   value={noteBody}
                   onChangeText={setNoteBody}
                   placeholder="Write an in-app note"
-                  placeholderTextColor="#9B9B9B"
+                  placeholderTextColor="#9ca3af"
                   multiline
                   textAlignVertical="top"
                   editable={!isSubmitting}
@@ -561,7 +561,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                     value={durationMinutes}
                     onChangeText={setDurationMinutes}
                     placeholder="Min"
-                    placeholderTextColor="#9B9B9B"
+                    placeholderTextColor="#9ca3af"
                     keyboardType="decimal-pad"
                     editable={!isSubmitting}
                   />
@@ -570,7 +570,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                     value={callNotes}
                     onChangeText={setCallNotes}
                     placeholder="Call notes"
-                    placeholderTextColor="#9B9B9B"
+                    placeholderTextColor="#9ca3af"
                     multiline
                     textAlignVertical="top"
                     editable={!isSubmitting}
@@ -603,7 +603,7 @@ export default function ContactMessagesScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#f0fdf8' },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorContainer: {
     flex: 1,
@@ -611,12 +611,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
   },
-  errorText: { color: '#D93025', fontSize: 14, textAlign: 'center', marginBottom: 16 },
+  errorText: { color: '#ef4444', fontSize: 14, textAlign: 'center', marginBottom: 16 },
   retryButton: {
-    backgroundColor: '#1A73E8',
+    backgroundColor: '#10b981',
     paddingHorizontal: 18,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 12,
     minHeight: 44,
     justifyContent: 'center',
   },
@@ -625,32 +625,32 @@ const styles = StyleSheet.create({
   emptyListContent: { flexGrow: 1, padding: 12 },
   threadHeader: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#ECECEC',
+    borderColor: '#e5e7eb',
   },
-  threadName: { color: '#1A1A1A', fontSize: 17, fontWeight: '700', marginBottom: 4 },
-  threadDetail: { color: '#6B6B6B', fontSize: 12, lineHeight: 18 },
+  threadName: { color: '#111827', fontSize: 17, fontWeight: '700', marginBottom: 4 },
+  threadDetail: { color: '#6b7280', fontSize: 12, lineHeight: 18 },
   emptyState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  emptyTitle: { color: '#1A1A1A', fontSize: 17, fontWeight: '700', marginTop: 12 },
-  emptyText: { color: '#6B6B6B', fontSize: 14, marginTop: 4, textAlign: 'center' },
+  emptyTitle: { color: '#111827', fontSize: 17, fontWeight: '700', marginTop: 12 },
+  emptyText: { color: '#6b7280', fontSize: 14, marginTop: 4, textAlign: 'center' },
   messageRow: { flexDirection: 'row', marginBottom: 10 },
   outboundRow: { justifyContent: 'flex-end' },
   inboundRow: { justifyContent: 'flex-start' },
   messageBubble: {
     maxWidth: '84%',
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
-  outboundBubble: { backgroundColor: '#1A73E8' },
+  outboundBubble: { backgroundColor: '#10b981' },
   inboundBubble: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -667,9 +667,9 @@ const styles = StyleSheet.create({
   messageTime: { fontSize: 11 },
   messageText: { fontSize: 14, lineHeight: 20 },
   outboundText: { color: '#FFFFFF' },
-  inboundText: { color: '#1A1A1A' },
+  inboundText: { color: '#111827' },
   outboundMutedText: { color: '#D8E8FF' },
-  inboundMutedText: { color: '#6B6B6B' },
+  inboundMutedText: { color: '#6b7280' },
   durationText: { fontSize: 12, fontWeight: '600', marginBottom: 3 },
   statusRow: {
     flexDirection: 'row',
@@ -682,23 +682,23 @@ const styles = StyleSheet.create({
   composer: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#e5e7eb',
     paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 14,
   },
   submitErrorBanner: {
-    backgroundColor: '#FFEBEE',
-    borderRadius: 8,
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 8,
     marginBottom: 10,
   },
-  submitErrorText: { color: '#D93025', fontSize: 13 },
+  submitErrorText: { color: '#ef4444', fontSize: 13 },
   modeRow: {
     flexDirection: 'row',
-    backgroundColor: '#EAF2FE',
-    borderRadius: 8,
+    backgroundColor: '#ecfdf5',
+    borderRadius: 12,
     padding: 3,
     marginBottom: 10,
   },
@@ -711,8 +711,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
   },
-  modeButtonActive: { backgroundColor: '#1A73E8' },
-  modeButtonText: { color: '#1A73E8', fontSize: 13, fontWeight: '700' },
+  modeButtonActive: { backgroundColor: '#10b981' },
+  modeButtonText: { color: '#10b981', fontSize: 13, fontWeight: '700' },
   modeButtonTextActive: { color: '#FFFFFF' },
   noteComposerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   noteInput: {
@@ -720,19 +720,19 @@ const styles = StyleSheet.create({
     minHeight: 44,
     maxHeight: 104,
     backgroundColor: '#F7F7F7',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#e5e7eb',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 14,
   },
   sendButton: {
     width: 44,
     height: 44,
-    borderRadius: 8,
-    backgroundColor: '#1A73E8',
+    borderRadius: 12,
+    backgroundColor: '#10b981',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -741,26 +741,26 @@ const styles = StyleSheet.create({
   directionButton: {
     flex: 1,
     minHeight: 36,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#D6E4FA',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
   },
-  directionButtonActive: { backgroundColor: '#EAF2FE', borderColor: '#1A73E8' },
-  directionButtonText: { color: '#6B6B6B', fontSize: 13, fontWeight: '700' },
-  directionButtonTextActive: { color: '#1A73E8' },
+  directionButtonActive: { backgroundColor: '#ecfdf5', borderColor: '#10b981' },
+  directionButtonText: { color: '#6b7280', fontSize: 13, fontWeight: '700' },
+  directionButtonTextActive: { color: '#10b981' },
   callFieldsRow: { flexDirection: 'row', gap: 8 },
   callInput: {
     backgroundColor: '#F7F7F7',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#e5e7eb',
     paddingHorizontal: 12,
     paddingVertical: 10,
     minHeight: 44,
-    color: '#1A1A1A',
+    color: '#111827',
     fontSize: 14,
   },
   durationInput: { width: 72 },
@@ -768,7 +768,7 @@ const styles = StyleSheet.create({
   logCallButton: {
     marginTop: 10,
     minHeight: 44,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: '#188038',
     alignItems: 'center',
     justifyContent: 'center',

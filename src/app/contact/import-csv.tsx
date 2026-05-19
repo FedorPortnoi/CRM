@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontWeight: '700', color: '#111827', marginBottom: 12 },
   input: {
     minHeight: 260,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#D1D5DB',
     backgroundColor: '#FFFFFF',
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
   preview: {
     marginTop: 12,
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -190,8 +190,8 @@ const styles = StyleSheet.create({
   error: { color: '#C5221F', marginTop: 12 },
   button: {
     height: 52,
-    borderRadius: 8,
-    backgroundColor: '#1A73E8',
+    borderRadius: 12,
+    backgroundColor: '#10b981',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',

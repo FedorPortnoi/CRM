@@ -9,9 +9,9 @@ type Config = {
 };
 
 const CONFIG: Record<SyncStatus, Config> = {
-  offline: { bg: '#D93025', text: 'No internet connection', autoHide: false },
+  offline: { bg: '#ef4444', text: 'No internet connection', autoHide: false },
   syncing: { bg: '#F9AB00', text: 'Syncing...', autoHide: false },
-  synced: { bg: '#1E8E3E', text: 'All synced', autoHide: true },
+  synced: { bg: '#10b981', text: 'All synced', autoHide: true },
 };
 
 export default function SyncStatusBar(): JSX.Element | null {
