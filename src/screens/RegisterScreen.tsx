@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ export default function RegisterScreen() {
   const [orgName, setOrgName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const router = useRouter();
   const { user, isLoading, error, register } = useUserStore();
@@ -31,6 +32,23 @@ export default function RegisterScreen() {
   }, [user, isLoading, error]);
 
   const handleRegister = async () => {
+    if (name.trim() === '') {
+      setValidationError(t('auth.fieldRequired'));
+      return;
+    }
+    if (orgName.trim() === '') {
+      setValidationError(t('auth.fieldRequired'));
+      return;
+    }
+    if (email.trim() === '' || !email.includes('@')) {
+      setValidationError(t('auth.emailInvalid'));
+      return;
+    }
+    if (password.length < 8) {
+      setValidationError(t('auth.passwordTooShort'));
+      return;
+    }
+    setValidationError(null);
     await register(email, password, name, orgName);
   };
 
@@ -51,7 +69,7 @@ export default function RegisterScreen() {
             placeholder={t('auth.name')}
             placeholderTextColor="#9CA3AF"
             value={name}
-            onChangeText={setName}
+            onChangeText={(v) => { setName(v); setValidationError(null); }}
             autoCapitalize="words"
           />
 
@@ -60,7 +78,7 @@ export default function RegisterScreen() {
             placeholder={t('auth.orgName')}
             placeholderTextColor="#9CA3AF"
             value={orgName}
-            onChangeText={setOrgName}
+            onChangeText={(v) => { setOrgName(v); setValidationError(null); }}
             autoCapitalize="words"
           />
 
@@ -69,7 +87,7 @@ export default function RegisterScreen() {
             placeholder={t('auth.email')}
             placeholderTextColor="#9CA3AF"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(v) => { setEmail(v); setValidationError(null); }}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
@@ -80,7 +98,7 @@ export default function RegisterScreen() {
             placeholder={t('auth.password')}
             placeholderTextColor="#9CA3AF"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(v) => { setPassword(v); setValidationError(null); }}
             secureTextEntry
           />
 
@@ -96,8 +114,8 @@ export default function RegisterScreen() {
             )}
           </TouchableOpacity>
 
-          {error !== null && (
-            <Text style={styles.errorText}>{error}</Text>
+          {(validationError !== null || error !== null) && (
+            <Text style={styles.errorText}>{validationError ?? error}</Text>
           )}
 
           <TouchableOpacity

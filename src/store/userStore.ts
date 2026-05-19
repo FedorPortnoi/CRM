@@ -29,16 +29,21 @@ interface UserState {
 }
 
 function extractErrorMessage(body: unknown, status: number): string {
-  if (
-    body !== null &&
-    typeof body === 'object' &&
-    'error' in body &&
-    body.error !== null &&
-    typeof body.error === 'object' &&
-    'message' in body.error &&
-    typeof (body.error as Record<string, unknown>).message === 'string'
-  ) {
-    return (body.error as Record<string, unknown>).message as string;
+  if (body !== null && typeof body === 'object') {
+    // Branch 1: custom envelope { error: { message: string } }
+    if (
+      'error' in body &&
+      body.error !== null &&
+      typeof body.error === 'object' &&
+      'message' in body.error &&
+      typeof (body.error as Record<string, unknown>).message === 'string'
+    ) {
+      return (body.error as Record<string, unknown>).message as string;
+    }
+    // Branch 2: Fastify/Zod top-level { message: string }
+    if ('message' in body && typeof (body as Record<string, unknown>).message === 'string') {
+      return (body as Record<string, unknown>).message as string;
+    }
   }
   return `Request failed with status ${status}`;
 }

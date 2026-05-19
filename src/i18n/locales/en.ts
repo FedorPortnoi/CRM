@@ -1,4 +1,4 @@
-﻿const en = {
+const en = {
   auth: {
     login: 'Log in',
     register: 'Register',
@@ -17,6 +17,9 @@
     getStarted: 'Get started',
     alreadyHaveAccount: 'Already have an account?',
     needAccount: 'Need an account?',
+    fieldRequired: 'This field is required',
+    emailInvalid: 'Please enter a valid email address',
+    passwordTooShort: 'Password must be at least 8 characters',
   },
   tabs: {
     contacts: 'Contacts',

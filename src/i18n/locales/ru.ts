@@ -17,6 +17,9 @@ const ru = {
     getStarted: 'Начать работу',
     alreadyHaveAccount: 'Уже есть аккаунт?',
     needAccount: 'Нужен аккаунт?',
+    fieldRequired: 'Это поле обязательно',
+    emailInvalid: 'Введите корректный email',
+    passwordTooShort: 'Пароль должен содержать не менее 8 символов',
   },
   tabs: {
     contacts: 'Контакты',

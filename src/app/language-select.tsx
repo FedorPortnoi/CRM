@@ -11,7 +11,7 @@ export default function LanguageSelectScreen() {
     setLoading(language);
     await setStoredLanguage(language);
     await initI18n(language);
-    router.replace('/(tabs)');
+    router.replace('/login');
   };
 
   return (
