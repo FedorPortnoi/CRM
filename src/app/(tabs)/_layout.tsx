@@ -3,7 +3,7 @@ import { Tabs, router } from 'expo-router';
 import { CalendarDays, Kanban, LayoutDashboard, Users, CheckSquare, Plus, MoreVertical, Settings } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
-const TEAL = '#10b981';
+const TEAL = '#065f46';
 const INACTIVE = '#9ca3af';
 
 export default function TabsLayout() {

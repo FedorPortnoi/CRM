@@ -46,7 +46,7 @@ function formatDue(due: string | null): string {
 function badgeColor(status: TaskStatus): string {
   switch (status) {
     case 'done':
-      return '#10b981';
+      return '#065f46';
     case 'in_progress':
       return '#f59e0b';
     case 'pending':
@@ -174,6 +174,9 @@ export default function TasksScreen(): JSX.Element {
 
   return (
     <View style={styles.container}>
+      <View style={styles.circle1} pointerEvents="none" />
+      <View style={styles.circle2} pointerEvents="none" />
+      <View style={styles.circle3} pointerEvents="none" />
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'today' && styles.tabActive]}
@@ -205,8 +208,8 @@ export default function TasksScreen(): JSX.Element {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={['#10b981']}
-            tintColor="#10b981"
+            colors={['#065f46']}
+            tintColor="#065f46"
           />
         }
         ListEmptyComponent={
@@ -227,17 +230,44 @@ export default function TasksScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
+  },
+  circle1: {
+    position: 'absolute',
+    width: 350,
+    height: 350,
+    borderRadius: 175,
+    backgroundColor: 'rgba(6,95,70,0.04)',
+    top: -80,
+    right: -100,
+  },
+  circle2: {
+    position: 'absolute',
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: 'rgba(6,95,70,0.03)',
+    bottom: 100,
+    left: -80,
+  },
+  circle3: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(6,95,70,0.03)',
+    top: '40%',
+    right: -60,
   },
   skeletonContainer: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
     padding: 12,
     paddingTop: 16,
   },
   skeletonRow: {
     height: 64,
-    backgroundColor: '#d1fae5',
+    backgroundColor: '#f3f4f6',
     borderRadius: 12,
     marginBottom: 8,
   },
@@ -246,7 +276,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
   },
   errorText: {
     color: '#ef4444',
@@ -255,7 +285,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
@@ -281,7 +311,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabActive: {
-    borderBottomColor: '#10b981',
+    borderBottomColor: '#065f46',
   },
   tabText: {
     fontSize: 14,
@@ -289,7 +319,7 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
   },
   tabTextActive: {
-    color: '#10b981',
+    color: '#065f46',
     fontWeight: '600',
   },
   listContent: {

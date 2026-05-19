@@ -131,7 +131,7 @@ const KanbanBoard: React.FC = () => {
           <Text style={{ fontWeight: '600', fontSize: 14, marginBottom: 4, color: '#111827' }}>
             {item.title}
           </Text>
-          <Text style={{ marginBottom: 4, color: '#10b981', fontWeight: '600', fontSize: 13 }}>
+          <Text style={{ marginBottom: 4, color: '#065f46', fontWeight: '600', fontSize: 13 }}>
             {item.value != null
               ? '$' + item.value.toLocaleString('en-US')
               : '--'}
@@ -146,7 +146,7 @@ const KanbanBoard: React.FC = () => {
   if (dealsLoading || pipelinesLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color="#065f46" />
       </View>
     );
   }

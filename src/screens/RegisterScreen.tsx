@@ -61,6 +61,7 @@ export default function RegisterScreen() {
     >
       <View style={styles.circle1} pointerEvents="none" />
       <View style={styles.circle2} pointerEvents="none" />
+      <View style={styles.circle3} pointerEvents="none" />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -68,7 +69,7 @@ export default function RegisterScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.logoContainer}>
-          <View style={styles.logoCircle}>
+          <View style={styles.logoSquare}>
             <Sparkles size={34} color="#FFFFFF" strokeWidth={2.5} />
           </View>
         </View>
@@ -175,24 +176,33 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
   },
   circle1: {
     position: 'absolute',
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: 'rgba(16,185,129,0.08)',
-    top: -60,
-    left: -80,
+    width: 350,
+    height: 350,
+    borderRadius: 175,
+    backgroundColor: 'rgba(6,95,70,0.04)',
+    top: -80,
+    right: -100,
   },
   circle2: {
     position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: 'rgba(16,185,129,0.05)',
-    bottom: 80,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: 'rgba(6,95,70,0.03)',
+    bottom: 100,
+    left: -80,
+  },
+  circle3: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(6,95,70,0.03)',
+    top: '40%',
     right: -60,
   },
   scrollContent: {
@@ -206,14 +216,14 @@ const styles = StyleSheet.create({
   logoContainer: {
     marginBottom: 24,
   },
-  logoCircle: {
+  logoSquare: {
     width: 80,
     height: 80,
-    borderRadius: 40,
-    backgroundColor: '#10b981',
+    borderRadius: 20,
+    backgroundColor: '#065f46',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#10b981',
+    shadowColor: '#065f46',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -271,7 +281,7 @@ const styles = StyleSheet.create({
   },
   button: {
     height: 52,
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -312,7 +322,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loginLinkText: {
-    color: '#10b981',
+    color: '#065f46',
     fontSize: 14,
     fontWeight: '500',
   },

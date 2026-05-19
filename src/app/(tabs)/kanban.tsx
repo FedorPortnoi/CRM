@@ -77,7 +77,7 @@ function DealListView(): JSX.Element {
   if (isLoading || pipelinesLoading) {
     return (
       <View style={listStyles.centered}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color="#065f46" />
       </View>
     );
   }
@@ -114,8 +114,8 @@ function DealListView(): JSX.Element {
         <RefreshControl
           refreshing={isRefreshing}
           onRefresh={handleRefresh}
-          colors={['#10b981']}
-          tintColor="#10b981"
+          colors={['#065f46']}
+          tintColor="#065f46"
         />
       }
       renderItem={({ item }) => {
@@ -154,6 +154,9 @@ export default function PipelineScreen(): JSX.Element {
 
   return (
     <View style={styles.container}>
+      <View style={styles.circle1} pointerEvents="none" />
+      <View style={styles.circle2} pointerEvents="none" />
+      <View style={styles.circle3} pointerEvents="none" />
       <View style={styles.toggleBar}>
         <TouchableOpacity
           style={[styles.toggleBtn, viewMode === 'board' ? styles.toggleActive : null]}
@@ -182,7 +185,10 @@ export default function PipelineScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0fdf8' },
+  container: { flex: 1, backgroundColor: '#ffffff' },
+  circle1: { position: 'absolute', width: 350, height: 350, borderRadius: 175, backgroundColor: 'rgba(6,95,70,0.04)', top: -80, right: -100 },
+  circle2: { position: 'absolute', width: 280, height: 280, borderRadius: 140, backgroundColor: 'rgba(6,95,70,0.03)', bottom: 100, left: -80 },
+  circle3: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(6,95,70,0.03)', top: '40%', right: -60 },
   toggleBar: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -198,7 +204,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#f3f4f6',
   },
-  toggleActive: { backgroundColor: '#10b981' },
+  toggleActive: { backgroundColor: '#065f46' },
   toggleText: { fontSize: 14, fontWeight: '600', color: '#6b7280' },
   toggleTextActive: { color: '#FFFFFF' },
   content: { flex: 1 },
@@ -209,7 +215,7 @@ const listStyles = StyleSheet.create({
   listContent: { paddingBottom: 24 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   errorText: { fontSize: 14, color: '#ef4444', textAlign: 'center', marginBottom: 12 },
-  retryButton: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#10b981', borderRadius: 12 },
+  retryButton: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#065f46', borderRadius: 12 },
   retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
   emptyText: { fontSize: 15, color: '#9ca3af' },
   stageHeader: {
@@ -218,7 +224,7 @@ const listStyles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     marginTop: 8,
@@ -237,5 +243,5 @@ const listStyles = StyleSheet.create({
   dealMain: { flex: 1, marginRight: 12 },
   dealTitle: { fontSize: 15, fontWeight: '500', color: '#111827', marginBottom: 2 },
   dealContact: { fontSize: 13, color: '#9ca3af' },
-  dealValue: { fontSize: 14, fontWeight: '600', color: '#10b981' },
+  dealValue: { fontSize: 14, fontWeight: '600', color: '#065f46' },
 });

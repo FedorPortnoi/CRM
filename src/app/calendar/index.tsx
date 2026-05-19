@@ -96,7 +96,7 @@ function contactName(contact: CalendarContact): string {
 }
 
 function statusColor(status: CalendarEventStatus): string {
-  if (status === 'completed') return '#10b981';
+  if (status === 'completed') return '#065f46';
   if (status === 'cancelled') return '#9ca3af';
   return '#6366f1';
 }
@@ -210,7 +210,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
               accessibilityRole="button"
               accessibilityLabel={t('calendar.newEvent')}
             >
-              <Plus size={24} color="#10b981" />
+              <Plus size={24} color="#065f46" />
             </TouchableOpacity>
           ),
         }}
@@ -224,8 +224,8 @@ export default function CalendarAgendaScreen(): JSX.Element {
             onRefresh={() => {
               void fetchEvents(true);
             }}
-            colors={['#10b981']}
-            tintColor="#10b981"
+            colors={['#065f46']}
+            tintColor="#065f46"
           />
         }
       >
@@ -313,7 +313,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
 
         {isRefreshing ? (
           <View style={styles.refreshIndicator}>
-            <ActivityIndicator color="#10b981" />
+            <ActivityIndicator color="#065f46" />
           </View>
         ) : null}
       </ScrollView>
@@ -324,7 +324,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
   },
   content: {
     padding: 16,
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   newButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
   skeletonRow: {
     height: 88,
     borderRadius: 12,
-    backgroundColor: '#d1fae5',
+    backgroundColor: '#f3f4f6',
   },
   centerState: {
     minHeight: 360,
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   emptyButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     borderRadius: 12,
     paddingHorizontal: 18,
     paddingVertical: 10,
@@ -448,7 +448,7 @@ const styles = StyleSheet.create({
   timeLine: {
     width: 1,
     flex: 1,
-    backgroundColor: '#d1fae5',
+    backgroundColor: '#f3f4f6',
     marginTop: 8,
   },
   eventBody: {

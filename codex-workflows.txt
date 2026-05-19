@@ -1,0 +1,110 @@
+You are working in the Mobile CRM Platform at C:\Users\fedor\crm.
+Tech stack: React Native + Expo + TypeScript + Fastify v5 + Prisma + PostgreSQL (Supabase) + Zustand.
+IMPORTANT: npm install MUST use --legacy-peer-deps on every install.
+IMPORTANT: Never touch these files (owned by other agents): backend/api/controllers/messages.ts, src/app/onboarding.tsx.
+
+## Goal: Add new workflow triggers — deal_won, deal_created, task_created
+
+Currently the WorkflowTrigger enum in backend/prisma/schema.prisma only has:
+  contact_created, deal_stage_changed, task_completed
+
+You must add: deal_won, deal_created, task_created
+
+## Step 1 — Update Prisma schema
+
+File: backend/prisma/schema.prisma
+Find the WorkflowTrigger enum (currently around line 97) and add the 3 new values:
+
+enum WorkflowTrigger {
+  contact_created
+  deal_stage_changed
+  task_completed
+  deal_won
+  deal_created
+  task_created
+}
+
+After editing, run:
+  npx prisma migrate dev --name add_workflow_triggers
+  npx prisma generate
+
+(Run from C:\Users\fedor\crm. Uses env vars in .env)
+
+## Step 2 — Update evaluateWorkflows service
+
+File: backend/services/workflows.ts
+Read it first. The function `evaluateWorkflows(context)` queries workflows by trigger and org.
+The existing service handles contact_created, deal_stage_changed, task_completed.
+The evaluateWorkflows function does NOT need to change structurally — new triggers work automatically
+because the function queries by `trigger` field which is now a valid enum value.
+However, update any type assertions or comments that reference the old trigger list.
+If the service has a type for the context that restricts trigger values, update it to include the 3 new values.
+
+## Step 3 — Add evaluateWorkflows calls in deals controller
+
+File: backend/api/controllers/deals.ts
+Read it. The file already imports WorkflowTrigger and evaluateWorkflows.
+Currently evaluateWorkflows is called after moveStage with trigger: WorkflowTrigger.deal_stage_changed.
+
+Add 2 more calls:
+
+a) After the `create` function successfully creates a deal (after db.deal.create, before reply.status(201).send):
+   await evaluateWorkflows({
+     organizationId: request.user.org_id,
+     trigger: WorkflowTrigger.deal_created,
+     record: deal as unknown as Record<string, unknown>,
+     userId: request.user.sub,
+     triggerRecordId: deal.id,
+   });
+
+b) After the `markWon` function successfully updates the deal to won (after db.deal.update, before reply.send):
+   await evaluateWorkflows({
+     organizationId: request.user.org_id,
+     trigger: WorkflowTrigger.deal_won,
+     record: updated as unknown as Record<string, unknown>,
+     userId: request.user.sub,
+     triggerRecordId: updated.id,
+   });
+
+Note: markWon uses db.deal.update and assigns result to `updated` (read the function to confirm variable names).
+
+## Step 4 — Add evaluateWorkflows call in tasks controller
+
+File: backend/api/controllers/tasks.ts
+Read it. The file already imports WorkflowTrigger and evaluateWorkflows.
+Currently evaluateWorkflows is called after task_completed.
+
+Add 1 more call: after the `create` function successfully creates a task (after db.task.create, before reply.status(201).send):
+   await evaluateWorkflows({
+     organizationId: request.user.org_id,
+     trigger: WorkflowTrigger.task_created,
+     record: task as unknown as Record<string, unknown>,
+     userId: request.user.sub,
+     triggerRecordId: task.id,
+   });
+
+## Step 5 — Update workflow builder UI
+
+File: src/app/workflows/new.tsx
+Read it. Currently:
+  type Trigger = 'contact_created' | 'deal_stage_changed' | 'task_completed';
+  const triggers: Trigger[] = ['contact_created', 'deal_stage_changed', 'task_completed'];
+
+Update to:
+  type Trigger = 'contact_created' | 'deal_stage_changed' | 'task_completed' | 'deal_won' | 'deal_created' | 'task_created';
+  const triggers: Trigger[] = ['contact_created', 'deal_stage_changed', 'task_completed', 'deal_won', 'deal_created', 'task_created'];
+
+The existing trigger display logic (item.replace(/_/g, ' ')) will work fine for the new values.
+
+Also update the backend/api/routes/workflows.ts Zod schema if it has a z.enum for trigger values —
+check for `z.nativeEnum(WorkflowTrigger)` or `z.enum([...])` and make sure it covers new triggers.
+If it uses z.nativeEnum(WorkflowTrigger), it will automatically pick up the new enum values from Prisma.
+
+## Step 6 — Verify
+
+Run: npx tsc --noEmit -p backend/tsconfig.json
+Fix any TypeScript errors. The most likely issue is if WorkflowTrigger context types anywhere restrict the trigger field.
+
+## Done
+
+Report exactly which files were modified and what changes were made.

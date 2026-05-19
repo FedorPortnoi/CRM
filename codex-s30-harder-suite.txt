@@ -1,0 +1,210 @@
+CONTEXT
+
+Project root: C:\Users\fedor\crm
+Backend: Fastify v5 + TypeScript + Prisma + PostgreSQL (Supabase)
+Test runner: Playwright (API tests only — no browser)
+Base URL: http://127.0.0.1:3000 (configured in playwright.config.ts)
+API prefix: /api/v1
+
+Test infrastructure:
+  import { getAuth } from './helpers/auth'  — returns { token, userId, email } from .auth.json (pre-seeded org)
+  registerOrg(request, suffix) pattern below creates isolated orgs for cross-org tests
+
+File to write: tests/smoke/31-coverage.spec.ts
+
+Style rules (match existing specs exactly):
+  import { test, expect, APIRequestContext } from '@playwright/test';
+  import { getAuth } from './helpers/auth';
+  test.describe.configure({ timeout: 30000 });
+  All helper functions at top of file, before the test.describe blocks
+  authHeaders(token) => { Authorization: `Bearer ${token}` }
+  All tests self-contained — create all entities they need, do not assume pre-seeded data beyond .auth.json
+  Response types annotated inline with `as { ... }` casts
+  No top-level awaits; helpers are all async functions
+
+Standard helpers to include at top of file:
+
+async function registerOrg(request: APIRequestContext, suffix: string) {
+  const unique = `${suffix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const res = await request.post('/api/v1/auth/', {
+    data: { email: `${unique}@example.com`, password: 'Password123!', name: `User ${suffix}`, org_name: `Org ${unique}` },
+  });
+  expect(res.status()).toBe(201);
+  const body = await res.json() as { data: { token: string; user: { id: string; email: string } } };
+  return { token: body.data.token, userId: body.data.user.id, email: body.data.user.email };
+}
+
+function authHeaders(token: string) { return { Authorization: `Bearer ${token}` }; }
+function isoFromNow(offsetMs: number) { return new Date(Date.now() + offsetMs).toISOString(); }
+
+// create helpers:
+async function makeContact(request, token, firstName, extra = {})   → POST /contacts → return data
+async function makeDeal(request, token, contactId, pipelineId, stageId, title, extra = {}) → POST /deals → return data
+async function makeTask(request, token, userId, title, extra = {})  → POST /tasks → return data
+async function makeEvent(request, token, startOffset, endOffset, extra = {}) → POST /calendar (start/end are ms from now) → return data
+async function getDefaultPipeline(request, token) → GET /deals/pipelines → return first default pipeline with stages
+
+---
+
+TASK: Write tests/smoke/31-coverage.spec.ts
+
+Target: at least 100 tests. All tests must be deterministic and independent. Aim for Rung 5–6 difficulty.
+
+Cover the following areas (write a test.describe block for each):
+
+───────────────────────────────────────────────────────────
+1. ANALYTICS CORRECTNESS (10+ tests)
+───────────────────────────────────────────────────────────
+These tests verify that analytics endpoints return numerically correct results, not just a valid shape.
+
+- Create exactly N deals with known values. Call GET /analytics/revenue. Verify total_value matches sum of values.
+- Create 3 deals in stage A, 2 in stage B. Call GET /analytics/funnel. Verify counts per stage match exactly.
+- Mark 2 deals won, 1 lost. Call GET /analytics/win-loss. Verify won=2, lost=1.
+- Create 5 tasks for a user. Call GET /analytics/rep-performance. Verify that user's task_count >= 5.
+- Create deals across two time periods. Call GET /analytics/revenue?from=X&to=Y with a window that captures only one period. Verify only that period's deals are summed.
+- Create a contact with lead_source set. Call GET /analytics/lead-sources. Verify that source appears in the response.
+- Move a deal through 3 stages over time. Call GET /analytics/stage-duration. Verify response includes stage duration data for that deal.
+- GET /analytics/dashboard. Verify open_deals_count increases after creating an open deal.
+- GET /analytics/pipeline-health. Verify response has shape { pipeline_health_score: number } or equivalent.
+- GET /analytics/conversion-rates. Verify response is 200 with an array or object (not 500).
+
+───────────────────────────────────────────────────────────
+2. PIPELINE / DEAL STATE MACHINE EXHAUSTION (10+ tests)
+───────────────────────────────────────────────────────────
+- Create deal → move through each stage in the pipeline sequentially → verify stage_id updates correctly after each move.
+- Mark deal won → verify status=won, verify PATCH to update title still works on a won deal.
+- Mark deal lost → verify status=lost.
+- Mark deal won → try to move stage → verify it returns an error (won deals cannot change stage).
+- Mark deal won → try to mark won again → idempotent or 422 (document what happens).
+- Create deal → archive it → verify it does not appear in GET /deals?status=open.
+- Create deal → archive → verify GET /deals/:id still returns it (archive is soft delete).
+- Create pipeline → add stage to it → verify stage appears in GET /deals/pipelines.
+- Create pipeline → rename it (PATCH) → verify name updated.
+- Move deal to a stage that belongs to a different org's pipeline → expect 403 or 404.
+
+───────────────────────────────────────────────────────────
+3. CONTACT LIFECYCLE AND MERGE INVARIANTS (10+ tests)
+───────────────────────────────────────────────────────────
+- Create contact A with deals, tasks, messages. Merge A into B (POST /contacts/A/merge with { target_id: B.id }). Verify: A is archived, B still active, B's deals list includes A's deals.
+- Merge A into B → merge B into C. Verify chain resolves: C has all entities.
+- Try to merge a contact into itself (target_id === source contact's id) → expect 400.
+- Try to merge contact from org A into contact from org B → expect 403 or 404.
+- Archive contact → verify contact does not appear in GET /contacts (default list excludes archived).
+- Archive contact → verify GET /contacts?status=archived returns it.
+- Archive contact → verify GET /contacts/:id/deals still returns the contact's deals.
+- Archive contact → verify GET /contacts/:id/activity still returns activity.
+- Create contact → PATCH to clear email (send email: null or empty string) → verify email is null in response.
+- Create contact with all fields → verify GET /contacts/:id returns all fields correctly.
+
+───────────────────────────────────────────────────────────
+4. TASK STATE MACHINE (8+ tests)
+───────────────────────────────────────────────────────────
+- Create task → POST /tasks/:id/start → verify status=in_progress.
+- Create task → POST /tasks/:id/start → POST /tasks/:id/complete → verify status=completed.
+- Create task → POST /tasks/:id/start → POST /tasks/:id/cancel → verify status=cancelled.
+- Create task → POST /tasks/:id/complete directly (skip start) → verify status=completed (if allowed) or correct error.
+- Create task → POST /tasks/:id/cancel → POST /tasks/:id/start → expect error (cancelled tasks cannot restart).
+- Create task → complete it → verify it appears in GET /tasks?status=completed.
+- Create task → GET /tasks/overdue with past due_date → verify it appears in overdue list.
+- Create task → GET /tasks/due-today with today's date → verify it appears.
+
+───────────────────────────────────────────────────────────
+5. CALENDAR EVENT INVARIANTS (8+ tests)
+───────────────────────────────────────────────────────────
+- Create event → POST /calendar/:id/complete → verify status=completed.
+- Create event → POST /calendar/:id/complete → POST /calendar/:id/notes with post-meeting notes → verify notes saved.
+- Create event → DELETE /calendar/:id (cancel) → PATCH /calendar/:id → expect 422 EVENT_CANCELLED.
+- Create event → DELETE /calendar/:id → DELETE again → expect 422 EVENT_ALREADY_CANCELLED.
+- Create event with end_time <= start_time → expect 400 VALIDATION_ERROR.
+- Create event with contact_id from another org → expect 403.
+- GET /calendar/availability?date=X&user_ids[]=Y → verify the created event appears in busy_slots.
+- Create event → update location → verify location updated in GET /calendar/:id.
+
+───────────────────────────────────────────────────────────
+6. DELTA SYNC CORRECTNESS (8+ tests)
+───────────────────────────────────────────────────────────
+- Create deal, note timestamp before creation. Delta since that timestamp → deal appears in data.deals.
+- Create contact → update contact → delta since creation time → updated contact appears (reflects latest state).
+- Delta since timestamp T1 → then update contact → delta since T2 (after update) → contact appears; delta since T3 (after T2 but before any more changes) → contact NOT in delta.
+- Create task, complete it → delta since just before completion → task appears with status=completed.
+- Create calendar event, cancel it → delta includes cancelled event (tombstone).
+- Cross-org: org A delta does not contain org B's recently created contacts.
+- Delta with no `since` param → meta.since is set and all arrays are arrays (shape test, not content).
+- Delta since far future → all four arrays are empty.
+
+───────────────────────────────────────────────────────────
+7. BULK OPERATIONS AND PAGINATION INVARIANTS (8+ tests)
+───────────────────────────────────────────────────────────
+- Create exactly 15 contacts. GET /contacts?page=1&per_page=10 → data.length=10, meta.total>=15. GET /contacts?page=2&per_page=10 → data.length>=5.
+- POST /contacts/bulk-archive with array of 5 contact IDs → verify all 5 are archived (GET each one and check status).
+- POST /contacts/bulk-assign with array of 5 contact IDs and a user_id → verify assigned_to updated on all.
+- GET /deals?page=1&per_page=1 → exactly 1 deal returned, meta.per_page=1.
+- GET /contacts?page=9999&per_page=10 → empty data array, total unchanged.
+- GET /tasks?page=1&per_page=5 with more than 5 tasks → exactly 5 returned.
+- Create 20 contacts. GET /contacts?q=<unique_prefix> → only matching contacts returned.
+- Bulk archive contacts → GET /contacts (default) → archived contacts NOT in list.
+
+───────────────────────────────────────────────────────────
+8. MESSAGES AND CONVERSATION INVARIANTS (8+ tests)
+───────────────────────────────────────────────────────────
+- POST /messages/send-in-app to a contact → verify message in GET /messages/conversation/:contactId.
+- POST /messages/log-call → verify channel=call in GET /messages/conversation/:contactId.
+- GET /messages/conversation/:contactId → verify messages ordered by created_at ascending.
+- POST /messages/mark-read with message ID → verify is_read=true.
+- GET /messages?contact_id=X → only messages for that contact returned.
+- POST /messages to a contact from another org → expect 403.
+- GET /messages/conversation/:contactId for contact from another org → expect 403 or empty.
+- Create 3 in-app messages → GET /messages/conversation/:contactId → all 3 appear.
+
+───────────────────────────────────────────────────────────
+9. CONCURRENT STRESS (5+ tests)
+───────────────────────────────────────────────────────────
+Use Promise.all to fire requests in parallel. Verify all succeed and results are consistent.
+
+- Create 10 contacts concurrently → verify all 10 created (unique IDs, all 201).
+- Move the same deal to different stages concurrently (5 parallel PATCH requests) → verify deal ends up in a valid stage (no 500, no corrupted state).
+- Create 8 tasks concurrently for the same org → verify all 8 are created and listed.
+- Create 5 contacts concurrently, immediately delete all 5 concurrently → verify all 5 are archived.
+- GET /analytics/dashboard 10 times concurrently → all 200, all return valid shape.
+
+───────────────────────────────────────────────────────────
+10. CROSS-ENTITY CASCADE AND REFERENTIAL INTEGRITY (5+ tests)
+───────────────────────────────────────────────────────────
+- Create contact → create deal linked to contact → archive contact → verify deal still accessible via GET /deals/:id.
+- Create contact → create task linked to contact → archive contact → verify task still accessible.
+- Create deal → create calendar event linked to deal → cancel event → verify deal unchanged.
+- Create contact with deal and task → GET /contacts/:id/deals → includes the deal. GET /contacts/:id/tasks → includes the task.
+- Create deal in stage S1 → move to S2 → GET /deals/:id → stage_id = S2.id (not S1).
+
+───────────────────────────────────────────────────────────
+11. RESPONSE ENVELOPE HARDENING (5+ tests)
+───────────────────────────────────────────────────────────
+Verify that every success response conforms to { data: ..., meta: {} } and every error response conforms to { error: { code: string, message: string } }.
+
+- POST /contacts (success) → body has data.id and meta key.
+- GET /contacts (list success) → body has data array, meta.total, meta.page, meta.per_page.
+- GET /contacts/:nonexistent-id → body has error.code and error.message.
+- POST /contacts with empty first_name → body has error.code.
+- POST /deals with missing contact_id → body has error.code.
+
+───────────────────────────────────────────────────────────
+12. WORKFLOW TRIGGERS (4+ tests)
+───────────────────────────────────────────────────────────
+- GET /workflows → 200 with data array.
+- POST /workflows with a contact_created trigger and create_task action → verify workflow created.
+- Create a contact → if workflow is active, verify a task was created for that contact (GET /tasks?contact_id=newContactId).
+- PATCH /workflows/:id to deactivate → verify is_active=false.
+
+---
+
+INSTRUCTIONS
+
+1. Write all tests to tests/smoke/31-coverage.spec.ts.
+2. Read the existing spec files (especially 28-coverage.spec.ts and 30-coverage.spec.ts) to match style exactly before writing.
+3. Each test must be independently runnable — create all its own data.
+4. Use descriptive names that match the pattern in existing specs: 'category: specific behavior description'.
+5. For endpoints that may return different status codes depending on server state (e.g., workflow triggers), write the assertion to handle both valid cases cleanly.
+6. Do not duplicate tests that already exist in 27-coverage, 28-coverage, 29-coverage, or 30-coverage.
+7. After writing the file, run: npx tsc --noEmit -p backend/tsconfig.json  (must pass — tests are TypeScript too).
+
+The file should contain at least 100 test() calls. Quality over quantity — each test must assert something specific and meaningful, not just status=200.

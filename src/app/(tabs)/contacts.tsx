@@ -45,7 +45,7 @@ type OrgUsersResponse = {
 
 const PER_PAGE = 20;
 
-const AVATAR_COLORS = ['#10b981', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
+const AVATAR_COLORS = ['#065f46', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
 
 function getInitials(firstName: string, lastName: string | null): string {
   const f = firstName.charAt(0).toUpperCase();
@@ -498,6 +498,9 @@ export default function ContactsScreen(): JSX.Element {
 
   return (
     <View style={styles.container}>
+      <View style={styles.circle1} pointerEvents="none" />
+      <View style={styles.circle2} pointerEvents="none" />
+      <View style={styles.circle3} pointerEvents="none" />
       <View style={styles.searchWrapper}>
         <Search size={16} color="#9ca3af" />
         <TextInput
@@ -531,8 +534,8 @@ export default function ContactsScreen(): JSX.Element {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={['#10b981']}
-            tintColor="#10b981"
+            colors={['#065f46']}
+            tintColor="#065f46"
           />
         }
         onEndReached={search.trim() ? undefined : loadMore}
@@ -547,7 +550,7 @@ export default function ContactsScreen(): JSX.Element {
         ListFooterComponent={
           isFetchingMore ? (
             <View style={styles.footer}>
-              <ActivityIndicator size="small" color="#10b981" />
+              <ActivityIndicator size="small" color="#065f46" />
             </View>
           ) : null
         }
@@ -622,7 +625,7 @@ export default function ContactsScreen(): JSX.Element {
             <View style={styles.userListContainer}>
               {isLoadingUsers ? (
                 <View style={styles.modalStateContainer}>
-                  <ActivityIndicator size="small" color="#10b981" />
+                  <ActivityIndicator size="small" color="#065f46" />
                   <Text style={styles.modalStateText}>{t('contacts.loadingUsers')}</Text>
                 </View>
               ) : usersError ? (
@@ -695,17 +698,44 @@ export default function ContactsScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
+  },
+  circle1: {
+    position: 'absolute',
+    width: 350,
+    height: 350,
+    borderRadius: 175,
+    backgroundColor: 'rgba(6,95,70,0.04)',
+    top: -80,
+    right: -100,
+  },
+  circle2: {
+    position: 'absolute',
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: 'rgba(6,95,70,0.03)',
+    bottom: 100,
+    left: -80,
+  },
+  circle3: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(6,95,70,0.03)',
+    top: '40%',
+    right: -60,
   },
   skeletonContainer: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
     padding: 12,
     paddingTop: 16,
   },
   skeletonRow: {
     height: 64,
-    backgroundColor: '#d1fae5',
+    backgroundColor: '#f3f4f6',
     borderRadius: 12,
     marginBottom: 8,
   },
@@ -714,7 +744,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
   },
   errorText: {
     color: '#ef4444',
@@ -723,7 +753,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
@@ -762,7 +792,7 @@ const styles = StyleSheet.create({
   },
   importRowText: {
     fontSize: 13,
-    color: '#10b981',
+    color: '#065f46',
     fontWeight: '500',
     paddingVertical: 4,
   },
@@ -810,8 +840,8 @@ const styles = StyleSheet.create({
   },
   checkboxSelected: {
     borderWidth: 1.5,
-    borderColor: '#10b981',
-    backgroundColor: '#10b981',
+    borderColor: '#065f46',
+    backgroundColor: '#065f46',
   },
   rowMain: {
     flex: 1,
@@ -885,7 +915,7 @@ const styles = StyleSheet.create({
     minWidth: 96,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -976,7 +1006,7 @@ const styles = StyleSheet.create({
     minHeight: 40,
     paddingHorizontal: 18,
     borderRadius: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -998,7 +1028,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   userRowSelected: {
-    borderColor: '#10b981',
+    borderColor: '#065f46',
     backgroundColor: '#ecfdf5',
   },
   userRowText: {
@@ -1030,8 +1060,8 @@ const styles = StyleSheet.create({
   },
   userSelectionIndicatorSelected: {
     borderWidth: 1.5,
-    borderColor: '#10b981',
-    backgroundColor: '#10b981',
+    borderColor: '#065f46',
+    backgroundColor: '#065f46',
   },
   modalActions: {
     flexDirection: 'row',
@@ -1056,7 +1086,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',

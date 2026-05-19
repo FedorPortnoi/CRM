@@ -1,3 +1,13 @@
+CONTEXT
+=======
+File to rewrite: src/screens/LoginScreen.tsx
+
+Current file has background #f0fdf8 (mint) and accent #10b981 (teal).
+Target design system: background #ffffff (pure white), accent #065f46 (deep emerald).
+
+The EXACT new content for the file is:
+
+---BEGIN FILE---
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -297,3 +307,26 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
+---END FILE---
+
+TASK
+====
+Overwrite src/screens/LoginScreen.tsx with the exact content between ---BEGIN FILE--- and ---END FILE--- above.
+Zero logic changes. Zero import changes. Only the StyleSheet values change (colors + circle dimensions + logoSquare borderRadius).
+
+CONSTRAINTS
+===========
+- TypeScript strict — no any
+- Preserve every import exactly
+- Preserve every JSX prop and handler exactly
+- Only the StyleSheet changes
+- File: src/screens/LoginScreen.tsx
+
+OUTPUT
+======
+Rewritten file: src/screens/LoginScreen.tsx
+
+VALIDATION
+==========
+Run: npx tsc --noEmit --project tsconfig.json 2>&1 | grep LoginScreen | head -5
+Expected: zero errors mentioning LoginScreen

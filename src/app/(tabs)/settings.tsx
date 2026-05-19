@@ -35,6 +35,10 @@ export default function SettingsScreen(): JSX.Element {
   const languageLabel = currentLanguage === 'ru' ? 'RU' : 'EN';
 
   return (
+    <View style={styles.wrapper}>
+      <View style={styles.circle1} pointerEvents="none" />
+      <View style={styles.circle2} pointerEvents="none" />
+      <View style={styles.circle3} pointerEvents="none" />
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <Text style={styles.pageTitle}>{t('settings.title')}</Text>
 
@@ -88,7 +92,7 @@ export default function SettingsScreen(): JSX.Element {
           <Switch
             value={notificationsEnabled}
             onValueChange={setNotificationsEnabled}
-            trackColor={{ false: '#e5e7eb', true: '#10b981' }}
+            trackColor={{ false: '#e5e7eb', true: '#065f46' }}
             thumbColor='#FFFFFF'
           />
         </View>
@@ -98,13 +102,45 @@ export default function SettingsScreen(): JSX.Element {
         <Text style={styles.logoutText}>{t('settings.logout')}</Text>
       </TouchableOpacity>
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  circle1: {
+    position: 'absolute',
+    width: 350,
+    height: 350,
+    borderRadius: 175,
+    backgroundColor: 'rgba(6,95,70,0.04)',
+    top: -80,
+    right: -100,
+  },
+  circle2: {
+    position: 'absolute',
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: 'rgba(6,95,70,0.03)',
+    bottom: 100,
+    left: -80,
+  },
+  circle3: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(6,95,70,0.03)',
+    top: '40%',
+    right: -60,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: 'transparent',
   },
   contentContainer: {
     paddingBottom: 40,
@@ -155,7 +191,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   roleBadge: {
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#f0fdf4',
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -164,7 +200,7 @@ const styles = StyleSheet.create({
   roleBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#10b981',
+    color: '#065f46',
     textTransform: 'capitalize',
   },
   row: {
@@ -195,7 +231,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   languageChip: {
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#f0fdf4',
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -203,7 +239,7 @@ const styles = StyleSheet.create({
   languageChipText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#10b981',
+    color: '#065f46',
   },
   chevron: {
     fontSize: 20,

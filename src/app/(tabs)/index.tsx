@@ -14,7 +14,7 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { notifyPendingCaptureCount } from '../../utils/notifications';
 
-const TEAL = '#10b981';
+const TEAL = '#065f46';
 const CAPTURE_COUNT_POLL_INTERVAL_MS = 60000;
 
 type DashboardData = {
@@ -263,6 +263,7 @@ export default function DashboardScreen(): JSX.Element {
     >
       <View style={styles.circle1} pointerEvents="none" />
       <View style={styles.circle2} pointerEvents="none" />
+      <View style={styles.circle3} pointerEvents="none" />
 
       {/* Header greeting */}
       <View style={styles.headerRow}>
@@ -290,7 +291,7 @@ export default function DashboardScreen(): JSX.Element {
         ) : summary.data ? (
           <>
             <View style={styles.metricCard}>
-              <View style={[styles.metricIconBox, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+              <View style={[styles.metricIconBox, { backgroundColor: 'rgba(6,95,70,0.08)' }]}>
                 <TrendingUp size={18} color={TEAL} />
               </View>
               <Text style={styles.metricNumber}>{summary.data.open_deals.count}</Text>
@@ -306,7 +307,7 @@ export default function DashboardScreen(): JSX.Element {
               <Text style={styles.metricSub}>{t('tabs.tasks')}</Text>
             </View>
             <View style={styles.metricCard}>
-              <View style={[styles.metricIconBox, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+              <View style={[styles.metricIconBox, { backgroundColor: 'rgba(6,95,70,0.08)' }]}>
                 <Activity size={18} color={TEAL} />
               </View>
               <Text style={styles.metricNumber}>{formatPipelineHealth(summary.data.pipeline_health_score)}</Text>
@@ -463,7 +464,7 @@ export default function DashboardScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#ffffff',
   },
   contentContainer: {
     paddingBottom: 40,
@@ -473,7 +474,7 @@ const styles = StyleSheet.create({
     width: 350,
     height: 350,
     borderRadius: 175,
-    backgroundColor: 'rgba(16,185,129,0.06)',
+    backgroundColor: 'rgba(6,95,70,0.04)',
     top: -80,
     right: -100,
   },
@@ -482,9 +483,18 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: 'rgba(16,185,129,0.04)',
-    top: 300,
+    backgroundColor: 'rgba(6,95,70,0.03)',
+    bottom: 100,
     left: -80,
+  },
+  circle3: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(6,95,70,0.03)',
+    top: '40%',
+    right: -60,
   },
   headerRow: {
     flexDirection: 'row',
@@ -511,7 +521,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 12,
@@ -592,7 +602,7 @@ const styles = StyleSheet.create({
   },
   viewAllText: {
     fontSize: 13,
-    color: '#10b981',
+    color: '#065f46',
     fontWeight: '500',
   },
   quickActionsRow: {
@@ -604,7 +614,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#10b981',
+    borderColor: '#065f46',
     paddingVertical: 14,
     alignItems: 'center',
     gap: 6,
@@ -613,13 +623,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: 'rgba(16,185,129,0.1)',
+    backgroundColor: 'rgba(6,95,70,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   quickActionLabel: {
     fontSize: 11,
-    color: '#10b981',
+    color: '#065f46',
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -659,14 +669,14 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(16,185,129,0.12)',
+    backgroundColor: 'rgba(6,95,70,0.08)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   contactAvatarText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#10b981',
+    color: '#065f46',
   },
   emptyText: {
     color: '#9ca3af',
@@ -681,7 +691,7 @@ const styles = StyleSheet.create({
   },
   outlineButton: {
     borderWidth: 1.5,
-    borderColor: '#10b981',
+    borderColor: '#065f46',
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -691,7 +701,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   outlineButtonText: {
-    color: '#10b981',
+    color: '#065f46',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -711,7 +721,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   inlineRetryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#065f46',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
