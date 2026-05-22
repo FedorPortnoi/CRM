@@ -27,13 +27,17 @@ type CreateBody = {
   currency: string;
   expected_close?: string;
   probability?: number;
+  next_action?: string;
+  next_action_due?: string;
   source?: string;
   assigned_to?: string;
   custom_fields?: Record<string, unknown>;
 };
 
-type UpdateBody = Partial<Omit<CreateBody, 'value'>> & {
+type UpdateBody = Partial<Omit<CreateBody, 'value' | 'next_action' | 'next_action_due'>> & {
   value?: number | null;
+  next_action?: string | null;
+  next_action_due?: string | null;
 };
 
 type IdParams = { id: string };
@@ -76,8 +80,8 @@ function pipelineOrgCacheKey(pipelineId: string, orgId: string): string {
   return `${orgId}:${pipelineId}`;
 }
 
-function stagePipelineCacheKey(stageId: string, pipelineId: string): string {
-  return `${pipelineId}:${stageId}`;
+function stagePipelineCacheKey(stageId: string, pipelineId: string, orgId: string): string {
+  return `${orgId}:${pipelineId}:${stageId}`;
 }
 
 function userOrgCacheKey(userId: string, orgId: string): string {
@@ -122,14 +126,14 @@ async function pipelineBelongsToOrg(pipelineId: string, orgId: string): Promise<
   return false;
 }
 
-async function stageBelongsToPipeline(stageId: string, pipelineId: string): Promise<boolean> {
-  const key = stagePipelineCacheKey(stageId, pipelineId);
+async function stageBelongsToPipeline(stageId: string, pipelineId: string, orgId: string): Promise<boolean> {
+  const key = stagePipelineCacheKey(stageId, pipelineId, orgId);
   if (stagePipelineCache.has(key)) {
     return true;
   }
 
   const stage = await db.pipelineStage.findFirst({
-    where: { id: stageId, pipeline_id: pipelineId },
+    where: { id: stageId, pipeline_id: pipelineId, pipeline: { organization_id: orgId } },
     select: { id: true },
   });
 
@@ -163,7 +167,7 @@ async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean>
 function invalidatePipelineCaches(pipelineId: string, orgId: string): void {
   pipelineOrgCache.delete(pipelineOrgCacheKey(pipelineId, orgId));
 
-  const stagePrefix = `${pipelineId}:`;
+  const stagePrefix = `${orgId}:${pipelineId}:`;
   for (const key of stagePipelineCache) {
     if (key.startsWith(stagePrefix)) {
       stagePipelineCache.delete(key);
@@ -171,8 +175,8 @@ function invalidatePipelineCaches(pipelineId: string, orgId: string): void {
   }
 }
 
-function invalidateStagePipelineCache(stageId: string, pipelineId: string): void {
-  stagePipelineCache.delete(stagePipelineCacheKey(stageId, pipelineId));
+function invalidateStagePipelineCache(stageId: string, pipelineId: string, orgId: string): void {
+  stagePipelineCache.delete(stagePipelineCacheKey(stageId, pipelineId, orgId));
 }
 
 // ─── Deal CRUD ────────────────────────────────────────────────────────────────
@@ -217,7 +221,7 @@ async function create(
   const [ownsContact, ownsPipeline, stageMatches, ownsAssignee] = await Promise.all([
     contactBelongsToOrg(body.contact_id, request.user.org_id),
     pipelineBelongsToOrg(body.pipeline_id, request.user.org_id),
-    stageBelongsToPipeline(body.stage_id, body.pipeline_id),
+    stageBelongsToPipeline(body.stage_id, body.pipeline_id, request.user.org_id),
     body.assigned_to !== undefined && body.assigned_to !== request.user.sub
       ? userBelongsToOrg(body.assigned_to, request.user.org_id)
       : Promise.resolve(true),
@@ -259,6 +263,8 @@ async function create(
       currency: body.currency,
       expected_close: body.expected_close ? new Date(body.expected_close) : undefined,
       probability: body.probability,
+      next_action: body.next_action,
+      next_action_due: body.next_action_due ? new Date(body.next_action_due) : undefined,
       source: body.source,
       assigned_to: body.assigned_to,
       custom_fields: body.custom_fields as Prisma.InputJsonValue | undefined,
@@ -324,7 +330,7 @@ async function update(
       });
       return;
     }
-    stageMatchesPromise = stageBelongsToPipeline(nextStageId, nextPipelineId);
+    stageMatchesPromise = stageBelongsToPipeline(nextStageId, nextPipelineId, request.user.org_id);
   }
 
   const [ownsContact, ownsPipeline, ownsAssignee, stageMatches] = await Promise.all([
@@ -377,6 +383,10 @@ async function update(
     updateData.expected_close = body.expected_close ? new Date(body.expected_close) : null;
   }
   if (body.probability !== undefined) updateData.probability = body.probability;
+  if (body.next_action !== undefined) updateData.next_action = body.next_action;
+  if (body.next_action_due !== undefined) {
+    updateData.next_action_due = body.next_action_due ? new Date(body.next_action_due) : null;
+  }
   if (body.source !== undefined) updateData.source = body.source;
   if (body.assigned_to !== undefined) updateData.assigned_to = body.assigned_to;
   if (body.custom_fields !== undefined) {
@@ -384,7 +394,7 @@ async function update(
   }
 
   const updated = await db.deal.update({
-    where: { id },
+    where: { id, organization_id: request.user.org_id },
     data: updateData,
     include: dealInclude,
   });
@@ -413,7 +423,7 @@ async function archive(
   }
 
   const updated = await db.deal.update({
-    where: { id },
+    where: { id, organization_id: request.user.org_id },
     data: { status: DealStatus.archived },
     include: dealInclude,
   });
@@ -443,11 +453,8 @@ async function moveStage(
   }
 
   const stageExists = deal.pipeline_id !== null
-    ? await stageBelongsToPipeline(stage_id, deal.pipeline_id)
-    : (await db.pipelineStage.findFirst({
-      where: { id: stage_id, pipeline_id: undefined },
-      select: { id: true },
-    })) !== null;
+    ? await stageBelongsToPipeline(stage_id, deal.pipeline_id, request.user.org_id)
+    : false;
 
   if (!stageExists) {
     reply.status(404).send({ error: { code: 'STAGE_NOT_FOUND', message: 'Stage not found in this deal\'s pipeline' } });
@@ -455,8 +462,8 @@ async function moveStage(
   }
 
   const updated = await db.deal.update({
-    where: { id },
-    data: { stage_id },
+    where: { id, organization_id: request.user.org_id },
+    data: { stage_id, stage_entered_at: new Date() },
     include: dealInclude,
   });
 
@@ -493,7 +500,7 @@ async function markWon(
   }
 
   const updated = await db.deal.update({
-    where: { id },
+    where: { id, organization_id: request.user.org_id },
     data: {
       status: DealStatus.won,
       actual_close: actual_close ? new Date(actual_close) : new Date(),
@@ -534,7 +541,7 @@ async function markLost(
   }
 
   const updated = await db.deal.update({
-    where: { id },
+    where: { id, organization_id: request.user.org_id },
     data: {
       status: DealStatus.lost,
       lost_reason: reason,
@@ -638,7 +645,7 @@ async function updatePipeline(
   }
 
   const updated = await db.pipeline.update({
-    where: { id },
+    where: { id, organization_id: request.user.org_id },
     data: { name, description, is_default },
     include: { stages: { orderBy: { position: 'asc' } } },
   });
@@ -662,7 +669,7 @@ async function deletePipeline(
   }
 
   const openDealCount = await db.deal.count({
-    where: { pipeline_id: id, status: DealStatus.open },
+    where: { pipeline_id: id, organization_id: request.user.org_id, status: DealStatus.open },
   });
 
   if (openDealCount > 0) {
@@ -677,14 +684,20 @@ async function deletePipeline(
 
   // Null out pipeline/stage refs on non-open deals so FK constraints don't block deletion
   await db.deal.updateMany({
-    where: { pipeline_id: id },
+    where: { pipeline_id: id, organization_id: request.user.org_id },
     data: { pipeline_id: null, stage_id: null },
   });
 
-  await db.pipelineStage.deleteMany({ where: { pipeline_id: id } });
+  await db.pipelineStage.deleteMany({
+    where: { pipeline_id: id, pipeline: { organization_id: request.user.org_id } },
+  });
   invalidatePipelineCaches(id, request.user.org_id);
 
-  await db.pipeline.delete({ where: { id } });
+  const deleted = await db.pipeline.deleteMany({ where: { id, organization_id: request.user.org_id } });
+  if (deleted.count !== 1) {
+    reply.status(404).send({ error: { code: 'PIPELINE_NOT_FOUND', message: 'Pipeline not found' } });
+    return;
+  }
 
   reply.send({ data: { deleted: true }, meta: {} });
 }
@@ -707,7 +720,7 @@ async function listStages(
   }
 
   const stages = await db.pipelineStage.findMany({
-    where: { pipeline_id },
+    where: { pipeline_id, pipeline: { organization_id: request.user.org_id } },
     orderBy: { position: 'asc' },
     include: { _count: { select: { deals: true } } },
   });
@@ -722,18 +735,25 @@ async function createStage(
   const { id: pipeline_id } = request.params as IdParams;
   const body = request.body as CreateStageBody;
 
-  const pipeline = await db.pipeline.findFirst({
-    where: { id: pipeline_id, organization_id: request.user.org_id },
+  const stage = await db.$transaction(async (tx) => {
+    const pipeline = await tx.pipeline.findFirst({
+      where: { id: pipeline_id, organization_id: request.user.org_id },
+      select: { id: true },
+    });
+
+    if (!pipeline) {
+      return null;
+    }
+
+    return tx.pipelineStage.create({
+      data: { ...body, pipeline_id },
+    });
   });
 
-  if (!pipeline) {
+  if (!stage) {
     reply.status(404).send({ error: { code: 'PIPELINE_NOT_FOUND', message: 'Pipeline not found' } });
     return;
   }
-
-  const stage = await db.pipelineStage.create({
-    data: { ...body, pipeline_id },
-  });
 
   reply.status(201).send({ data: stage, meta: {} });
 }
@@ -746,19 +766,33 @@ async function updateStage(
   const body = request.body as UpdateStageBody;
 
   const stage = await db.pipelineStage.findFirst({
-    where: { id },
+    where: { id, pipeline: { organization_id: request.user.org_id } },
     include: { pipeline: { select: { organization_id: true } } },
   });
 
-  if (!stage || stage.pipeline.organization_id !== request.user.org_id) {
+  if (!stage) {
     reply.status(404).send({ error: { code: 'STAGE_NOT_FOUND', message: 'Stage not found' } });
     return;
   }
 
-  const updated = await db.pipelineStage.update({
-    where: { id },
+  const result = await db.pipelineStage.updateMany({
+    where: { id, pipeline: { organization_id: request.user.org_id } },
     data: body,
   });
+
+  if (result.count !== 1) {
+    reply.status(404).send({ error: { code: 'STAGE_NOT_FOUND', message: 'Stage not found' } });
+    return;
+  }
+
+  const updated = await db.pipelineStage.findFirst({
+    where: { id, pipeline: { organization_id: request.user.org_id } },
+  });
+
+  if (!updated) {
+    reply.status(404).send({ error: { code: 'STAGE_NOT_FOUND', message: 'Stage not found' } });
+    return;
+  }
 
   reply.send({ data: updated, meta: {} });
 }
@@ -770,17 +804,17 @@ async function deleteStage(
   const { id } = request.params as IdParams;
 
   const stage = await db.pipelineStage.findFirst({
-    where: { id },
+    where: { id, pipeline: { organization_id: request.user.org_id } },
     include: { pipeline: { select: { organization_id: true } } },
   });
 
-  if (!stage || stage.pipeline.organization_id !== request.user.org_id) {
+  if (!stage) {
     reply.status(404).send({ error: { code: 'STAGE_NOT_FOUND', message: 'Stage not found' } });
     return;
   }
 
   const openDealCount = await db.deal.count({
-    where: { stage_id: id, status: DealStatus.open },
+    where: { stage_id: id, organization_id: request.user.org_id, status: DealStatus.open },
   });
 
   if (openDealCount > 0) {
@@ -793,8 +827,19 @@ async function deleteStage(
     return;
   }
 
-  await db.pipelineStage.delete({ where: { id } });
-  invalidateStagePipelineCache(id, stage.pipeline_id);
+  await db.deal.updateMany({
+    where: { stage_id: id, organization_id: request.user.org_id, status: { not: DealStatus.open } },
+    data: { stage_id: null },
+  });
+
+  const deleted = await db.pipelineStage.deleteMany({
+    where: { id, pipeline: { organization_id: request.user.org_id } },
+  });
+  if (deleted.count !== 1) {
+    reply.status(404).send({ error: { code: 'STAGE_NOT_FOUND', message: 'Stage not found' } });
+    return;
+  }
+  invalidateStagePipelineCache(id, stage.pipeline_id, request.user.org_id);
 
   reply.send({ data: { deleted: true }, meta: {} });
 }

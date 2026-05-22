@@ -40,6 +40,15 @@ type RecentContact = {
   phone: string | null;
 };
 
+type ClosingDeal = {
+  id: string;
+  title: string;
+  expected_close: string | null;
+  value: number | null;
+  currency: string | null;
+  contact: { first_name: string; last_name: string | null } | null;
+};
+
 type SectionState<T> = {
   data: T | null;
   isLoading: boolean;
@@ -100,6 +109,7 @@ export default function DashboardScreen(): JSX.Element {
   const [summary, setSummary] = useState<SectionState<DashboardData>>(initialSection<DashboardData>);
   const [tasks, setTasks] = useState<SectionState<TodayTask[]>>(initialSection<TodayTask[]>);
   const [contacts, setContacts] = useState<SectionState<RecentContact[]>>(initialSection<RecentContact[]>);
+  const [closingDeals, setClosingDeals] = useState<SectionState<ClosingDeal[]>>(initialSection<ClosingDeal[]>);
   const [captureCount, setCaptureCount] = useState<number>(0);
   const [workflowCount, setWorkflowCount] = useState<SectionState<number>>(initialSection<number>);
   const [refreshing, setRefreshing] = useState(false);
@@ -125,7 +135,7 @@ export default function DashboardScreen(): JSX.Element {
         }));
       }
     },
-    [token],
+    [token, t],
   );
 
   const fetchTasks = useCallback(
@@ -148,7 +158,7 @@ export default function DashboardScreen(): JSX.Element {
         }));
       }
     },
-    [token],
+    [token, t],
   );
 
   const fetchContacts = useCallback(
@@ -171,7 +181,7 @@ export default function DashboardScreen(): JSX.Element {
         }));
       }
     },
-    [token],
+    [token, t],
   );
 
   const fetchWorkflowCount = useCallback(async (showSkeleton: boolean): Promise<void> => {
@@ -192,7 +202,34 @@ export default function DashboardScreen(): JSX.Element {
         error: errorMessage(e, t('errors.failedToLoadWorkflows')),
       }));
     }
-  }, [token]);
+  }, [token, t]);
+
+  const fetchClosingDeals = useCallback(async (showSkeleton: boolean): Promise<void> => {
+    if (!token) return;
+    if (showSkeleton) setClosingDeals((prev) => ({ ...prev, isLoading: true }));
+    try {
+      setClosingDeals((prev) => ({ ...prev, error: null }));
+      const dealsRes = await fetch(`${API_URL}/deals?status=open&sort=expected_close&order=asc&per_page=50`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!dealsRes.ok) throw new Error(`Deals failed with status ${dealsRes.status}`);
+      const dealsJson = await dealsRes.json() as { data: ClosingDeal[] };
+      const now = Date.now();
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
+      const closing = dealsJson.data.filter(d => {
+        if (!d.expected_close) return false;
+        const diff = new Date(d.expected_close).getTime() - now;
+        return diff >= 0 && diff <= sevenDays;
+      });
+      setClosingDeals({ data: closing, isLoading: false, error: null });
+    } catch (e: unknown) {
+      setClosingDeals((prev) => ({
+        data: prev.data,
+        isLoading: false,
+        error: errorMessage(e, t('errors.failedToLoadDashboard')),
+      }));
+    }
+  }, [token, t]);
 
   const fetchCaptureCount = useCallback(async (): Promise<void> => {
     if (!token) return;
@@ -210,6 +247,7 @@ export default function DashboardScreen(): JSX.Element {
         void notifyPendingCaptureCount(
           t('dashboard.pendingCapturesNotificationTitle'),
           t('dashboard.pendingCapturesNotificationBody', { count: nextCount }),
+          nextCount,
         );
       }
     } catch {
@@ -223,11 +261,12 @@ export default function DashboardScreen(): JSX.Element {
         fetchSummary(showSkeleton),
         fetchTasks(showSkeleton),
         fetchContacts(showSkeleton),
+        fetchClosingDeals(showSkeleton),
         fetchCaptureCount(),
         fetchWorkflowCount(showSkeleton),
       ]);
     },
-    [fetchSummary, fetchTasks, fetchContacts, fetchCaptureCount, fetchWorkflowCount],
+    [fetchSummary, fetchTasks, fetchContacts, fetchClosingDeals, fetchCaptureCount, fetchWorkflowCount],
   );
 
   useEffect(() => {
@@ -388,6 +427,50 @@ export default function DashboardScreen(): JSX.Element {
           ))
         ) : (
           <Text style={styles.emptyText}>{t('tasks.noToday')}</Text>
+        )}
+      </View>
+
+      {/* Closing this week */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionHeader}>Closing This Week</Text>
+          <TouchableOpacity onPress={() => { router.push('/(tabs)/kanban'); }} accessibilityRole="button">
+            <Text style={styles.viewAllText}>{t('dashboard.viewAll')}</Text>
+          </TouchableOpacity>
+        </View>
+        {closingDeals.isLoading ? (
+          <View style={styles.closingSkeleton} />
+        ) : closingDeals.error ? (
+          <SectionError message={closingDeals.error} onRetry={() => { void fetchClosingDeals(true); }} retryLabel={t('common.retry')} />
+        ) : closingDeals.data && closingDeals.data.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.closingScroll}>
+            {closingDeals.data.map((deal) => {
+              const daysRemaining = Math.ceil((new Date(deal.expected_close ?? '').getTime() - Date.now()) / 86400000);
+              const badgeColor = daysRemaining <= 2 ? '#dc2626' : daysRemaining <= 5 ? '#d97706' : TEAL;
+              const contact = deal.contact
+                ? [deal.contact.first_name, deal.contact.last_name].filter(Boolean).join(' ')
+                : '';
+              return (
+                <TouchableOpacity
+                  key={deal.id}
+                  style={styles.closingCard}
+                  onPress={() => { router.push({ pathname: '/deal/[id]', params: { id: deal.id } }); }}
+                  accessibilityRole="button"
+                >
+                  <View style={[styles.closingBadge, { backgroundColor: badgeColor }]}>
+                    <Text style={styles.closingBadgeText}>{daysRemaining}d</Text>
+                  </View>
+                  <Text style={styles.closingTitle} numberOfLines={2}>{deal.title}</Text>
+                  <Text style={styles.closingContact} numberOfLines={1}>{contact}</Text>
+                  {deal.value != null ? (
+                    <Text style={styles.closingValue}>{formatCurrency(Number(deal.value))}</Text>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <Text style={styles.emptyText}>No deals closing this week</Text>
         )}
       </View>
 
@@ -688,6 +771,57 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb',
     borderRadius: 12,
     marginBottom: 8,
+  },
+  closingSkeleton: {
+    height: 116,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 12,
+  },
+  closingScroll: {
+    gap: 10,
+    paddingRight: 16,
+  },
+  closingCard: {
+    width: 180,
+    minHeight: 116,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#d1fae5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  closingBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 8,
+  },
+  closingBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  closingTitle: {
+    color: '#065f46',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  closingContact: {
+    color: '#6b7280',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  closingValue: {
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 8,
   },
   outlineButton: {
     borderWidth: 1.5,

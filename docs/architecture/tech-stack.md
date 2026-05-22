@@ -43,7 +43,7 @@ Every technology was evaluated against:
 | **Fastify** | REST API framework — faster than Express, built-in schema validation hooks, WebSocket-compatible |
 | **Zod** | Runtime validation + TypeScript schema inference; schemas shared between mobile client and backend |
 | **Prisma ORM** | Type-safe DB queries + migrations; strong Supabase PostgreSQL integration |
-| **Twilio SDK** | Outbound SMS for Call & Messaging |
+| **SMS.ru HTTP API** | Outbound SMS for Call & Messaging in the Russian market |
 
 ### Key Backend Decisions
 
@@ -87,7 +87,7 @@ The original plan (self-managed PostgreSQL + Redis + custom JWT + PgBouncer + So
 | Technology | Purpose |
 |-----------|---------|
 | **Expo Push Notifications** | Native push to iOS (APNS) and Android (FCM) via a single Expo API — no separate FCM/APNS credentials needed during development |
-| **Twilio** | Outbound SMS for Call & Messaging; inbound SMS via Twilio webhook to Fastify endpoint |
+| **SMS.ru** | Outbound SMS for Call & Messaging; send operations stay server-side behind the Fastify API |
 
 ---
 

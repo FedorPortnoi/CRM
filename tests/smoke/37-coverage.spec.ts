@@ -39,6 +39,24 @@ async function createDeal(request: APIRequestContext, token: string, contactId: 
   return ((await res.json()) as { data: { id: string; stage_id: string } }).data;
 }
 
+async function createPipelineWithStage(request: APIRequestContext, token: string, suffix: string): Promise<{ pipelineId: string; stageId: string }> {
+  const pipelineRes = await request.post('/api/v1/deals/pipelines', {
+    headers: authHeaders(token),
+    data: { name: `WF37 Pipeline ${suffix}` },
+  });
+  expect(pipelineRes.status()).toBe(201);
+  const pipelineId = ((await pipelineRes.json()) as { data: { id: string } }).data.id;
+
+  const stageRes = await request.post(`/api/v1/deals/pipelines/${pipelineId}/stages`, {
+    headers: authHeaders(token),
+    data: { name: `WF37 Stage ${suffix}`, position: 0, is_won_stage: false, is_lost_stage: false },
+  });
+  expect(stageRes.status()).toBe(201);
+  const stageId = ((await stageRes.json()) as { data: { id: string } }).data.id;
+
+  return { pipelineId, stageId };
+}
+
 async function createTask(request: APIRequestContext, token: string, userId: string, title: string, contactId?: string): Promise<{ id: string }> {
   const res = await request.post('/api/v1/tasks', {
     headers: authHeaders(token),
@@ -164,6 +182,117 @@ test('workflow 37: update_deal_stage action moves deal to target stage after dea
   expect(getRes.status()).toBe(200);
   const deal = (await getRes.json() as { data: { id: string; stage_id: string } }).data;
   expect(deal.stage_id).toBe(stageB);
+});
+
+test('workflow 37: create rejects update_deal_stage stage from another org', async ({ request }) => {
+  const orgA = await registerOrg(request, 'wf37-stage-org-a');
+  const orgB = await registerOrg(request, 'wf37-stage-org-b');
+  const plB = await getPipeline(request, orgB.token);
+
+  const wfRes = await request.post('/api/v1/workflows', {
+    headers: authHeaders(orgA.token),
+    data: {
+      name: 'CrossOrgStage37',
+      trigger: 'deal_created',
+      actions: [{ type: 'update_deal_stage', stage_id: plB.stages[0]!.id }],
+    },
+  });
+
+  expect(wfRes.status()).toBe(400);
+  const body = (await wfRes.json()) as { error: { code: string } };
+  expect(body.error.code).toBe('INVALID_WORKFLOW_ACTION');
+});
+
+test('workflow 37: patch rejects update_deal_stage stage from another org', async ({ request }) => {
+  const orgA = await registerOrg(request, 'wf37-patch-stage-a');
+  const orgB = await registerOrg(request, 'wf37-patch-stage-b');
+  const plB = await getPipeline(request, orgB.token);
+
+  const createRes = await request.post('/api/v1/workflows', {
+    headers: authHeaders(orgA.token),
+    data: { name: 'PatchStage37', trigger: 'contact_created', actions: [{ type: 'create_task', title: 'Valid task' }] },
+  });
+  expect(createRes.status()).toBe(201);
+  const workflowId = ((await createRes.json()) as { data: { id: string } }).data.id;
+
+  const patchRes = await request.patch(`/api/v1/workflows/${workflowId}`, {
+    headers: authHeaders(orgA.token),
+    data: { actions: [{ type: 'update_deal_stage', stage_id: plB.stages[0]!.id }] },
+  });
+
+  expect(patchRes.status()).toBe(400);
+  const body = (await patchRes.json()) as { error: { code: string } };
+  expect(body.error.code).toBe('INVALID_WORKFLOW_ACTION');
+});
+
+test('workflow 37: create rejects create_task assignee from another org', async ({ request }) => {
+  const orgA = await registerOrg(request, 'wf37-assignee-a');
+  const orgB = await registerOrg(request, 'wf37-assignee-b');
+
+  const wfRes = await request.post('/api/v1/workflows', {
+    headers: authHeaders(orgA.token),
+    data: {
+      name: 'CrossOrgAssignee37',
+      trigger: 'contact_created',
+      actions: [{ type: 'create_task', title: 'Bad assignee', assigned_to: orgB.userId }],
+    },
+  });
+
+  expect(wfRes.status()).toBe(400);
+  const body = (await wfRes.json()) as { error: { code: string } };
+  expect(body.error.code).toBe('INVALID_WORKFLOW_ACTION');
+});
+
+test('workflow 37: patch rejects create_task assignee from another org', async ({ request }) => {
+  const orgA = await registerOrg(request, 'wf37-patch-assignee-a');
+  const orgB = await registerOrg(request, 'wf37-patch-assignee-b');
+
+  const createRes = await request.post('/api/v1/workflows', {
+    headers: authHeaders(orgA.token),
+    data: { name: 'PatchAssignee37', trigger: 'contact_created', actions: [{ type: 'create_task', title: 'Valid task' }] },
+  });
+  expect(createRes.status()).toBe(201);
+  const workflowId = ((await createRes.json()) as { data: { id: string } }).data.id;
+
+  const patchRes = await request.patch(`/api/v1/workflows/${workflowId}`, {
+    headers: authHeaders(orgA.token),
+    data: { actions: [{ type: 'create_task', title: 'Bad assignee', assigned_to: orgB.userId }] },
+  });
+
+  expect(patchRes.status()).toBe(400);
+  const body = (await patchRes.json()) as { error: { code: string } };
+  expect(body.error.code).toBe('INVALID_WORKFLOW_ACTION');
+});
+
+test('workflow 37: update_deal_stage execution rejects stage outside deal pipeline', async ({ request }) => {
+  const org = await registerOrg(request, 'wf37-stage-exec');
+  const pl = await getPipeline(request, org.token);
+  const originalStage = pl.stages[0]!.id;
+  const otherPipeline = await createPipelineWithStage(request, org.token, 'Other');
+
+  const wfRes = await request.post('/api/v1/workflows', {
+    headers: authHeaders(org.token),
+    data: {
+      name: 'WrongPipelineStage37',
+      trigger: 'deal_created',
+      actions: [{ type: 'update_deal_stage', stage_id: otherPipeline.stageId }],
+    },
+  });
+  expect(wfRes.status()).toBe(201);
+  const workflowId = ((await wfRes.json()) as { data: { id: string } }).data.id;
+
+  const contact = await createContact(request, org.token, 'WrongPipelineTarget');
+  const deal = await createDeal(request, org.token, contact.id, pl.id, originalStage);
+
+  const getRes = await request.get(`/api/v1/deals/${deal.id}`, { headers: authHeaders(org.token) });
+  expect(getRes.status()).toBe(200);
+  const storedDeal = (await getRes.json() as { data: { stage_id: string } }).data;
+  expect(storedDeal.stage_id).toBe(originalStage);
+
+  const runsRes = await request.get(`/api/v1/workflows/${workflowId}/runs`, { headers: authHeaders(org.token) });
+  expect(runsRes.status()).toBe(200);
+  const runs = (await runsRes.json() as WorkflowRunList).data;
+  expect(runs[0]?.status).toBe('failed');
 });
 
 // ─── Group 2: WorkflowRun record ─────────────────────────────────────────────

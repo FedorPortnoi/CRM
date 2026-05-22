@@ -8,6 +8,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { db } from '../../services/db';
+import { isSmsSendingEnabled, sendSms as sendSmsViaSmsRu } from '../../services/sms';
 
 // --- Local request types ---
 
@@ -34,6 +35,13 @@ type SendInAppBody = {
   body: string;
 };
 
+type CreateMessageBody = {
+  contact_id: string;
+  channel: MessageChannel;
+  direction?: MessageDirection;
+  body: string;
+};
+
 type SmsWebhookBody = Record<string, unknown> & {
   api_id?: unknown;
   from?: unknown;
@@ -46,20 +54,6 @@ type SmsWebhookBody = Record<string, unknown> & {
   Status?: unknown;
   org_id?: unknown;
   organization_id?: unknown;
-};
-
-type SmsRuRecipientResult = {
-  status?: string;
-  status_code?: number;
-  sms_id?: string;
-  status_text?: string;
-};
-
-type SmsRuSendResponse = {
-  status?: string;
-  status_code?: number;
-  status_text?: string;
-  sms?: Record<string, SmsRuRecipientResult>;
 };
 
 type WebSocketClientLike = {
@@ -120,15 +114,6 @@ async function contactBelongsToOrg(contactId: string, orgId: string): Promise<bo
   return false;
 }
 
-function sendServiceNotConfigured(reply: FastifyReply, variableName: string): void {
-  reply.status(503).send({
-    error: {
-      code: 'SERVICE_NOT_CONFIGURED',
-      message: `${variableName} is not configured`,
-    },
-  });
-}
-
 function toRequiredString(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
@@ -152,15 +137,6 @@ function toSmsWebhookBody(value: unknown): SmsWebhookBody {
 
 function getSmsRuApiId(): string | undefined {
   return toRequiredString(process.env.SMSRU_API_ID);
-}
-
-function getSmsRuSender(): string {
-  return toRequiredString(process.env.SMSRU_SENDER) ?? 'CRM';
-}
-
-function getSmsRuError(body: SmsRuSendResponse, to: string): string {
-  const recipient = body.sms?.[to];
-  return recipient?.status_text ?? body.status_text ?? 'SMS.ru send failed';
 }
 
 function isUuid(value: string): boolean {
@@ -201,7 +177,7 @@ function buildSmsInboundCaptureRawData(
   };
 }
 
-async function findSmsWebhookContact(from: string, orgId: string | undefined): Promise<SmsWebhookContact | null> {
+async function findSmsWebhookContact(from: string, orgId: string): Promise<SmsWebhookContact | null> {
   const phoneWhere = {
     OR: [
       { phone: from },
@@ -209,23 +185,13 @@ async function findSmsWebhookContact(from: string, orgId: string | undefined): P
     ],
   };
 
-  if (orgId) {
-    return db.contact.findFirst({
-      where: {
-        organization_id: orgId,
-        ...phoneWhere,
-      },
-      select: { id: true, organization_id: true },
-    });
-  }
-
-  const contacts = await db.contact.findMany({
-    where: phoneWhere,
+  return db.contact.findFirst({
+    where: {
+      organization_id: orgId,
+      ...phoneWhere,
+    },
     select: { id: true, organization_id: true },
-    take: 2,
   });
-
-  return contacts.length === 1 ? contacts[0] : null;
 }
 
 async function orgExists(orgId: string): Promise<boolean> {
@@ -235,31 +201,6 @@ async function orgExists(orgId: string): Promise<boolean> {
   });
 
   return Boolean(org);
-}
-
-async function sendViaSmsRu(apiId: string, to: string, msg: string): Promise<SmsRuSendResponse> {
-  const params = new URLSearchParams({
-    api_id: apiId,
-    to,
-    msg,
-    from: getSmsRuSender(),
-    json: '1',
-  });
-
-  const response = await fetch('https://sms.ru/sms/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params,
-  });
-
-  const body = await response.json() as SmsRuSendResponse;
-  const recipient = body.sms?.[to];
-
-  if (!response.ok || body.status !== 'OK' || body.status_code !== 100 || recipient?.status !== 'OK') {
-    throw new Error(getSmsRuError(body, to));
-  }
-
-  return body;
 }
 
 function broadcastMessageIfAvailable(request: FastifyRequest, message: unknown): void {
@@ -282,6 +223,39 @@ function broadcastMessageIfAvailable(request: FastifyRequest, message: unknown):
       // Broadcast is best-effort; webhook processing should not fail because a socket closed.
     }
   }
+}
+
+function sendSmsWebhookReceived(reply: FastifyReply): void {
+  reply.status(200).send({ data: { received: true }, meta: {} });
+}
+
+function rejectUnauthorizedSmsRuWebhook(
+  reply: FastifyReply,
+  configuredApiId: string | undefined,
+  apiId: string | undefined,
+): boolean {
+  if (!configuredApiId) {
+    reply.status(503).send({
+      error: { code: 'SERVICE_NOT_CONFIGURED', message: 'SMSRU_API_ID is not configured' },
+    });
+    return true;
+  }
+
+  if (!apiId) {
+    reply.status(401).send({
+      error: { code: 'SMSRU_API_ID_REQUIRED', message: 'SMS.ru api_id is required' },
+    });
+    return true;
+  }
+
+  if (apiId !== configuredApiId) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Invalid SMS.ru api_id' },
+    });
+    return true;
+  }
+
+  return false;
 }
 
 // --- Handlers ---
@@ -336,6 +310,55 @@ async function getConversation(
   reply.send({ data: messages, meta: {} });
 }
 
+async function getById(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const { id } = request.params as IdParams;
+
+  const message = await db.message.findFirst({
+    where: { id, organization_id: request.user.org_id },
+  });
+
+  if (!message) {
+    reply.status(404).send({ error: { code: 'MESSAGE_NOT_FOUND', message: 'Message not found' } });
+    return;
+  }
+
+  reply.send({ data: message, meta: {} });
+}
+
+async function create(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const body = request.body as CreateMessageBody;
+  const organization_id = request.user.org_id;
+  const ownsContact = await contactBelongsToOrg(body.contact_id, organization_id);
+  if (!ownsContact) {
+    reply.status(404).send({ error: { code: 'CONTACT_NOT_FOUND', message: 'Contact not found' } });
+    return;
+  }
+
+  const message = await db.message.create({
+    data: {
+      organization_id,
+      contact_id: body.contact_id,
+      user_id: request.user.sub,
+      direction: body.direction ?? MessageDirection.outbound,
+      channel: body.channel,
+      body: body.body,
+      status: body.channel === MessageChannel.sms
+        ? MessageStatus.pending
+        : body.channel === MessageChannel.call
+          ? MessageStatus.delivered
+          : MessageStatus.sent,
+    },
+  });
+
+  reply.status(201).send({ data: message, meta: {} });
+}
+
 async function sendSms(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -375,22 +398,42 @@ async function sendSms(
     return;
   }
 
+  if (!isSmsSendingEnabled()) {
+    reply.status(201).send({
+      data: message,
+      meta: { delivery: 'queued_without_smsru_config', reason: 'smsru_send_disabled' },
+    });
+    return;
+  }
+
   if (!to) {
     const failed = await db.message.update({
-      where: { id: message.id },
+      where: { id: message.id, organization_id },
       data: { status: MessageStatus.failed, error_message: 'Contact has no phone number' },
     });
-    reply.status(422).send({ error: { code: 'CONTACT_PHONE_MISSING', message: 'Contact has no phone number' }, data: failed });
+    void failed;
+    reply.status(422).send({ error: { code: 'CONTACT_PHONE_MISSING', message: 'Contact has no phone number' } });
     return;
   }
 
   try {
-    const sent = await sendViaSmsRu(apiId, to, body);
-    const smsruId = sent.sms?.[to]?.sms_id;
+    const result = await sendSmsViaSmsRu(to, body);
+    if (!result.success) {
+      const failed = await db.message.update({
+        where: { id: message.id, organization_id },
+        data: {
+          status: MessageStatus.failed,
+          error_message: result.errorCode ?? 'SMS.ru send failed',
+        },
+      });
+      reply.status(201).send({ data: failed, meta: { delivery: 'smsru_failed' } });
+      return;
+    }
+
     const updated = await db.message.update({
-      where: { id: message.id },
+      where: { id: message.id, organization_id },
       data: {
-        twilio_sid: smsruId,
+        twilio_sid: result.smsId,
         status: MessageStatus.sent,
       },
     });
@@ -398,7 +441,7 @@ async function sendSms(
     reply.status(201).send({ data: updated, meta: { delivery: 'sent_to_smsru' } });
   } catch (error) {
     const failed = await db.message.update({
-      where: { id: message.id },
+      where: { id: message.id, organization_id },
       data: {
         status: MessageStatus.failed,
         error_message: error instanceof Error ? error.message : 'SMS.ru send failed',
@@ -484,7 +527,7 @@ async function markRead(
   }
 
   const updatedMessage = await db.message.update({
-    where: { id },
+    where: { id, organization_id: request.user.org_id },
     data: { status: MessageStatus.read, read_at: new Date() },
   });
 
@@ -505,8 +548,7 @@ async function smsruInboundWebhook(
   const orgContext = getWebhookOrgContext(body, query);
   const orgId = orgContext.orgId;
 
-  if (configuredApiId && apiId && apiId !== configuredApiId) {
-    reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Invalid SMS.ru api_id' } });
+  if (rejectUnauthorizedSmsRuWebhook(reply, configuredApiId, apiId)) {
     return;
   }
 
@@ -516,7 +558,12 @@ async function smsruInboundWebhook(
   }
 
   if (orgContext.provided && !orgId) {
-    reply.status(200).send({ received: true });
+    sendSmsWebhookReceived(reply);
+    return;
+  }
+
+  if (!orgId) {
+    sendSmsWebhookReceived(reply);
     return;
   }
 
@@ -536,7 +583,7 @@ async function smsruInboundWebhook(
     });
 
     broadcastMessageIfAvailable(request, message);
-  } else if (orgId && (await orgExists(orgId))) {
+  } else if (await orgExists(orgId)) {
     await db.pendingCapture.create({
       data: {
         org_id: orgId,
@@ -548,7 +595,7 @@ async function smsruInboundWebhook(
     });
   }
 
-  reply.status(200).send({ received: true });
+  sendSmsWebhookReceived(reply);
 }
 
 async function smsruStatusWebhook(
@@ -561,14 +608,20 @@ async function smsruStatusWebhook(
   const apiId = toRequiredString(body.api_id) ?? toRequiredString(query.api_id);
   const smsId = toRequiredString(body.SmsId) ?? toRequiredString(body.sms_id) ?? toRequiredString(query.SmsId) ?? toRequiredString(query.sms_id);
   const rawStatus = toRequiredString(body.Status) ?? toRequiredString(body.status) ?? toRequiredString(query.Status) ?? toRequiredString(query.status);
+  const orgContext = getWebhookOrgContext(body, query);
+  const orgId = orgContext.orgId;
 
-  if (configuredApiId && apiId && apiId !== configuredApiId) {
-    reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Invalid SMS.ru api_id' } });
+  if (rejectUnauthorizedSmsRuWebhook(reply, configuredApiId, apiId)) {
     return;
   }
 
   if (!smsId || !rawStatus) {
     reply.status(400).send({ error: { code: 'INVALID_WEBHOOK_PAYLOAD', message: 'SmsId and Status are required' } });
+    return;
+  }
+
+  if (!orgId) {
+    sendSmsWebhookReceived(reply);
     return;
   }
 
@@ -581,11 +634,11 @@ async function smsruStatusWebhook(
         : MessageStatus.sent;
 
   await db.message.updateMany({
-    where: { twilio_sid: smsId },
+    where: { twilio_sid: smsId, organization_id: orgId },
     data: { status },
   });
 
-  reply.status(200).send({ received: true });
+  sendSmsWebhookReceived(reply);
 }
 
 // --- Export ---
@@ -593,6 +646,8 @@ async function smsruStatusWebhook(
 export const MessagesController = {
   list,
   getConversation,
+  getById,
+  create,
   sendSms,
   sendInApp,
   logCall,

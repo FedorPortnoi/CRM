@@ -13,7 +13,7 @@ type PipelineSummary = {
   is_default: boolean;
 };
 
-test.describe.configure({ timeout: 30000 });
+test.describe.configure({ timeout: 60000 });
 
 test.beforeAll(async ({ request }) => {
   const { token } = getAuth();

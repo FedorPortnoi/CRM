@@ -185,15 +185,15 @@ test('workflow 33: POST with add_contact_note action; GET /:id confirms action t
   expect(body.data.actions.some((a) => a.type === 'add_contact_note')).toBe(true);
 });
 
-test('workflow 33: POST with update_deal_stage action (no stage_id) returns 201', async ({ request }) => {
+test('workflow 33: POST with update_deal_stage action missing stage_id returns 400', async ({ request }) => {
   const org = await registerOrg(request, 'wf33-act-stage');
   const r = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
     data: { name: 'StageAction', trigger: 'deal_stage_changed', actions: [{ type: 'update_deal_stage', config: {} }] },
   });
-  expect(r.status()).toBe(201);
-  const body = (await r.json()) as WorkflowBody;
-  expect(body.data.actions.some((a) => a.type === 'update_deal_stage')).toBe(true);
+  expect(r.status()).toBe(400);
+  const body = (await r.json()) as { error: { code: string } };
+  expect(body.error.code).toBe('INVALID_WORKFLOW_ACTION');
 });
 
 test('workflow 33: GET /:id response body.data has runs array', async ({ request }) => {

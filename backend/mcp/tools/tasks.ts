@@ -1,6 +1,7 @@
-import { Prisma, TaskStatus, TaskPriority } from '@prisma/client';
+import { Prisma, TaskStatus } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
+import { validateMcpWriteReferences } from '../validation';
 
 type TaskStatusValue = 'pending' | 'in_progress' | 'done' | 'cancelled';
 type TaskPriorityValue = 'low' | 'medium' | 'high' | 'urgent';
@@ -130,6 +131,11 @@ registerTool(
     const due_date = typeof args.due_date === 'string' ? args.due_date : undefined;
     const priority = isTaskPriority(args.priority) ? args.priority : undefined;
 
+    const referenceError = await validateMcpWriteReferences(user, { assigned_to, contact_id, deal_id });
+    if (referenceError) {
+      return referenceError;
+    }
+
     const task = await db.task.create({
       data: {
         title,
@@ -187,6 +193,13 @@ registerTool(
       updateData.due_date = args.due_date ? new Date(args.due_date) : null;
     }
     if (isTaskPriority(args.priority)) updateData.priority = args.priority;
+
+    const referenceError = await validateMcpWriteReferences(user, {
+      assigned_to: typeof args.assigned_to === 'string' ? args.assigned_to : undefined,
+    });
+    if (referenceError) {
+      return referenceError;
+    }
 
     const updated = await db.task.update({
       where: { id },

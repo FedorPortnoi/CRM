@@ -25,6 +25,8 @@ interface Task {
   title: string;
   description: string | null;
   due_date: string | null;
+  is_recurring: boolean;
+  recurrence_rule: string | null;
   contact_id?: string | null;
   contact: TaskContact | null;
   assignee: TaskAssignee;
@@ -50,14 +52,28 @@ type TaskForm = {
   due_date: string;
   description: string;
   contact_id: string;
+  is_recurring: boolean;
+  recurrence_rule: string;
 };
 
 type TaskPatch = {
   title?: string;
-  due_date?: string;
+  due_date?: string | null;
   description?: string;
-  contact_id?: string;
+  contact_id?: string | null;
+  is_recurring?: boolean;
+  recurrence_rule?: string;
 };
+
+type RecurrencePreset = 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
+
+const RECURRENCE_OPTIONS: Array<{ value: RecurrencePreset; label: string }> = [
+  { value: 'none', label: 'None' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'custom', label: 'Custom' },
+];
 
 function contactDisplayName(contact: { first_name: string; last_name: string | null }): string {
   return `${contact.first_name}${contact.last_name ? ' ' + contact.last_name : ''}`;
@@ -80,6 +96,21 @@ function toDateInputValue(dateStr: string | null): string {
   return `${year}-${month}-${day}`;
 }
 
+function recurrenceRuleFromInput(preset: RecurrencePreset, customRule: string): string | null {
+  if (preset === 'none') return null;
+  if (preset === 'custom') {
+    const trimmedRule = customRule.trim();
+    return trimmedRule !== '' ? trimmedRule : null;
+  }
+  return preset;
+}
+
+function recurrencePresetFromRule(isRecurring: boolean, rule: string | null): RecurrencePreset {
+  if (!isRecurring || !rule) return 'none';
+  if (rule === 'daily' || rule === 'weekly' || rule === 'monthly') return rule;
+  return 'custom';
+}
+
 function formatDate(dateStr: string): string {
   const date = new Date(`${dateStr}T00:00:00`);
   return date.toLocaleDateString('en-US', {
@@ -95,6 +126,8 @@ function toForm(task: Task): TaskForm {
     due_date: toDateInputValue(task.due_date),
     description: task.description ?? '',
     contact_id: task.contact_id ?? task.contact?.id ?? '',
+    is_recurring: task.is_recurring,
+    recurrence_rule: task.recurrence_rule ?? '',
   };
 }
 
@@ -113,12 +146,18 @@ function buildPatch(current: TaskForm, original: TaskForm): TaskPatch {
     patch.description = currentDescription;
   }
 
-  if (current.due_date !== '' && current.due_date !== original.due_date) {
-    patch.due_date = new Date(`${current.due_date}T00:00:00`).toISOString();
+  if (current.due_date !== original.due_date) {
+    patch.due_date =
+      current.due_date !== '' ? new Date(`${current.due_date}T00:00:00`).toISOString() : null;
   }
 
-  if (current.contact_id !== '' && current.contact_id !== original.contact_id) {
-    patch.contact_id = current.contact_id;
+  if (current.contact_id !== original.contact_id) {
+    patch.contact_id = current.contact_id !== '' ? current.contact_id : null;
+  }
+
+  if (current.is_recurring !== original.is_recurring || current.recurrence_rule !== original.recurrence_rule) {
+    patch.is_recurring = current.is_recurring;
+    patch.recurrence_rule = current.is_recurring ? current.recurrence_rule : '';
   }
 
   return patch;
@@ -142,15 +181,22 @@ export default function EditTaskScreen(): JSX.Element {
   const [apiError, setApiError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [recurrencePreset, setRecurrencePreset] = useState<RecurrencePreset>('none');
+  const [customRecurrenceRule, setCustomRecurrenceRule] = useState<string>('');
 
   const form = useMemo<TaskForm>(
-    () => ({
-      title,
-      due_date: dueDate,
-      description: notes,
-      contact_id: selectedContactId,
-    }),
-    [dueDate, notes, selectedContactId, title],
+    () => {
+      const recurrenceRule = recurrenceRuleFromInput(recurrencePreset, customRecurrenceRule);
+      return {
+        title,
+        due_date: dueDate,
+        description: notes,
+        contact_id: selectedContactId,
+        is_recurring: recurrenceRule !== null,
+        recurrence_rule: recurrenceRule ?? '',
+      };
+    },
+    [customRecurrenceRule, dueDate, notes, recurrencePreset, selectedContactId, title],
   );
 
   const loadTask = useCallback(async (): Promise<void> => {
@@ -182,6 +228,9 @@ export default function EditTaskScreen(): JSX.Element {
       setNotes(loadedForm.description);
       setSelectedContactId(loadedForm.contact_id);
       setSelectedContactName(parsedBody.data.contact !== null ? contactDisplayName(parsedBody.data.contact) : '');
+      const loadedPreset = recurrencePresetFromRule(loadedForm.is_recurring, loadedForm.recurrence_rule);
+      setRecurrencePreset(loadedPreset);
+      setCustomRecurrenceRule(loadedPreset === 'custom' ? loadedForm.recurrence_rule : '');
       setContactQuery('');
       setContactResults([]);
     } catch (err) {
@@ -372,6 +421,35 @@ export default function EditTaskScreen(): JSX.Element {
             </Modal>
 
             <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Repeat</Text>
+              <View style={styles.segmentedControl}>
+                {RECURRENCE_OPTIONS.map((option) => {
+                  const selected = recurrencePreset === option.value;
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[styles.segmentButton, selected ? styles.segmentButtonSelected : null]}
+                      onPress={() => setRecurrencePreset(option.value)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[styles.segmentText, selected ? styles.segmentTextSelected : null]}>{option.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {recurrencePreset === 'custom' ? (
+                <TextInput
+                  style={[styles.input, styles.customRuleInput]}
+                  value={customRecurrenceRule}
+                  onChangeText={setCustomRecurrenceRule}
+                  placeholder="Every 2 weeks, weekdays, first Monday..."
+                  placeholderTextColor="#6b7280"
+                  autoCapitalize="sentences"
+                />
+              ) : null}
+            </View>
+
+            <View style={styles.fieldGroup}>
               <Text style={styles.label}>Notes</Text>
               <TextInput
                 style={styles.notesInput}
@@ -478,6 +556,26 @@ const styles = StyleSheet.create({
   inputText: { color: '#111827', fontSize: 16 },
   placeholderText: { color: '#6b7280', fontSize: 16 },
   clearLink: { color: '#065f46', fontSize: 12, marginTop: 4 },
+  segmentedControl: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  segmentButton: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  segmentButtonSelected: {
+    borderColor: '#065f46',
+    backgroundColor: '#ecfdf5',
+  },
+  segmentText: { color: '#374151', fontSize: 14, fontWeight: '500' },
+  segmentTextSelected: { color: '#065f46' },
+  customRuleInput: { marginTop: 10 },
   notesInput: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,

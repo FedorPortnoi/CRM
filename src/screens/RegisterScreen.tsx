@@ -31,7 +31,7 @@ export default function RegisterScreen() {
     if (!isLoading && error === null && user !== null) {
       router.replace('/(tabs)');
     }
-  }, [user, isLoading, error]);
+  }, [user, isLoading, error, router]);
 
   const handleRegister = async () => {
     if (name.trim() === '') {

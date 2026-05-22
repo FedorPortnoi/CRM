@@ -244,6 +244,31 @@ test('GET /api/v1/calendar/sync/status returns sync state', async ({ request }) 
   expect(body.data).toMatchObject({ connected: false });
 });
 
+test('GET /api/v1/calendar/sync/yandex/auth returns auth URL or configured error envelope', async ({ request }) => {
+  const { token } = getAuth();
+  const res = await request.get('/api/v1/calendar/sync/yandex/auth', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect([200, 501]).toContain(res.status());
+  const body = await res.json();
+
+  if (res.status() === 200) {
+    expect(body.data.auth_url).toContain('https://oauth.yandex.ru/authorize');
+    expect(body.data.redirect_uri).toContain('/api/v1/calendar/sync/yandex/callback');
+    expect(body.data.auth_url).not.toContain('/google/');
+  } else {
+    expect(body.error.code).toBe('YANDEX_OAUTH_NOT_CONFIGURED');
+  }
+});
+
+test('calendar sync routes reject missing auth', async ({ request }) => {
+  const statusRes = await request.get('/api/v1/calendar/sync/status');
+  const authRes = await request.get('/api/v1/calendar/sync/yandex/auth');
+
+  expect(statusRes.status()).toBe(401);
+  expect(authRes.status()).toBe(401);
+});
+
 test('GET /api/v1/calendar/sync/google/auth returns OAuth URL when configured', async ({ request }) => {
   const { token } = getAuth();
   const res = await request.get('/api/v1/calendar/sync/google/auth', {

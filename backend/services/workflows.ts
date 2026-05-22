@@ -36,6 +36,48 @@ type WorkflowAction = {
   priority?: 'low' | 'medium' | 'high' | 'urgent';
 };
 
+type ActiveWorkflow = Awaited<ReturnType<typeof db.workflow.findMany>>[number];
+type WorkflowActionValidationError = {
+  code: 'INVALID_WORKFLOW_ACTION';
+  message: string;
+};
+
+const WORKFLOW_CACHE_TTL_MS = 30000;
+const activeWorkflowCache = new Map<string, { expiresAt: number; workflows: ActiveWorkflow[] }>();
+
+function workflowCacheKey(organizationId: string, trigger: WorkflowTrigger): string {
+  return `${organizationId}:${trigger}`;
+}
+
+export function invalidateWorkflowCache(organizationId: string): void {
+  const prefix = `${organizationId}:`;
+  for (const key of activeWorkflowCache.keys()) {
+    if (key.startsWith(prefix)) {
+      activeWorkflowCache.delete(key);
+    }
+  }
+}
+
+async function getActiveWorkflows(organizationId: string, trigger: WorkflowTrigger): Promise<ActiveWorkflow[]> {
+  const key = workflowCacheKey(organizationId, trigger);
+  const cached = activeWorkflowCache.get(key);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) {
+    return cached.workflows;
+  }
+
+  const workflows = await db.workflow.findMany({
+    where: {
+      organization_id: organizationId,
+      trigger,
+      status: WorkflowStatus.active,
+    },
+  });
+
+  activeWorkflowCache.set(key, { expiresAt: now + WORKFLOW_CACHE_TTL_MS, workflows });
+  return workflows;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? value as Record<string, unknown> : null;
 }
@@ -97,6 +139,121 @@ function dateFromOffset(days: number | undefined): Date | undefined {
   return due;
 }
 
+async function userBelongsToOrganization(userId: string, organizationId: string): Promise<boolean> {
+  const user = await db.user.findFirst({
+    where: { id: userId, organization_id: organizationId },
+    select: { id: true },
+  });
+
+  return user !== null;
+}
+
+async function resolveOrganizationUser(
+  userId: string | null | undefined,
+  organizationId: string,
+): Promise<string | null> {
+  if (!userId) return null;
+  return await userBelongsToOrganization(userId, organizationId) ? userId : null;
+}
+
+async function resolveTaskAssignee(action: WorkflowAction, context: WorkflowContext): Promise<string> {
+  if (action.assigned_to && await userBelongsToOrganization(action.assigned_to, context.organizationId)) {
+    return action.assigned_to;
+  }
+
+  const contextUserId = await resolveOrganizationUser(context.userId, context.organizationId);
+  if (contextUserId) {
+    return contextUserId;
+  }
+
+  throw new Error('Workflow task assignee does not belong to this organization');
+}
+
+async function targetStageBelongsToDealPipeline(
+  stageId: string,
+  pipelineId: string | null,
+  organizationId: string,
+): Promise<boolean> {
+  const stage = await db.pipelineStage.findFirst({
+    where: {
+      id: stageId,
+      pipeline: {
+        organization_id: organizationId,
+        ...(pipelineId ? { id: pipelineId } : {}),
+      },
+    },
+    select: { id: true },
+  });
+
+  return stage !== null;
+}
+
+export async function validateWorkflowActionsForOrganization(
+  organizationId: string,
+  rawActions: unknown,
+): Promise<WorkflowActionValidationError | null> {
+  const actions = asArray<WorkflowAction>(rawActions);
+  const stageIds = new Set<string>();
+  const assigneeIds = new Set<string>();
+
+  for (const [index, action] of actions.entries()) {
+    if (action.type === 'update_deal_stage' && !action.stage_id) {
+      return {
+        code: 'INVALID_WORKFLOW_ACTION',
+        message: `actions[${index}].stage_id is required for update_deal_stage`,
+      };
+    }
+
+    if (action.stage_id) {
+      stageIds.add(action.stage_id);
+    }
+
+    if (action.type === 'create_task' && action.assigned_to) {
+      assigneeIds.add(action.assigned_to);
+    }
+  }
+
+  if (stageIds.size > 0) {
+    const stages = await db.pipelineStage.findMany({
+      where: {
+        id: { in: [...stageIds] },
+        pipeline: { organization_id: organizationId },
+      },
+      select: { id: true },
+    });
+    const validStageIds = new Set(stages.map((stage) => stage.id));
+    const invalidStageId = [...stageIds].find((stageId) => !validStageIds.has(stageId));
+
+    if (invalidStageId) {
+      return {
+        code: 'INVALID_WORKFLOW_ACTION',
+        message: `Workflow stage ${invalidStageId} does not belong to this organization`,
+      };
+    }
+  }
+
+  if (assigneeIds.size > 0) {
+    const users = await db.user.findMany({
+      where: {
+        id: { in: [...assigneeIds] },
+        organization_id: organizationId,
+      },
+      select: { id: true },
+    });
+    const validAssigneeIds = new Set(users.map((user) => user.id));
+    const invalidAssigneeId = [...assigneeIds].find((assigneeId) => !validAssigneeIds.has(assigneeId));
+
+    if (invalidAssigneeId) {
+      return {
+        code: 'INVALID_WORKFLOW_ACTION',
+        message: `Workflow assignee ${invalidAssigneeId} does not belong to this organization`,
+      };
+    }
+  }
+
+  return null;
+}
+
 async function executeAction(
   action: WorkflowAction,
   context: WorkflowContext,
@@ -115,8 +272,8 @@ async function executeAction(
         title: interpolate(action.title ?? 'Follow up', record),
         description: action.body ? interpolate(action.body, record) : undefined,
         contact_id: contactId,
-        assigned_to: action.assigned_to ?? context.userId ?? '',
-        created_by: context.userId ?? undefined,
+        assigned_to: await resolveTaskAssignee(action, context),
+        created_by: await resolveOrganizationUser(context.userId, context.organizationId) ?? undefined,
         due_date: dateFromOffset(action.due_in_days),
         priority: (action.priority ?? 'medium') as TaskPriority,
         status: TaskStatus.pending,
@@ -152,6 +309,23 @@ async function executeAction(
     const dealId = typeof record.id === 'string' ? record.id : undefined;
     if (!dealId || !action.stage_id) return;
 
+    const deal = await db.deal.findFirst({
+      where: { id: dealId, organization_id: context.organizationId },
+      select: { id: true, pipeline_id: true },
+    });
+
+    if (!deal) return;
+
+    const stageMatchesDeal = await targetStageBelongsToDealPipeline(
+      action.stage_id,
+      deal.pipeline_id,
+      context.organizationId,
+    );
+
+    if (!stageMatchesDeal) {
+      throw new Error('Workflow target stage does not belong to this deal pipeline');
+    }
+
     await db.deal.updateMany({
       where: { id: dealId, organization_id: context.organizationId },
       data: { stage_id: action.stage_id },
@@ -160,13 +334,7 @@ async function executeAction(
 }
 
 export async function evaluateWorkflows(context: WorkflowContext): Promise<void> {
-  const workflows = await db.workflow.findMany({
-    where: {
-      organization_id: context.organizationId,
-      trigger: context.trigger,
-      status: WorkflowStatus.active,
-    },
-  });
+  const workflows = await getActiveWorkflows(context.organizationId, context.trigger);
 
   for (const workflow of workflows) {
     try {

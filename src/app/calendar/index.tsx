@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -42,6 +43,23 @@ type CalendarEvent = {
 
 type CalendarResponse = {
   data: CalendarEvent[];
+};
+
+type CalendarSyncStatus = {
+  connected: boolean;
+  yandex_username: string | null;
+  yandex_calendar_slug: string | null;
+  expires_at: string | null;
+};
+
+type CalendarSyncStatusResponse = {
+  data: CalendarSyncStatus;
+};
+
+type YandexAuthResponse = {
+  data: {
+    auth_url: string;
+  };
 };
 
 type AgendaSection = {
@@ -101,6 +119,15 @@ function statusColor(status: CalendarEventStatus): string {
   return '#6366f1';
 }
 
+async function readApiError(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: { message?: string }; message?: string };
+    return body.error?.message ?? body.message ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function buildSections(events: CalendarEvent[]): AgendaSection[] {
   const sectionsByDate = new Map<string, CalendarEvent[]>();
   events.forEach((event) => {
@@ -151,6 +178,34 @@ export default function CalendarAgendaScreen(): JSX.Element {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<CalendarSyncStatus | null>(null);
+  const [isSyncLoading, setIsSyncLoading] = useState<boolean>(true);
+  const [syncAction, setSyncAction] = useState<'connect' | 'disconnect' | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const fetchSyncStatus = useCallback(async (): Promise<void> => {
+    if (!token) return;
+    setIsSyncLoading(true);
+    setSyncError(null);
+
+    try {
+      const res = await fetch(`${API_URL}/calendar/sync/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        throw new Error(await readApiError(res, `Sync status failed with status ${res.status}`));
+      }
+
+      const body = (await res.json()) as CalendarSyncStatusResponse;
+      setSyncStatus(body.data);
+    } catch (e: unknown) {
+      setSyncError(e instanceof Error ? e.message : t('errors.serverError'));
+    } finally {
+      setIsSyncLoading(false);
+    }
+  }, [token, t]);
 
   const fetchEvents = useCallback(
     async (refreshing: boolean): Promise<void> => {
@@ -191,11 +246,75 @@ export default function CalendarAgendaScreen(): JSX.Element {
     void fetchEvents(false);
   }, [fetchEvents]);
 
+  useEffect(() => {
+    void fetchSyncStatus();
+  }, [fetchSyncStatus]);
+
   const sections = useMemo(() => buildSections(events), [events]);
 
   const handleRetry = useCallback((): void => {
     void fetchEvents(false);
   }, [fetchEvents]);
+
+  const handleRefresh = useCallback((): void => {
+    void fetchEvents(true);
+    void fetchSyncStatus();
+  }, [fetchEvents, fetchSyncStatus]);
+
+  const handleConnectYandex = async (): Promise<void> => {
+    if (!token) return;
+    setSyncAction('connect');
+    setSyncError(null);
+    setSyncMessage(null);
+
+    try {
+      const res = await fetch(`${API_URL}/calendar/sync/yandex/auth`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        throw new Error(await readApiError(res, `Yandex connection failed with status ${res.status}`));
+      }
+
+      const body = (await res.json()) as YandexAuthResponse;
+      await Linking.openURL(body.data.auth_url);
+      setSyncMessage('Yandex authorization opened. Refresh status after completing sign-in.');
+    } catch (e: unknown) {
+      setSyncError(e instanceof Error ? e.message : t('errors.serverError'));
+    } finally {
+      setSyncAction(null);
+    }
+  };
+
+  const handleDisconnectYandex = async (): Promise<void> => {
+    if (!token) return;
+    setSyncAction('disconnect');
+    setSyncError(null);
+    setSyncMessage(null);
+
+    try {
+      const res = await fetch(`${API_URL}/calendar/sync/yandex`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        throw new Error(await readApiError(res, `Yandex disconnect failed with status ${res.status}`));
+      }
+
+      setSyncStatus({
+        connected: false,
+        yandex_username: null,
+        yandex_calendar_slug: null,
+        expires_at: null,
+      });
+      setSyncMessage('Yandex Calendar disconnected.');
+    } catch (e: unknown) {
+      setSyncError(e instanceof Error ? e.message : t('errors.serverError'));
+    } finally {
+      setSyncAction(null);
+    }
+  };
 
   return (
     <>
@@ -221,9 +340,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
-            onRefresh={() => {
-              void fetchEvents(true);
-            }}
+            onRefresh={handleRefresh}
             colors={['#065f46']}
             tintColor="#065f46"
           />
@@ -241,6 +358,86 @@ export default function CalendarAgendaScreen(): JSX.Element {
           >
             <Text style={styles.newButtonText}>{t('calendar.newEvent')}</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.syncCard}>
+          <View style={styles.syncHeader}>
+            <View style={styles.rowMain}>
+              <Text style={styles.syncTitle}>Yandex Calendar</Text>
+              <Text style={styles.syncSubtitle}>
+                {syncStatus?.connected
+                  ? `Connected${syncStatus.yandex_username ? ` as ${syncStatus.yandex_username}` : ''}`
+                  : 'Connect Yandex to sync new and updated CRM events.'}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.syncBadge,
+                syncStatus?.connected ? styles.syncBadgeConnected : styles.syncBadgeDisconnected,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.syncBadgeText,
+                  syncStatus?.connected
+                    ? styles.syncBadgeTextConnected
+                    : styles.syncBadgeTextDisconnected,
+                ]}
+              >
+                {syncStatus?.connected ? 'Connected' : 'Off'}
+              </Text>
+            </View>
+          </View>
+          {isSyncLoading ? (
+            <View style={styles.syncInline}>
+              <ActivityIndicator color="#065f46" size="small" />
+              <Text style={styles.syncInlineText}>Checking sync...</Text>
+            </View>
+          ) : (
+            <>
+              {syncStatus?.connected && syncStatus.yandex_calendar_slug ? (
+                <Text style={styles.syncMeta}>Calendar: {syncStatus.yandex_calendar_slug}</Text>
+              ) : null}
+              {syncMessage ? <Text style={styles.syncSuccess}>{syncMessage}</Text> : null}
+              {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
+              <View style={styles.syncActions}>
+                {syncStatus?.connected ? (
+                  <TouchableOpacity
+                    style={[styles.syncSecondaryButton, syncAction !== null && styles.syncButtonDisabled]}
+                    onPress={() => { void handleDisconnectYandex(); }}
+                    disabled={syncAction !== null}
+                    accessibilityRole="button"
+                  >
+                    {syncAction === 'disconnect' ? (
+                      <ActivityIndicator color="#065f46" size="small" />
+                    ) : (
+                      <Text style={styles.syncSecondaryText}>Disconnect</Text>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.syncPrimaryButton, syncAction !== null && styles.syncButtonDisabled]}
+                    onPress={() => { void handleConnectYandex(); }}
+                    disabled={syncAction !== null}
+                    accessibilityRole="button"
+                  >
+                    {syncAction === 'connect' ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={styles.syncPrimaryText}>Connect</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={styles.syncGhostButton}
+                  onPress={() => { void fetchSyncStatus(); }}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.syncGhostText}>Refresh</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
 
         {isLoading ? (
@@ -362,6 +559,126 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  rowMain: {
+    flex: 1,
+  },
+  syncCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 14,
+    marginBottom: 18,
+  },
+  syncHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  syncTitle: {
+    fontSize: 15,
+    color: '#111827',
+    fontWeight: '700',
+  },
+  syncSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    lineHeight: 17,
+    marginTop: 3,
+  },
+  syncBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  syncBadgeConnected: {
+    backgroundColor: '#f0fdf4',
+  },
+  syncBadgeDisconnected: {
+    backgroundColor: '#f3f4f6',
+  },
+  syncBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  syncBadgeTextConnected: {
+    color: '#065f46',
+  },
+  syncBadgeTextDisconnected: {
+    color: '#6b7280',
+  },
+  syncInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  syncInlineText: {
+    color: '#6b7280',
+    fontSize: 12,
+  },
+  syncMeta: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 10,
+  },
+  syncSuccess: {
+    fontSize: 12,
+    color: '#065f46',
+    marginTop: 10,
+  },
+  syncError: {
+    fontSize: 12,
+    color: '#ef4444',
+    marginTop: 10,
+  },
+  syncActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  syncPrimaryButton: {
+    flex: 1,
+    backgroundColor: '#065f46',
+    borderRadius: 10,
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  syncPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  syncSecondaryButton: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#065f46',
+  },
+  syncSecondaryText: {
+    color: '#065f46',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  syncGhostButton: {
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  syncGhostText: {
+    color: '#065f46',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  syncButtonDisabled: {
+    opacity: 0.65,
   },
   loadingWrap: {
     gap: 10,

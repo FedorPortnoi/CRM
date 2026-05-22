@@ -1,6 +1,7 @@
 import { Prisma, DealStatus } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
+import { validateMcpWriteReferences } from '../validation';
 
 type DealStatusValue = 'open' | 'won' | 'lost' | 'archived';
 
@@ -138,6 +139,11 @@ registerTool(
       return { error: { code: 'STAGE_PIPELINE_MISMATCH', message: 'Stage does not belong to the specified pipeline' } };
     }
 
+    const referenceError = await validateMcpWriteReferences(user, { assigned_to });
+    if (referenceError) {
+      return referenceError;
+    }
+
     const deal = await db.deal.create({
       data: {
         title,
@@ -199,6 +205,13 @@ registerTool(
     if (typeof args.probability === 'number') updateData.probability = args.probability;
     if (typeof args.source === 'string') updateData.source = args.source;
     if (typeof args.assigned_to === 'string') updateData.assigned_to = args.assigned_to;
+
+    const referenceError = await validateMcpWriteReferences(user, {
+      assigned_to: typeof args.assigned_to === 'string' ? args.assigned_to : undefined,
+    });
+    if (referenceError) {
+      return referenceError;
+    }
 
     const updated = await db.deal.update({
       where: { id },

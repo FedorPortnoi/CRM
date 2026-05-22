@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
-import { sendOrQueueMutation } from '../../utils/offlineMutation';
+import { enqueue } from '../../utils/offlineQueue';
 
 interface CreateContactResponse {
   data: { id: string };
@@ -25,9 +26,9 @@ function firstRouteParam(value: RouteParamValue): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-async function matchCaptureToContact(captureId: string, contactId: string, authToken: string): Promise<void> {
+async function matchCaptureToContact(captureId: string, contactId: string, authToken: string): Promise<boolean> {
   try {
-    await fetch(`${API_URL}/captures/${captureId}/match`, {
+    const response = await fetch(`${API_URL}/captures/${captureId}/match`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${authToken}`,
@@ -35,9 +36,37 @@ async function matchCaptureToContact(captureId: string, contactId: string, authT
       },
       body: JSON.stringify({ contact_id: contactId }),
     });
+
+    return response.ok || response.status === 404 || response.status === 422;
   } catch {
-    // Matching the capture is best-effort after contact creation.
+    return false;
   }
+}
+
+async function queueCaptureMatch(captureId: string, contactId: string): Promise<void> {
+  await enqueue({
+    url: `${API_URL}/captures/${captureId}/match`,
+    method: 'POST',
+    body: JSON.stringify({ contact_id: contactId }),
+  });
+}
+
+async function queueContactCreation(
+  body: Record<string, string>,
+  captureId: string | null,
+): Promise<void> {
+  await enqueue({
+    url: `${API_URL}/contacts`,
+    method: 'POST',
+    body: JSON.stringify(body),
+    followUp: captureId
+      ? {
+          kind: 'matchCaptureToCreatedContact',
+          url: `${API_URL}/captures/${captureId}/match`,
+          method: 'POST',
+        }
+      : undefined,
+  });
 }
 
 export default function NewContactScreen(): JSX.Element {
@@ -62,6 +91,11 @@ export default function NewContactScreen(): JSX.Element {
       return;
     }
     setShowFirstNameError(false);
+    if (!token) {
+      setApiError(t('errors.unauthorized'));
+      return;
+    }
+
     setIsSubmitting(true);
 
     const body: Record<string, string> = { first_name: firstName.trim() };
@@ -72,24 +106,39 @@ export default function NewContactScreen(): JSX.Element {
     if (notes.trim() !== '') body.notes = notes.trim();
 
     try {
-      const result = await sendOrQueueMutation({
-        url: `${API_URL}/contacts`,
-        method: 'POST',
-        token: token ?? '',
-        body,
-      });
+      const netState = await NetInfo.fetch();
+      const isOnline = netState.isConnected === true && netState.isInternetReachable !== false;
 
-      if (result.queued) {
+      if (!isOnline) {
+        await queueContactCreation(body, captureId);
         router.replace('/(tabs)/contacts');
         return;
       }
 
-      const response = result.response;
+      let response: Response;
+      try {
+        response = await fetch(`${API_URL}/contacts`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        await queueContactCreation(body, captureId);
+        router.replace('/(tabs)/contacts');
+        return;
+      }
+
       if (response.ok) {
         const responseBody = (await response.json()) as CreateContactResponse;
         const newContactId = responseBody.data.id;
-        if (captureId && token) {
-          await matchCaptureToContact(captureId, newContactId, token);
+        if (captureId) {
+          const matched = await matchCaptureToContact(captureId, newContactId, token);
+          if (!matched) {
+            await queueCaptureMatch(captureId, newContactId);
+          }
         }
         router.replace({ pathname: '/contact/[id]', params: { id: newContactId } });
       } else {

@@ -23,6 +23,8 @@ interface Task {
   status: 'pending' | 'in_progress' | 'done' | 'cancelled';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   due_date: string | null;
+  is_recurring: boolean;
+  recurrence_rule: string | null;
   assignee: TaskAssignee;
   contact: TaskContact | null;
 }
@@ -54,6 +56,14 @@ function statusBadgeColor(status: string): string {
   if (status === 'in_progress') return '#10b981';
   if (status === 'pending') return '#E8A000';
   return '#9ca3af';
+}
+
+function formatRecurrence(isRecurring: boolean, rule: string | null): string {
+  if (!isRecurring || !rule) return 'None';
+  if (rule === 'daily') return 'Daily';
+  if (rule === 'weekly') return 'Weekly';
+  if (rule === 'monthly') return 'Monthly';
+  return rule;
 }
 
 interface SkeletonBoxProps {
@@ -326,6 +336,12 @@ export default function TaskDetailScreen(): JSX.Element {
               <Text style={styles.detailValue}>None</Text>
             )}
           </View>
+          <View style={[styles.detailRow, { marginTop: 12 }]}>
+            <Text style={styles.detailLabel}>Repeat</Text>
+            <Text style={task.is_recurring ? styles.recurrenceValue : styles.detailValue}>
+              {formatRecurrence(task.is_recurring, task.recurrence_rule)}
+            </Text>
+          </View>
         </View>
 
         <View style={[styles.card, { marginTop: 16 }]}>
@@ -421,6 +437,7 @@ const styles = StyleSheet.create({
   },
   detailLabel: { fontSize: 13, color: '#9ca3af', width: 72 },
   detailValue: { fontSize: 13, color: '#111827', flex: 1, textAlign: 'right' },
+  recurrenceValue: { fontSize: 13, color: '#065f46', flex: 1, textAlign: 'right', fontWeight: '600' },
   linkText: {
     fontSize: 13,
     color: '#10b981',

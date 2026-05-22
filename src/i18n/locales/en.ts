@@ -293,7 +293,7 @@ const en = {
   },
   workflows: {
     title: 'Workflows',
-    empty: 'No workflows yet â€” tap + to create your first',
+    empty: 'No workflows yet - tap + to create your first',
     enabled: 'Enabled',
     disabled: 'Disabled',
     trigger_contact_created: 'Contact created',
@@ -349,4 +349,3 @@ const en = {
 };
 
 export default en;
-

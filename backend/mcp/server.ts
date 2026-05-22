@@ -1,3 +1,4 @@
+import '../config/env';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -5,10 +6,12 @@ import {
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { createVerifier } from 'fast-jwt';
+import { getJwtSecret } from '../config/security';
+import { validateMcpPrincipal } from './validation';
 
 export type McpUser = { sub: string; org_id: string; role: string };
 
-const verify = createVerifier({ key: process.env.JWT_SECRET ?? '' });
+const verify = createVerifier({ key: getJwtSecret() });
 
 export function verifyToken(token: string): McpUser {
   const payload = verify(token) as Record<string, string>;
@@ -64,7 +67,24 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
     };
   }
 
-  const user = verifyToken(jwtToken);
+  let user: McpUser;
+  try {
+    user = verifyToken(jwtToken);
+  } catch {
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Invalid jwt_token' }) }],
+      isError: true,
+    };
+  }
+
+  const principalError = await validateMcpPrincipal(user);
+  if (principalError) {
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(principalError) }],
+      isError: true,
+    };
+  }
+
   const { jwt_token: _stripped, ...remainingArgs } = callArgs;
   void _stripped;
 

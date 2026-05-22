@@ -69,6 +69,7 @@ const ContactFilterSchema = z.object({
   assigned_to: z.string().uuid().optional(),
   tag: z.string().optional(),
   source: z.string().optional(),
+  last_contacted_before: z.string().datetime().optional(),
   page: z.coerce.number().min(1).default(1),
   per_page: z.coerce.number().min(1).max(100).default(50),
   sort: z.enum(['created_at', 'updated_at', 'first_name', 'company']).default('created_at'),

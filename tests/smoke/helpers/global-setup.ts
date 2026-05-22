@@ -1,29 +1,47 @@
-import { request } from '@playwright/test';
-import * as fs from 'fs';
-import * as path from 'path';
+import { request } from "@playwright/test";
+import * as fs from "fs";
+import { AUTH_STATE_PATH } from "./auth";
+
+process.env.SMSRU_API_ID = process.env.SMSRU_API_ID ?? "test-smsru-api-id";
+process.env.SMSRU_SEND_ENABLED = process.env.SMSRU_SEND_ENABLED ?? "false";
 
 export default async function globalSetup() {
-  const api = await request.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  fs.rmSync(AUTH_STATE_PATH, { force: true });
+
+  const runStartedAt = new Date(Date.now() - 60_000).toISOString();
+  const baseURL = (
+    process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000"
+  ).replace(/\/+$/, "");
+  const api = await request.newContext({ baseURL });
 
   const email = `smoke-${Date.now()}@test.com`;
-  const password = 'SmokeTest123!';
+  const password = "SmokeTest123!";
 
-  const res = await api.post('/api/v1/auth/', {
-    data: { email, password, name: 'Smoke Test', org_name: 'Smoke Org' },
-  });
+  try {
+    const res = await api.post("/api/v1/auth/", {
+      data: { email, password, name: "Smoke Test", org_name: "Smoke Org" },
+    });
 
-  if (!res.ok()) {
-    const body = await res.text();
-    throw new Error(`Register failed (${res.status()}): ${body}`);
+    if (!res.ok()) {
+      const body = await res.text();
+      throw new Error(`Register failed (${res.status()}): ${body}`);
+    }
+
+    const body = await res.json();
+    const { token, user } = body.data;
+
+    fs.writeFileSync(
+      AUTH_STATE_PATH,
+      JSON.stringify({
+        token,
+        userId: user.id,
+        orgId: user.org_id,
+        email,
+        runStartedAt,
+      }),
+      "utf-8",
+    );
+  } finally {
+    await api.dispose();
   }
-
-  const body = await res.json();
-  const { token, user } = body.data;
-
-  const authPath = path.resolve(__dirname, '../.auth.json');
-  fs.writeFileSync(authPath, JSON.stringify({ token, userId: user.id, email }));
-
-  await api.dispose();
 }
-process.env.SMSRU_API_ID = process.env.SMSRU_API_ID ?? 'test-smsru-api-id';
-process.env.SMSRU_SEND_ENABLED = process.env.SMSRU_SEND_ENABLED ?? 'false';

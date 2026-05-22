@@ -12,7 +12,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1A73E8"
+      "backgroundColor": "#065f46"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
@@ -22,13 +22,14 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "CRM uses your location for field visit tracking.",
         "NSContactsUsageDescription": "CRM can import contacts from your phone.",
-        "NSCameraUsageDescription": "CRM uses the camera to scan business cards."
+        "NSCameraUsageDescription": "CRM uses the camera to scan business cards.",
+        "NSPhotoLibraryUsageDescription": "CRM lets you choose business card images from your photo library."
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1A73E8"
+        "backgroundColor": "#065f46"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.fedorportnoi.crm",
@@ -52,16 +53,21 @@
       "expo-notifications",
       "expo-background-fetch",
       "expo-task-manager",
-      "expo-location"
+      "expo-location",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CRM lets you choose business card images from your photo library.",
+          "cameraPermission": "CRM uses the camera to scan business cards."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "apiUrls": {
-        "development": "http://192.168.5.249:3000/api/v1",
-        "staging": "https://staging.railway.app/api/v1",
-        "production": "https://api.railway.app/api/v1"
+        "development": "http://192.168.5.249:3000/api/v1"
       }
     }
   }

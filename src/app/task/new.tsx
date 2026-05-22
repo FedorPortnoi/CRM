@@ -27,6 +27,25 @@ interface ErrorApiResponse {
   error: { code: string; message: string };
 }
 
+type RecurrencePreset = 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
+
+const RECURRENCE_OPTIONS: Array<{ value: RecurrencePreset; label: string }> = [
+  { value: 'none', label: 'None' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'custom', label: 'Custom' },
+];
+
+function recurrenceRuleFromInput(preset: RecurrencePreset, customRule: string): string | null {
+  if (preset === 'none') return null;
+  if (preset === 'custom') {
+    const trimmedRule = customRule.trim();
+    return trimmedRule !== '' ? trimmedRule : null;
+  }
+  return preset;
+}
+
 export default function NewTaskScreen(): JSX.Element | null {
   const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
@@ -42,6 +61,8 @@ export default function NewTaskScreen(): JSX.Element | null {
   const [selectedContactName, setSelectedContactName] = useState<string>('');
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [recurrencePreset, setRecurrencePreset] = useState<RecurrencePreset>('none');
+  const [customRecurrenceRule, setCustomRecurrenceRule] = useState<string>('');
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -76,9 +97,12 @@ export default function NewTaskScreen(): JSX.Element | null {
       return;
     }
     setIsSubmitting(true);
+    const recurrenceRule = recurrenceRuleFromInput(recurrencePreset, customRecurrenceRule);
     const body = {
       title: title.trim(),
       assigned_to: user.id,
+      is_recurring: recurrenceRule !== null,
+      recurrence_rule: recurrenceRule ?? '',
       ...(dueDate !== '' ? { due_date: new Date(dueDate + 'T00:00:00').toISOString() } : {}),
       ...(selectedContactId !== '' ? { contact_id: selectedContactId } : {}),
     };
@@ -173,6 +197,33 @@ export default function NewTaskScreen(): JSX.Element | null {
         />
       </Modal>
 
+      <Text style={styles.label}>Repeat</Text>
+      <View style={styles.segmentedControl}>
+        {RECURRENCE_OPTIONS.map((option) => {
+          const selected = recurrencePreset === option.value;
+          return (
+            <TouchableOpacity
+              key={option.value}
+              style={[styles.segmentButton, selected ? styles.segmentButtonSelected : null]}
+              onPress={() => setRecurrencePreset(option.value)}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.segmentText, selected ? styles.segmentTextSelected : null]}>{option.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      {recurrencePreset === 'custom' && (
+        <TextInput
+          style={[styles.input, styles.customRuleInput]}
+          value={customRecurrenceRule}
+          onChangeText={setCustomRecurrenceRule}
+          placeholder="Every 2 weeks, weekdays, first Monday..."
+          placeholderTextColor="#6b7280"
+          autoCapitalize="sentences"
+        />
+      )}
+
       <Text style={styles.label}>Assigned To</Text>
       <View style={styles.disabledInput}>
         <Text style={styles.inputText}>{user.name}</Text>
@@ -265,6 +316,26 @@ const styles = StyleSheet.create({
   placeholderText: { color: '#6b7280', fontSize: 16 },
   fieldError: { color: '#ef4444', fontSize: 12, marginTop: 4 },
   clearLink: { color: '#065f46', fontSize: 12, marginTop: 4 },
+  segmentedControl: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  segmentButton: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  segmentButtonSelected: {
+    borderColor: '#065f46',
+    backgroundColor: '#ecfdf5',
+  },
+  segmentText: { color: '#374151', fontSize: 14, fontWeight: '500' },
+  segmentTextSelected: { color: '#065f46' },
+  customRuleInput: { marginTop: 10 },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

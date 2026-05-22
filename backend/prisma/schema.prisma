@@ -241,6 +241,9 @@ model Deal {
   probability     Int?
   status          DealStatus @default(open)
   lost_reason     String?
+  next_action      String?
+  next_action_due  DateTime?
+  stage_entered_at DateTime   @default(now())
   source          String?
   assigned_to     String?    @db.Uuid
   custom_fields   Json?

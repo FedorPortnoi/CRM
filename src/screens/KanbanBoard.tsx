@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,10 @@ import {
   Alert,
   ActivityIndicator,
   TouchableOpacity,
+  Animated,
+  PanResponder,
+  StyleSheet,
 } from 'react-native';
-import DraggableFlatList, {
-  ScaleDecorator,
-  RenderItemParams,
-} from 'react-native-draggable-flatlist';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useDealsStore } from '../store/dealsStore';
@@ -32,6 +31,9 @@ type Deal = {
   stage: { id: string; name: string; position: number } | null;
   assigned_to: string | null;
   created_by: string | null;
+  next_action: string | null;
+  next_action_due: string | null;
+  stage_entered_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -53,6 +55,137 @@ type StageWithDeals = {
   stageDeals: Deal[];
 };
 
+const STAGE_WIDTH = 280;
+const DRAG_STAGE_THRESHOLD = 72;
+
+type DealCardProps = {
+  deal: Deal;
+  stageIndex: number;
+  stages: PipelineStage[];
+  onMoveStage: (deal: Deal, stage: PipelineStage) => void;
+  onLongPress: (deal: Deal) => void;
+};
+
+function DealCard({
+  deal,
+  stageIndex,
+  stages,
+  onMoveStage,
+  onLongPress,
+}: DealCardProps): JSX.Element {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const [isDragging, setIsDragging] = React.useState(false);
+
+  const resetPosition = useCallback((): void => {
+    Animated.spring(translateX, {
+      toValue: 0,
+      useNativeDriver: true,
+    }).start(() => setIsDragging(false));
+  }, [translateX]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gestureState) =>
+          Math.abs(gestureState.dx) > 12 &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
+        onPanResponderGrant: () => {
+          setIsDragging(true);
+          translateX.setOffset(0);
+          translateX.setValue(0);
+        },
+        onPanResponderMove: (_event, gestureState) => {
+          translateX.setValue(gestureState.dx);
+        },
+        onPanResponderRelease: (_event, gestureState) => {
+          const rawDelta = Math.trunc(gestureState.dx / STAGE_WIDTH);
+          const stageDelta =
+            rawDelta !== 0
+              ? rawDelta
+              : Math.abs(gestureState.dx) >= DRAG_STAGE_THRESHOLD
+                ? Math.sign(gestureState.dx)
+                : 0;
+          const targetIndex = Math.max(
+            0,
+            Math.min(stages.length - 1, stageIndex + stageDelta),
+          );
+
+          resetPosition();
+
+          if (targetIndex !== stageIndex) {
+            onMoveStage(deal, stages[targetIndex]);
+          }
+        },
+        onPanResponderTerminate: resetPosition,
+      }),
+    [deal, onMoveStage, resetPosition, stageIndex, stages, translateX],
+  );
+
+  return (
+    <Animated.View
+      {...panResponder.panHandlers}
+      style={[
+        styles.dealCardDragWrapper,
+        isDragging ? styles.dealCardDragging : null,
+        { transform: [{ translateX }] },
+      ]}
+    >
+      <TouchableOpacity
+        onPress={() => router.push({ pathname: '/deal/[id]', params: { id: deal.id } })}
+        onLongPress={() => onLongPress(deal)}
+        disabled={isDragging}
+        style={styles.dealCard}
+        accessibilityRole="button"
+      >
+        <Text style={styles.dealTitle}>
+          {deal.title}
+        </Text>
+        {deal.next_action_due && (() => {
+          const due = new Date(deal.next_action_due);
+          const now = new Date();
+          const isOverdue = due < now;
+          const isToday = due.toDateString() === now.toDateString();
+          if (!isOverdue && !isToday) return null;
+          return (
+            <View style={[
+              styles.warningBadge,
+              isOverdue ? styles.overdueBadge : styles.todayBadge,
+            ]}>
+              <Text style={[
+                styles.warningBadgeText,
+                isOverdue ? styles.overdueText : styles.todayText,
+              ]}>
+                {deal.next_action ?? 'Next action'} - {isOverdue ? 'Overdue' : 'Today'}
+              </Text>
+            </View>
+          );
+        })()}
+        {deal.stage_entered_at && (() => {
+          const daysInStage = Math.floor(
+            (Date.now() - new Date(deal.stage_entered_at).getTime()) / (1000 * 60 * 60 * 24),
+          );
+          if (daysInStage < 14) return null;
+          return (
+            <View style={[styles.warningBadge, styles.todayBadge]}>
+              <Text style={[styles.warningBadgeText, styles.todayText]}>
+                Stale - {daysInStage}d in stage
+              </Text>
+            </View>
+          );
+        })()}
+        <Text style={styles.dealValue}>
+          {deal.value != null
+            ? '$' + deal.value.toLocaleString('en-US')
+            : '--'}
+        </Text>
+        <Text style={styles.dealContact}>
+          {deal.contact.first_name + ' ' + deal.contact.last_name}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 const KanbanBoard: React.FC = () => {
   const { t } = useTranslation();
   const deals = useDealsStore((s) => s.deals) as Deal[];
@@ -66,15 +199,9 @@ const KanbanBoard: React.FC = () => {
   const pipelinesError = usePipelinesStore((s) => s.error);
   const fetchPipelines = usePipelinesStore((s) => s.fetchPipelines);
 
-  const [localDeals, setLocalDeals] = useState<Deal[]>(deals);
-
   useEffect(() => {
     void Promise.all([fetchDeals(), fetchPipelines()]);
-  }, []);
-
-  useEffect(() => {
-    setLocalDeals(deals);
-  }, [deals]);
+  }, [fetchDeals, fetchPipelines]);
 
   const defaultPipeline = pipelines.find((p) => p.is_default) ?? pipelines[0];
 
@@ -87,15 +214,22 @@ const KanbanBoard: React.FC = () => {
     () =>
       stages.map((stage) => ({
         stage,
-        stageDeals: localDeals.filter(
+        stageDeals: deals.filter(
           (d) => d.status === 'open' && d.stage_id === stage.id,
         ),
       })),
-    [stages, localDeals],
+    [stages, deals],
   );
 
-  const handleLongPress = (deal: Deal, allStages: PipelineStage[]): void => {
-    const otherStages = allStages.filter((s) => s.id !== deal.stage_id);
+  const handleMoveStage = useCallback(
+    (deal: Deal, stage: PipelineStage): void => {
+      void moveDeal(deal.id, stage.id);
+    },
+    [moveDeal],
+  );
+
+  const handleLongPress = useCallback((deal: Deal): void => {
+    const otherStages = stages.filter((s) => s.id !== deal.stage_id);
     Alert.alert(t('deals.moveDeal'), deal.title, [
       ...otherStages.map((s) => ({
         text: s.name,
@@ -103,45 +237,7 @@ const KanbanBoard: React.FC = () => {
       })),
       { text: t('common.cancel'), style: 'cancel' as const },
     ]);
-  };
-
-  const renderDealCard =
-    (stageId: string, allStages: PipelineStage[]) =>
-    ({ item, isActive }: RenderItemParams<Deal>) => (
-      <ScaleDecorator>
-        <TouchableOpacity
-          onPress={() => router.push({ pathname: '/deal/[id]', params: { id: item.id } })}
-          onLongPress={() => handleLongPress(item, allStages)}
-          disabled={isActive}
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 12,
-            padding: 12,
-            marginVertical: 6,
-            marginHorizontal: 4,
-            borderWidth: 1,
-            borderColor: '#e5e7eb',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.05,
-            shadowRadius: 2,
-            elevation: 1,
-          }}
-        >
-          <Text style={{ fontWeight: '600', fontSize: 14, marginBottom: 4, color: '#111827' }}>
-            {item.title}
-          </Text>
-          <Text style={{ marginBottom: 4, color: '#065f46', fontWeight: '600', fontSize: 13 }}>
-            {item.value != null
-              ? '$' + item.value.toLocaleString('en-US')
-              : '--'}
-          </Text>
-          <Text style={{ color: '#6b7280', fontSize: 12 }}>
-            {item.contact.first_name + ' ' + item.contact.last_name}
-          </Text>
-        </TouchableOpacity>
-      </ScaleDecorator>
-    );
+  }, [moveDeal, stages, t]);
 
   if (dealsLoading || pipelinesLoading) {
     return (
@@ -163,53 +259,138 @@ const KanbanBoard: React.FC = () => {
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 8 }}
+      style={styles.board}
+      contentContainerStyle={styles.boardContent}
     >
-      {stagesWithDeals.map(({ stage, stageDeals }) => (
+      {stagesWithDeals.map(({ stage, stageDeals }, stageIndex) => (
         <View
           key={stage.id}
-          style={{
-            width: 280,
-            margin: 8,
-            backgroundColor: '#ecfdf5',
-            borderRadius: 12,
-            padding: 8,
-          }}
+          style={styles.stageColumn}
         >
-          <View
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 8,
-              paddingHorizontal: 4,
-            }}
-          >
-            <Text style={{ fontWeight: '700', fontSize: 15, color: '#111827' }}>
+          <View style={styles.stageHeader}>
+            <Text style={styles.stageName}>
               {stage.name}
             </Text>
-            <Text style={{ color: '#9ca3af', fontSize: 13, fontWeight: '600' }}>
+            <Text style={styles.stageCount}>
               {stageDeals.length}
             </Text>
           </View>
-          <DraggableFlatList<Deal>
-            data={stageDeals}
-            keyExtractor={(item) => item.id}
-            onDragEnd={({ data }: { data: Deal[] }) =>
-              setLocalDeals((prev) => {
-                const otherDeals = prev.filter(
-                  (d) => d.stage_id !== stage.id,
-                );
-                return [...otherDeals, ...data];
-              })
-            }
-            renderItem={renderDealCard(stage.id, stages)}
-          />
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+            contentContainerStyle={styles.stageDeals}
+          >
+            {stageDeals.map((deal) => (
+              <DealCard
+                key={deal.id}
+                deal={deal}
+                stageIndex={stageIndex}
+                stages={stages}
+                onMoveStage={handleMoveStage}
+                onLongPress={handleLongPress}
+              />
+            ))}
+          </ScrollView>
         </View>
       ))}
     </ScrollView>
   );
 };
+
+const styles = StyleSheet.create({
+  board: {
+    flex: 1,
+  },
+  boardContent: {
+    padding: 8,
+  },
+  stageColumn: {
+    width: STAGE_WIDTH,
+    margin: 8,
+    backgroundColor: '#ecfdf5',
+    borderRadius: 12,
+    padding: 8,
+  },
+  stageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  stageName: {
+    flex: 1,
+    fontWeight: '700',
+    fontSize: 15,
+    color: '#111827',
+    marginRight: 8,
+  },
+  stageCount: {
+    color: '#9ca3af',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  stageDeals: {
+    paddingBottom: 12,
+  },
+  dealCardDragWrapper: {
+    marginVertical: 6,
+    marginHorizontal: 4,
+  },
+  dealCardDragging: {
+    zIndex: 10,
+    elevation: 4,
+  },
+  dealCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  dealTitle: {
+    fontWeight: '600',
+    fontSize: 14,
+    marginBottom: 4,
+    color: '#111827',
+  },
+  warningBadge: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+  },
+  overdueBadge: {
+    backgroundColor: '#fef2f2',
+  },
+  todayBadge: {
+    backgroundColor: '#fffbeb',
+  },
+  warningBadgeText: {
+    fontSize: 10,
+  },
+  overdueText: {
+    color: '#dc2626',
+  },
+  todayText: {
+    color: '#d97706',
+  },
+  dealValue: {
+    marginBottom: 4,
+    color: '#065f46',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  dealContact: {
+    color: '#6b7280',
+    fontSize: 12,
+  },
+});
 
 export default KanbanBoard;

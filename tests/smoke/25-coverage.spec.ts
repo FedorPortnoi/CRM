@@ -226,6 +226,55 @@ test('G3: POST /api/v1/notifications/send without title returns 400', async ({ r
   expect(res.status()).toBe(400);
 });
 
+test('G3b: notifications/register is idempotent for the same Expo token', async ({ request }) => {
+  const org = await registerOrg(request, 'g3b-push-idempotent');
+  const tokenValue = `ExponentPushToken[${randomUUID()}]`;
+
+  const first = await request.post('/api/v1/notifications/register', {
+    headers: authHeaders(org.token),
+    data: { token: tokenValue },
+  });
+  expect(first.status()).toBe(200);
+  const firstBody = await first.json() as { data: { already_registered: boolean; cleared_duplicate_count?: number } };
+  expect(firstBody.data.already_registered).toBe(false);
+  expect(firstBody.data.cleared_duplicate_count).toBe(0);
+
+  const second = await request.post('/api/v1/notifications/register', {
+    headers: authHeaders(org.token),
+    data: { token: tokenValue },
+  });
+  expect(second.status()).toBe(200);
+  const secondBody = await second.json() as { data: { already_registered: boolean } };
+  expect(secondBody.data.already_registered).toBe(true);
+});
+
+test('G3c: notifications/send returns stable no-recipient error when user has no push token', async ({ request }) => {
+  const org = await registerOrg(request, 'g3c-no-push-token');
+
+  const res = await request.post('/api/v1/notifications/send', {
+    headers: authHeaders(org.token),
+    data: { user_id: org.userId, title: 'Reminder', body: 'Follow up today' },
+  });
+
+  expect(res.status()).toBe(422);
+  const body = await res.json() as ErrorResponse;
+  expect(body.error.code).toBe('NO_PUSH_TOKEN');
+});
+
+test('G3d: notifications/send rejects cross-org user_id', async ({ request }) => {
+  const orgA = await registerOrg(request, 'g3d-push-org-a');
+  const orgB = await registerOrg(request, 'g3d-push-org-b');
+
+  const res = await request.post('/api/v1/notifications/send', {
+    headers: authHeaders(orgA.token),
+    data: { user_id: orgB.userId, title: 'Cross org', body: 'Should not send' },
+  });
+
+  expect(res.status()).toBe(404);
+  const body = await res.json() as ErrorResponse;
+  expect(body.error.code).toBe('USER_NOT_FOUND');
+});
+
 test('G5: GET /api/v1/tasks?due_before returns tasks before the ISO cutoff only', async ({ request }) => {
   const org = await registerOrg(request, 'g5-due-before');
   const tomorrowDue = daysFromNow(1);

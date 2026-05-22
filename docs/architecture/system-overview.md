@@ -78,13 +78,13 @@ A dedicated sync service on the client reconciles local mutations with the serve
 | Component | Technology | Responsibility |
 |-----------|-----------|----------------|
 | Mobile App | React Native + Expo | UI, local cache, offline ops, push receipt |
-| API Gateway | Express + TypeScript | Auth, validation, routing, rate limiting |
+| API Gateway | Fastify + TypeScript | Auth, validation, routing, rate limiting |
 | Business Services | Node.js services | CRM logic, automation rules, notifications |
 | PostgreSQL | PostgreSQL 16 | Primary data store, audit logs, RLS |
 | Redis | Redis 7 | Caching, job queues, rate limit counters |
 | Push Delivery | FCM + APNS + Expo | Cross-platform push notifications |
-| SMS | Twilio | Outbound SMS from contact profiles |
-| Calendar Sync | Google/Apple Calendar APIs | Two-way appointment sync |
+| SMS | SMS.ru | Outbound SMS from contact profiles |
+| Calendar Sync | Yandex Calendar | Appointment sync through OAuth and CalDAV |
 | File Storage | AWS S3 | Attachments, business card photos |
 
 ## Security Boundaries

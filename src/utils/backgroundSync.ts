@@ -5,11 +5,10 @@ import * as SecureStore from 'expo-secure-store';
 import { queryClient } from './queryClient';
 import * as offlineQueue from './offlineQueue';
 import { useSyncStore } from '../store/syncStore';
+import { API_URL } from './api';
 
-const TASK_NAME = 'crm-background-sync';
+export const BACKGROUND_SYNC_TASK_NAME = 'crm-background-sync';
 const LAST_SYNC_KEY = 'crm-last-sync-at';
-
-const API_URL_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:3000/api/v1';
 
 type DeltaPayload = {
   data: {
@@ -25,10 +24,12 @@ async function performSync(): Promise<void> {
   const token = await SecureStore.getItemAsync('crm_auth_token');
   if (!token) return;
 
+  await offlineQueue.flush();
+
   const lastSyncAt = await AsyncStorage.getItem(LAST_SYNC_KEY);
   const sinceParam = lastSyncAt ? `?since=${encodeURIComponent(lastSyncAt)}` : '';
 
-  const response = await fetch(`${API_URL_BASE}/sync/delta${sinceParam}`, {
+  const response = await fetch(`${API_URL}/sync/delta${sinceParam}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -48,11 +49,10 @@ async function performSync(): Promise<void> {
     await queryClient.invalidateQueries({ queryKey: ['events'] });
   }
 
-  await offlineQueue.flush();
   await AsyncStorage.setItem(LAST_SYNC_KEY, body.meta.server_time);
 }
 
-TaskManager.defineTask(TASK_NAME, async () => {
+TaskManager.defineTask(BACKGROUND_SYNC_TASK_NAME, async () => {
   try {
     await performSync();
     return BackgroundFetch.BackgroundFetchResult.NewData;
@@ -63,7 +63,7 @@ TaskManager.defineTask(TASK_NAME, async () => {
 
 export async function registerBackgroundSync(): Promise<void> {
   try {
-    await BackgroundFetch.registerTaskAsync(TASK_NAME, {
+    await BackgroundFetch.registerTaskAsync(BACKGROUND_SYNC_TASK_NAME, {
       minimumInterval: 15 * 60,
       stopOnTerminate: false,
       startOnBoot: true,

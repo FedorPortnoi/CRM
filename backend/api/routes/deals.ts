@@ -12,13 +12,19 @@ const CreateDealSchema = z.object({
   currency: z.string().length(3).default('USD'),
   expected_close: z.string().date().optional(),
   probability: z.number().min(0).max(100).optional(),
+  next_action: z.string().max(500).optional(),
+  next_action_due: z.string().optional(),
   source: z.string().max(100).optional(),
   assigned_to: z.string().uuid().optional(),
   custom_fields: z.record(z.unknown()).optional(),
 });
 
 const UpdateDealSchema = CreateDealSchema.partial()
-  .extend({ value: z.union([z.number().positive(), z.null()]).optional() });
+  .extend({
+    value: z.union([z.number().nonnegative(), z.null()]).optional(),
+    next_action: z.union([z.string().max(500), z.null()]).optional(),
+    next_action_due: z.union([z.string(), z.null()]).optional(),
+  });
 
 const MoveStageSchema = z.object({
   stage_id: z.string().uuid(),

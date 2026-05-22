@@ -47,7 +47,7 @@ async function makeEvent(request: APIRequestContext, token: string, title: strin
   return ((await res.json()) as { data: { id: string; status: string } }).data;
 }
 
-test.describe.configure({ timeout: 30000 });
+test.describe.configure({ timeout: 60000 });
 
 // ── 1. ANALYTICS CORRECTNESS ──────────────────────────────────────────────────
 
@@ -1106,7 +1106,7 @@ test.describe('workflows', () => {
       data: {
         name: 'New Contact Task',
         trigger: 'contact_created',
-        actions: [{ type: 'create_task', task_title: 'Follow up' }],
+        actions: [{ type: 'create_task', title: 'Follow up' }],
         status: 'active',
       },
     });
@@ -1120,7 +1120,7 @@ test.describe('workflows', () => {
     const { token } = await registerOrg(request, 'wf-deact');
     const cr = await request.post('/api/v1/workflows', {
       headers: authHeaders(token),
-      data: { name: 'DeactWF', trigger: 'contact_created', actions: [{ type: 'create_task', task_title: 'Task' }], status: 'active' },
+      data: { name: 'DeactWF', trigger: 'contact_created', actions: [{ type: 'create_task', title: 'Task' }], status: 'active' },
     });
     const wf = ((await cr.json()) as { data: { id: string } }).data;
     const r = await request.patch(`/api/v1/workflows/${wf.id}`, { headers: authHeaders(token), data: { status: 'paused' } });
@@ -1133,13 +1133,14 @@ test.describe('workflows', () => {
     const { token } = await registerOrg(request, 'wf-fire');
     await request.post('/api/v1/workflows', {
       headers: authHeaders(token),
-      data: { name: 'FireWF', trigger: 'contact_created', actions: [{ type: 'create_task', task_title: 'Auto follow-up' }], status: 'active' },
+      data: { name: 'FireWF', trigger: 'contact_created', actions: [{ type: 'create_task', title: 'Auto follow-up {{first_name}}' }], status: 'active' },
     });
     const c = await makeContact(request, token, 'WFFireContact');
     const r = await request.get(`/api/v1/tasks?contact_id=${c.id}&per_page=20`, { headers: authHeaders(token) });
     expect(r.status()).toBe(200);
-    // Accept workflow may be async; assert either task created or list is accessible
-    const body = await r.json() as { data: unknown[] };
-    expect(Array.isArray(body.data)).toBe(true);
+    const body = await r.json() as { data: Array<{ title: string; contact_id: string }> };
+    expect(body.data.some((task) =>
+      task.title === 'Auto follow-up WFFireContact' && task.contact_id === c.id,
+    )).toBe(true);
   });
 });

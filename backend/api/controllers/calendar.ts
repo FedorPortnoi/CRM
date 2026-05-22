@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { CalendarEventStatus, Prisma } from '@prisma/client';
 import crypto from 'crypto';
+import { getJwtSecret } from '../../config/security';
 import { db } from '../../services/db';
 
 // ─── Local request types ──────────────────────────────────────────────────────
@@ -93,6 +94,61 @@ function base64Url(input: string | Buffer): string {
   return Buffer.from(input).toString('base64url');
 }
 
+const ENCRYPTED_TOKEN_PREFIX = 'enc:v1:';
+
+function getTokenEncryptionKey(): Buffer {
+  const secret = process.env.TOKEN_ENCRYPTION_KEY?.trim() || getJwtSecret();
+  return crypto.createHash('sha256').update(secret).digest();
+}
+
+function encryptToken(token: string): string;
+function encryptToken(token: null): null;
+function encryptToken(token: undefined): undefined;
+function encryptToken(token: string | null | undefined): string | null | undefined;
+function encryptToken(token: string | null | undefined): string | null | undefined {
+  if (!token || token.startsWith(ENCRYPTED_TOKEN_PREFIX)) {
+    return token;
+  }
+
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', getTokenEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+
+  return `${ENCRYPTED_TOKEN_PREFIX}${iv.toString('base64url')}.${tag.toString('base64url')}.${encrypted.toString('base64url')}`;
+}
+
+function decryptToken(token: string): string {
+  if (!token.startsWith(ENCRYPTED_TOKEN_PREFIX)) {
+    return token;
+  }
+
+  const [ivValue, tagValue, encryptedValue] = token.slice(ENCRYPTED_TOKEN_PREFIX.length).split('.');
+  if (!ivValue || !tagValue || !encryptedValue) {
+    throw new Error('Invalid encrypted Yandex token payload');
+  }
+
+  const decipher = crypto.createDecipheriv(
+    'aes-256-gcm',
+    getTokenEncryptionKey(),
+    Buffer.from(ivValue, 'base64url'),
+  );
+  decipher.setAuthTag(Buffer.from(tagValue, 'base64url'));
+
+  return Buffer.concat([
+    decipher.update(Buffer.from(encryptedValue, 'base64url')),
+    decipher.final(),
+  ]).toString('utf8');
+}
+
+function decryptYandexSync<T extends { access_token: string; refresh_token: string | null }>(sync: T): T {
+  return {
+    ...sync,
+    access_token: decryptToken(sync.access_token),
+    refresh_token: sync.refresh_token ? decryptToken(sync.refresh_token) : sync.refresh_token,
+  };
+}
+
 function signState(payload: OAuthState): string {
   const encoded = base64Url(JSON.stringify(payload));
   const secret = process.env.JWT_SECRET ?? '';
@@ -161,32 +217,43 @@ async function getYandexUsername(accessToken: string): Promise<string> {
   return body.login;
 }
 
-async function getValidYandexSync(userId: string) {
-  const sync = await db.userCalendarSync.findUnique({
-    where: { user_id_provider: { user_id: userId, provider: 'yandex' } },
+async function getValidYandexSync(userId: string, orgId: string) {
+  const syncWhere = { user_id: userId, provider: 'yandex', user: { organization_id: orgId } };
+  const sync = await db.userCalendarSync.findFirst({
+    where: syncWhere,
   });
 
   if (!sync) return null;
 
+  const decryptedSync = decryptYandexSync(sync);
   const expiresAt = sync.expires_at?.getTime() ?? 0;
-  if (!sync.refresh_token || expiresAt > Date.now() + 60_000) {
-    return sync;
+  if (!decryptedSync.refresh_token || expiresAt > Date.now() + 60_000) {
+    return decryptedSync;
   }
 
   const token = await exchangeYandexToken({
     client_id: process.env.YANDEX_CLIENT_ID ?? '',
     client_secret: process.env.YANDEX_CLIENT_SECRET ?? '',
-    refresh_token: sync.refresh_token,
+    refresh_token: decryptedSync.refresh_token,
     grant_type: 'refresh_token',
   });
 
-  return db.userCalendarSync.update({
-    where: { user_id_provider: { user_id: userId, provider: 'yandex' } },
+  const result = await db.userCalendarSync.updateMany({
+    where: syncWhere,
     data: {
-      access_token: token.access_token,
+      access_token: encryptToken(token.access_token),
+      refresh_token: encryptToken(token.refresh_token ?? decryptedSync.refresh_token),
       expires_at: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : sync.expires_at,
     },
   });
+
+  if (result.count !== 1) return null;
+
+  const updated = await db.userCalendarSync.findFirst({
+    where: syncWhere,
+  });
+
+  return updated ? decryptYandexSync(updated) : null;
 }
 
 function buildIcal(event: {
@@ -216,13 +283,17 @@ function buildIcal(event: {
   return lines.join('\r\n');
 }
 
-async function syncYandexEventForUser(userId: string | null | undefined, eventId: string): Promise<void> {
+async function syncYandexEventForUser(
+  userId: string | null | undefined,
+  eventId: string,
+  orgId: string,
+): Promise<void> {
   if (!userId || !yandexConfigured()) return;
 
-  const sync = await getValidYandexSync(userId);
+  const sync = await getValidYandexSync(userId, orgId);
   if (!sync) return;
 
-  const event = await db.calendarEvent.findUnique({ where: { id: eventId } });
+  const event = await db.calendarEvent.findFirst({ where: { id: eventId, organization_id: orgId } });
   if (!event || event.status === CalendarEventStatus.cancelled) return;
 
   const username = sync.yandex_username;
@@ -244,20 +315,27 @@ async function syncYandexEventForUser(userId: string | null | undefined, eventId
   });
 
   if (response.ok && !event.ext_event_uid) {
-    await db.calendarEvent.update({
-      where: { id: event.id },
+    const result = await db.calendarEvent.updateMany({
+      where: { id: event.id, organization_id: orgId },
       data: { ext_event_uid: eventUid, ext_calendar_uid: `${username}/${calendarSlug}` },
     });
+    if (result.count !== 1) {
+      throw new Error('Calendar event not found');
+    }
   }
 }
 
-async function deleteYandexEventForUser(userId: string | null | undefined, eventId: string): Promise<void> {
+async function deleteYandexEventForUser(
+  userId: string | null | undefined,
+  eventId: string,
+  orgId: string,
+): Promise<void> {
   if (!userId || !yandexConfigured()) return;
 
-  const event = await db.calendarEvent.findUnique({ where: { id: eventId } });
+  const event = await db.calendarEvent.findFirst({ where: { id: eventId, organization_id: orgId } });
   if (!event?.ext_event_uid) return;
 
-  const sync = await getValidYandexSync(userId);
+  const sync = await getValidYandexSync(userId, orgId);
   if (!sync?.yandex_username) return;
 
   const username = sync.yandex_username;
@@ -362,7 +440,7 @@ async function create(
     },
   });
 
-  await syncYandexEventForUser(request.user.sub, event.id);
+  await syncYandexEventForUser(request.user.sub, event.id, request.user.org_id);
 
   reply.status(201).send({ data: event, meta: {} });
 }
@@ -396,9 +474,10 @@ async function update(
   const { id } = request.params as IdParams;
   const { attendees, start_time, end_time, send_invite: _send_invite, ...rest } =
     request.body as UpdateBody;
+  const orgId = request.user.org_id;
 
   const event = await db.calendarEvent.findFirst({
-    where: { id, organization_id: request.user.org_id },
+    where: { id, organization_id: orgId },
   });
 
   if (!event) {
@@ -423,10 +502,10 @@ async function update(
 
   const [ownsContact, ownsDeal] = await Promise.all([
     rest.contact_id !== undefined
-      ? contactBelongsToOrg(rest.contact_id, request.user.org_id)
+      ? contactBelongsToOrg(rest.contact_id, orgId)
       : Promise.resolve(true),
     rest.deal_id !== undefined
-      ? dealBelongsToOrg(rest.deal_id, request.user.org_id)
+      ? dealBelongsToOrg(rest.deal_id, orgId)
       : Promise.resolve(true),
   ]);
 
@@ -444,8 +523,8 @@ async function update(
     return;
   }
 
-  const updated = await db.calendarEvent.update({
-    where: { id },
+  const result = await db.calendarEvent.updateMany({
+    where: { id, organization_id: orgId, status: { not: CalendarEventStatus.cancelled } },
     data: {
       ...rest,
       ...(start_time !== undefined && { start_time: new Date(start_time) }),
@@ -454,7 +533,21 @@ async function update(
     },
   });
 
-  await syncYandexEventForUser(request.user.sub, updated.id);
+  if (result.count !== 1) {
+    reply.status(404).send({ error: { code: 'EVENT_NOT_FOUND', message: 'Calendar event not found' } });
+    return;
+  }
+
+  const updated = await db.calendarEvent.findFirst({
+    where: { id, organization_id: orgId },
+  });
+
+  if (!updated) {
+    reply.status(404).send({ error: { code: 'EVENT_NOT_FOUND', message: 'Calendar event not found' } });
+    return;
+  }
+
+  await syncYandexEventForUser(request.user.sub, updated.id, orgId);
 
   reply.send({ data: updated, meta: {} });
 }
@@ -464,9 +557,10 @@ async function cancel(
   reply: FastifyReply,
 ): Promise<void> {
   const { id } = request.params as IdParams;
+  const orgId = request.user.org_id;
 
   const event = await db.calendarEvent.findFirst({
-    where: { id, organization_id: request.user.org_id },
+    where: { id, organization_id: orgId },
   });
 
   if (!event) {
@@ -479,12 +573,26 @@ async function cancel(
     return;
   }
 
-  const updated = await db.calendarEvent.update({
-    where: { id },
+  const result = await db.calendarEvent.updateMany({
+    where: { id, organization_id: orgId, status: { not: CalendarEventStatus.cancelled } },
     data: { status: CalendarEventStatus.cancelled },
   });
 
-  await deleteYandexEventForUser(request.user.sub, updated.id);
+  if (result.count !== 1) {
+    reply.status(404).send({ error: { code: 'EVENT_NOT_FOUND', message: 'Calendar event not found' } });
+    return;
+  }
+
+  const updated = await db.calendarEvent.findFirst({
+    where: { id, organization_id: orgId },
+  });
+
+  if (!updated) {
+    reply.status(404).send({ error: { code: 'EVENT_NOT_FOUND', message: 'Calendar event not found' } });
+    return;
+  }
+
+  await deleteYandexEventForUser(request.user.sub, updated.id, orgId);
 
   reply.send({ data: updated, meta: {} });
 }
@@ -495,9 +603,10 @@ async function addPostMeetingNotes(
 ): Promise<void> {
   const { id } = request.params as IdParams;
   const { notes } = request.body as PostMeetingNotesBody;
+  const orgId = request.user.org_id;
 
   const event = await db.calendarEvent.findFirst({
-    where: { id, organization_id: request.user.org_id },
+    where: { id, organization_id: orgId },
   });
 
   if (!event) {
@@ -510,10 +619,24 @@ async function addPostMeetingNotes(
     return;
   }
 
-  const updated = await db.calendarEvent.update({
-    where: { id },
+  const result = await db.calendarEvent.updateMany({
+    where: { id, organization_id: orgId, status: { not: CalendarEventStatus.scheduled } },
     data: { notes, post_meeting_prompted: true },
   });
+
+  if (result.count !== 1) {
+    reply.status(404).send({ error: { code: 'EVENT_NOT_FOUND', message: 'Calendar event not found' } });
+    return;
+  }
+
+  const updated = await db.calendarEvent.findFirst({
+    where: { id, organization_id: orgId },
+  });
+
+  if (!updated) {
+    reply.status(404).send({ error: { code: 'EVENT_NOT_FOUND', message: 'Calendar event not found' } });
+    return;
+  }
 
   reply.send({ data: updated, meta: {} });
 }
@@ -523,9 +646,10 @@ async function markCompleted(
   reply: FastifyReply,
 ): Promise<void> {
   const { id } = request.params as IdParams;
+  const orgId = request.user.org_id;
 
   const event = await db.calendarEvent.findFirst({
-    where: { id, organization_id: request.user.org_id },
+    where: { id, organization_id: orgId },
   });
 
   if (!event) {
@@ -538,13 +662,27 @@ async function markCompleted(
     return;
   }
 
-  const updated = await db.calendarEvent.update({
-    where: { id },
+  const result = await db.calendarEvent.updateMany({
+    where: { id, organization_id: orgId, status: { not: CalendarEventStatus.cancelled } },
     data:
       event.status === CalendarEventStatus.completed
         ? { status: CalendarEventStatus.scheduled, completed_at: null }
         : { status: CalendarEventStatus.completed, completed_at: new Date() },
   });
+
+  if (result.count !== 1) {
+    reply.status(404).send({ error: { code: 'EVENT_NOT_FOUND', message: 'Calendar event not found' } });
+    return;
+  }
+
+  const updated = await db.calendarEvent.findFirst({
+    where: { id, organization_id: orgId },
+  });
+
+  if (!updated) {
+    reply.status(404).send({ error: { code: 'EVENT_NOT_FOUND', message: 'Calendar event not found' } });
+    return;
+  }
 
   reply.send({ data: updated, meta: {} });
 }
@@ -658,28 +796,53 @@ async function yandexOAuthCallback(
 
   const yandexLogin = await getYandexUsername(token.access_token);
 
-  const existing = await db.userCalendarSync.findUnique({
-    where: { user_id_provider: { user_id: payload.sub, provider: 'yandex' } },
+  const syncWhere = {
+    user_id: payload.sub,
+    provider: 'yandex',
+    user: { organization_id: payload.org_id },
+  };
+  const existing = await db.userCalendarSync.findFirst({
+    where: syncWhere,
   });
 
-  await db.userCalendarSync.upsert({
-    where: { user_id_provider: { user_id: payload.sub, provider: 'yandex' } },
-    create: {
-      user_id: payload.sub,
-      provider: 'yandex',
-      access_token: token.access_token,
-      refresh_token: token.refresh_token,
-      expires_at: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined,
-      yandex_username: yandexLogin,
-      yandex_calendar_slug: existing?.yandex_calendar_slug ?? 'home',
-    },
-    update: {
-      access_token: token.access_token,
-      refresh_token: token.refresh_token ?? existing?.refresh_token,
-      expires_at: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined,
-      yandex_username: yandexLogin,
-    },
+  const user = await db.user.findFirst({
+    where: { id: payload.sub, organization_id: payload.org_id },
+    select: { id: true },
   });
+
+  if (!user) {
+    reply.status(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
+    return;
+  }
+
+  if (existing) {
+    const result = await db.userCalendarSync.updateMany({
+      where: syncWhere,
+      data: {
+        access_token: encryptToken(token.access_token),
+        refresh_token: encryptToken(token.refresh_token ?? existing.refresh_token),
+        expires_at: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined,
+        yandex_username: yandexLogin,
+      },
+    });
+
+    if (result.count !== 1) {
+      reply.status(404).send({ error: { code: 'YANDEX_SYNC_NOT_CONNECTED', message: 'Yandex Calendar is not connected for this user' } });
+      return;
+    }
+  } else {
+    await db.userCalendarSync.create({
+      data: {
+        user_id: payload.sub,
+        provider: 'yandex',
+        access_token: encryptToken(token.access_token),
+        refresh_token: token.refresh_token ? encryptToken(token.refresh_token) : undefined,
+        expires_at: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined,
+        yandex_username: yandexLogin,
+        yandex_calendar_slug: 'home',
+      },
+    });
+  }
 
   const successUrl = process.env.YANDEX_CALENDAR_SUCCESS_URL;
   if (successUrl) {
@@ -694,8 +857,13 @@ async function yandexDisconnect(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const sync = await db.userCalendarSync.findUnique({
-    where: { user_id_provider: { user_id: request.user.sub, provider: 'yandex' } },
+  const syncWhere = {
+    user_id: request.user.sub,
+    provider: 'yandex',
+    user: { organization_id: request.user.org_id },
+  };
+  const sync = await db.userCalendarSync.findFirst({
+    where: syncWhere,
   });
 
   if (!sync) {
@@ -703,9 +871,14 @@ async function yandexDisconnect(
     return;
   }
 
-  await db.userCalendarSync.delete({
-    where: { user_id_provider: { user_id: request.user.sub, provider: 'yandex' } },
+  const result = await db.userCalendarSync.deleteMany({
+    where: syncWhere,
   });
+
+  if (result.count !== 1) {
+    reply.status(404).send({ error: { code: 'YANDEX_SYNC_NOT_CONNECTED', message: 'Yandex Calendar is not connected for this user' } });
+    return;
+  }
 
   reply.send({ data: { disconnected: true }, meta: {} });
 }
@@ -714,8 +887,12 @@ async function syncStatus(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const sync = await db.userCalendarSync.findUnique({
-    where: { user_id_provider: { user_id: request.user.sub, provider: 'yandex' } },
+  const sync = await db.userCalendarSync.findFirst({
+    where: {
+      user_id: request.user.sub,
+      provider: 'yandex',
+      user: { organization_id: request.user.org_id },
+    },
   });
 
   reply.send({

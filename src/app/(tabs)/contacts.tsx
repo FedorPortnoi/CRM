@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
 import { router } from 'expo-router';
 import { Check, Search } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { formatDistanceToNow } from 'date-fns';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
@@ -27,6 +28,7 @@ type Contact = {
   phone: string | null;
   email: string | null;
   status: string;
+  last_contacted_at?: string | null;
 };
 
 type OrgUser = {
@@ -38,6 +40,13 @@ type OrgUser = {
 
 type OrgUsersResponse = {
   data: OrgUser[];
+  meta: {
+    total: number;
+  };
+};
+
+type ContactsResponse = {
+  data: Contact[];
   meta: {
     total: number;
   };
@@ -80,6 +89,8 @@ export default function ContactsScreen(): JSX.Element {
   const [isAssigning, setIsAssigning] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [assignError, setAssignError] = useState<string | null>(null);
+  const [showNoContact30d, setShowNoContact30d] = useState(false);
+  const contactsRequestId = useRef(0);
 
   const selectedContactIdSet = useMemo(
     () => new Set(selectedContactIds),
@@ -90,30 +101,105 @@ export default function ContactsScreen(): JSX.Element {
 
   const fetchContacts = useCallback(
     async (pageNum: number, reset: boolean): Promise<void> => {
-      if (!token) return;
-      try {
-        setError(null);
-        const res = await fetch(
-          `${API_URL}/contacts?page=${pageNum}&per_page=${PER_PAGE}&sort=created_at&order=desc`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
-        const json = (await res.json()) as { data: Contact[]; meta: { total: number } };
-        setContacts((prev) => (reset ? json.data : [...prev, ...json.data]));
-        setHasMore(json.data.length === PER_PAGE);
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : t('errors.serverError'));
-      } finally {
+      const requestId = contactsRequestId.current + 1;
+      contactsRequestId.current = requestId;
+
+      if (!token) {
+        setContacts([]);
+        setHasMore(false);
         setIsLoading(false);
         setIsFetchingMore(false);
+        setError(t('errors.unauthorized'));
+        return;
+      }
+
+      const query = search.trim();
+
+      const fetchPage = async (currentPage: number): Promise<ContactsResponse> => {
+        const params = new URLSearchParams({
+          page: String(currentPage),
+          per_page: String(PER_PAGE),
+          sort: 'created_at',
+          order: 'desc',
+        });
+
+        if (query) {
+          params.set('q', query);
+        }
+
+        const res = await fetch(
+          `${API_URL}/contacts?${params.toString()}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+
+        if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+
+        return (await res.json()) as ContactsResponse;
+      };
+
+      try {
+        setError(null);
+
+        if (showNoContact30d) {
+          const allContacts: Contact[] = [];
+          let currentPage = 1;
+          let total: number | null = null;
+
+          while (total === null || allContacts.length < total) {
+            const json = await fetchPage(currentPage);
+            allContacts.push(...json.data);
+            total = json.meta.total;
+
+            if (json.data.length < PER_PAGE) {
+              break;
+            }
+
+            currentPage += 1;
+          }
+
+          if (contactsRequestId.current !== requestId) {
+            return;
+          }
+
+          setContacts(allContacts);
+          setPage(currentPage);
+          setHasMore(false);
+          return;
+        }
+
+        const json = await fetchPage(pageNum);
+
+        if (contactsRequestId.current !== requestId) {
+          return;
+        }
+
+        setContacts((prev) => (reset ? json.data : [...prev, ...json.data]));
+        const loadedCount = reset ? json.data.length : (pageNum - 1) * PER_PAGE + json.data.length;
+        setHasMore(
+          json.data.length === PER_PAGE &&
+            loadedCount < json.meta.total,
+        );
+      } catch (e: unknown) {
+        if (contactsRequestId.current !== requestId) {
+          return;
+        }
+
+        setError(e instanceof Error ? e.message : t('errors.serverError'));
+      } finally {
+        if (contactsRequestId.current === requestId) {
+          setIsLoading(false);
+          setIsFetchingMore(false);
+        }
       }
     },
-    [token, t],
+    [search, showNoContact30d, token, t],
   );
 
   useEffect(() => {
     setIsLoading(true);
+    setIsFetchingMore(false);
     setPage(1);
+    setSelectedContactIds([]);
     void fetchContacts(1, true);
   }, [fetchContacts]);
 
@@ -358,16 +444,14 @@ export default function ContactsScreen(): JSX.Element {
     t,
   ]);
 
-  const filtered: Contact[] = search.trim()
-    ? contacts.filter((c) => {
-        const q = search.toLowerCase();
-        return (
-          c.first_name.toLowerCase().includes(q) ||
-          (c.last_name?.toLowerCase().includes(q) ?? false) ||
-          (c.email?.toLowerCase().includes(q) ?? false) ||
-          (c.phone?.includes(q) ?? false)
-        );
-      })
+  const thirtyDaysAgo = useMemo(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 30);
+    return date;
+  }, []);
+
+  const filtered = showNoContact30d
+    ? contacts.filter((c) => !c.last_contacted_at || new Date(c.last_contacted_at) < thirtyDaysAgo)
     : contacts;
 
   const renderItem = useCallback(
@@ -415,6 +499,11 @@ export default function ContactsScreen(): JSX.Element {
             {item.company ? (
               <Text style={styles.rowSub} numberOfLines={1}>
                 {item.company}
+              </Text>
+            ) : null}
+            {item.last_contacted_at ? (
+              <Text style={styles.lastContactText}>
+                Last contact: {formatDistanceToNow(new Date(item.last_contacted_at), { addSuffix: true })}
               </Text>
             ) : null}
           </View>
@@ -523,6 +612,23 @@ export default function ContactsScreen(): JSX.Element {
           <Text style={styles.importRowText}>{t('contacts.importCsv')}</Text>
         </TouchableOpacity>
       ) : null}
+      {!isSelectionMode ? (
+        <View style={styles.filterBar}>
+          <TouchableOpacity
+            style={[styles.filterChip, showNoContact30d ? styles.filterChipActive : null]}
+            onPress={() => {
+              setShowNoContact30d((current) => !current);
+              setPage(1);
+            }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: showNoContact30d }}
+          >
+            <Text style={[styles.filterChipText, showNoContact30d ? styles.filterChipTextActive : null]}>
+              No contact 30d+
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       {archiveError ? (
         <Text style={styles.archiveErrorText}>{archiveError}</Text>
       ) : null}
@@ -538,13 +644,38 @@ export default function ContactsScreen(): JSX.Element {
             tintColor="#065f46"
           />
         }
-        onEndReached={search.trim() ? undefined : loadMore}
+        onEndReached={loadMore}
         onEndReachedThreshold={0.3}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
               {search.trim() ? t('contacts.noSearchResults') : t('contacts.noContacts')}
             </Text>
+            {!search.trim() && !showNoContact30d ? (
+              <View style={styles.emptyActions}>
+                <TouchableOpacity
+                  style={styles.emptyPrimaryButton}
+                  onPress={() => router.push('/contact/new')}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.emptyPrimaryText}>{t('contacts.add')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.emptySecondaryButton}
+                  onPress={() => router.push('/contacts/import' as never)}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.emptySecondaryText}>{t('contacts.importCsv')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.emptySecondaryButton}
+                  onPress={() => router.push('/contact/scan-card' as never)}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.emptySecondaryText}>{t('contacts.scanCard')}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </View>
         }
         ListFooterComponent={
@@ -796,6 +927,31 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     paddingVertical: 4,
   },
+  filterBar: {
+    flexDirection: 'row',
+    marginHorizontal: 12,
+    marginBottom: 8,
+  },
+  filterChip: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  filterChipActive: {
+    borderColor: '#065f46',
+    backgroundColor: '#ecfdf5',
+  },
+  filterChipText: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  filterChipTextActive: {
+    color: '#065f46',
+  },
   avatar: {
     width: 40,
     height: 40,
@@ -858,6 +1014,11 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 2,
   },
+  lastContactText: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginTop: 2,
+  },
   rowPhone: {
     fontSize: 13,
     color: '#6b7280',
@@ -871,6 +1032,40 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: '#9ca3af',
+    textAlign: 'center',
+  },
+  emptyActions: {
+    width: '100%',
+    marginTop: 18,
+    gap: 10,
+  },
+  emptyPrimaryButton: {
+    backgroundColor: '#065f46',
+    borderRadius: 12,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  emptyPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  emptySecondaryButton: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 12,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    backgroundColor: '#FFFFFF',
+  },
+  emptySecondaryText: {
+    color: '#065f46',
+    fontSize: 14,
+    fontWeight: '600',
   },
   emptyContent: {
     flexGrow: 1,

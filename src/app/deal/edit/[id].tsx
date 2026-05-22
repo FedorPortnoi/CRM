@@ -49,6 +49,8 @@ interface Deal {
   contact: ContactPreview;
   pipeline: { id: string; name: string } | null;
   stage: { id: string; name: string; position: number } | null;
+  next_action: string | null;
+  next_action_due: string | null;
 }
 
 interface DealApiResponse {
@@ -65,6 +67,8 @@ type DealForm = {
   pipeline_id: string;
   stage_id: string;
   contact_id: string;
+  next_action: string;
+  next_action_due: string;
 };
 
 type DealPatch = {
@@ -73,6 +77,8 @@ type DealPatch = {
   pipeline_id?: string;
   stage_id?: string;
   contact_id?: string;
+  next_action?: string | null;
+  next_action_due?: string | null;
 };
 
 function contactDisplayName(contact: ContactPreview): string {
@@ -84,6 +90,12 @@ function formatContactResult(contact: ContactPreview): string {
   return contact.company ? `${name} - ${contact.company}` : name;
 }
 
+function dateInputValue(value: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString().slice(0, 10);
+}
+
 function formFromDeal(deal: Deal): DealForm {
   const numericValue = deal.value === null ? '' : String(deal.value);
   return {
@@ -92,6 +104,8 @@ function formFromDeal(deal: Deal): DealForm {
     pipeline_id: deal.pipeline_id ?? deal.pipeline?.id ?? '',
     stage_id: deal.stage_id ?? deal.stage?.id ?? '',
     contact_id: deal.contact_id ?? deal.contact.id,
+    next_action: deal.next_action ?? '',
+    next_action_due: dateInputValue(deal.next_action_due),
   };
 }
 
@@ -116,6 +130,12 @@ function buildPatch(current: DealForm, original: DealForm): DealPatch {
   if (current.contact_id !== '' && current.contact_id !== original.contact_id) {
     patch.contact_id = current.contact_id;
   }
+  if (current.next_action.trim() !== original.next_action.trim()) {
+    patch.next_action = current.next_action.trim() || null;
+  }
+  if (current.next_action_due.trim() !== original.next_action_due.trim()) {
+    patch.next_action_due = current.next_action_due.trim() || null;
+  }
   return patch;
 }
 
@@ -134,6 +154,8 @@ export default function EditDealScreen(): JSX.Element {
   const [selectedStageId, setSelectedStageId] = useState<string>('');
   const [selectedContactId, setSelectedContactId] = useState<string>('');
   const [selectedContactName, setSelectedContactName] = useState<string>('');
+  const [nextAction, setNextAction] = useState<string>('');
+  const [nextActionDue, setNextActionDue] = useState<string>('');
   const [contactQuery, setContactQuery] = useState<string>('');
   const [contactResults, setContactResults] = useState<ContactPreview[]>([]);
   const [showPipelineModal, setShowPipelineModal] = useState<boolean>(false);
@@ -175,6 +197,8 @@ export default function EditDealScreen(): JSX.Element {
         setSelectedStageId(loaded.stage_id);
         setSelectedContactId(loaded.contact_id);
         setSelectedContactName(contactDisplayName(data.data.contact));
+        setNextAction(loaded.next_action);
+        setNextActionDue(loaded.next_action_due);
       } catch (err) {
         setApiError(err instanceof Error ? err.message : 'Failed to load deal');
       } finally {
@@ -254,6 +278,8 @@ export default function EditDealScreen(): JSX.Element {
       pipeline_id: selectedPipelineId,
       stage_id: selectedStageId,
       contact_id: selectedContactId,
+      next_action: nextAction,
+      next_action_due: nextActionDue,
     };
     const patch = buildPatch(current, original);
 
@@ -489,6 +515,25 @@ export default function EditDealScreen(): JSX.Element {
               )}
             </>
           )}
+
+          <Text style={styles.label}>Next Action</Text>
+          <TextInput
+            style={styles.input}
+            value={nextAction}
+            onChangeText={setNextAction}
+            placeholder="e.g. Send proposal"
+            placeholderTextColor="#6b7280"
+          />
+
+          <Text style={styles.label}>Due Date</Text>
+          <TextInput
+            style={styles.input}
+            value={nextActionDue}
+            onChangeText={setNextActionDue}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor="#6b7280"
+            autoCapitalize="none"
+          />
 
           <TouchableOpacity
             style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}

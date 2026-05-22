@@ -16,6 +16,8 @@ import { API_URL } from '../../utils/api';
 import { useUserStore } from '../../store/userStore';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 
+const TEAL = '#065f46';
+
 interface Deal {
   id: string;
   title: string;
@@ -27,6 +29,8 @@ interface Deal {
   contact: { id: string; first_name: string; last_name: string | null };
   pipeline: { id: string; name: string } | null;
   stage: { id: string; name: string; position: number } | null;
+  next_action: string | null;
+  next_action_due: string | null;
 }
 
 interface SkeletonBoxProps {
@@ -275,6 +279,16 @@ export default function DealDetailScreen(): JSX.Element {
         )}
       </View>
 
+      {deal.next_action && (
+        <View style={styles.card}>
+          <Text style={styles.nextActionLabel}>Next Action</Text>
+          <Text style={styles.nextActionText}>{deal.next_action}</Text>
+          {deal.next_action_due && (
+            <Text style={styles.nextActionDue}>{new Date(deal.next_action_due).toLocaleDateString()}</Text>
+          )}
+        </View>
+      )}
+
       {/* Contact card */}
       <View style={styles.card}>
         <Text style={styles.sectionLabel}>CONTACT</Text>
@@ -410,6 +424,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6b7280',
   },
+  nextActionLabel: {
+    color: TEAL,
+    fontWeight: '600',
+    fontSize: 13,
+    marginBottom: 6,
+  },
+  nextActionText: {
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  nextActionDue: {
+    color: '#6b7280',
+    fontSize: 13,
+    marginTop: 6,
+  },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '600',
@@ -492,4 +522,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-

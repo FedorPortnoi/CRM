@@ -24,8 +24,8 @@ async function registerToken(request: FastifyRequest, reply: FastifyReply): Prom
     return;
   }
 
-  const existingUser = await db.user.findUnique({
-    where: { id: request.user.sub },
+  const existingUser = await db.user.findFirst({
+    where: { id: request.user.sub, organization_id: request.user.org_id },
     select: { push_token: true },
   });
 
@@ -51,12 +51,13 @@ async function registerToken(request: FastifyRequest, reply: FastifyReply): Prom
     db.user.updateMany({
       where: {
         push_token: token,
+        organization_id: request.user.org_id,
         id: { not: request.user.sub },
       },
       data: { push_token: null },
     }),
-    db.user.update({
-      where: { id: request.user.sub },
+    db.user.updateMany({
+      where: { id: request.user.sub, organization_id: request.user.org_id },
       data: { push_token: token },
     }),
   ]);
@@ -100,8 +101,8 @@ async function sendNotification(request: FastifyRequest, reply: FastifyReply): P
   }
 
   if (!Expo.isExpoPushToken(user.push_token)) {
-    await db.user.update({
-      where: { id: user.id },
+    await db.user.updateMany({
+      where: { id: user.id, organization_id: request.user.org_id },
       data: { push_token: null },
     });
 
@@ -125,8 +126,8 @@ async function sendNotification(request: FastifyRequest, reply: FastifyReply): P
 
   if (ticket?.status === 'error') {
     if (ticket.details?.error === 'DeviceNotRegistered') {
-      await db.user.update({
-        where: { id: user.id },
+      await db.user.updateMany({
+        where: { id: user.id, organization_id: request.user.org_id },
         data: { push_token: null },
       });
     }

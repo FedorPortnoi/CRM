@@ -58,7 +58,7 @@ type CalendarPatch = {
   start_time?: string;
   end_time?: string;
   description?: string;
-  contact_id?: string;
+  contact_id?: string | null;
 };
 
 type FieldErrors = {
@@ -167,8 +167,8 @@ function buildPatch(
     patch.description = currentDescription;
   }
 
-  if (current.contact_id !== '' && current.contact_id !== original.contact_id) {
-    patch.contact_id = current.contact_id;
+  if (current.contact_id !== original.contact_id) {
+    patch.contact_id = current.contact_id !== '' ? current.contact_id : null;
   }
 
   return patch;

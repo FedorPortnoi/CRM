@@ -117,7 +117,7 @@ GET    /tasks/overdue          Overdue tasks for current user
 
 ```
 GET    /messages               List messages for org (filterable by contact)
-POST   /messages/sms           Send SMS to a contact (via Twilio)
+POST   /messages/sms           Send SMS to a contact (via SMS.ru)
 POST   /messages/in-app        Send in-app message to contact
 GET    /messages/:contact_id   Conversation history with a contact
 POST   /messages/:id/read      Mark message as read
@@ -139,8 +139,10 @@ PATCH  /calendar/events/:id    Update event
 DELETE /calendar/events/:id    Cancel event
 
 GET    /calendar/availability  Get team availability for a date range
-POST   /calendar/sync/google   Initiate Google Calendar OAuth flow
-POST   /calendar/sync/apple    Configure Apple Calendar sync
+GET    /calendar/sync/yandex/auth      Initiate Yandex Calendar OAuth flow
+GET    /calendar/sync/yandex/callback  Complete Yandex Calendar OAuth callback
+POST   /calendar/sync/yandex           Sync Yandex Calendar events
+DELETE /calendar/sync/yandex           Disconnect Yandex Calendar
 GET    /calendar/sync/status   Check sync health
 ```
 
@@ -219,5 +221,5 @@ DELETE /attachments/:id        Delete attachment
 
 - Default: 100 requests / minute per user
 - Bulk import endpoints: 10 requests / minute per org
-- SMS send: 60 per hour per org (Twilio-enforced upstream as well)
+- SMS send: 60 per hour per org, subject to SMS.ru account limits
 - Analytics: 30 requests / minute (queries are expensive)

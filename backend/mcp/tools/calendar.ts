@@ -1,6 +1,7 @@
 import { Prisma, CalendarEventStatus } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
+import { validateMcpWriteReferences } from '../validation';
 
 type CalendarStatusValue = 'scheduled' | 'completed' | 'cancelled';
 
@@ -125,6 +126,11 @@ registerTool(
 
     if (endDate.getTime() <= startDate.getTime()) {
       return { error: { code: 'VALIDATION_ERROR', message: 'end_time must be after start_time' } };
+    }
+
+    const referenceError = await validateMcpWriteReferences(user, { contact_id, deal_id });
+    if (referenceError) {
+      return referenceError;
     }
 
     const event = await db.calendarEvent.create({

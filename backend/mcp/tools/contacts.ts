@@ -1,6 +1,7 @@
 import { Prisma, ContactStatus } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
+import { validateMcpWriteReferences } from '../validation';
 
 type ContactTypeValue = 'lead' | 'customer' | 'partner' | 'other';
 type ContactStatusValue = 'active' | 'inactive' | 'archived';
@@ -124,6 +125,11 @@ registerTool(
     const assigned_to = typeof args.assigned_to === 'string' ? args.assigned_to : undefined;
     const type = isContactType(args.type) ? args.type : undefined;
 
+    const referenceError = await validateMcpWriteReferences(user, { assigned_to });
+    if (referenceError) {
+      return referenceError;
+    }
+
     const contact = await db.contact.create({
       data: {
         first_name,
@@ -190,6 +196,13 @@ registerTool(
     if (typeof args.notes === 'string') updateData.notes = args.notes;
     if (typeof args.assigned_to === 'string') updateData.assigned_to = args.assigned_to;
     if (isContactType(args.type)) updateData.type = args.type;
+
+    const referenceError = await validateMcpWriteReferences(user, {
+      assigned_to: typeof args.assigned_to === 'string' ? args.assigned_to : undefined,
+    });
+    if (referenceError) {
+      return referenceError;
+    }
 
     const contact = await db.contact.update({ where: { id }, data: updateData });
 

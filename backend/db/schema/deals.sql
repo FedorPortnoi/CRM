@@ -58,7 +58,7 @@ CREATE TABLE deals (
 CREATE INDEX idx_deals_org ON deals(organization_id);
 CREATE INDEX idx_deals_contact ON deals(organization_id, contact_id);
 CREATE INDEX idx_deals_stage ON deals(organization_id, stage_id);
-CREATE INDEX idx_deals_assigned TO deals(organization_id, assigned_to);
+CREATE INDEX idx_deals_assigned ON deals(organization_id, assigned_to);
 CREATE INDEX idx_deals_status ON deals(organization_id, status);
 CREATE INDEX idx_deals_expected_close ON deals(organization_id, expected_close);
 CREATE INDEX idx_deals_created_at ON deals(organization_id, created_at DESC);

@@ -215,6 +215,47 @@ test('coverage 38: GET /messages with cross-org contact_id returns empty (isolat
   expect(body.data).toHaveLength(0);
 });
 
+test('coverage 38: POST /messages with sms channel returns message id and status', async ({ request }) => {
+  const org = await registerOrg(request, '38-msg-generic-sms');
+  const c = await createContact(request, org.token, 'GenericSms');
+
+  const res = await request.post('/api/v1/messages', {
+    headers: authHeaders(org.token),
+    data: { contact_id: c.id, channel: 'sms', body: 'Generic SMS message' },
+  });
+  expect(res.status()).toBe(201);
+  const body = await res.json() as { data: { id: string; status: string } };
+  expect(body.data.id).toBeTruthy();
+  expect(body.data.status).toBeTruthy();
+});
+
+test('coverage 38: GET /messages/:id returns created message', async ({ request }) => {
+  const org = await registerOrg(request, '38-msg-get-id');
+  const c = await createContact(request, org.token, 'GetMessage');
+  const createRes = await request.post('/api/v1/messages', {
+    headers: authHeaders(org.token),
+    data: { contact_id: c.id, channel: 'sms', body: 'Fetch me' },
+  });
+  expect(createRes.status()).toBe(201);
+  const created = await createRes.json() as { data: { id: string } };
+
+  const res = await request.get(`/api/v1/messages/${created.data.id}`, { headers: authHeaders(org.token) });
+  expect(res.status()).toBe(200);
+  const body = await res.json() as { data: { id: string } };
+  expect(body.data.id).toBe(created.data.id);
+});
+
+test('coverage 38: POST /messages without auth returns 401', async ({ request }) => {
+  const res = await request.post('/api/v1/messages', {
+    data: {
+      contact_id: '00000000-0000-0000-0000-000000000000',
+      channel: 'sms',
+      body: 'No auth',
+    },
+  });
+  expect(res.status()).toBe(401);
+});
+
 // ─── Group 4: Captures ───────────────────────────────────────────────────────
 
 test('coverage 38: POST /captures/:id/match on already-matched capture → 422 CAPTURE_ALREADY_RESOLVED', async ({ request }) => {

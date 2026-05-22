@@ -1,16 +1,17 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { Prisma, WorkflowStatus } from '@prisma/client';
+import { Prisma, WorkflowStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
+import { invalidateWorkflowCache, validateWorkflowActionsForOrganization } from '../../services/workflows';
 
 type ListQuery = {
   status?: WorkflowStatus;
-  trigger?: 'contact_created' | 'deal_stage_changed' | 'task_completed';
+  trigger?: WorkflowTrigger;
 };
 
 type WorkflowBody = {
   name: string;
   description?: string;
-  trigger: 'contact_created' | 'deal_stage_changed' | 'task_completed';
+  trigger: WorkflowTrigger;
   conditions?: Prisma.InputJsonValue;
   actions: Prisma.InputJsonValue;
   status?: WorkflowStatus;
@@ -40,6 +41,12 @@ async function list(request: FastifyRequest, reply: FastifyReply): Promise<void>
 
 async function create(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const body = request.body as WorkflowBody;
+  const actionError = await validateWorkflowActionsForOrganization(request.user.org_id, body.actions);
+
+  if (actionError) {
+    reply.status(400).send({ error: actionError });
+    return;
+  }
 
   const workflow = await db.workflow.create({
     data: {
@@ -54,6 +61,7 @@ async function create(request: FastifyRequest, reply: FastifyReply): Promise<voi
     },
   });
 
+  invalidateWorkflowCache(request.user.org_id);
   reply.status(201).send({ data: workflow, meta: {} });
 }
 
@@ -88,8 +96,17 @@ async function update(request: FastifyRequest, reply: FastifyReply): Promise<voi
     return;
   }
 
+  if (body.actions !== undefined) {
+    const actionError = await validateWorkflowActionsForOrganization(request.user.org_id, body.actions);
+
+    if (actionError) {
+      reply.status(400).send({ error: actionError });
+      return;
+    }
+  }
+
   const workflow = await db.workflow.update({
-    where: { id },
+    where: { id, organization_id: request.user.org_id },
     data: {
       ...(body.name !== undefined && { name: body.name }),
       ...(body.description !== undefined && { description: body.description }),
@@ -100,6 +117,7 @@ async function update(request: FastifyRequest, reply: FastifyReply): Promise<voi
     },
   });
 
+  invalidateWorkflowCache(request.user.org_id);
   reply.send({ data: workflow, meta: {} });
 }
 
@@ -116,10 +134,11 @@ async function archive(request: FastifyRequest, reply: FastifyReply): Promise<vo
   }
 
   const workflow = await db.workflow.update({
-    where: { id },
+    where: { id, organization_id: request.user.org_id },
     data: { status: WorkflowStatus.archived },
   });
 
+  invalidateWorkflowCache(request.user.org_id);
   reply.send({ data: workflow, meta: {} });
 }
 

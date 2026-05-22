@@ -45,6 +45,12 @@ function generateSlug(name: string): string {
   return `${base}-${suffix}`;
 }
 
+function invalidCredentials(reply: FastifyReply) {
+  return reply.code(401).send({
+    error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' },
+  });
+}
+
 export const AuthController = {
   register: async (request: FastifyRequest, reply: FastifyReply) => {
     const { email, password, name, org_name } = request.body as {
@@ -116,6 +122,7 @@ export const AuthController = {
           user: { id: user_id, email, name, role: 'owner', org_id, onboarding_completed: false },
           token,
         },
+        meta: {},
       });
     } catch (err: unknown) {
       const errCode = (err as { code?: string })?.code;
@@ -140,10 +147,8 @@ export const AuthController = {
 
     const user = await db.user.findUnique({ where: { email } });
 
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-      return reply.code(401).send({
-        error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' },
-      });
+    if (!user || !user.is_active || !(await bcrypt.compare(password, user.password_hash))) {
+      return invalidCredentials(reply);
     }
 
     const token = await reply.jwtSign(
@@ -156,6 +161,7 @@ export const AuthController = {
         user: publicUser(user),
         token,
       },
+      meta: {},
     });
   },
 
@@ -203,7 +209,7 @@ export const AuthController = {
     };
 
     const user = await db.user.update({
-      where: { id: request.user.sub },
+      where: { id: request.user.sub, organization_id: request.user.org_id },
       data: { onboarding_state: state },
     });
 

@@ -17,23 +17,31 @@ export async function sendOrQueueMutation(options: MutationOptions): Promise<Mut
   const isOnline = netState.isConnected === true && netState.isInternetReachable !== false;
   const serializedBody = options.body === undefined ? '' : JSON.stringify(options.body);
 
-  if (!isOnline) {
+  const queueMutation = async (): Promise<MutationResult> => {
     await offlineQueue.enqueue({
       url: options.url,
       method: options.method,
       body: serializedBody,
     });
     return { queued: true };
+  };
+
+  if (!isOnline) {
+    return queueMutation();
   }
 
-  const response = await fetch(options.url, {
-    method: options.method,
-    headers: {
-      Authorization: `Bearer ${options.token}`,
-      'Content-Type': 'application/json',
-    },
-    body: serializedBody || undefined,
-  });
+  try {
+    const response = await fetch(options.url, {
+      method: options.method,
+      headers: {
+        Authorization: `Bearer ${options.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: serializedBody || undefined,
+    });
 
-  return { queued: false, response };
+    return { queued: false, response };
+  } catch {
+    return queueMutation();
+  }
 }

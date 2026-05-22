@@ -50,7 +50,7 @@ function mapToPhoneContact(contact: Contacts.ExistingContact): PhoneContact {
   const lastName: string = contact.lastName ?? '';
   const phone: string | null = contact.phoneNumbers?.[0]?.number?.trim() ?? null;
   const email: string | null = contact.emails?.[0]?.email?.trim() ?? null;
-  const trimmedName: string = contact.name.trim();
+  const trimmedName: string = contact.name?.trim() ?? '';
   const fallbackName: string = [firstName, lastName]
     .filter((namePart: string): boolean => namePart.length > 0)
     .join(' ');
@@ -62,6 +62,8 @@ function mapToPhoneContact(contact: Contacts.ExistingContact): PhoneContact {
     displayName = fallbackName;
   } else if (phone !== null && phone.length > 0) {
     displayName = phone;
+  } else if (email !== null && email.length > 0) {
+    displayName = email;
   }
 
   return {
@@ -76,10 +78,11 @@ function mapToPhoneContact(contact: Contacts.ExistingContact): PhoneContact {
 
 function buildContactBody(contact: PhoneContact): ContactCreateBody {
   const displayNameParts: string[] = contact.displayName.split(' ');
-  const firstName: string = contact.firstName || displayNameParts[0] || 'Unknown';
+  const displayNameIsFallback = contact.displayName === contact.phone || contact.displayName === contact.email;
+  const firstName: string = contact.firstName || (!displayNameIsFallback ? displayNameParts[0] : '') || 'Unknown';
   const lastName: string | null = contact.lastName
     ? contact.lastName
-    : contact.displayName.includes(' ')
+    : !displayNameIsFallback && contact.displayName.includes(' ')
       ? displayNameParts.slice(1).join(' ')
       : null;
   const body: ContactCreateBody = { first_name: firstName };
@@ -103,6 +106,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
   const [phase, setPhase] = useState<Phase>('permission');
   const [isRequestingPermission, setIsRequestingPermission] = useState<boolean>(true);
   const [permissionDenied, setPermissionDenied] = useState<boolean>(false);
+  const [canAskContactsPermissionAgain, setCanAskContactsPermissionAgain] = useState<boolean>(true);
   const [deviceContacts, setDeviceContacts] = useState<PhoneContact[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [search, setSearch] = useState<string>('');
@@ -115,11 +119,14 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
     try {
       const permissionResponse: Contacts.PermissionResponse = await Contacts.requestPermissionsAsync();
       if (permissionResponse.status === Contacts.PermissionStatus.GRANTED) {
+        setCanAskContactsPermissionAgain(true);
         setPhase('loading');
       } else {
+        setCanAskContactsPermissionAgain(permissionResponse.canAskAgain !== false);
         setPermissionDenied(true);
       }
     } catch {
+      setCanAskContactsPermissionAgain(false);
       setPermissionDenied(true);
     } finally {
       setIsRequestingPermission(false);
@@ -135,7 +142,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
         .map((contact: Contacts.ExistingContact): PhoneContact => mapToPhoneContact(contact))
         .filter(
           (contact: PhoneContact): boolean =>
-            !(contact.displayName === 'Unknown' && contact.phone === null),
+            !(contact.displayName === 'Unknown' && contact.phone === null && contact.email === null),
         );
 
       setDeviceContacts(mappedContacts);
@@ -287,11 +294,17 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
         <TouchableOpacity
           style={styles.settingsButton}
           onPress={() => {
-            void Linking.openSettings();
+            if (canAskContactsPermissionAgain) {
+              void requestContactsPermission();
+            } else {
+              void Linking.openSettings();
+            }
           }}
           accessibilityRole="button"
         >
-          <Text style={styles.settingsButtonText}>Open Settings</Text>
+          <Text style={styles.settingsButtonText}>
+            {canAskContactsPermissionAgain ? 'Try Again' : 'Open Settings'}
+          </Text>
         </TouchableOpacity>
       </View>
     );

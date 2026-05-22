@@ -73,7 +73,10 @@ function resolveDateRange(
 ): { startDate: Date; endDate: Date } {
   const now = new Date();
   if (period === 'custom' && start && end) {
-    return { startDate: new Date(start), endDate: new Date(end) };
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    endDate.setUTCHours(23, 59, 59, 999);
+    return { startDate, endDate };
   }
   const startDate = new Date(now);
   switch (period) {
@@ -195,13 +198,14 @@ async function revenue(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { start, end, period, pipeline_id, assigned_to, group_by } = request.query as RevenueQuery;
+  const { start, end, period, pipeline_id, assigned_to, group_by, currency } = request.query as RevenueQuery;
   const { startDate, endDate } = resolveDateRange(period, start, end);
 
   const deals = await db.deal.findMany({
     where: {
       organization_id: request.user.org_id,
       status: DealStatus.won,
+      currency,
       actual_close: { gte: startDate, lte: endDate },
       ...(pipeline_id && { pipeline_id }),
       ...(assigned_to && { assigned_to }),
@@ -237,7 +241,7 @@ async function revenue(
 
   reply.send({
     data: {
-      period: { start: startDate, end: endDate, group_by },
+      period: { start: startDate, end: endDate, group_by, currency },
       periods,
       summary: {
         total_revenue: Math.round(totalRevenue * 100) / 100,
@@ -622,7 +626,7 @@ async function stageDuration(request: FastifyRequest, reply: FastifyReply): Prom
     select: {
       stage_id: true,
       status: true,
-      updated_at: true,
+      stage_entered_at: true,
       actual_close: true,
       pipeline_id: true,
       stage: { select: { name: true, position: true } },
@@ -640,10 +644,10 @@ async function stageDuration(request: FastifyRequest, reply: FastifyReply): Prom
 
     const closeMs =
       deal.status === DealStatus.won || deal.status === DealStatus.lost
-        ? (deal.actual_close?.getTime() ?? deal.updated_at.getTime())
+        ? (deal.actual_close?.getTime() ?? deal.stage_entered_at.getTime())
         : now;
 
-    const days_in_stage = Math.max(0, (closeMs - deal.updated_at.getTime()) / 86_400_000);
+    const days_in_stage = Math.max(0, (closeMs - deal.stage_entered_at.getTime()) / 86_400_000);
 
     const existing = stageMap.get(deal.stage_id) ?? {
       name: deal.stage.name,
@@ -678,7 +682,7 @@ async function stageDuration(request: FastifyRequest, reply: FastifyReply): Prom
 
   reply.send({
     data,
-    meta: { note: 'Stage duration uses updated_at delta as a proxy — no stage history table available' },
+    meta: { note: 'Stage duration uses stage_entered_at for each deal.' },
   });
 }
 

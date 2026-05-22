@@ -48,7 +48,7 @@ function DealListView(): JSX.Element {
 
   useEffect(() => {
     void Promise.all([fetchDeals(), fetchPipelines()]);
-  }, []);
+  }, [fetchDeals, fetchPipelines]);
 
   const handleRefresh = useCallback((): void => {
     setIsRefreshing(true);

@@ -50,25 +50,25 @@ export default function RootLayout() {
         setIsRestoring(false);
       });
     void registerBackgroundSync();
-  }, []);
+  }, [restoreSession]);
 
   useEffect(() => {
     if (!isRestoring && hasLanguage === false) {
       router.replace('/language-select' as never);
     }
-  }, [hasLanguage, isRestoring]);
+  }, [hasLanguage, isRestoring, router]);
 
   useEffect(() => {
     if (!isRestoring && hasLanguage !== false && token === null) {
       router.replace('/login');
     }
-  }, [token, isRestoring, hasLanguage]);
+  }, [token, isRestoring, hasLanguage, router]);
 
   useEffect(() => {
     if (!isRestoring && hasLanguage !== false && token !== null && user?.onboarding_completed === false) {
       router.replace('/onboarding' as never);
     }
-  }, [token, user?.onboarding_completed, isRestoring, hasLanguage]);
+  }, [token, user?.onboarding_completed, isRestoring, hasLanguage, router]);
 
   useEffect(() => {
     if (token === null) {

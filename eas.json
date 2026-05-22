@@ -2,9 +2,7 @@
   "_notes": [
     "PLACEHOLDER VALUES: ascAppId and appleTeamId in submit.production.ios must be filled before first iOS build/submit.",
     "google-play-service-account.json must be created from Google Play Console before Android submit.",
-    "ASSET WARNING: assets/icon.png is a 1x1 stub - replace with a 1024x1024 PNG before production build.",
-    "ASSET WARNING: assets/splash.png is a 1x1 stub - replace with a proper splash image before production build.",
-    "ASSET WARNING: assets/adaptive-icon.png is a 1x1 stub - replace with a 1024x1024 PNG before production build."
+    "Set EXPO_PUBLIC_API_URL as an EAS environment variable for preview and production; app.config.js rejects missing or placeholder deployment URLs."
   ],
   "cli": {
     "version": ">= 10.0.0",
@@ -14,16 +12,19 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": { "APP_ENV": "development" },
       "ios": { "simulator": true },
       "android": { "buildType": "apk" }
     },
     "preview": {
       "distribution": "internal",
+      "env": { "APP_ENV": "staging" },
       "android": { "buildType": "apk" },
       "ios": { "simulator": false }
     },
     "production": {
       "autoIncrement": true,
+      "env": { "APP_ENV": "production" },
       "ios": { "resourceClass": "m-medium" },
       "android": { "buildType": "app-bundle" }
     }

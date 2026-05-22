@@ -76,7 +76,7 @@ export default function CapturesScreen(): JSX.Element {
     } finally {
       setIsLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void fetchCaptures();
@@ -186,7 +186,7 @@ export default function CapturesScreen(): JSX.Element {
     [token, matchTargetId, closeMatchModal, fetchCaptures],
   );
 
-  function typeLabel(type: PendingCapture['type']): string {
+  const typeLabel = useCallback((type: PendingCapture['type']): string => {
     switch (type) {
       case 'call':
         return t('captures.call');
@@ -195,7 +195,7 @@ export default function CapturesScreen(): JSX.Element {
       default:
         return type.toUpperCase();
     }
-  }
+  }, [t]);
 
   const renderCapture = useCallback(
     ({ item }: ListRenderItemInfo<PendingCapture>): JSX.Element => {
@@ -240,7 +240,7 @@ export default function CapturesScreen(): JSX.Element {
         </View>
       );
     },
-    [actionId, t, openMatchModal, handleCreateContact, handleDismiss],
+    [actionId, t, typeLabel, openMatchModal, handleCreateContact, handleDismiss],
   );
 
   const renderContactResult = useCallback(

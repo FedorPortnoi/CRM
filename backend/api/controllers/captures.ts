@@ -244,7 +244,7 @@ async function match(request: FastifyRequest, reply: FastifyReply): Promise<void
 
   const contact = await db.contact.findFirst({
     where: { id: contact_id, organization_id: orgId },
-    select: { id: true },
+    select: { id: true, first_name: true, last_name: true },
   });
 
   if (!contact) {
@@ -263,10 +263,27 @@ async function match(request: FastifyRequest, reply: FastifyReply): Promise<void
         data: buildMessageData(orgId, contact_id, capture),
       });
 
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(9, 0, 0, 0);
+
+      await tx.task.create({
+        data: {
+          organization_id: orgId,
+          title: `Follow up: ${contact.first_name}${contact.last_name ? ' ' + contact.last_name : ''}`,
+          contact_id,
+          assigned_to: request.user.sub,
+          due_date: tomorrow,
+          priority: 'medium',
+          status: 'pending',
+          created_by: request.user.sub,
+        },
+      });
+
       return updated;
     });
 
-    reply.send({ data: updatedCapture, meta: {} });
+    reply.send({ data: { ...updatedCapture, follow_up_task_created: true }, meta: {} });
   } catch (error) {
     if (isRecordNotFound(error)) {
       sendAlreadyResolved(reply);

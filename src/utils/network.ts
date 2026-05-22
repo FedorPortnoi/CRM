@@ -11,7 +11,7 @@ NetInfo.addEventListener((state: NetInfoState) => {
 
   if (previouslyOnline === false && isOnline === true) {
     setSyncing();
-    void offlineQueue.flush().then(() => setSynced());
+    void offlineQueue.flush().then(setSynced, setSynced);
   } else if (!isOnline) {
     setOffline();
   }

@@ -17,6 +17,7 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { enqueue } from '../../utils/offlineQueue';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 
 type CalendarEventStatus = 'scheduled' | 'completed' | 'cancelled';
@@ -204,6 +205,13 @@ export default function CalendarEventDetailScreen(): JSX.Element {
       });
 
       if (completionResult.queued) {
+        if (trimmedNotes !== '') {
+          await enqueue({
+            url: `${API_URL}/calendar/${id}/notes`,
+            method: 'POST',
+            body: JSON.stringify({ notes: trimmedNotes }),
+          });
+        }
         router.back();
         return;
       }

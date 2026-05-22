@@ -1,8 +1,19 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { API_URL } from './api';
 
 const DEFAULT_NOTIFICATION_CHANNEL_ID = 'default';
+
+export type NotificationPermissionSnapshot = {
+  status: string;
+  granted: boolean;
+  canAskAgain: boolean;
+};
+
+export type PushRegistrationResult =
+  | { ok: true; message: string }
+  | { ok: false; reason: string; message: string };
 
 export async function ensureDefaultNotificationChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
@@ -13,30 +24,99 @@ export async function ensureDefaultNotificationChannel(): Promise<void> {
   });
 }
 
-export async function registerDevicePushToken(authToken: string): Promise<boolean> {
-  await ensureDefaultNotificationChannel();
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
 
-  const existingPermission = await Notifications.getPermissionsAsync();
-  let finalStatus = existingPermission.status;
+export function getExpoPushProjectId(): string | null {
+  return (
+    nonEmptyString(Constants.easConfig?.projectId) ??
+    nonEmptyString(Constants.expoConfig?.extra?.eas?.projectId)
+  );
+}
 
-  if (finalStatus !== 'granted') {
-    const requestedPermission = await Notifications.requestPermissionsAsync();
-    finalStatus = requestedPermission.status;
+export async function getNotificationPermissionSnapshot(): Promise<NotificationPermissionSnapshot> {
+  const permission = await Notifications.getPermissionsAsync();
+  return {
+    status: permission.status,
+    granted: permission.granted === true || permission.status === 'granted',
+    canAskAgain: permission.canAskAgain !== false,
+  };
+}
+
+async function parseErrorMessage(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as { error?: { message?: string }; message?: string };
+    return body.error?.message ?? body.message ?? null;
+  } catch {
+    return null;
   }
+}
 
-  if (finalStatus !== 'granted') return false;
+export async function registerDevicePushTokenDetailed(authToken: string): Promise<PushRegistrationResult> {
+  try {
+    await ensureDefaultNotificationChannel();
 
-  const pushTokenData = await Notifications.getExpoPushTokenAsync();
-  const response = await fetch(`${API_URL}/notifications/register`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${authToken}`,
-    },
-    body: JSON.stringify({ token: pushTokenData.data }),
-  });
+    const existingPermission = await Notifications.getPermissionsAsync();
+    let finalPermission = existingPermission;
 
-  return response.ok;
+    if (finalPermission.status !== 'granted' && finalPermission.canAskAgain !== false) {
+      finalPermission = await Notifications.requestPermissionsAsync();
+    }
+
+    if (finalPermission.status !== 'granted') {
+      return {
+        ok: false,
+        reason: 'permission-denied',
+        message:
+          finalPermission.canAskAgain === false
+            ? 'Notification permission is blocked. Enable it in system settings.'
+            : 'Notification permission was not granted.',
+      };
+    }
+
+    const projectId = getExpoPushProjectId();
+    if (!projectId) {
+      return {
+        ok: false,
+        reason: 'missing-project-id',
+        message: 'Push notifications are not configured for this build.',
+      };
+    }
+
+    const pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    const response = await fetch(`${API_URL}/notifications/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ token: pushTokenData.data }),
+    });
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        reason: 'server-error',
+        message:
+          (await parseErrorMessage(response)) ??
+          `Push registration failed with status ${response.status}.`,
+      };
+    }
+
+    return { ok: true, message: 'Push notifications enabled.' };
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      reason: 'registration-error',
+      message: error instanceof Error ? error.message : 'Push registration failed.',
+    };
+  }
+}
+
+export async function registerDevicePushToken(authToken: string): Promise<boolean> {
+  const result = await registerDevicePushTokenDetailed(authToken);
+  return result.ok;
 }
 
 export async function notifyUnknownCallCapture(phone: string): Promise<void> {
@@ -60,8 +140,10 @@ export async function notifyUnknownCallCapture(phone: string): Promise<void> {
   }
 }
 
-export async function notifyPendingCaptureCount(title: string, body: string): Promise<void> {
+export async function notifyPendingCaptureCount(title: string, body: string, count = 1): Promise<void> {
   try {
+    if (count <= 0) return;
+
     await ensureDefaultNotificationChannel();
 
     const existingPermission = await Notifications.getPermissionsAsync();
@@ -90,8 +172,12 @@ function taskReminderDate(dueDate: string): Date {
   return new Date(`${dateOnly}T09:00:00`);
 }
 
-export async function scheduleTaskDueReminder(taskId: string, title: string, dueDate: string): Promise<void> {
+export async function scheduleTaskDueReminder(taskId: string, title: string, dueDate: string | null | undefined): Promise<void> {
+  if (!dueDate) return;
+
   const triggerDate = taskReminderDate(dueDate);
+
+  if (Number.isNaN(triggerDate.getTime())) return;
 
   await cancelTaskDueReminder(taskId);
 

@@ -34,6 +34,9 @@ interface DealsState {
 
 type ApiListResponse = {
   data: Deal[];
+  meta?: {
+    total?: number;
+  };
 };
 
 type ApiDealResponse = {
@@ -47,6 +50,8 @@ type ApiErrorResponse = {
   };
   message?: string;
 };
+
+const DEALS_PER_PAGE = 100;
 
 async function getToken(): Promise<string> {
   const token: string | null = await SecureStore.getItemAsync('crm_auth_token');
@@ -118,15 +123,35 @@ export const useDealsStore = create<DealsState>()((set, get) => ({
 
     try {
       const token: string = await getToken();
-      const response: Response = await fetch(`${API_URL}/deals?page=1&per_page=100&status=open`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      const body: ApiListResponse = await readJsonResponse<ApiListResponse>(response);
+      const deals: Deal[] = [];
+      let page = 1;
+      let total: number | null = null;
 
-      set({ deals: body.data, isLoading: false });
+      while (total === null || deals.length < total) {
+        const params = new URLSearchParams({
+          page: String(page),
+          per_page: String(DEALS_PER_PAGE),
+          status: 'open',
+        });
+        const response: Response = await fetch(`${API_URL}/deals?${params.toString()}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const body: ApiListResponse = await readJsonResponse<ApiListResponse>(response);
+
+        deals.push(...body.data);
+        total = typeof body.meta?.total === 'number' ? body.meta.total : null;
+
+        if (body.data.length < DEALS_PER_PAGE) {
+          break;
+        }
+
+        page += 1;
+      }
+
+      set({ deals, isLoading: false });
     } catch (e: unknown) {
       const msg: string = e instanceof Error ? e.message : 'Unknown error';
       set({ error: msg, isLoading: false });

@@ -64,6 +64,8 @@ export default function NewDealScreen(): JSX.Element {
   const [contactResults, setContactResults] = useState<ContactPreview[]>([]);
   const [selectedContactId, setSelectedContactId] = useState<string>('');
   const [selectedContactName, setSelectedContactName] = useState<string>('');
+  const [nextAction, setNextAction] = useState<string>('');
+  const [nextActionDue, setNextActionDue] = useState<string>('');
   const [showPipelineModal, setShowPipelineModal] = useState<boolean>(false);
   const [showStageModal, setShowStageModal] = useState<boolean>(false);
   const [showTitleError, setShowTitleError] = useState<boolean>(false);
@@ -75,7 +77,7 @@ export default function NewDealScreen(): JSX.Element {
     if (pipelines.length === 0) {
       void fetchPipelines();
     }
-  }, []);
+  }, [fetchPipelines, pipelines.length]);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -126,6 +128,8 @@ export default function NewDealScreen(): JSX.Element {
       stage_id: string;
       contact_id?: string;
       value?: number;
+      next_action?: string;
+      next_action_due?: string;
     } = {
       title: title.trim(),
       pipeline_id: selectedPipelineId,
@@ -134,6 +138,8 @@ export default function NewDealScreen(): JSX.Element {
       ...(valueStr.trim() !== '' && !isNaN(parseFloat(valueStr))
         ? { value: parseFloat(valueStr) }
         : {}),
+      ...(nextAction.trim() !== '' ? { next_action: nextAction.trim() } : {}),
+      ...(nextActionDue.trim() !== '' ? { next_action_due: nextActionDue.trim() } : {}),
     };
 
     try {
@@ -363,6 +369,25 @@ export default function NewDealScreen(): JSX.Element {
           )}
         </>
       )}
+
+      <Text style={styles.label}>Next Action</Text>
+      <TextInput
+        style={styles.input}
+        value={nextAction}
+        onChangeText={setNextAction}
+        placeholder="e.g. Send proposal"
+        placeholderTextColor="#6b7280"
+      />
+
+      <Text style={styles.label}>Due Date</Text>
+      <TextInput
+        style={styles.input}
+        value={nextActionDue}
+        onChangeText={setNextActionDue}
+        placeholder="YYYY-MM-DD"
+        placeholderTextColor="#6b7280"
+        autoCapitalize="none"
+      />
 
       <TouchableOpacity
         style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}

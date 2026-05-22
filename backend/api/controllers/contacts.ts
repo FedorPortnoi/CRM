@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { CalendarEventStatus, ContactStatus, Prisma, TaskStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
 import { evaluateWorkflows } from '../../services/workflows';
+import { getLastContactedMap } from '../../services/lastContacted';
 
 type ContactBody = {
   first_name: string;
@@ -100,6 +101,13 @@ class ServiceNotConfiguredError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ServiceNotConfiguredError';
+  }
+}
+
+class ScopedMutationMissError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ScopedMutationMissError';
   }
 }
 
@@ -381,7 +389,7 @@ function extractKeywordValue(text: string, keywords: string[]): string | null {
   return text.match(pattern)?.[1]?.trim() ?? null;
 }
 
-function extractVoiceFields(transcript: string): VoiceFields {
+function _extractVoiceFields(transcript: string): VoiceFields {
   const phone = transcript.match(/(?:\+7|8)[\s().-]*\d{3}[\s().-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}/)?.[0]?.trim() ?? null;
   const name = extractKeywordValue(transcript, ['имя', 'зовут', 'меня зовут']);
   const company = extractKeywordValue(transcript, ['компания']);
@@ -406,7 +414,20 @@ function extractSpeechFields(transcript: string): VoiceFields {
 
 export const ContactsController = {
   list: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { q, status, type, assigned_to, tag, phone, page, per_page, sort, order } = request.query as {
+    const {
+      q,
+      status,
+      type,
+      assigned_to,
+      tag,
+      phone,
+      source,
+      last_contacted_before,
+      page,
+      per_page,
+      sort,
+      order,
+    } = request.query as {
       q?: string;
       status?: 'active' | 'inactive' | 'archived';
       type?: 'lead' | 'customer' | 'partner' | 'other';
@@ -414,6 +435,7 @@ export const ContactsController = {
       tag?: string;
       phone?: string;
       source?: string;
+      last_contacted_before?: string;
       page: number;
       per_page: number;
       sort: 'created_at' | 'updated_at' | 'first_name' | 'company';
@@ -426,6 +448,7 @@ export const ContactsController = {
       ...(type && { type }),
       ...(assigned_to && { assigned_to }),
       ...(tag && { tags: { array_contains: tag } }),
+      ...(source && { source }),
       ...(q && {
         OR: [
           { first_name: { contains: q, mode: 'insensitive' } },
@@ -437,22 +460,44 @@ export const ContactsController = {
       }),
     };
 
-    if (phone !== undefined) {
-      const searchKeys = phoneMatchKeys(phone);
+    const lastContactedBefore = last_contacted_before ? new Date(last_contacted_before) : null;
 
-      if (searchKeys.size === 0) {
+    if (phone !== undefined || lastContactedBefore !== null) {
+      const searchKeys = phone !== undefined ? phoneMatchKeys(phone) : null;
+
+      if (searchKeys !== null && searchKeys.size === 0) {
         return reply.send({ data: [], meta: { total: 0, page, per_page } });
       }
 
-      const contacts = await db.contact.findMany({
-        where,
-        orderBy: { [sort]: order },
+      const [contacts, lastContactedMap] = await Promise.all([
+        db.contact.findMany({
+          where,
+          orderBy: { [sort]: order },
+        }),
+        getLastContactedMap(request.user.org_id),
+      ]);
+
+      const matchedContacts = contacts.filter((contact) => {
+        if (searchKeys !== null && !hasMatchingPhone(contact, searchKeys)) {
+          return false;
+        }
+
+        if (lastContactedBefore !== null) {
+          const lastContactedAt = lastContactedMap.get(contact.id);
+          return !lastContactedAt || lastContactedAt < lastContactedBefore;
+        }
+
+        return true;
       });
-      const matchedContacts = contacts.filter((contact) => hasMatchingPhone(contact, searchKeys));
+
       const start = (page - 1) * per_page;
       const paginatedContacts = matchedContacts.slice(start, start + per_page);
+      const contactsWithActivity = paginatedContacts.map(c => ({
+        ...c,
+        last_contacted_at: lastContactedMap.get(c.id) ?? null,
+      }));
 
-      return reply.send({ data: paginatedContacts, meta: { total: matchedContacts.length, page, per_page } });
+      return reply.send({ data: contactsWithActivity, meta: { total: matchedContacts.length, page, per_page } });
     }
 
     const [contacts, total] = await Promise.all([
@@ -465,7 +510,16 @@ export const ContactsController = {
       db.contact.count({ where }),
     ]);
 
-    return reply.send({ data: contacts, meta: { total, page, per_page } });
+    const contactIds = contacts.map(c => c.id);
+    const lastContactedMap = contactIds.length > 0
+      ? await getLastContactedMap(request.user.org_id)
+      : new Map<string, Date>();
+    const contactsWithActivity = contacts.map(c => ({
+      ...c,
+      last_contacted_at: lastContactedMap.get(c.id) ?? null,
+    }));
+
+    return reply.send({ data: contactsWithActivity, meta: { total, page, per_page } });
   },
 
   create: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -561,7 +615,22 @@ export const ContactsController = {
     if (body.type !== undefined) updateData.type = body.type;
     if (body.custom_fields !== undefined) updateData.custom_fields = body.custom_fields;
 
-    const contact = await db.contact.update({ where: { id }, data: updateData });
+    const result = await db.contact.updateMany({
+      where: { id, organization_id: request.user.org_id, status: { not: ContactStatus.archived } },
+      data: updateData,
+    });
+
+    if (result.count !== 1) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    }
+
+    const contact = await db.contact.findFirst({
+      where: { id, organization_id: request.user.org_id },
+    });
+
+    if (!contact) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    }
 
     return reply.send({ data: contact });
   },
@@ -577,7 +646,22 @@ export const ContactsController = {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
     }
 
-    const contact = await db.contact.update({ where: { id }, data: { status: 'archived' } });
+    const result = await db.contact.updateMany({
+      where: { id, organization_id: request.user.org_id },
+      data: { status: ContactStatus.archived },
+    });
+
+    if (result.count !== 1) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    }
+
+    const contact = await db.contact.findFirst({
+      where: { id, organization_id: request.user.org_id },
+    });
+
+    if (!contact) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    }
 
     return reply.send({ data: contact });
   },
@@ -701,28 +785,38 @@ export const ContactsController = {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
     }
 
-    await db.$transaction(async (tx) => {
-      await tx.deal.updateMany({
-        where: { contact_id: source.id, organization_id: org_id },
-        data: { contact_id: target.id },
+    try {
+      await db.$transaction(async (tx) => {
+        await tx.deal.updateMany({
+          where: { contact_id: source.id, organization_id: org_id },
+          data: { contact_id: target.id },
+        });
+        await tx.task.updateMany({
+          where: { contact_id: source.id, organization_id: org_id },
+          data: { contact_id: target.id },
+        });
+        await tx.message.updateMany({
+          where: { contact_id: source.id, organization_id: org_id },
+          data: { contact_id: target.id },
+        });
+        await tx.calendarEvent.updateMany({
+          where: { contact_id: source.id, organization_id: org_id },
+          data: { contact_id: target.id },
+        });
+        const archived = await tx.contact.updateMany({
+          where: { id: source.id, organization_id: org_id },
+          data: { status: ContactStatus.archived },
+        });
+        if (archived.count !== 1) {
+          throw new ScopedMutationMissError('Source contact not found');
+        }
       });
-      await tx.task.updateMany({
-        where: { contact_id: source.id, organization_id: org_id },
-        data: { contact_id: target.id },
-      });
-      await tx.message.updateMany({
-        where: { contact_id: source.id, organization_id: org_id },
-        data: { contact_id: target.id },
-      });
-      await tx.calendarEvent.updateMany({
-        where: { contact_id: source.id, organization_id: org_id },
-        data: { contact_id: target.id },
-      });
-      await tx.contact.update({
-        where: { id: source.id },
-        data: { status: 'archived' },
-      });
-    });
+    } catch (error) {
+      if (error instanceof ScopedMutationMissError) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: error.message } });
+      }
+      throw error;
+    }
 
     const updated = await db.contact.findFirst({
       where: { id: target.id, organization_id: org_id },
@@ -833,6 +927,10 @@ export const ContactsController = {
       data: { assigned_to },
     });
 
+    if (result.count !== uniqueContactIds.length) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'One or more contacts not found' } });
+    }
+
     return reply.send({
       data: { assigned_count: result.count, assigned_to, contact_ids: uniqueContactIds },
       meta: {},
@@ -856,16 +954,30 @@ export const ContactsController = {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'One or more contacts not found' } });
     }
 
-    await db.$transaction(
-      contacts.map((contact) => {
-        const existingTags = Array.isArray(contact.tags) ? contact.tags.filter((tag): tag is string => typeof tag === 'string') : [];
-        const nextTags = mode === 'replace' ? tags : Array.from(new Set([...existingTags, ...tags]));
-        return db.contact.update({
-          where: { id: contact.id },
-          data: { tags: nextTags },
-        });
-      }),
-    );
+    try {
+      await db.$transaction(async (tx) => {
+        for (const contact of contacts) {
+          const existingTags = Array.isArray(contact.tags) ? contact.tags.filter((tag): tag is string => typeof tag === 'string') : [];
+          const nextTags = mode === 'replace' ? tags : Array.from(new Set([...existingTags, ...tags]));
+          const result = await tx.contact.updateMany({
+            where: {
+              id: contact.id,
+              organization_id: orgId,
+              status: { not: ContactStatus.archived },
+            },
+            data: { tags: nextTags },
+          });
+          if (result.count !== 1) {
+            throw new ScopedMutationMissError('One or more contacts not found');
+          }
+        }
+      });
+    } catch (error) {
+      if (error instanceof ScopedMutationMissError) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: error.message } });
+      }
+      throw error;
+    }
 
     return reply.send({
       data: { tagged_count: contacts.length, contact_ids: uniqueContactIds, tags, mode: mode ?? 'append' },
@@ -898,6 +1010,10 @@ export const ContactsController = {
       },
       data: { status: ContactStatus.archived },
     });
+
+    if (result.count !== uniqueContactIds.length) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'One or more contacts not found' } });
+    }
 
     return reply.send({
       data: { archived_count: result.count, contact_ids: uniqueContactIds },

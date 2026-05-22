@@ -10,14 +10,23 @@ import { router } from 'expo-router';
 import { Check } from 'lucide-react-native';
 import { initI18n, Language } from '../i18n';
 import { setStoredLanguage } from '../i18n/storage';
+import { useUserStore } from '../store/userStore';
 
 export default function LanguageSelectScreen() {
+  const token = useUserStore((s) => s.token);
+  const user = useUserStore((s) => s.user);
   const [loading, setLoading] = useState<Language | null>(null);
 
   const selectLanguage = async (language: Language) => {
     setLoading(language);
     await setStoredLanguage(language);
     await initI18n(language);
+
+    if (token) {
+      router.replace((user?.onboarding_completed === false ? '/onboarding' : '/(tabs)/settings') as never);
+      return;
+    }
+
     router.replace('/login');
   };
 
@@ -52,12 +61,12 @@ export default function LanguageSelectScreen() {
               <ActivityIndicator color="#065f46" />
             ) : (
               <>
-                <Text style={styles.langFlag}>🇬🇧</Text>
+                <Text style={styles.langFlag}>EN</Text>
                 <View style={styles.langTextBlock}>
                   <Text style={styles.langName}>English</Text>
                   <Text style={styles.langNative}>English</Text>
                 </View>
-                {loading === null && <View style={styles.langArrow}><Text style={styles.langArrowText}>›</Text></View>}
+                {loading === null && <View style={styles.langArrow}><Text style={styles.langArrowText}>{'>'}</Text></View>}
               </>
             )}
           </Pressable>
@@ -76,12 +85,12 @@ export default function LanguageSelectScreen() {
               <ActivityIndicator color="#065f46" />
             ) : (
               <>
-                <Text style={styles.langFlag}>🇷🇺</Text>
+                <Text style={styles.langFlag}>RU</Text>
                 <View style={styles.langTextBlock}>
                   <Text style={styles.langName}>Russian</Text>
                   <Text style={styles.langNative}>Русский</Text>
                 </View>
-                {loading === null && <View style={styles.langArrow}><Text style={styles.langArrowText}>›</Text></View>}
+                {loading === null && <View style={styles.langArrow}><Text style={styles.langArrowText}>{'>'}</Text></View>}
               </>
             )}
           </Pressable>
@@ -190,7 +199,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   langFlag: {
-    fontSize: 32,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#065f46',
+    width: 44,
   },
   langTextBlock: {
     flex: 1,

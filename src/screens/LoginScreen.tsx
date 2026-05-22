@@ -28,7 +28,7 @@ export default function LoginScreen() {
     if (!isLoading && error === null && user !== null) {
       router.replace('/(tabs)');
     }
-  }, [user, isLoading, error]);
+  }, [user, isLoading, error, router]);
 
   const handleSignIn = async () => {
     await login(email, password);

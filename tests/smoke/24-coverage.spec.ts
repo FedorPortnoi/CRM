@@ -471,7 +471,7 @@ test('G17: POST /api/v1/notifications/register with same token twice for same us
   expect(body.data.already_registered).toBe(true);
 });
 
-test('G18: POST /api/v1/notifications/register moves duplicate device token to the latest user', async ({ request }) => {
+test('G18: POST /api/v1/notifications/register does not clear duplicate device token across orgs', async ({ request }) => {
   const orgA = await registerOrg(request, 'g18-token-owner-a');
   const orgB = await registerOrg(request, 'g18-token-owner-b');
   const pushToken = `ExponentPushToken[g18-${Date.now()}]`;
@@ -490,19 +490,17 @@ test('G18: POST /api/v1/notifications/register moves duplicate device token to t
   const secondBody = (await secondRes.json()) as {
     data: { cleared_duplicate_count: number };
   };
-  expect(secondBody.data.cleared_duplicate_count).toBe(1);
+  expect(secondBody.data.cleared_duplicate_count).toBe(0);
 
-  const oldOwnerSendRes = await request.post('/api/v1/notifications/send', {
+  const oldOwnerRegisterRes = await request.post('/api/v1/notifications/register', {
     headers: authHeaders(orgA.token),
-    data: {
-      user_id: orgA.userId,
-      title: 'Should not send',
-      body: 'The old owner should no longer have this token',
-    },
+    data: { token: pushToken },
   });
-  expect(oldOwnerSendRes.status()).toBe(422);
-  const oldOwnerBody = (await oldOwnerSendRes.json()) as ErrorResponse;
-  expect(oldOwnerBody.error.code).toBe('NO_PUSH_TOKEN');
+  expect(oldOwnerRegisterRes.status()).toBe(200);
+  const oldOwnerBody = (await oldOwnerRegisterRes.json()) as {
+    data: { already_registered: boolean };
+  };
+  expect(oldOwnerBody.data.already_registered).toBe(true);
 });
 
 test('G19: POST /api/v1/notifications/register with token="" returns 400 before controller validation', async ({ request }) => {

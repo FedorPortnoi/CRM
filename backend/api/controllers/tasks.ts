@@ -229,9 +229,10 @@ async function update(
 ): Promise<void> {
   const { id } = request.params as IdParams;
   const body = request.body as UpdateBody;
+  const orgId = request.user.org_id;
 
   const task = await db.task.findFirst({
-    where: { id, organization_id: request.user.org_id },
+    where: { id, organization_id: orgId },
   });
 
   if (!task) {
@@ -249,10 +250,10 @@ async function update(
       ? userBelongsToOrg(body.assigned_to, request.user.org_id)
       : Promise.resolve(true),
     body.contact_id !== undefined
-      ? contactBelongsToOrg(body.contact_id, request.user.org_id)
+      ? contactBelongsToOrg(body.contact_id, orgId)
       : Promise.resolve(true),
     body.deal_id !== undefined
-      ? dealBelongsToOrg(body.deal_id, request.user.org_id)
+      ? dealBelongsToOrg(body.deal_id, orgId)
       : Promise.resolve(true),
   ]);
 
@@ -277,14 +278,28 @@ async function update(
     return;
   }
 
-  const updatedTask = await db.task.update({
-    where: { id },
+  const result = await db.task.updateMany({
+    where: { id, organization_id: orgId, status: { not: TaskStatus.cancelled } },
     data: {
       ...body,
       due_date: body.due_date ? new Date(body.due_date) : undefined,
       reminder_at: body.reminder_at ? new Date(body.reminder_at) : undefined,
     },
   });
+
+  if (result.count !== 1) {
+    reply.status(404).send({ error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } });
+    return;
+  }
+
+  const updatedTask = await db.task.findFirst({
+    where: { id, organization_id: orgId },
+  });
+
+  if (!updatedTask) {
+    reply.status(404).send({ error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } });
+    return;
+  }
 
   reply.send({ data: updatedTask, meta: {} });
 }
@@ -294,9 +309,10 @@ async function complete(
   reply: FastifyReply,
 ): Promise<void> {
   const { id } = request.params as IdParams;
+  const orgId = request.user.org_id;
 
   const task = await db.task.findFirst({
-    where: { id, organization_id: request.user.org_id },
+    where: { id, organization_id: orgId },
   });
 
   if (!task) {
@@ -309,13 +325,27 @@ async function complete(
     return;
   }
 
-  const updatedTask = await db.task.update({
-    where: { id },
+  const result = await db.task.updateMany({
+    where: { id, organization_id: orgId, status: { not: TaskStatus.cancelled } },
     data:
       task.status === TaskStatus.done
         ? { status: TaskStatus.pending, completed_at: null, completed_by: null }
         : { status: TaskStatus.done, completed_at: new Date(), completed_by: request.user.sub },
   });
+
+  if (result.count !== 1) {
+    reply.status(404).send({ error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } });
+    return;
+  }
+
+  const updatedTask = await db.task.findFirst({
+    where: { id, organization_id: orgId },
+  });
+
+  if (!updatedTask) {
+    reply.status(404).send({ error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } });
+    return;
+  }
 
   if (updatedTask.status === TaskStatus.done && task.status !== TaskStatus.done) {
     await evaluateWorkflows({
@@ -335,9 +365,10 @@ async function startProgress(
   reply: FastifyReply,
 ): Promise<void> {
   const { id } = request.params as IdParams;
+  const orgId = request.user.org_id;
 
   const task = await db.task.findFirst({
-    where: { id, organization_id: request.user.org_id },
+    where: { id, organization_id: orgId },
   });
 
   if (!task) {
@@ -350,10 +381,24 @@ async function startProgress(
     return;
   }
 
-  const updatedTask = await db.task.update({
-    where: { id },
+  const result = await db.task.updateMany({
+    where: { id, organization_id: orgId, status: TaskStatus.pending },
     data: { status: TaskStatus.in_progress },
   });
+
+  if (result.count !== 1) {
+    reply.status(404).send({ error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } });
+    return;
+  }
+
+  const updatedTask = await db.task.findFirst({
+    where: { id, organization_id: orgId },
+  });
+
+  if (!updatedTask) {
+    reply.status(404).send({ error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } });
+    return;
+  }
 
   reply.send({ data: updatedTask, meta: {} });
 }
@@ -363,9 +408,10 @@ async function cancel(
   reply: FastifyReply,
 ): Promise<void> {
   const { id } = request.params as IdParams;
+  const orgId = request.user.org_id;
 
   const task = await db.task.findFirst({
-    where: { id, organization_id: request.user.org_id },
+    where: { id, organization_id: orgId },
   });
 
   if (!task) {
@@ -373,10 +419,24 @@ async function cancel(
     return;
   }
 
-  const updatedTask = await db.task.update({
-    where: { id },
+  const result = await db.task.updateMany({
+    where: { id, organization_id: orgId },
     data: { status: TaskStatus.cancelled },
   });
+
+  if (result.count !== 1) {
+    reply.status(404).send({ error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } });
+    return;
+  }
+
+  const updatedTask = await db.task.findFirst({
+    where: { id, organization_id: orgId },
+  });
+
+  if (!updatedTask) {
+    reply.status(404).send({ error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } });
+    return;
+  }
 
   reply.send({ data: updatedTask, meta: {} });
 }
