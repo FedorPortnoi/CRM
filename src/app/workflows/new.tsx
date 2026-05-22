@@ -22,7 +22,8 @@ type TriggerValue =
   | 'task_completed'
   | 'deal_won'
   | 'deal_created'
-  | 'task_created';
+  | 'task_created'
+  | 'deal_stale';
 
 interface ConditionItem {
   field: string;
@@ -45,6 +46,7 @@ const TRIGGERS: TriggerValue[] = [
   'deal_won',
   'deal_created',
   'task_created',
+  'deal_stale',
 ];
 
 const TRIGGER_KEY_MAP: Record<TriggerValue, string> = {
@@ -54,6 +56,7 @@ const TRIGGER_KEY_MAP: Record<TriggerValue, string> = {
   deal_won: 'trigger_deal_won',
   deal_created: 'trigger_deal_created',
   task_created: 'trigger_task_created',
+  deal_stale: 'trigger_deal_stale',
 };
 
 const OPERATORS = ['equals', 'not_equals', 'contains', 'exists'];

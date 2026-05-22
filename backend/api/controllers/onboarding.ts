@@ -16,6 +16,8 @@ const DEFAULT_STATE: OnboardingState = {
   completed_at: null,
 };
 
+const WALKTHROUGH_STEPS = ['contacts', 'deals', 'tasks', 'calendar'];
+
 type UpdateBody = {
   completed_steps?: string[];
   dismissed_tooltips?: string[];
@@ -24,6 +26,31 @@ type UpdateBody = {
 
 function toJson(value: OnboardingState): Prisma.InputJsonValue {
   return value as unknown as Prisma.InputJsonValue;
+}
+
+function normalizeState(value: Prisma.JsonValue | null): OnboardingState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { ...DEFAULT_STATE };
+  }
+
+  const record = value as Record<string, unknown>;
+  const completedSteps = Array.isArray(record.completed_steps)
+    ? record.completed_steps.filter((step): step is string => typeof step === 'string')
+    : record.completed === true
+      ? WALKTHROUGH_STEPS
+      : [];
+  const dismissedTooltips = Array.isArray(record.dismissed_tooltips)
+    ? record.dismissed_tooltips.filter((step): step is string => typeof step === 'string')
+    : Array.isArray(record.dismissed_steps)
+      ? record.dismissed_steps.filter((step): step is string => typeof step === 'string')
+      : [];
+
+  return {
+    completed_steps: completedSteps,
+    dismissed_tooltips: dismissedTooltips,
+    example_data_loaded: record.example_data_loaded === true,
+    completed_at: typeof record.completed_at === 'string' ? record.completed_at : null,
+  };
 }
 
 function mergeState(current: OnboardingState, update: UpdateBody): OnboardingState {
@@ -40,7 +67,7 @@ async function readUserState(userId: string, orgId: string): Promise<OnboardingS
     where: { id: userId, organization_id: orgId },
     select: { onboarding_state: true },
   });
-  return (user?.onboarding_state as OnboardingState | null) ?? DEFAULT_STATE;
+  return normalizeState(user?.onboarding_state ?? null);
 }
 
 async function updateUserState(userId: string, orgId: string, state: OnboardingState): Promise<boolean> {

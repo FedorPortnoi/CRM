@@ -25,6 +25,7 @@ type Deal = {
   status: DealStatus;
   pipeline_id: string | null;
   stage_id: string | null;
+  expected_close: string | null;
   contact_id: string;
   contact: { id: string; first_name: string; last_name: string };
   pipeline: { id: string; name: string } | null;
@@ -73,6 +74,7 @@ function DealCard({
   onMoveStage,
   onLongPress,
 }: DealCardProps): JSX.Element {
+  const { t } = useTranslation();
   const translateX = useRef(new Animated.Value(0)).current;
   const [isDragging, setIsDragging] = React.useState(false);
 
@@ -155,11 +157,16 @@ function DealCard({
                 styles.warningBadgeText,
                 isOverdue ? styles.overdueText : styles.todayText,
               ]}>
-                {deal.next_action ?? 'Next action'} - {isOverdue ? 'Overdue' : 'Today'}
+                {deal.next_action ?? t('deals.nextAction')} - {isOverdue ? t('deals.overdue') : t('deals.today')}
               </Text>
             </View>
           );
         })()}
+        {deal.next_action && !deal.next_action_due ? (
+          <Text style={styles.nextActionText} numberOfLines={2}>
+            {deal.next_action}
+          </Text>
+        ) : null}
         {deal.stage_entered_at && (() => {
           const daysInStage = Math.floor(
             (Date.now() - new Date(deal.stage_entered_at).getTime()) / (1000 * 60 * 60 * 24),
@@ -168,7 +175,7 @@ function DealCard({
           return (
             <View style={[styles.warningBadge, styles.todayBadge]}>
               <Text style={[styles.warningBadgeText, styles.todayText]}>
-                Stale - {daysInStage}d in stage
+                {t('deals.staleDays', { count: daysInStage })}
               </Text>
             </View>
           );
@@ -390,6 +397,11 @@ const styles = StyleSheet.create({
   dealContact: {
     color: '#6b7280',
     fontSize: 12,
+  },
+  nextActionText: {
+    color: '#374151',
+    fontSize: 12,
+    marginBottom: 4,
   },
 });
 

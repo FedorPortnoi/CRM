@@ -48,6 +48,7 @@ const TRIGGER_KEY_MAP: Record<string, string> = {
   deal_won: 'trigger_deal_won',
   deal_created: 'trigger_deal_created',
   task_created: 'trigger_task_created',
+  deal_stale: 'trigger_deal_stale',
 };
 
 export default function WorkflowsScreen(): JSX.Element {

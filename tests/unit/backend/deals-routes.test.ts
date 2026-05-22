@@ -18,6 +18,7 @@ const routeMocks = vi.hoisted(() => {
 vi.mock('../../../backend/api/controllers/deals', () => ({
   DealsController: {
     list: routeMocks.noop,
+    evaluateStale: routeMocks.noop,
     create: routeMocks.noop,
     getById: routeMocks.noop,
     update: routeMocks.update,

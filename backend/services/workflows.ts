@@ -17,6 +17,7 @@ type WorkflowContext = {
   record: Record<string, unknown>;
   userId?: string | null;
   triggerRecordId?: string | null;
+  dedupeByTriggerRecord?: boolean;
 };
 
 type WorkflowCondition = {
@@ -328,7 +329,7 @@ async function executeAction(
 
     await db.deal.updateMany({
       where: { id: dealId, organization_id: context.organizationId },
-      data: { stage_id: action.stage_id },
+      data: { stage_id: action.stage_id, stage_entered_at: new Date() },
     });
   }
 }
@@ -338,6 +339,21 @@ export async function evaluateWorkflows(context: WorkflowContext): Promise<void>
 
   for (const workflow of workflows) {
     try {
+      if (context.dedupeByTriggerRecord && context.triggerRecordId) {
+        const existingRun = await db.workflowRun.findFirst({
+          where: {
+            workflow_id: workflow.id,
+            organization_id: context.organizationId,
+            trigger_record_id: context.triggerRecordId,
+          },
+          select: { id: true },
+        });
+
+        if (existingRun) {
+          continue;
+        }
+      }
+
       if (!workflowMatches(context.record, workflow.conditions)) {
         continue;
       }

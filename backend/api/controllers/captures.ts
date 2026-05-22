@@ -33,6 +33,12 @@ type CaptureForMessage = {
   phone_number: string | null;
 };
 
+type CaptureContact = {
+  id: string;
+  first_name: string;
+  last_name: string | null;
+};
+
 // --- Helpers ---
 
 function toRequiredString(value: unknown): string | undefined {
@@ -188,6 +194,34 @@ function buildMessageData(
   };
 }
 
+function followUpDueDate(): Date {
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + 1);
+  dueDate.setHours(9, 0, 0, 0);
+  return dueDate;
+}
+
+function contactFullName(contact: CaptureContact): string {
+  return `${contact.first_name}${contact.last_name ? ' ' + contact.last_name : ''}`;
+}
+
+function buildFollowUpTaskData(
+  organizationId: string,
+  contact: CaptureContact,
+  userId: string,
+): Prisma.TaskUncheckedCreateInput {
+  return {
+    organization_id: organizationId,
+    title: `Follow up: ${contactFullName(contact)}`,
+    contact_id: contact.id,
+    assigned_to: userId,
+    due_date: followUpDueDate(),
+    priority: 'medium',
+    status: 'pending',
+    created_by: userId,
+  };
+}
+
 function sendAlreadyResolved(reply: FastifyReply): void {
   reply.status(422).send({
     error: {
@@ -263,21 +297,8 @@ async function match(request: FastifyRequest, reply: FastifyReply): Promise<void
         data: buildMessageData(orgId, contact_id, capture),
       });
 
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(9, 0, 0, 0);
-
       await tx.task.create({
-        data: {
-          organization_id: orgId,
-          title: `Follow up: ${contact.first_name}${contact.last_name ? ' ' + contact.last_name : ''}`,
-          contact_id,
-          assigned_to: request.user.sub,
-          due_date: tomorrow,
-          priority: 'medium',
-          status: 'pending',
-          created_by: request.user.sub,
-        },
+        data: buildFollowUpTaskData(orgId, contact, request.user.sub),
       });
 
       return updated;
@@ -366,6 +387,10 @@ async function createContact(request: FastifyRequest, reply: FastifyReply): Prom
         data: buildMessageData(orgId, contact.id, capture),
       });
 
+      await tx.task.create({
+        data: buildFollowUpTaskData(orgId, contact, request.user.sub),
+      });
+
       await tx.pendingCapture.update({
         where: { id, org_id: orgId, status: PendingCaptureStatus.pending },
         data: { status: PendingCaptureStatus.matched, contact_id: contact.id },
@@ -374,7 +399,7 @@ async function createContact(request: FastifyRequest, reply: FastifyReply): Prom
       return contact;
     });
 
-    reply.status(201).send({ data: newContact, meta: {} });
+    reply.status(201).send({ data: newContact, meta: { follow_up_task_created: true } });
   } catch (error) {
     if (isRecordNotFound(error)) {
       sendAlreadyResolved(reply);

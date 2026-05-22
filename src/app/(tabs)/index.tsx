@@ -433,7 +433,7 @@ export default function DashboardScreen(): JSX.Element {
       {/* Closing this week */}
       <View style={styles.section}>
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionHeader}>Closing This Week</Text>
+          <Text style={styles.sectionHeader}>{t('dashboard.closingThisWeek')}</Text>
           <TouchableOpacity onPress={() => { router.push('/(tabs)/kanban'); }} accessibilityRole="button">
             <Text style={styles.viewAllText}>{t('dashboard.viewAll')}</Text>
           </TouchableOpacity>
@@ -470,7 +470,7 @@ export default function DashboardScreen(): JSX.Element {
             })}
           </ScrollView>
         ) : (
-          <Text style={styles.emptyText}>No deals closing this week</Text>
+          <Text style={styles.emptyText}>{t('dashboard.noDealsClosingThisWeek')}</Text>
         )}
       </View>
 

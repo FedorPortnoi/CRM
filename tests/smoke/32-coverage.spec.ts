@@ -119,6 +119,10 @@ function formBody(fields: Record<string, string>): string {
   return params.toString();
 }
 
+function smsRuApiId(): string {
+  return process.env.SMSRU_API_ID ?? 'test-smsru-api-id';
+}
+
 async function createCapture(
   request: APIRequestContext,
   token: string,
@@ -314,13 +318,14 @@ test.describe('sms.ru webhooks', () => {
     // When phone doesn't match any contact, webhook still returns 200
     const r = await request.post('/api/v1/messages/webhooks/sms/inbound', {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: 'From=%2B15559999999&Body=Hello+from+unknown&SmsId=SMtest001',
+      data: formBody({ api_id: smsRuApiId(), From: '+15559999999', Body: 'Hello from unknown', SmsId: 'SMtest001' }),
     });
     expect(r.status()).toBe(200);
   });
 
   test('sms.ru: inbound webhook creates message when phone matches contact', async ({ request }) => {
     const { token } = await registerOrg(request, 'smsru-inbound');
+    const orgId = decodeOrgId(token);
     const phone = `+1555${Math.floor(1000000 + Math.random() * 9000000)}`;
     // Create contact with that phone
     const c = await makeContact(request, token, 'SmsRuContact', { phone });
@@ -329,7 +334,7 @@ test.describe('sms.ru webhooks', () => {
     const smsSid = `SM${Date.now()}test`;
     const r = await request.post('/api/v1/messages/webhooks/sms/inbound', {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: `From=${encodeURIComponent(phone)}&Body=Hello+from+SMS.ru&SmsId=${smsSid}`,
+      data: formBody({ api_id: smsRuApiId(), From: phone, Body: 'Hello from SMS.ru', SmsId: smsSid, org_id: orgId }),
     });
     expect(r.status()).toBe(200);
 
@@ -344,7 +349,7 @@ test.describe('sms.ru webhooks', () => {
   test('sms.ru: status webhook accepts delivery status for unknown SmsId', async ({ request }) => {
     const r = await request.post('/api/v1/messages/webhooks/sms/status', {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: 'SmsId=SMunknown999&Status=delivered',
+      data: formBody({ api_id: smsRuApiId(), SmsId: 'SMunknown999', Status: 'delivered' }),
     });
     expect(r.status()).toBe(200);
   });
@@ -352,7 +357,7 @@ test.describe('sms.ru webhooks', () => {
   test('sms.ru: status webhook requires SmsId and Status', async ({ request }) => {
     const r = await request.post('/api/v1/messages/webhooks/sms/status', {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: `SmsId=SMstatus${Date.now()}`,
+      data: formBody({ api_id: smsRuApiId(), SmsId: `SMstatus${Date.now()}` }),
     });
     expect(r.status()).toBe(400);
   });
@@ -699,7 +704,7 @@ test.describe('auto-capture', () => {
     });
     expect(createRes.status()).toBe(201);
     const created = await createRes.json() as Envelope<Contact>;
-    expect(created.meta).toEqual({});
+    expect(created.meta.follow_up_task_created).toBe(true);
     expect(created.data.first_name).toBe('Captured');
     expect(created.data.phone).toBe(phone);
 
@@ -761,7 +766,7 @@ test.describe('auto-capture', () => {
 
     const webhook = await request.post('/api/v1/messages/webhooks/sms/inbound', {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: formBody({ From: phone, Body: text, SmsId: smsId, org_id: orgId }),
+      data: formBody({ api_id: smsRuApiId(), From: phone, Body: text, SmsId: smsId, org_id: orgId }),
     });
     expect(webhook.status()).toBe(200);
 
@@ -784,7 +789,13 @@ test.describe('auto-capture', () => {
 
     const webhook = await request.post('/api/v1/messages/webhooks/sms/inbound', {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: formBody({ From: phone, Body: text, SmsId: `SMcap${Date.now()}${uniqueDigits(4)}`, org_id: orgId }),
+      data: formBody({
+        api_id: smsRuApiId(),
+        From: phone,
+        Body: text,
+        SmsId: `SMcap${Date.now()}${uniqueDigits(4)}`,
+        org_id: orgId,
+      }),
     });
     expect(webhook.status()).toBe(200);
 

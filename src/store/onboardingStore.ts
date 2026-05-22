@@ -2,10 +2,11 @@ import { create } from 'zustand';
 import { API_URL } from '../utils/api';
 
 interface BackendOnboardingState {
-  completed_steps: string[];
-  dismissed_tooltips: string[];
-  example_data_loaded: boolean;
-  completed_at: string | null;
+  completed_steps?: string[];
+  dismissed_tooltips?: string[];
+  example_data_loaded?: boolean;
+  completed_at?: string | null;
+  completed?: boolean;
 }
 
 interface OnboardingStore {
@@ -18,6 +19,15 @@ interface OnboardingStore {
 }
 
 export const WALKTHROUGH_STEPS = ['contacts', 'deals', 'tasks', 'calendar'] as const;
+
+function completedSteps(state: BackendOnboardingState): string[] {
+  if (Array.isArray(state.completed_steps)) return state.completed_steps;
+  return state.completed === true ? [...WALKTHROUGH_STEPS] : [];
+}
+
+function isCompleted(state: BackendOnboardingState): boolean {
+  return state.completed === true || typeof state.completed_at === 'string';
+}
 
 async function patchRemote(token: string, body: Partial<BackendOnboardingState>): Promise<BackendOnboardingState> {
   const res = await fetch(`${API_URL}/onboarding`, {
@@ -42,8 +52,9 @@ export const useOnboardingStore = create<OnboardingStore>()((set, get) => ({
       if (!res.ok) return;
       const json = (await res.json()) as { data: BackendOnboardingState };
       const state = json.data;
-      const allDone = state.completed_at !== null;
-      const nextIdx = WALKTHROUGH_STEPS.findIndex((s) => !state.completed_steps.includes(s));
+      const steps = completedSteps(state);
+      const allDone = isCompleted(state);
+      const nextIdx = WALKTHROUGH_STEPS.findIndex((s) => !steps.includes(s));
       set({
         remoteState: state,
         visible: !allDone && nextIdx !== -1,
@@ -57,13 +68,14 @@ export const useOnboardingStore = create<OnboardingStore>()((set, get) => ({
   completeStep: async (token: string, step: string): Promise<void> => {
     const { remoteState } = get();
     if (!remoteState) return;
-    const newSteps = Array.from(new Set([...remoteState.completed_steps, step]));
+    const newSteps = Array.from(new Set([...completedSteps(remoteState), step]));
     const allDone = WALKTHROUGH_STEPS.every((s) => newSteps.includes(s));
     const updated = await patchRemote(token, {
       completed_steps: newSteps,
       ...(allDone ? { completed_at: new Date().toISOString() } : {}),
     });
-    const nextIdx = WALKTHROUGH_STEPS.findIndex((s) => !updated.completed_steps.includes(s));
+    const updatedSteps = completedSteps(updated);
+    const nextIdx = WALKTHROUGH_STEPS.findIndex((s) => !updatedSteps.includes(s));
     set({
       remoteState: updated,
       visible: !allDone,

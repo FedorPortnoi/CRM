@@ -14,12 +14,16 @@ type Deal = {
   status: DealStatus;
   pipeline_id: string | null;
   stage_id: string | null;
+  expected_close: string | null;
   contact_id: string;
   contact: { id: string; first_name: string; last_name: string };
   pipeline: { id: string; name: string } | null;
   stage: { id: string; name: string; position: number } | null;
   assigned_to: string | null;
   created_by: string | null;
+  next_action: string | null;
+  next_action_due: string | null;
+  stage_entered_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -163,7 +167,7 @@ export const useDealsStore = create<DealsState>()((set, get) => ({
 
     set({
       deals: get().deals.map((d: Deal) =>
-        d.id === dealId ? { ...d, stage_id: stageId } : d,
+        d.id === dealId ? { ...d, stage_id: stageId, stage_entered_at: new Date().toISOString() } : d,
       ),
     });
 

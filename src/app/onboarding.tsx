@@ -8,33 +8,35 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle2, Kanban, Users, Zap } from 'lucide-react-native';
 import { useUserStore } from '../store/userStore';
 
 const slides = [
   {
     Icon: Zap,
-    title: 'Welcome to CRM',
-    subtitle: 'Your mobile sales command center',
+    titleKey: 'onboarding.welcomeTitle',
+    subtitleKey: 'onboarding.welcomeSubtitle',
   },
   {
     Icon: Users,
-    title: 'Capture every lead',
-    subtitle: 'Add contacts and track conversations in one tap',
+    titleKey: 'onboarding.captureTitle',
+    subtitleKey: 'onboarding.captureSubtitle',
   },
   {
     Icon: Kanban,
-    title: 'Close deals faster',
-    subtitle: 'Move deals through your pipeline with a swipe',
+    titleKey: 'onboarding.closeTitle',
+    subtitleKey: 'onboarding.closeSubtitle',
   },
   {
     Icon: CheckCircle2,
-    title: "You're all set",
-    subtitle: "Let's build your pipeline",
+    titleKey: 'onboarding.readyTitle',
+    subtitleKey: 'onboarding.readySubtitle',
   },
 ];
 
 export default function OnboardingScreen(): JSX.Element {
+  const { t } = useTranslation();
   const completeOnboarding = useUserStore((s) => s.completeOnboarding);
   const [step, setStep] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -55,7 +57,7 @@ export default function OnboardingScreen(): JSX.Element {
     }
   };
 
-  const { Icon, title, subtitle } = slides[step]!;
+  const { Icon, titleKey, subtitleKey } = slides[step]!;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -64,8 +66,8 @@ export default function OnboardingScreen(): JSX.Element {
           <View style={styles.iconWrap}>
             <Icon size={56} color="#10b981" />
           </View>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+          <Text style={styles.title}>{t(titleKey)}</Text>
+          <Text style={styles.subtitle}>{t(subtitleKey)}</Text>
         </View>
 
         <View style={styles.dots}>
@@ -88,7 +90,7 @@ export default function OnboardingScreen(): JSX.Element {
           {isSaving ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.primaryText}>{isLast ? 'Get Started' : 'Next'}</Text>
+            <Text style={styles.primaryText}>{isLast ? t('onboarding.getStarted') : t('common.next')}</Text>
           )}
         </TouchableOpacity>
 
@@ -98,7 +100,7 @@ export default function OnboardingScreen(): JSX.Element {
             onPress={() => { void finish(); }}
             accessibilityRole="button"
           >
-            <Text style={styles.skipText}>Skip</Text>
+            <Text style={styles.skipText}>{t('onboarding.skipAll')}</Text>
           </TouchableOpacity>
         )}
       </View>

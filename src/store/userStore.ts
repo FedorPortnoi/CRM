@@ -116,22 +116,26 @@ export const useUserStore = create<UserState>()((set) => ({
     const userJson = await SecureStore.getItemAsync('crm_auth_user');
     if (!token || !userJson) return;
 
-    const response = await fetch(`${API_URL}/auth/onboarding`, {
+    const response = await fetch(`${API_URL}/onboarding`, {
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ completed: true }),
+      body: JSON.stringify({
+        completed_steps: ['contacts', 'deals', 'tasks', 'calendar'],
+        completed_at: new Date().toISOString(),
+      }),
     });
     const body: unknown = await response.json();
     if (!response.ok) {
       throw new Error(extractErrorMessage(body, response.status));
     }
 
-    const { data } = body as { data: AuthUser };
-    await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(data));
-    set({ user: data });
+    const currentUser = JSON.parse(userJson) as AuthUser;
+    const nextUser = { ...currentUser, onboarding_completed: true };
+    await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(nextUser));
+    set({ user: nextUser });
   },
 
   restoreSession: async (): Promise<void> => {

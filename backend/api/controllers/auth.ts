@@ -20,12 +20,12 @@ type AuthUsersResponse = {
 };
 
 function onboardingCompleted(state: Prisma.JsonValue | null): boolean {
-  return (
-    typeof state === 'object' &&
-    state !== null &&
-    !Array.isArray(state) &&
-    (state as Record<string, unknown>).completed === true
-  );
+  if (typeof state !== 'object' || state === null || Array.isArray(state)) {
+    return false;
+  }
+
+  const record = state as Record<string, unknown>;
+  return record.completed === true || typeof record.completed_at === 'string';
 }
 
 function publicUser(user: { id: string; email: string; name: string; role: string; organization_id: string; onboarding_state?: Prisma.JsonValue | null }) {

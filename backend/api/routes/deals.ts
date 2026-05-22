@@ -52,6 +52,10 @@ const DealFilterSchema = z.object({
   order: z.enum(['asc', 'desc']).default('desc'),
 });
 
+const StaleDealScanSchema = z.object({
+  threshold_days: z.coerce.number().int().min(0).max(365).optional(),
+});
+
 const CreatePipelineSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
@@ -83,6 +87,11 @@ export default async function dealsRoutes(fastify: FastifyInstance) {
     preHandler: [authenticate],
     schema: { body: CreateDealSchema },
   }, DealsController.create);
+
+  f.post('/stale/evaluate', {
+    preHandler: [authenticate],
+    schema: { querystring: StaleDealScanSchema },
+  }, DealsController.evaluateStale);
 
   f.get('/:id', { preHandler: [authenticate] }, DealsController.getById);
 

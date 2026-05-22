@@ -18,6 +18,10 @@ type ListQuery = {
   order: 'asc' | 'desc';
 };
 
+type StaleQuery = {
+  threshold_days?: number;
+};
+
 type CreateBody = {
   title: string;
   contact_id: string;
@@ -71,6 +75,7 @@ const contactOrgCache = new Set<string>();
 const pipelineOrgCache = new Set<string>();
 const stagePipelineCache = new Set<string>();
 const userOrgCache = new Set<string>();
+const MS_PER_DAY = 86_400_000;
 
 function contactOrgCacheKey(contactId: string, orgId: string): string {
   return `${orgId}:${contactId}`;
@@ -179,6 +184,10 @@ function invalidateStagePipelineCache(stageId: string, pipelineId: string, orgId
   stagePipelineCache.delete(stagePipelineCacheKey(stageId, pipelineId, orgId));
 }
 
+function daysSince(date: Date, now: Date): number {
+  return Math.max(0, Math.floor((now.getTime() - date.getTime()) / MS_PER_DAY));
+}
+
 // ─── Deal CRUD ────────────────────────────────────────────────────────────────
 
 async function list(
@@ -210,6 +219,49 @@ async function list(
   ]);
 
   reply.send({ data: deals, meta: { total, page, per_page } });
+}
+
+async function evaluateStale(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const { threshold_days } = request.query as StaleQuery;
+  const now = new Date();
+  const org = await db.org.findUnique({
+    where: { id: request.user.org_id },
+    select: { stalled_threshold_days: true },
+  });
+  const thresholdDays = threshold_days ?? org?.stalled_threshold_days ?? 14;
+  const cutoff = new Date(now.getTime() - thresholdDays * MS_PER_DAY);
+
+  const staleDeals = await db.deal.findMany({
+    where: {
+      organization_id: request.user.org_id,
+      status: DealStatus.open,
+      stage_entered_at: { lte: cutoff },
+    },
+    orderBy: { stage_entered_at: 'asc' },
+    include: dealInclude,
+  });
+
+  const data = staleDeals.map((deal) => ({
+    ...deal,
+    stale_days: daysSince(deal.stage_entered_at, now),
+    stale_threshold_days: thresholdDays,
+  }));
+
+  for (const deal of data) {
+    await evaluateWorkflows({
+      organizationId: request.user.org_id,
+      trigger: WorkflowTrigger.deal_stale,
+      record: deal as unknown as Record<string, unknown>,
+      userId: request.user.sub,
+      triggerRecordId: deal.id,
+      dedupeByTriggerRecord: true,
+    });
+  }
+
+  reply.send({ data, meta: { total: data.length, threshold_days: thresholdDays } });
 }
 
 async function create(
@@ -848,6 +900,7 @@ async function deleteStage(
 
 export const DealsController = {
   list,
+  evaluateStale,
   create,
   getById,
   update,

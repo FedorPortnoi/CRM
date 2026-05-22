@@ -101,6 +101,7 @@ enum WorkflowTrigger {
   deal_won
   deal_created
   task_created
+  deal_stale
 }
 
 enum WorkflowRunStatus {
