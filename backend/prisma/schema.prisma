@@ -134,14 +134,16 @@ model User {
   role              UserRole  @default(member)
   avatar_url        String?
   phone             String?
-  is_active         Boolean   @default(true)
-  onboarding_state  Json?
-  preferences       Json?
-  last_seen_at      DateTime?
-  invited_by        String?   @db.Uuid
-  created_at        DateTime  @default(now())
-  updated_at        DateTime  @updatedAt
-  push_token        String?
+  is_active              Boolean   @default(true)
+  onboarding_state       Json?
+  preferences            Json?
+  last_seen_at           DateTime?
+  invited_by             String?   @db.Uuid
+  created_at             DateTime  @default(now())
+  updated_at             DateTime  @updatedAt
+  push_token             String?
+  failed_login_count     Int       @default(0)
+  locked_until           DateTime?
 
   // Relations
   organization     Org       @relation("UserOrg", fields: [organization_id], references: [id])

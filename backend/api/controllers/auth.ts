@@ -13,6 +13,12 @@ import {
 
 const saltRounds = process.env.NODE_ENV === 'test' ? 4 : 12;
 
+const MAX_FAILED_ATTEMPTS = 10;
+const LOCKOUT_DURATION_MS = 30 * 60 * 1000; // 30 minutes
+
+// Pre-computed dummy hash — always run bcrypt to prevent timing-based email enumeration.
+const DUMMY_HASH = '$2b$12$invalidhashfortimingprotectio.AAAAAAAAAAAAAAAAAAAAAAAA';
+
 type AuthRole = 'owner' | 'admin' | 'member' | 'viewer';
 
 type AuthUserListItem = {
@@ -208,24 +214,57 @@ export const AuthController = {
     const email = normalizeEmail(rawEmail);
 
     const user = await db.user.findUnique({ where: { email } });
-    const passwordMatches = user?.is_active === true
-      ? await bcrypt.compare(password, user.password_hash)
-      : false;
 
-    if (!user || !user.is_active || !passwordMatches) {
+    // Always run bcrypt regardless of whether user exists — prevents timing-based email enumeration.
+    const hashToCompare = user?.password_hash ?? DUMMY_HASH;
+    const passwordMatches = await bcrypt.compare(password, hashToCompare);
+
+    // Check account lockout before revealing any other reason for failure.
+    if (user && user.locked_until && user.locked_until > new Date()) {
+      await auditLog({
+        action: 'auth.login',
+        outcome: 'failure',
+        request,
+        organizationId: user.organization_id,
+        userId: user.id,
+        metadata: { email, reason: 'account_locked' },
+      });
+      return invalidCredentials(reply);
+    }
+
+    const isValidLogin = user !== null && user.is_active && passwordMatches;
+
+    if (!isValidLogin) {
+      const reason = !user ? 'unknown_email' : !user.is_active ? 'inactive_user' : 'invalid_password';
+
+      if (user) {
+        const newCount = user.failed_login_count + 1;
+        const shouldLock = newCount >= MAX_FAILED_ATTEMPTS;
+        await db.user.update({
+          where: { id: user.id },
+          data: {
+            failed_login_count: newCount,
+            ...(shouldLock ? { locked_until: new Date(Date.now() + LOCKOUT_DURATION_MS) } : {}),
+          },
+        });
+      }
+
       await auditLog({
         action: 'auth.login',
         outcome: 'failure',
         request,
         organizationId: user?.organization_id,
         userId: user?.id,
-        metadata: {
-          email,
-          reason: !user ? 'unknown_email' : user.is_active ? 'invalid_password' : 'inactive_user',
-        },
+        metadata: { email, reason },
       });
       return invalidCredentials(reply);
     }
+
+    // Reset lockout state on successful login.
+    await db.user.update({
+      where: { id: user.id },
+      data: { failed_login_count: 0, locked_until: null },
+    });
 
     const token = await signSessionToken(request, reply, { ...user, role: user.role as AuthRole });
 
