@@ -8,6 +8,7 @@ node_modules/
 .env.local
 .env.*.local
 firebase-service-account.json
+google-services.json
 
 # Build outputs
 dist/

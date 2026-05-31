@@ -4,11 +4,25 @@ import { db } from '../../services/db';
 
 // --- Validation --------------------------------------------------------------
 
+function isSafePublicUrl(url: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(url);
+    if (protocol !== 'http:' && protocol !== 'https:') return false;
+    const h = hostname.toLowerCase();
+    if (h === 'localhost' || h === '127.0.0.1' || h === '::1') return false;
+    if (/^169\.254\./.test(h)) return false;
+    if (/^10\./.test(h)) return false;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return false;
+    if (/^192\.168\./.test(h)) return false;
+    return true;
+  } catch { return false; }
+}
+
 const CreateAttachmentSchema = z.object({
   entity_type: z.enum(['contact', 'deal', 'task', 'calendar_event']),
   entity_id: z.string().uuid(),
   filename: z.string().min(1),
-  file_url: z.string().url(),
+  file_url: z.string().url().refine(isSafePublicUrl, { message: 'file_url must be a public http/https URL' }),
   mime_type: z.string().optional(),
   size: z.number().int().positive().optional(),
 });

@@ -176,27 +176,28 @@ export const AuthController = {
         metadata: { email },
       });
 
-      // Issue OTPs and send both SMS and email in parallel.
-      const [smsCode, emailCode] = await Promise.all([
-        issueCode(user_id, 'sms'),
-        issueCode(user_id, 'email'),
-      ]);
-
-      const [smsResult, emailResult] = await Promise.all([
-        isSmsSendingEnabled() ? sendOtp(phone, smsCode) : Promise.resolve({ success: false, errorCode: 'SMS_SEND_DISABLED', disabled: true }),
-        isEmailSendingEnabled() ? sendEmail(email, 'Код подтверждения', `Ваш код: ${emailCode}. Действителен 10 минут.`) : Promise.resolve({ success: false, errorCode: 'EMAIL_SEND_DISABLED' }),
-      ]);
+      // Issue OTPs — delivery failure must not crash registration; account was already committed.
+      // Client should call POST /auth/verify/resend if sms_sent and email_sent are both false.
+      let smsDelivered = false;
+      let emailDelivered = false;
+      try {
+        const [smsCode, emailCode] = await Promise.all([
+          issueCode(user_id, 'sms'),
+          issueCode(user_id, 'email'),
+        ]);
+        const [smsResult, emailResult] = await Promise.all([
+          isSmsSendingEnabled() ? sendOtp(phone, smsCode) : Promise.resolve({ success: false }),
+          isEmailSendingEnabled() ? sendEmail(email, 'Код подтверждения', `Ваш код: ${emailCode}. Действителен 10 минут.`) : Promise.resolve({ success: false }),
+        ]);
+        smsDelivered = smsResult.success;
+        emailDelivered = emailResult.success;
+      } catch {
+        // silent — user can resend
+      }
 
       return reply.code(201).send({
-        data: {
-          user_id,
-          email,
-          needs_verification: true,
-        },
-        meta: {
-          sms_sent: smsResult.success,
-          email_sent: emailResult.success,
-        },
+        data: { user_id, email, needs_verification: true },
+        meta: { sms_sent: smsDelivered, email_sent: emailDelivered },
       });
     } catch (err: unknown) {
       const errCode = (err as { code?: string })?.code;

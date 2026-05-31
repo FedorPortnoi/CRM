@@ -51,7 +51,6 @@ async function registerToken(request: FastifyRequest, reply: FastifyReply): Prom
     db.user.updateMany({
       where: {
         push_token: token,
-        organization_id: request.user.org_id,
         id: { not: request.user.sub },
       },
       data: { push_token: null },

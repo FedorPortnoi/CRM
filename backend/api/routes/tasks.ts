@@ -1,7 +1,17 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { RRule } from 'rrule';
 import { TasksController } from '../controllers/tasks';
+
+function isSafeRRule(val: string): boolean {
+  try {
+    const rule = RRule.fromString(val.startsWith('RRULE:') ? val : `RRULE:${val}`);
+    if (rule.options.count !== null && rule.options.count !== undefined && rule.options.count > 1000) return false;
+    if (rule.options.interval !== undefined && rule.options.interval < 1) return false;
+    return true;
+  } catch { return false; }
+}
 
 const CreateTaskSchema = z.object({
   title: z.string().min(1).max(200),
@@ -12,7 +22,10 @@ const CreateTaskSchema = z.object({
   due_date: z.string().datetime().optional(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
   is_recurring: z.boolean().default(false),
-  recurrence_rule: z.string().max(200).optional(),
+  recurrence_rule: z.string().max(200).optional().refine(
+    (v) => v === undefined || isSafeRRule(v),
+    { message: 'Invalid or unsafe recurrence rule' },
+  ),
   reminder_at: z.string().datetime().optional(),
 });
 

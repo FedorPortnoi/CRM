@@ -1,4 +1,5 @@
 ﻿import './config/env';
+import { Prisma } from '@prisma/client';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
@@ -105,6 +106,14 @@ async function start() {
   });
 
   server.setErrorHandler((err, request, reply) => {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2023' ||
+      err instanceof Prisma.PrismaClientValidationError && err.message.includes('UUID')
+    ) {
+      reply.status(400).send({ error: { code: 'INVALID_ID', message: 'Invalid identifier format' } });
+      return;
+    }
+
     const apiError = toApiError(err);
     const statusCode = apiError.statusCode && apiError.statusCode >= 400 ? apiError.statusCode : 500;
     const message = statusCode >= 500 ? 'Internal server error' : apiError.message;
