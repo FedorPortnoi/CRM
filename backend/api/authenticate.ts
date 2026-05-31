@@ -22,7 +22,15 @@ function isPublicApiRoute(request: FastifyRequest): boolean {
   const path = apiPath(request);
   const method = request.method.toUpperCase();
 
-  if (method === 'POST' && (path === '/api/v1/auth' || path === '/api/v1/auth/login')) {
+  if (
+    method === 'POST' &&
+    (
+      path === '/api/v1/auth' ||
+      path === '/api/v1/auth/login' ||
+      path === '/api/v1/auth/verify' ||
+      path === '/api/v1/auth/verify/resend'
+    )
+  ) {
     return true;
   }
 

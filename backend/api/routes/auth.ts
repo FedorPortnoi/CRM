@@ -12,6 +12,18 @@ const RegisterSchema = z.object({
     .regex(/[^A-Za-z0-9]/, 'Password must include a symbol'),
   name: z.string().min(1).max(100),
   org_name: z.string().min(1).max(200),
+  phone: z.string().min(10).max(20),
+});
+
+const VerifyOtpSchema = z.object({
+  user_id: z.string().uuid(),
+  code: z.string().length(6).regex(/^\d{6}$/),
+  channel: z.enum(['sms', 'email']),
+});
+
+const ResendVerificationSchema = z.object({
+  user_id: z.string().uuid(),
+  channel: z.enum(['sms', 'email']),
 });
 
 const LoginSchema = z.object({
@@ -76,6 +88,14 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     preHandler: [authenticate],
     schema: { body: OnboardingSchema },
   }, AuthController.updateOnboarding);
+  fastify.post('/verify', {
+    config: { rateLimit: authRateLimit(10, '15 minutes') },
+    schema: { body: VerifyOtpSchema },
+  }, AuthController.verifyOtp);
+  fastify.post('/verify/resend', {
+    config: { rateLimit: authRateLimit(3, '5 minutes') },
+    schema: { body: ResendVerificationSchema },
+  }, AuthController.resendVerification);
 };
 
 export default authRoutes;

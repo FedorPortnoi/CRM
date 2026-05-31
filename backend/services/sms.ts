@@ -16,20 +16,14 @@ type SendResult = {
 
 function readTrimmedEnv(name: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
   const value = env[name];
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-
+  if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
 export function isSmsSendingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const configured = readTrimmedEnv('SMSRU_SEND_ENABLED', env)?.toLowerCase();
-  if (configured === undefined) {
-    return env.NODE_ENV !== 'test';
-  }
-
+  if (configured === undefined) return env.NODE_ENV !== 'test';
   return configured === '1' || configured === 'true' || configured === 'yes' || configured === 'on';
 }
 
@@ -42,24 +36,12 @@ function normalizeNetworkError(error: unknown): string {
   return error instanceof Error && error.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR';
 }
 
-export async function sendSms(to: string, text: string): Promise<SendResult> {
-  if (!isSmsSendingEnabled()) {
-    return { success: false, errorCode: 'SMS_SEND_DISABLED', disabled: true };
-  }
-
+async function sendSmsRu(to: string, text: string): Promise<SendResult> {
   const apiId = readTrimmedEnv('SMSRU_API_ID');
-  if (!apiId) {
-    return { success: false, errorCode: 'SERVICE_NOT_CONFIGURED' };
-  }
+  if (!apiId) return { success: false, errorCode: 'SERVICE_NOT_CONFIGURED' };
 
   const sender = readTrimmedEnv('SMSRU_SENDER') ?? 'CRM';
-  const params = new URLSearchParams({
-    api_id: apiId,
-    to,
-    msg: text,
-    from: sender,
-    json: '1',
-  });
+  const params = new URLSearchParams({ api_id: apiId, to, msg: text, from: sender, json: '1' });
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), getTimeoutMs());
@@ -67,30 +49,27 @@ export async function sendSms(to: string, text: string): Promise<SendResult> {
   try {
     const response = await fetch(new URL('/sms/send', SMS_RU_BASE), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString(),
       signal: controller.signal,
     });
 
-    if (!response.ok) {
-      return { success: false, errorCode: `HTTP_${response.status}` };
-    }
+    if (!response.ok) return { success: false, errorCode: `HTTP_${response.status}` };
 
     const body = await response.json() as SmsRuResponse;
     const smsEntry = body.sms ? Object.values(body.sms)[0] : undefined;
     if (body.status === 'OK' && (!smsEntry || smsEntry.status === 'OK')) {
       return { success: true, smsId: smsEntry?.sms_id };
     }
-
-    return {
-      success: false,
-      errorCode: String(smsEntry?.status_code ?? body.status_code ?? 'SMSRU_ERROR'),
-    };
+    return { success: false, errorCode: String(smsEntry?.status_code ?? body.status_code ?? 'SMSRU_ERROR') };
   } catch (error) {
     return { success: false, errorCode: normalizeNetworkError(error) };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function sendOtp(phone: string, code: string): Promise<SendResult> {
+  if (!isSmsSendingEnabled()) return { success: false, errorCode: 'SMS_SEND_DISABLED', disabled: true };
+  return sendSmsRu(phone, `Ваш код подтверждения: ${code}. Действителен 10 минут.`);
 }

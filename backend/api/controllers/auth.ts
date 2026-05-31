@@ -10,6 +10,9 @@ import {
   revokeAllUserSessions,
   revokeAuthSession,
 } from '../../services/sessions';
+import { issueCode, verifyCode } from '../../services/verification';
+import { sendOtp, isSmsSendingEnabled } from '../../services/sms';
+import { sendEmail, isEmailSendingEnabled } from '../../services/email';
 
 const saltRounds = process.env.NODE_ENV === 'test' ? 4 : 12;
 
@@ -103,11 +106,12 @@ async function signSessionToken(
 
 export const AuthController = {
   register: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { email: rawEmail, password, name, org_name } = request.body as {
+    const { email: rawEmail, password, name, org_name, phone } = request.body as {
       email: string;
       password: string;
       name: string;
       org_name: string;
+      phone: string;
     };
     const email = normalizeEmail(rawEmail);
 
@@ -128,8 +132,8 @@ export const AuthController = {
             RETURNING id
           ),
           user_cte AS (
-            INSERT INTO "User" (organization_id, email, password_hash, name, role, updated_at)
-            SELECT id, ${email}, ${password_hash}, ${name}, 'owner'::"UserRole", NOW()
+            INSERT INTO "User" (organization_id, email, password_hash, name, role, phone, updated_at)
+            SELECT id, ${email}, ${password_hash}, ${name}, 'owner'::"UserRole", ${phone}, NOW()
             FROM org_cte
             RETURNING id
           ),
@@ -163,12 +167,6 @@ export const AuthController = {
 
       const { org_id, user_id } = rows[0];
 
-      const token = await signSessionToken(request, reply, {
-        id: user_id,
-        organization_id: org_id,
-        role: 'owner',
-      });
-
       await auditLog({
         action: 'auth.register',
         outcome: 'success',
@@ -178,12 +176,27 @@ export const AuthController = {
         metadata: { email },
       });
 
+      // Issue OTPs and send both SMS and email in parallel.
+      const [smsCode, emailCode] = await Promise.all([
+        issueCode(user_id, 'sms'),
+        issueCode(user_id, 'email'),
+      ]);
+
+      const [smsResult, emailResult] = await Promise.all([
+        isSmsSendingEnabled() ? sendOtp(phone, smsCode) : Promise.resolve({ success: false, errorCode: 'SMS_SEND_DISABLED', disabled: true }),
+        isEmailSendingEnabled() ? sendEmail(email, 'Код подтверждения', `Ваш код: ${emailCode}. Действителен 10 минут.`) : Promise.resolve({ success: false, errorCode: 'EMAIL_SEND_DISABLED' }),
+      ]);
+
       return reply.code(201).send({
         data: {
-          user: { id: user_id, email, name, role: 'owner', org_id, onboarding_completed: false },
-          token,
+          user_id,
+          email,
+          needs_verification: true,
         },
-        meta: {},
+        meta: {
+          sms_sent: smsResult.success,
+          email_sent: emailResult.success,
+        },
       });
     } catch (err: unknown) {
       const errCode = (err as { code?: string })?.code;
@@ -232,7 +245,13 @@ export const AuthController = {
       return invalidCredentials(reply);
     }
 
-    const isValidLogin = user !== null && user.is_active && passwordMatches;
+    const isValidLogin = user !== null && user.is_active && user.is_verified && passwordMatches;
+
+    if (user && !user.is_verified && passwordMatches && user.is_active) {
+      return reply.code(403).send({
+        error: { code: 'ACCOUNT_NOT_VERIFIED', message: 'Please verify your account via the code sent to your phone and email.' },
+      });
+    }
 
     if (!isValidLogin) {
       const reason = !user ? 'unknown_email' : !user.is_active ? 'inactive_user' : 'invalid_password';
@@ -472,6 +491,7 @@ export const AuthController = {
         role,
         organization_id: request.user.org_id,
         is_active: true,
+        is_verified: true,
       },
       select: { id: true, email: true, name: true, role: true },
     });
@@ -532,5 +552,95 @@ export const AuthController = {
 
     const updated = await db.user.update({ where: { id }, data: { role }, select: { id: true, role: true } });
     return reply.send({ data: updated, meta: {} });
+  },
+
+  verifyOtp: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { user_id, code, channel } = request.body as { user_id: string; code: string; channel: 'sms' | 'email' };
+
+    const user = await db.user.findUnique({
+      where: { id: user_id },
+      select: { id: true, email: true, name: true, role: true, organization_id: true, is_verified: true, is_active: true },
+    });
+
+    if (!user || !user.is_active) {
+      return reply.code(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
+    }
+
+    if (user.is_verified) {
+      return reply.code(409).send({ error: { code: 'ALREADY_VERIFIED', message: 'Account is already verified' } });
+    }
+
+    const valid = await verifyCode(user_id, code, channel);
+    if (!valid) {
+      await auditLog({
+        action: 'auth.verify_otp',
+        outcome: 'failure',
+        request,
+        organizationId: user.organization_id,
+        userId: user_id,
+        metadata: { channel, reason: 'invalid_or_expired_code' },
+      });
+      return reply.code(400).send({ error: { code: 'INVALID_CODE', message: 'Code is invalid or has expired' } });
+    }
+
+    const verificationUpdate =
+      channel === 'sms'
+        ? { phone_verified: true, is_verified: true }
+        : { email_verified: true, is_verified: true };
+
+    await db.user.update({ where: { id: user_id }, data: verificationUpdate });
+
+    await auditLog({
+      action: 'auth.verify_otp',
+      outcome: 'success',
+      request,
+      organizationId: user.organization_id,
+      userId: user_id,
+      metadata: { channel },
+    });
+
+    const token = await signSessionToken(request, reply, {
+      id: user.id,
+      organization_id: user.organization_id,
+      role: user.role as AuthRole,
+    });
+
+    return reply.code(200).send({
+      data: {
+        user: { id: user.id, email: user.email, name: user.name, role: user.role, org_id: user.organization_id, onboarding_completed: false },
+        token,
+      },
+      meta: {},
+    });
+  },
+
+  resendVerification: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { user_id, channel } = request.body as { user_id: string; channel: 'sms' | 'email' };
+
+    const user = await db.user.findUnique({
+      where: { id: user_id },
+      select: { id: true, email: true, phone: true, is_verified: true, is_active: true },
+    });
+
+    if (!user || !user.is_active) {
+      return reply.code(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
+    }
+
+    if (user.is_verified) {
+      return reply.code(409).send({ error: { code: 'ALREADY_VERIFIED', message: 'Account is already verified' } });
+    }
+
+    const code = await issueCode(user_id, channel);
+
+    if (channel === 'sms') {
+      if (!user.phone) {
+        return reply.code(400).send({ error: { code: 'PHONE_MISSING', message: 'No phone number on file' } });
+      }
+      await sendOtp(user.phone, code);
+    } else {
+      await sendEmail(user.email, 'Код подтверждения', `Ваш код: ${code}. Действителен 10 минут.`);
+    }
+
+    return reply.code(200).send({ data: { sent: true }, meta: {} });
   },
 };
