@@ -603,10 +603,10 @@ export const ContactsController = {
     const { id } = request.params as { id: string };
 
     const existing = await db.contact.findFirst({
-      where: { id, organization_id: request.user.org_id },
+      where: { id, organization_id: request.user.org_id, status: { not: ContactStatus.archived } },
     });
 
-    if (!existing || existing.status === ContactStatus.archived) {
+    if (!existing) {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
     }
 

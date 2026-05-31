@@ -134,7 +134,7 @@ function verifyState(state: string): OAuthState | null {
 
   try {
     const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as OAuthState;
-    if (payload.exp < Date.now()) return null;
+    if (payload.exp <= Date.now()) return null;
     return payload;
   } catch {
     return null;
@@ -749,7 +749,7 @@ async function yandexOAuthStart(
   const state = signState({
     sub: request.user.sub,
     org_id: request.user.org_id,
-    exp: Date.now() + 10 * 60 * 1000,
+    exp: Date.now() + 5 * 60 * 1000,
   });
   const redirectUri = yandexRedirectUri(request);
   const authUrl = new URL('https://oauth.yandex.ru/authorize');
