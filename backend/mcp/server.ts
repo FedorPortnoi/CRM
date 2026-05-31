@@ -8,6 +8,7 @@ import {
 import { createVerifier } from 'fast-jwt';
 import { getJwtSecret } from '../config/security';
 import { validateMcpPrincipal } from './validation';
+import { auditLog } from '../services/audit';
 
 export type McpUser = { sub: string; org_id: string; role: string; sid?: string };
 
@@ -71,6 +72,11 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
   try {
     user = verifyToken(jwtToken);
   } catch {
+    await auditLog({
+      action: `mcp.tool.${name}`,
+      outcome: 'failure',
+      metadata: { reason: 'invalid_jwt' },
+    });
     return {
       content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Invalid jwt_token' }) }],
       isError: true,
@@ -79,6 +85,13 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
 
   const principalError = await validateMcpPrincipal(user);
   if (principalError) {
+    await auditLog({
+      action: `mcp.tool.${name}`,
+      outcome: 'denied',
+      organizationId: user.org_id,
+      userId: user.sub,
+      metadata: { reason: principalError.error.code },
+    });
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(principalError) }],
       isError: true,
@@ -88,7 +101,27 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { jwt_token: _stripped, ...remainingArgs } = callArgs;
   void _stripped;
 
-  const result = await entry.handler(remainingArgs, user);
+  let result: unknown;
+  try {
+    result = await entry.handler(remainingArgs, user);
+  } catch (err) {
+    await auditLog({
+      action: `mcp.tool.${name}`,
+      outcome: 'failure',
+      organizationId: user.org_id,
+      userId: user.sub,
+      metadata: { error: err instanceof Error ? err.message : 'UNKNOWN_ERROR' },
+    });
+    throw err;
+  }
+
+  await auditLog({
+    action: `mcp.tool.${name}`,
+    outcome: 'success',
+    organizationId: user.org_id,
+    userId: user.sub,
+  });
+
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(result) }],
   };

@@ -496,7 +496,22 @@ export const AuthController = {
       select: { id: true, email: true, name: true, role: true },
     });
 
-    return reply.status(201).send({ data: { ...user, temp_password: tempPassword }, meta: {} });
+    const emailResult = isEmailSendingEnabled()
+      ? await sendEmail(
+          email.trim().toLowerCase(),
+          'Добро пожаловать — временный пароль',
+          `Здравствуйте, ${name.trim()}!\n\nВаш временный пароль: ${tempPassword}\n\nПожалуйста, смените его при первом входе в систему.`,
+        )
+      : null;
+
+    return reply.status(201).send({
+      data: {
+        ...user,
+        // Included only when email delivery is unavailable so the admin can share it manually.
+        ...(emailResult === null ? { temp_password: tempPassword } : {}),
+      },
+      meta: { email_sent: emailResult?.success ?? false },
+    });
   },
 
   deactivateUser: async (request: FastifyRequest, reply: FastifyReply) => {
