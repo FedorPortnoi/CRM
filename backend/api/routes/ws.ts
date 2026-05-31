@@ -5,7 +5,12 @@ import { joinRoom, leaveRoom } from '../../services/wsRooms';
 
 export async function wsRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get('/ws', { websocket: true }, async (socket, request) => {
-    const token = (request.query as Record<string, string>)['token'];
+    const authHeader = request.headers['authorization'];
+    const token =
+      (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+        ? authHeader.slice(7)
+        : undefined) ??
+      (request.query as Record<string, string>)['token'];
     if (!token) {
       socket.close(1008, 'Missing token');
       return;

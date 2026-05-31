@@ -114,9 +114,45 @@ async function runRecurrence(): Promise<void> {
   }
 }
 
+async function cleanupStaleUnverifiedAccounts(): Promise<void> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  // Single-user orgs whose owner is still unverified after 24 h
+  const stale = await db.$queryRaw<Array<{ org_id: string; user_id: string }>>`
+    SELECT o.id AS org_id, u.id AS user_id
+    FROM organizations o
+    JOIN "User" u ON u.id = o.owner_id
+    WHERE u.is_verified = false
+      AND u.created_at < ${cutoff}
+      AND (SELECT COUNT(*) FROM "User" WHERE organization_id = o.id) = 1
+  `;
+
+  for (const row of stale) {
+    try {
+      await db.$transaction(async (tx) => {
+        await tx.$executeRaw`DELETE FROM "PipelineStage" ps USING "Pipeline" p WHERE ps.pipeline_id = p.id AND p.organization_id = ${row.org_id}::uuid`;
+        await tx.$executeRaw`DELETE FROM "Pipeline" WHERE organization_id = ${row.org_id}::uuid`;
+        await tx.$executeRaw`DELETE FROM "AuthSession" WHERE organization_id = ${row.org_id}::uuid`;
+        await tx.$executeRaw`DELETE FROM "VerificationCode" WHERE user_id = ${row.user_id}::uuid`;
+        await tx.$executeRaw`UPDATE organizations SET owner_id = NULL WHERE id = ${row.org_id}::uuid`;
+        await tx.$executeRaw`DELETE FROM "User" WHERE id = ${row.user_id}::uuid`;
+        await tx.$executeRaw`DELETE FROM organizations WHERE id = ${row.org_id}::uuid`;
+      });
+    } catch {
+      // skip — will retry next run
+    }
+  }
+}
+
 export function startScheduler(): void {
   setInterval(() => {
     void runReminders().catch(console.error);
     void runRecurrence().catch(console.error);
   }, 60_000);
+
+  // Hourly cleanup of orgs whose owner never verified within 24 h
+  void cleanupStaleUnverifiedAccounts().catch(console.error);
+  setInterval(() => {
+    void cleanupStaleUnverifiedAccounts().catch(console.error);
+  }, 60 * 60_000);
 }
