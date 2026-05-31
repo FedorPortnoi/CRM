@@ -5,7 +5,7 @@ import { db } from '../../services/db';
 // --- Validation --------------------------------------------------------------
 
 const CreateAttachmentSchema = z.object({
-  entity_type: z.string().min(1),
+  entity_type: z.enum(['contact', 'deal', 'task', 'calendar_event']),
   entity_id: z.string().uuid(),
   filename: z.string().min(1),
   file_url: z.string().url(),
@@ -64,6 +64,25 @@ export async function createAttachment(
   }
 
   const body = parsed.data;
+
+  const entityLookup: Record<string, () => Promise<{ id: string } | null>> = {
+    contact: () => db.contact.findFirst({ where: { id: body.entity_id, organization_id: request.user.org_id }, select: { id: true } }),
+    deal: () => db.deal.findFirst({ where: { id: body.entity_id, organization_id: request.user.org_id }, select: { id: true } }),
+    task: () => db.task.findFirst({ where: { id: body.entity_id, organization_id: request.user.org_id }, select: { id: true } }),
+    calendar_event: () => db.calendarEvent.findFirst({ where: { id: body.entity_id, organization_id: request.user.org_id }, select: { id: true } }),
+  };
+
+  const lookup = entityLookup[body.entity_type];
+  if (!lookup) {
+    reply.status(400).send({ error: { code: 'INVALID_ENTITY_TYPE', message: 'Unsupported entity type' } });
+    return;
+  }
+
+  const entityExists = await lookup();
+  if (!entityExists) {
+    reply.status(403).send({ error: { code: 'ENTITY_NOT_FOUND', message: 'Entity not found in your organization' } });
+    return;
+  }
 
   const attachment = await db.attachment.create({
     data: {
