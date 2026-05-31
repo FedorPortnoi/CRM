@@ -57,7 +57,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: { body: RegisterSchema },
   }, AuthController.register);
   fastify.post('/login', {
-    config: { rateLimit: authRateLimit(10, '5 minutes') },
+    config: { rateLimit: authRateLimit(5, '15 minutes') },
     schema: { body: LoginSchema },
   }, AuthController.login);
   fastify.post('/logout', { preHandler: [authenticate] }, AuthController.logout);

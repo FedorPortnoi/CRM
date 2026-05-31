@@ -461,7 +461,7 @@ export const AuthController = {
       return reply.status(409).send({ error: { code: 'EMAIL_TAKEN', message: 'A user with this email already exists in your organization' } });
     }
 
-    const tempPassword = crypto.randomBytes(6).toString('hex');
+    const tempPassword = crypto.randomBytes(16).toString('base64url');
     const hashedPassword = await bcrypt.hash(tempPassword, saltRounds);
 
     const user = await db.user.create({
