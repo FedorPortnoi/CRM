@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
@@ -8,6 +8,7 @@ import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
 import { scheduleTaskDueReminder } from '../../../utils/notifications';
 import { sendOrQueueMutation } from '../../../utils/offlineMutation';
+import { formatMarketDate } from '../../../market/profile';
 
 interface TaskContact {
   id: string;
@@ -25,6 +26,7 @@ interface Task {
   title: string;
   description: string | null;
   due_date: string | null;
+  reminder_at: string | null;
   is_recurring: boolean;
   recurrence_rule: string | null;
   contact_id?: string | null;
@@ -59,6 +61,7 @@ type TaskForm = {
 type TaskPatch = {
   title?: string;
   due_date?: string | null;
+  reminder_at?: string | null;
   description?: string;
   contact_id?: string | null;
   is_recurring?: boolean;
@@ -112,8 +115,7 @@ function recurrencePresetFromRule(isRecurring: boolean, rule: string | null): Re
 }
 
 function formatDate(dateStr: string): string {
-  const date = new Date(`${dateStr}T00:00:00`);
-  return date.toLocaleDateString('en-US', {
+  return formatMarketDate(`${dateStr}T00:00:00`, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -183,6 +185,8 @@ export default function EditTaskScreen(): JSX.Element {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [recurrencePreset, setRecurrencePreset] = useState<RecurrencePreset>('none');
   const [customRecurrenceRule, setCustomRecurrenceRule] = useState<string>('');
+  const [reminderDate, setReminderDate] = useState<string>('');
+  const [showReminderCalendar, setShowReminderCalendar] = useState<boolean>(false);
 
   const form = useMemo<TaskForm>(
     () => {
@@ -231,6 +235,7 @@ export default function EditTaskScreen(): JSX.Element {
       const loadedPreset = recurrencePresetFromRule(loadedForm.is_recurring, loadedForm.recurrence_rule);
       setRecurrencePreset(loadedPreset);
       setCustomRecurrenceRule(loadedPreset === 'custom' ? loadedForm.recurrence_rule : '');
+      setReminderDate(toDateInputValue(parsedBody.data.reminder_at ?? null));
       setContactQuery('');
       setContactResults([]);
     } catch (err) {
@@ -286,6 +291,10 @@ export default function EditTaskScreen(): JSX.Element {
     setIsSubmitting(true);
 
     const patch = buildPatch(form, original);
+    const originalReminderDate = toDateInputValue(null); // reminder not in form, track separately
+    if (reminderDate !== originalReminderDate) {
+      patch.reminder_at = reminderDate !== '' ? new Date(reminderDate + 'T09:00:00').toISOString() : null;
+    }
     if (Object.keys(patch).length === 0) {
       setIsSubmitting(false);
       router.back();
@@ -311,7 +320,7 @@ export default function EditTaskScreen(): JSX.Element {
         const parsedBody = (await response.json()) as { data: Task };
         if (parsedBody.data.due_date) {
           try {
-            await scheduleTaskDueReminder(id, parsedBody.data.title, parsedBody.data.due_date);
+            await scheduleTaskDueReminder(id, parsedBody.data.title, parsedBody.data.due_date, reminderDate || null);
           } catch {
             // The task update succeeded; local reminder updates are best-effort.
           }
@@ -364,7 +373,7 @@ export default function EditTaskScreen(): JSX.Element {
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#065f46" />
+            <ActivityIndicator size="large" color="#C45A10" />
           </View>
         ) : original !== null ? (
           <>
@@ -378,7 +387,7 @@ export default function EditTaskScreen(): JSX.Element {
                   setShowTitleError(false);
                 }}
                 placeholder={t('tasks.titlePlaceholder')}
-                placeholderTextColor="#6b7280"
+                placeholderTextColor="#B07868"
                 autoCapitalize="sentences"
               />
               {showTitleError ? <Text style={styles.fieldError}>{t('tasks.titleRequired')}</Text> : null}
@@ -413,12 +422,43 @@ export default function EditTaskScreen(): JSX.Element {
                 markedDates={
                   dueDate !== ''
                     ? ({
-                        [dueDate]: { selected: true, selectedColor: '#065f46' },
+                        [dueDate]: { selected: true, selectedColor: '#C45A10' },
                       } as Record<string, { selected?: boolean; selectedColor?: string }>)
                     : {}
                 }
               />
             </Modal>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Reminder (optional)</Text>
+              <TouchableOpacity style={styles.input} onPress={() => setShowReminderCalendar(true)}>
+                <Text style={reminderDate ? styles.inputText : styles.placeholderText}>{reminderDate ? `Remind on ${formatDate(reminderDate)}` : 'No reminder'}</Text>
+              </TouchableOpacity>
+              {reminderDate !== '' && (
+                <TouchableOpacity onPress={() => setReminderDate('')}>
+                  <Text style={styles.clearLink}>Clear</Text>
+                </TouchableOpacity>
+              )}
+              <Modal animationType="slide" visible={showReminderCalendar} onRequestClose={() => setShowReminderCalendar(false)}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Reminder Date</Text>
+                  <TouchableOpacity onPress={() => setShowReminderCalendar(false)}>
+                    <Text style={styles.modalDone}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+                <Calendar
+                  onDayPress={(day: CalendarDay) => {
+                    setReminderDate(day.dateString);
+                    setShowReminderCalendar(false);
+                  }}
+                  markedDates={
+                    reminderDate
+                      ? ({ [reminderDate]: { selected: true, selectedColor: '#C45A10' } } as Record<string, { selected?: boolean; selectedColor?: string }>)
+                      : {}
+                  }
+                />
+              </Modal>
+            </View>
 
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Repeat</Text>
@@ -443,7 +483,7 @@ export default function EditTaskScreen(): JSX.Element {
                   value={customRecurrenceRule}
                   onChangeText={setCustomRecurrenceRule}
                   placeholder="Every 2 weeks, weekdays, first Monday..."
-                  placeholderTextColor="#6b7280"
+                  placeholderTextColor="#B07868"
                   autoCapitalize="sentences"
                 />
               ) : null}
@@ -456,7 +496,7 @@ export default function EditTaskScreen(): JSX.Element {
                 value={notes}
                 onChangeText={setNotes}
                 placeholder="Add notes"
-                placeholderTextColor="#6b7280"
+                placeholderTextColor="#B07868"
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
@@ -488,7 +528,7 @@ export default function EditTaskScreen(): JSX.Element {
                     value={contactQuery}
                     onChangeText={setContactQuery}
                     placeholder={t('contacts.searchByName')}
-                    placeholderTextColor="#6b7280"
+                    placeholderTextColor="#B07868"
                   />
                   {contactResults.slice(0, 5).length > 0 ? (
                     <View style={styles.contactResultsContainer}>
@@ -538,24 +578,24 @@ const styles = StyleSheet.create({
   },
   errorBannerText: { color: '#ef4444' },
   bannerRetry: { marginTop: 8, alignSelf: 'flex-start' },
-  bannerRetryText: { color: '#065f46', fontWeight: '600' },
+  bannerRetryText: { color: '#C45A10', fontWeight: '600' },
   fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 14, fontWeight: '600', color: '#111827', marginBottom: 6 },
+  label: { fontSize: 14, fontWeight: '600', color: '#383432', marginBottom: 6 },
   input: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     minHeight: 44,
     justifyContent: 'center',
     fontSize: 16,
-    color: '#111827',
+    color: '#383432',
   },
-  inputText: { color: '#111827', fontSize: 16 },
-  placeholderText: { color: '#6b7280', fontSize: 16 },
-  clearLink: { color: '#065f46', fontSize: 12, marginTop: 4 },
+  inputText: { color: '#383432', fontSize: 16 },
+  placeholderText: { color: '#B07868', fontSize: 16 },
+  clearLink: { color: '#C45A10', fontSize: 12, marginTop: 4 },
   segmentedControl: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -563,29 +603,29 @@ const styles = StyleSheet.create({
   },
   segmentButton: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#E8DDD6',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
     backgroundColor: '#FFFFFF',
   },
   segmentButtonSelected: {
-    borderColor: '#065f46',
-    backgroundColor: '#ecfdf5',
+    borderColor: '#C45A10',
+    backgroundColor: '#FEF0E8',
   },
-  segmentText: { color: '#374151', fontSize: 14, fontWeight: '500' },
-  segmentTextSelected: { color: '#065f46' },
+  segmentText: { color: '#383432', fontSize: 14, fontWeight: '500' },
+  segmentTextSelected: { color: '#C45A10' },
   customRuleInput: { marginTop: 10 },
   notesInput: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     height: 100,
     fontSize: 16,
-    color: '#111827',
+    color: '#383432',
   },
   fieldError: { color: '#ef4444', fontSize: 12, marginTop: 4 },
   modalHeader: {
@@ -595,16 +635,16 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#E8DDD6',
   },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: '#111827' },
-  modalDone: { fontSize: 16, color: '#065f46', fontWeight: '600' },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: '#383432' },
+  modalDone: { fontSize: 16, color: '#C45A10', fontWeight: '600' },
   contactChip: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -613,15 +653,15 @@ const styles = StyleSheet.create({
   },
   contactChipText: {
     fontSize: 14,
-    color: '#111827',
+    color: '#383432',
     marginRight: 8,
     flexShrink: 1,
   },
-  contactChipRemove: { fontSize: 14, color: '#065f46', fontWeight: '600' },
+  contactChipRemove: { fontSize: 14, color: '#C45A10', fontWeight: '600' },
   contactResultsContainer: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     marginTop: 4,
   },
@@ -629,11 +669,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#E8DDD6',
   },
-  contactResultText: { fontSize: 15, color: '#111827' },
+  contactResultText: { fontSize: 15, color: '#383432' },
   submitButton: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 12,
     minHeight: 48,
     justifyContent: 'center',

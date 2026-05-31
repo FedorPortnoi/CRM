@@ -1,9 +1,19 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { db } from '../../services/db';
+import { auditLog, listAuditEvents } from '../../services/audit';
+import {
+  createAuthSession,
+  listActiveUserSessions,
+  revokeAllUserSessions,
+  revokeAuthSession,
+} from '../../services/sessions';
 
 const saltRounds = process.env.NODE_ENV === 'test' ? 4 : 12;
+
+type AuthRole = 'owner' | 'admin' | 'member' | 'viewer';
 
 type AuthUserListItem = {
   id: string;
@@ -17,6 +27,16 @@ type AuthUsersResponse = {
   meta: {
     total: number;
   };
+};
+
+type AuditQuery = {
+  action?: string;
+  outcome?: string;
+  user_id?: string;
+  start?: string;
+  end?: string;
+  page: number;
+  per_page: number;
 };
 
 function onboardingCompleted(state: Prisma.JsonValue | null): boolean {
@@ -51,14 +71,39 @@ function invalidCredentials(reply: FastifyReply) {
   });
 }
 
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+async function signSessionToken(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  user: { id: string; organization_id: string; role: AuthRole },
+): Promise<string> {
+  const expiresIn = process.env.JWT_EXPIRES_IN ?? '7d';
+  const sessionId = await createAuthSession({
+    request,
+    userId: user.id,
+    organizationId: user.organization_id,
+    expiresIn,
+  });
+
+  const token = await reply.jwtSign(
+    { sub: user.id, org_id: user.organization_id, role: user.role, sid: sessionId },
+    { expiresIn },
+  );
+  return token;
+}
+
 export const AuthController = {
   register: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { email, password, name, org_name } = request.body as {
+    const { email: rawEmail, password, name, org_name } = request.body as {
       email: string;
       password: string;
       name: string;
       org_name: string;
     };
+    const email = normalizeEmail(rawEmail);
 
     try {
       const [password_hash, slug] = await Promise.all([
@@ -112,10 +157,20 @@ export const AuthController = {
 
       const { org_id, user_id } = rows[0];
 
-      const token = await reply.jwtSign(
-        { sub: user_id, org_id, role: 'owner' },
-        { expiresIn: process.env.JWT_EXPIRES_IN ?? '7d' }
-      );
+      const token = await signSessionToken(request, reply, {
+        id: user_id,
+        organization_id: org_id,
+        role: 'owner',
+      });
+
+      await auditLog({
+        action: 'auth.register',
+        outcome: 'success',
+        request,
+        organizationId: org_id,
+        userId: user_id,
+        metadata: { email },
+      });
 
       return reply.code(201).send({
         data: {
@@ -134,6 +189,12 @@ export const AuthController = {
         rawQueryCode === '23505' ||
         (errCode === 'P2010' && (errMessage.includes('23505') || errMessage.includes('duplicate key')))
       ) {
+        await auditLog({
+          action: 'auth.register',
+          outcome: 'failure',
+          request,
+          metadata: { email, reason: 'duplicate_email' },
+        });
         return reply.code(409).send({
           error: { code: 'EMAIL_ALREADY_EXISTS', message: 'An account with this email already exists' },
         });
@@ -143,18 +204,39 @@ export const AuthController = {
   },
 
   login: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { email, password } = request.body as { email: string; password: string };
+    const { email: rawEmail, password } = request.body as { email: string; password: string };
+    const email = normalizeEmail(rawEmail);
 
     const user = await db.user.findUnique({ where: { email } });
+    const passwordMatches = user?.is_active === true
+      ? await bcrypt.compare(password, user.password_hash)
+      : false;
 
-    if (!user || !user.is_active || !(await bcrypt.compare(password, user.password_hash))) {
+    if (!user || !user.is_active || !passwordMatches) {
+      await auditLog({
+        action: 'auth.login',
+        outcome: 'failure',
+        request,
+        organizationId: user?.organization_id,
+        userId: user?.id,
+        metadata: {
+          email,
+          reason: !user ? 'unknown_email' : user.is_active ? 'invalid_password' : 'inactive_user',
+        },
+      });
       return invalidCredentials(reply);
     }
 
-    const token = await reply.jwtSign(
-      { sub: user.id, org_id: user.organization_id, role: user.role },
-      { expiresIn: process.env.JWT_EXPIRES_IN ?? '7d' }
-    );
+    const token = await signSessionToken(request, reply, { ...user, role: user.role as AuthRole });
+
+    await auditLog({
+      action: 'auth.login',
+      outcome: 'success',
+      request,
+      organizationId: user.organization_id,
+      userId: user.id,
+      metadata: { email },
+    });
 
     return reply.send({
       data: {
@@ -162,6 +244,104 @@ export const AuthController = {
         token,
       },
       meta: {},
+    });
+  },
+
+  logout: async (request: FastifyRequest, reply: FastifyReply) => {
+    const sessionId = request.user.sid;
+    if (!sessionId) {
+      await auditLog({
+        action: 'auth.logout',
+        outcome: 'failure',
+        request,
+        metadata: { reason: 'missing_session_id' },
+      });
+      return reply.status(401).send({
+        error: { code: 'SESSION_REQUIRED', message: 'Authentication session is required' },
+      });
+    }
+
+    const revokedCount = await revokeAuthSession(
+      sessionId,
+      request.user.sub,
+      request.user.org_id,
+      'user_logout',
+    );
+
+    await auditLog({
+      action: 'auth.logout',
+      outcome: revokedCount === 1 ? 'success' : 'failure',
+      request,
+      metadata: { revoked_count: revokedCount },
+    });
+
+    return reply.send({ data: { revoked: revokedCount === 1 }, meta: {} });
+  },
+
+  logoutAll: async (request: FastifyRequest, reply: FastifyReply) => {
+    const revokedCount = await revokeAllUserSessions(
+      request.user.sub,
+      request.user.org_id,
+      'user_logout_all',
+    );
+
+    await auditLog({
+      action: 'auth.logout_all',
+      outcome: 'success',
+      request,
+      metadata: { revoked_count: revokedCount },
+    });
+
+    return reply.send({ data: { revoked_count: revokedCount }, meta: {} });
+  },
+
+  listSessions: async (request: FastifyRequest, reply: FastifyReply) => {
+    const sessions = await listActiveUserSessions(request.user.sub, request.user.org_id);
+    return reply.send({
+      data: sessions.map((session) => ({
+        ...session,
+        current: request.user.sid === session.id,
+      })),
+      meta: { total: sessions.length },
+    });
+  },
+
+  listAuditEvents: async (request: FastifyRequest, reply: FastifyReply) => {
+    const query = request.query as AuditQuery;
+    const { data, total } = await listAuditEvents({
+      organizationId: request.user.org_id,
+      action: query.action,
+      outcome: query.outcome,
+      userId: query.user_id,
+      start: query.start ? new Date(query.start) : undefined,
+      end: query.end ? new Date(query.end) : undefined,
+      page: query.page,
+      perPage: query.per_page,
+    });
+
+    await auditLog({
+      action: 'audit.read',
+      outcome: 'success',
+      request,
+      metadata: {
+        filters: {
+          action: query.action,
+          outcome: query.outcome,
+          user_id: query.user_id,
+          start: query.start,
+          end: query.end,
+        },
+        result_count: data.length,
+      },
+    });
+
+    return reply.send({
+      data,
+      meta: {
+        total,
+        page: query.page,
+        per_page: query.per_page,
+      },
     });
   },
 
@@ -217,5 +397,101 @@ export const AuthController = {
       data: publicUser(user),
       meta: {},
     });
+  },
+
+  inviteUser: async (request: FastifyRequest, reply: FastifyReply) => {
+    const callerRole = request.user.role as AuthRole;
+    if (callerRole !== 'owner' && callerRole !== 'admin') {
+      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Only owners and admins can invite members' } });
+    }
+
+    const { email, name, role } = request.body as { email: string; name: string; role: AuthRole };
+
+    const validRoles: AuthRole[] = ['admin', 'member', 'viewer'];
+    if (!validRoles.includes(role)) {
+      return reply.status(400).send({ error: { code: 'INVALID_ROLE', message: 'Role must be admin, member, or viewer' } });
+    }
+    if (callerRole === 'admin' && role === 'admin') {
+      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Admins cannot invite other admins' } });
+    }
+
+    const existing = await db.user.findFirst({
+      where: { email: email.trim().toLowerCase(), organization_id: request.user.org_id },
+    });
+    if (existing) {
+      return reply.status(409).send({ error: { code: 'EMAIL_TAKEN', message: 'A user with this email already exists in your organization' } });
+    }
+
+    const tempPassword = crypto.randomBytes(6).toString('hex');
+    const hashedPassword = await bcrypt.hash(tempPassword, saltRounds);
+
+    const user = await db.user.create({
+      data: {
+        email: email.trim().toLowerCase(),
+        name: name.trim(),
+        password_hash: hashedPassword,
+        role,
+        organization_id: request.user.org_id,
+        is_active: true,
+      },
+      select: { id: true, email: true, name: true, role: true },
+    });
+
+    return reply.status(201).send({ data: { ...user, temp_password: tempPassword }, meta: {} });
+  },
+
+  deactivateUser: async (request: FastifyRequest, reply: FastifyReply) => {
+    const callerRole = request.user.role as AuthRole;
+    if (callerRole !== 'owner' && callerRole !== 'admin') {
+      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Only owners and admins can deactivate members' } });
+    }
+
+    const { id } = request.params as { id: string };
+    if (id === request.user.sub) {
+      return reply.status(400).send({ error: { code: 'CANNOT_DEACTIVATE_SELF', message: 'You cannot deactivate your own account' } });
+    }
+
+    const target = await db.user.findFirst({
+      where: { id, organization_id: request.user.org_id },
+      select: { id: true, role: true, is_active: true },
+    });
+    if (!target) {
+      return reply.status(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
+    }
+    if (target.role === 'owner' && callerRole !== 'owner') {
+      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Only the owner can deactivate another owner' } });
+    }
+
+    await db.user.update({ where: { id }, data: { is_active: false } });
+    return reply.send({ data: { id }, meta: {} });
+  },
+
+  changeUserRole: async (request: FastifyRequest, reply: FastifyReply) => {
+    const callerRole = request.user.role as AuthRole;
+    if (callerRole !== 'owner') {
+      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Only owners can change user roles' } });
+    }
+
+    const { id } = request.params as { id: string };
+    if (id === request.user.sub) {
+      return reply.status(400).send({ error: { code: 'CANNOT_CHANGE_OWN_ROLE', message: 'You cannot change your own role' } });
+    }
+
+    const { role } = request.body as { role: AuthRole };
+    const assignableRoles: AuthRole[] = ['admin', 'member', 'viewer'];
+    if (!assignableRoles.includes(role)) {
+      return reply.status(400).send({ error: { code: 'INVALID_ROLE', message: 'Role must be admin, member, or viewer' } });
+    }
+
+    const target = await db.user.findFirst({
+      where: { id, organization_id: request.user.org_id },
+      select: { id: true },
+    });
+    if (!target) {
+      return reply.status(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
+    }
+
+    const updated = await db.user.update({ where: { id }, data: { role }, select: { id: true, role: true } });
+    return reply.send({ data: updated, meta: {} });
   },
 };

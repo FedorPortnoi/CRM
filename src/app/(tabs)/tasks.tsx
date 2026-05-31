@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+﻿import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,11 @@ import {
   StyleSheet,
   ListRenderItemInfo,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 
@@ -46,68 +48,56 @@ function formatDue(due: string | null): string {
 function badgeColor(status: TaskStatus): string {
   switch (status) {
     case 'done':
-      return '#065f46';
+      return '#C45A10';
     case 'in_progress':
       return '#f59e0b';
     case 'pending':
       return '#E8A000';
     default:
-      return '#9ca3af';
+      return '#CFADA3';
   }
 }
 
 export default function TasksScreen(): JSX.Element {
   const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
-  const [todayTasks, setTodayTasks] = useState<Task[]>([]);
-  const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>('today');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  const fetchTasks = useCallback(async (): Promise<void> => {
-    if (!token) return;
-    try {
-      setError(null);
-      const [todayRes, allRes] = await Promise.all([
-        fetch(`${API_URL}/tasks/today`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${API_URL}/tasks?per_page=100`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
-      if (!todayRes.ok) throw new Error(`Tasks/today failed: ${todayRes.status}`);
-      if (!allRes.ok) throw new Error(`Tasks failed: ${allRes.status}`);
+  const { data: todayTasks = [], isLoading: todayLoading, error: todayError, refetch: refetchToday } = useQuery({
+    queryKey: ['tasks-today', token],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/tasks/today`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`Tasks/today failed: ${res.status}`);
+      const json = (await res.json()) as { data: Task[] };
+      return sortByDueAsc(json.data);
+    },
+    enabled: !!token,
+  });
 
-      const todayJson = (await todayRes.json()) as { data: Task[] };
-      const allJson = (await allRes.json()) as { data: Task[] };
+  const { data: allTasks = [], isLoading: allLoading, error: allError, refetch: refetchAll } = useQuery({
+    queryKey: ['tasks-all', token],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/tasks?per_page=100`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`Tasks failed: ${res.status}`);
+      const json = (await res.json()) as { data: Task[] };
+      return sortByDueAsc(json.data.filter((t) => t.status !== 'cancelled'));
+    },
+    enabled: !!token,
+  });
 
-      setTodayTasks(sortByDueAsc(todayJson.data));
-      setAllTasks(
-        sortByDueAsc(allJson.data.filter((t) => t.status !== 'cancelled')),
-      );
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t('errors.serverError'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [token, t]);
-
-  useEffect(() => {
-    void fetchTasks();
-  }, [fetchTasks]);
+  const isLoading = todayLoading || allLoading;
+  const error = todayError?.message ?? allError?.message ?? null;
 
   const handleRetry = useCallback((): void => {
-    setIsLoading(true);
-    void fetchTasks();
-  }, [fetchTasks]);
+    void refetchToday();
+    void refetchAll();
+  }, [refetchToday, refetchAll]);
 
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const handleRefresh = useCallback((): void => {
     setIsRefreshing(true);
-    void fetchTasks().finally(() => setIsRefreshing(false));
-  }, [fetchTasks]);
+    void Promise.all([refetchToday(), refetchAll()]).finally(() => setIsRefreshing(false));
+  }, [refetchToday, refetchAll]);
 
   const renderItem = useCallback(({ item }: ListRenderItemInfo<Task>): JSX.Element => {
     const overdue = isOverdue(item);
@@ -208,8 +198,8 @@ export default function TasksScreen(): JSX.Element {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={['#065f46']}
-            tintColor="#065f46"
+            colors={['#C45A10']}
+            tintColor="#C45A10"
           />
         }
         ListEmptyComponent={
@@ -267,7 +257,7 @@ const styles = StyleSheet.create({
   },
   skeletonRow: {
     height: 64,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#FAF6F3',
     borderRadius: 12,
     marginBottom: 8,
   },
@@ -285,7 +275,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
@@ -301,7 +291,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: '#FAF6F3',
   },
   tab: {
     flex: 1,
@@ -311,15 +301,15 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabActive: {
-    borderBottomColor: '#065f46',
+    borderBottomColor: '#C45A10',
   },
   tabText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#9ca3af',
+    color: '#CFADA3',
   },
   tabTextActive: {
-    color: '#065f46',
+    color: '#C45A10',
     fontWeight: '600',
   },
   listContent: {
@@ -336,7 +326,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#9ca3af',
+    color: '#CFADA3',
   },
   row: {
     backgroundColor: '#FFFFFF',
@@ -356,7 +346,7 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#111827',
+    color: '#383432',
     marginBottom: 6,
   },
   rowTitleOverdue: {
@@ -369,7 +359,7 @@ const styles = StyleSheet.create({
   },
   rowDate: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#B07868',
   },
   rowDateOverdue: {
     color: '#ef4444',

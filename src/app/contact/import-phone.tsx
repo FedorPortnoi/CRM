@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -117,7 +117,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
     setPermissionDenied(false);
 
     try {
-      const permissionResponse: Contacts.PermissionResponse = await Contacts.requestPermissionsAsync();
+      const permissionResponse = await Contacts.requestPermissionsAsync();
       if (permissionResponse.status === Contacts.PermissionStatus.GRANTED) {
         setCanAskContactsPermissionAgain(true);
         setPhase('loading');
@@ -283,7 +283,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
     if (isRequestingPermission || !permissionDenied) {
       return (
         <View style={styles.centeredContainer}>
-          <ActivityIndicator size="large" color="#10b981" />
+          <ActivityIndicator size="large" color="#C4704F" />
         </View>
       );
     }
@@ -313,7 +313,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
   if (phase === 'loading') {
     return (
       <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color="#C4704F" />
       </View>
     );
   }
@@ -321,7 +321,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
   if (phase === 'importing') {
     return (
       <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color="#C4704F" />
         <Text style={styles.progressText}>
           Importing {progress.done} of {progress.total}...
         </Text>
@@ -337,7 +337,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
           value={search}
           onChangeText={handleSearchChange}
           placeholder={t('contacts.searchImportPhone')}
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor="#CFADA3"
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -387,14 +387,14 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#FEF0E8',
   },
   centeredContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#FEF0E8',
   },
   errorText: {
     color: '#ef4444',
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
   },
   settingsButtonText: {
     color: '#FFFFFF',
@@ -418,22 +418,22 @@ const styles = StyleSheet.create({
   },
   progressText: {
     marginTop: 16,
-    color: '#111827',
+    color: '#383432',
     fontSize: 16,
     fontWeight: '600',
   },
   searchContainer: {
     padding: 16,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#FEF0E8',
   },
   searchInput: {
     minHeight: 44,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
-    color: '#111827',
+    color: '#383432',
     fontSize: 16,
   },
   listContent: {
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyStateText: {
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 16,
   },
   contactRow: {
@@ -462,7 +462,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
   },
@@ -477,24 +477,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#10b981',
+    borderColor: '#C4704F',
     borderRadius: 4,
     backgroundColor: '#FFFFFF',
   },
   checkboxSelected: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
   },
   contactTextArea: {
     flex: 1,
   },
   contactName: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 16,
     fontWeight: '700',
   },
   contactSubtitle: {
     marginTop: 2,
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 14,
   },
   actionBar: {
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: '#E8DDD6',
     backgroundColor: '#FFFFFF',
   },
   cancelButton: {
@@ -511,12 +511,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
   },
   cancelButtonText: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -526,7 +526,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
   },
   importButtonDisabled: {
     opacity: 0.5,

@@ -1,6 +1,8 @@
 import { db } from '../services/db';
+import { validateAuthSession } from '../services/sessions';
+import type { McpUser } from './server';
 
-type McpPrincipal = { sub: string; org_id: string };
+type McpPrincipal = { sub: string; org_id: string; sid?: string };
 
 export type McpToolError = {
   error: {
@@ -24,8 +26,8 @@ export function mcpError(code: string, message: string): McpToolError {
 }
 
 export async function validateMcpPrincipal(user: McpPrincipal): Promise<McpToolError | null> {
-  if (!isNonEmptyString(user.sub) || !isNonEmptyString(user.org_id)) {
-    return mcpError('INVALID_TOKEN', 'JWT payload must include sub and org_id');
+  if (!isNonEmptyString(user.sub) || !isNonEmptyString(user.org_id) || !isNonEmptyString(user.sid)) {
+    return mcpError('INVALID_TOKEN', 'JWT payload must include sub, org_id, and sid');
   }
 
   const [activeUser, org] = await Promise.all([
@@ -41,6 +43,15 @@ export async function validateMcpPrincipal(user: McpPrincipal): Promise<McpToolE
 
   if (!activeUser || !org) {
     return mcpError('UNAUTHORIZED', 'Authenticated user is inactive or does not belong to an active organization');
+  }
+
+  const activeSession = await validateAuthSession({
+    sessionId: user.sid,
+    userId: user.sub,
+    organizationId: user.org_id,
+  });
+  if (!activeSession) {
+    return mcpError('SESSION_REVOKED', 'Authentication session has expired or was revoked');
   }
 
   return null;
@@ -101,5 +112,12 @@ export async function validateMcpWriteReferences(
     return mcpError('FORBIDDEN', 'Deal does not belong to your organization');
   }
 
+  return null;
+}
+
+export function requireMcpWrite(user: McpUser): McpToolError | null {
+  if (user.role === 'viewer') {
+    return mcpError('FORBIDDEN', 'Viewer role cannot perform write operations');
+  }
   return null;
 }

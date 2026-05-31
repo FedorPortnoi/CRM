@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { enqueue } from '../../utils/offlineQueue';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
+import { formatMarketDateTime, formatMarketTime } from '../../market/profile';
 
 type CalendarEventStatus = 'scheduled' | 'completed' | 'cancelled';
 
@@ -55,27 +56,27 @@ type ActionName = 'complete' | 'cancel' | 'notes';
 type MutationResult = { queued: true } | { queued: false; response: Response };
 
 function formatDateTime(dateString: string): string {
-  return new Date(dateString).toLocaleString('en-US', {
-    weekday: 'short',
-    month: 'short',
+  return formatMarketDateTime(dateString, {
     day: 'numeric',
-    year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    month: 'short',
+    weekday: 'short',
+    year: 'numeric',
   });
 }
 
 function formatTime(dateString: string): string {
-  return new Date(dateString).toLocaleTimeString('en-US', {
+  return formatMarketTime(dateString, {
     hour: 'numeric',
     minute: '2-digit',
   });
 }
 
 function statusColor(status: CalendarEventStatus): string {
-  if (status === 'completed') return '#34A853';
-  if (status === 'cancelled') return '#9ca3af';
-  return '#10b981';
+  if (status === 'completed') return '#C4704F';
+  if (status === 'cancelled') return '#CFADA3';
+  return '#C4704F';
 }
 
 function contactName(contact: CalendarContact): string {
@@ -106,7 +107,7 @@ function SkeletonBox({ height, width = '100%', marginBottom = 0 }: SkeletonBoxPr
         width,
         marginBottom,
         borderRadius: 12,
-        backgroundColor: '#d1fae5',
+        backgroundColor: '#FEF0E8',
       }}
     />
   );
@@ -511,7 +512,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               numberOfLines={5}
               textAlignVertical="top"
               placeholder={t('calendar.outcomesPlaceholder')}
-              placeholderTextColor="#6b7280"
+              placeholderTextColor="#B07868"
             />
             {notesFieldError ? <Text style={styles.fieldError}>{notesFieldError}</Text> : null}
             <TouchableOpacity
@@ -607,7 +608,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               numberOfLines={4}
               textAlignVertical="top"
               placeholder={t('calendar.completeNotesPromptPlaceholder')}
-              placeholderTextColor="#6b7280"
+              placeholderTextColor="#B07868"
               editable={!isActionDisabled}
               autoFocus
             />
@@ -649,7 +650,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#FEF0E8',
   },
   content: {
     padding: 16,
@@ -660,17 +661,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     padding: 16,
   },
   title: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 22,
     fontWeight: '700',
     marginBottom: 8,
   },
   timeRange: {
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 13,
     lineHeight: 19,
     marginBottom: 12,
@@ -708,48 +709,48 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   detailLabel: {
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 13,
     fontWeight: '600',
     width: 82,
   },
   detailValue: {
-    color: '#111827',
+    color: '#383432',
     flex: 1,
     fontSize: 14,
     textAlign: 'right',
   },
   emptyValue: {
-    color: '#9ca3af',
+    color: '#CFADA3',
     flex: 1,
     fontSize: 14,
     textAlign: 'right',
   },
   linkText: {
-    color: '#10b981',
+    color: '#C4704F',
     fontSize: 14,
     fontWeight: '600',
     maxWidth: 220,
     textAlign: 'right',
   },
   sectionLabel: {
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 8,
     textTransform: 'uppercase',
   },
   bodyText: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 14,
     lineHeight: 20,
   },
   notesInput: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     borderWidth: 1,
-    color: '#111827',
+    color: '#383432',
     fontSize: 15,
     minHeight: 116,
     paddingHorizontal: 12,
@@ -761,12 +762,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   infoBox: {
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#FEF0E8',
     borderRadius: 12,
     padding: 12,
   },
   infoText: {
-    color: '#10b981',
+    color: '#C4704F',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -778,7 +779,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   buttonPrimary: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
   },
   buttonDestructive: {
     backgroundColor: '#ef4444',
@@ -802,7 +803,7 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     alignItems: 'center',
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#FEF0E8',
     flex: 1,
     justifyContent: 'center',
     padding: 24,
@@ -814,7 +815,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
     borderRadius: 12,
     justifyContent: 'center',
     minHeight: 44,
@@ -831,7 +832,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   headerEditText: {
-    color: '#10b981',
+    color: '#C4704F',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -850,23 +851,23 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   promptTitle: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 8,
   },
   promptMessage: {
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 12,
   },
   promptInput: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     borderWidth: 1,
-    color: '#111827',
+    color: '#383432',
     fontSize: 15,
     minHeight: 104,
     paddingHorizontal: 12,
@@ -887,11 +888,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   promptButtonPrimary: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
   },
   promptButtonSecondary: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#10b981',
+    borderColor: '#C4704F',
     borderWidth: 1,
   },
   promptButtonPrimaryText: {
@@ -900,7 +901,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   promptButtonSecondaryText: {
-    color: '#10b981',
+    color: '#C4704F',
     fontSize: 14,
     fontWeight: '600',
   },

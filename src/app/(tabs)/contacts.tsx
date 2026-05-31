@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+﻿import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { router } from 'expo-router';
 import { Check, Search } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { formatDistanceToNow } from 'date-fns';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
@@ -54,7 +55,7 @@ type ContactsResponse = {
 
 const PER_PAGE = 20;
 
-const AVATAR_COLORS = ['#065f46', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
+const AVATAR_COLORS = ['#C45A10', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
 
 function getInitials(firstName: string, lastName: string | null): string {
   const f = firstName.charAt(0).toUpperCase();
@@ -70,47 +71,26 @@ function avatarColor(name: string): string {
 
 export default function ContactsScreen(): JSX.Element {
   const { t } = useTranslation();
-  const token = useUserStore((s) => s.token);
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const queryClient = useQueryClient();
+  const { token } = useUserStore();
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isFetchingMore, setIsFetchingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
-  const [isArchiving, setIsArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [isAssignModalVisible, setIsAssignModalVisible] = useState(false);
   const [orgUsers, setOrgUsers] = useState<OrgUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [isAssigning, setIsAssigning] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [showNoContact30d, setShowNoContact30d] = useState(false);
-  const contactsRequestId = useRef(0);
+  const filter = showNoContact30d ? 'no-contact-30d' : 'all';
 
-  const selectedContactIdSet = useMemo(
-    () => new Set(selectedContactIds),
-    [selectedContactIds],
-  );
-  const isSelectionMode = selectedContactIds.length > 0;
-  const isBulkActionRunning = isArchiving || isAssigning;
-
-  const fetchContacts = useCallback(
-    async (pageNum: number, reset: boolean): Promise<void> => {
-      const requestId = contactsRequestId.current + 1;
-      contactsRequestId.current = requestId;
-
+  const contactsQuery = useQuery<ContactsResponse, Error>({
+    queryKey: ['contacts', page, search, filter, token],
+    queryFn: async (): Promise<ContactsResponse> => {
       if (!token) {
-        setContacts([]);
-        setHasMore(false);
-        setIsLoading(false);
-        setIsFetchingMore(false);
-        setError(t('errors.unauthorized'));
-        return;
+        throw new Error(t('errors.unauthorized'));
       }
 
       const query = search.trim();
@@ -137,92 +117,184 @@ export default function ContactsScreen(): JSX.Element {
         return (await res.json()) as ContactsResponse;
       };
 
-      try {
-        setError(null);
+      if (filter === 'no-contact-30d') {
+        const allContacts: Contact[] = [];
+        let currentPage = 1;
+        let total: number | null = null;
 
-        if (showNoContact30d) {
-          const allContacts: Contact[] = [];
-          let currentPage = 1;
-          let total: number | null = null;
+        while (total === null || allContacts.length < total) {
+          const json = await fetchPage(currentPage);
+          allContacts.push(...json.data);
+          total = json.meta.total;
 
-          while (total === null || allContacts.length < total) {
-            const json = await fetchPage(currentPage);
-            allContacts.push(...json.data);
-            total = json.meta.total;
-
-            if (json.data.length < PER_PAGE) {
-              break;
-            }
-
-            currentPage += 1;
+          if (json.data.length < PER_PAGE) {
+            break;
           }
 
-          if (contactsRequestId.current !== requestId) {
-            return;
-          }
-
-          setContacts(allContacts);
-          setPage(currentPage);
-          setHasMore(false);
-          return;
+          currentPage += 1;
         }
 
-        const json = await fetchPage(pageNum);
+        return {
+          data: allContacts,
+          meta: { total: total ?? allContacts.length },
+        };
+      }
 
-        if (contactsRequestId.current !== requestId) {
-          return;
-        }
+      return fetchPage(page);
+    },
+    retry: (failureCount) => Boolean(token) && failureCount < 3,
+  });
 
-        setContacts((prev) => (reset ? json.data : [...prev, ...json.data]));
-        const loadedCount = reset ? json.data.length : (pageNum - 1) * PER_PAGE + json.data.length;
-        setHasMore(
-          json.data.length === PER_PAGE &&
-            loadedCount < json.meta.total,
-        );
-      } catch (e: unknown) {
-        if (contactsRequestId.current !== requestId) {
-          return;
-        }
+  const archiveMutation = useMutation<void, Error, string[]>({
+    mutationFn: async (contactIds: string[]): Promise<void> => {
+      if (!token) {
+        throw new Error(t('errors.unauthorized'));
+      }
 
-        setError(e instanceof Error ? e.message : t('errors.serverError'));
-      } finally {
-        if (contactsRequestId.current === requestId) {
-          setIsLoading(false);
-          setIsFetchingMore(false);
-        }
+      const result = await sendOrQueueMutation({
+        url: `${API_URL}/contacts/bulk-archive`,
+        method: 'POST',
+        token,
+        body: { contact_ids: contactIds },
+      });
+
+      if (!result.queued && !result.response.ok) {
+        throw new Error(`Request failed with status ${result.response.status}`);
       }
     },
-    [search, showNoContact30d, token, t],
-  );
+    onSuccess: (_data, contactIds) => {
+      const archivedContactIds = new Set(contactIds);
+      queryClient.setQueriesData<ContactsResponse>(
+        { queryKey: ['contacts'] },
+        (current) => {
+          if (!current) return current;
 
-  useEffect(() => {
-    setIsLoading(true);
-    setIsFetchingMore(false);
-    setPage(1);
-    setSelectedContactIds([]);
-    void fetchContacts(1, true);
-  }, [fetchContacts]);
+          const nextData = current.data.filter(
+            (contact) => !archivedContactIds.has(contact.id),
+          );
+          const removedCount = current.data.length - nextData.length;
+
+          if (removedCount === 0) return current;
+
+          return {
+            ...current,
+            data: nextData,
+            meta: {
+              ...current.meta,
+              total: Math.max(0, current.meta.total - removedCount),
+            },
+          };
+        },
+      );
+      void queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      setSelectedContactIds([]);
+      setArchiveError(null);
+      setAssignError(null);
+      setUsersError(null);
+      setSelectedUserId(null);
+      setIsAssignModalVisible(false);
+    },
+    onError: (e) => {
+      setArchiveError(e.message);
+    },
+  });
+
+  const assignMutation = useMutation<void, Error, { contactIds: string[]; assignedTo: string }>({
+    mutationFn: async ({ contactIds, assignedTo }): Promise<void> => {
+      if (!token) {
+        throw new Error(t('errors.unauthorized'));
+      }
+
+      const result = await sendOrQueueMutation({
+        url: `${API_URL}/contacts/bulk-assign`,
+        method: 'POST',
+        token,
+        body: {
+          contact_ids: contactIds,
+          assigned_to: assignedTo,
+        },
+      });
+
+      if (!result.queued && !result.response.ok) {
+        throw new Error(`Request failed with status ${result.response.status}`);
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      setSelectedContactIds([]);
+      setIsAssignModalVisible(false);
+      setSelectedUserId(null);
+      setArchiveError(null);
+      setAssignError(null);
+      setUsersError(null);
+    },
+    onError: (e) => {
+      setAssignError(e.message);
+    },
+  });
+
+  const contactPages =
+    filter === 'no-contact-30d'
+      ? contactsQuery.data
+        ? [contactsQuery.data]
+        : []
+      : Array.from({ length: page }, (_, index) =>
+          queryClient.getQueryData<ContactsResponse>([
+            'contacts',
+            index + 1,
+            search,
+            filter,
+            token,
+          ]),
+        ).filter((value): value is ContactsResponse => value !== undefined);
+
+  const contacts = contactPages.flatMap((contactPage) => contactPage.data);
+  const hasMore =
+    filter !== 'no-contact-30d' &&
+    contactsQuery.data !== undefined &&
+    contactsQuery.data.data.length === PER_PAGE &&
+    contacts.length < contactsQuery.data.meta.total;
+  const isLoading = contactsQuery.isPending && contacts.length === 0;
+  const isFetchingMore = page > 1 && contactsQuery.isPending;
+  const isRefreshing = contactsQuery.isRefetching && page === 1;
+  const error = contactsQuery.isError ? contactsQuery.error.message : null;
+
+  const selectedContactIdSet = useMemo(
+    () => new Set(selectedContactIds),
+    [selectedContactIds],
+  );
+  const isSelectionMode = selectedContactIds.length > 0;
+  const isArchiving = archiveMutation.isPending;
+  const isAssigning = assignMutation.isPending;
+  const isBulkActionRunning = isArchiving || isAssigning;
 
   const loadMore = useCallback((): void => {
-    if (isFetchingMore || !hasMore) return;
-    const nextPage = page + 1;
-    setIsFetchingMore(true);
-    setPage(nextPage);
-    void fetchContacts(nextPage, false);
-  }, [isFetchingMore, hasMore, page, fetchContacts]);
+    if (contactsQuery.isFetching || !hasMore) return;
+    setPage((currentPage) => currentPage + 1);
+  }, [contactsQuery.isFetching, hasMore]);
 
   const handleRetry = useCallback((): void => {
-    setIsLoading(true);
     setPage(1);
-    void fetchContacts(1, true);
-  }, [fetchContacts]);
+    void queryClient.invalidateQueries({ queryKey: ['contacts'] });
+  }, [queryClient]);
 
   const handleRefresh = useCallback((): void => {
-    setIsRefreshing(true);
     setPage(1);
     setSelectedContactIds([]);
-    void fetchContacts(1, true).finally(() => setIsRefreshing(false));
-  }, [fetchContacts]);
+    void queryClient.invalidateQueries({ queryKey: ['contacts'] });
+  }, [queryClient]);
+
+  const handleSearchChange = useCallback((text: string): void => {
+    setSearch(text);
+    setPage(1);
+    setSelectedContactIds([]);
+  }, []);
+
+  const handleToggleNoContactFilter = useCallback((): void => {
+    setShowNoContact30d((current) => !current);
+    setPage(1);
+    setSelectedContactIds([]);
+  }, []);
 
   const handleLongPressContact = useCallback(
     (contactId: string): void => {
@@ -299,47 +371,14 @@ export default function ContactsScreen(): JSX.Element {
   }, [fetchOrgUsers, isAssignModalVisible]);
 
   const archiveSelectedContacts = useCallback(
-    async (contactIds: string[]): Promise<void> => {
+    (contactIds: string[]): void => {
       if (isAssigning) return;
 
-      if (!token) {
-        setArchiveError(t('errors.unauthorized'));
-        return;
-      }
-
-      try {
-        setIsArchiving(true);
-        setArchiveError(null);
-        setAssignError(null);
-        const result = await sendOrQueueMutation({
-          url: `${API_URL}/contacts/bulk-archive`,
-          method: 'POST',
-          token,
-          body: { contact_ids: contactIds },
-        });
-
-        if (!result.queued && !result.response.ok) {
-          throw new Error(`Request failed with status ${result.response.status}`);
-        }
-
-        const archivedContactIds = new Set(contactIds);
-        setContacts((prev) =>
-          prev.filter((contact) => !archivedContactIds.has(contact.id)),
-        );
-        setSelectedContactIds([]);
-        setError(null);
-        setArchiveError(null);
-        setAssignError(null);
-        setUsersError(null);
-        setSelectedUserId(null);
-        setIsAssignModalVisible(false);
-      } catch (e: unknown) {
-        setArchiveError(e instanceof Error ? e.message : t('errors.serverError'));
-      } finally {
-        setIsArchiving(false);
-      }
+      setArchiveError(null);
+      setAssignError(null);
+      archiveMutation.mutate(contactIds);
     },
-    [isAssigning, token, t],
+    [archiveMutation, isAssigning],
   );
 
   const handleArchivePress = useCallback((): void => {
@@ -357,7 +396,7 @@ export default function ContactsScreen(): JSX.Element {
           text: t('contacts.archive'),
           style: 'destructive',
           onPress: () => {
-            void archiveSelectedContacts(contactIdsToArchive);
+            archiveSelectedContacts(contactIdsToArchive);
           },
         },
       ],
@@ -384,46 +423,14 @@ export default function ContactsScreen(): JSX.Element {
   }, [isAssigning]);
 
   const assignSelectedContacts = useCallback(
-    async (contactIds: string[], assignedTo: string): Promise<void> => {
+    (contactIds: string[], assignedTo: string): void => {
       if (isArchiving) return;
 
-      if (!token) {
-        setAssignError(t('errors.unauthorized'));
-        return;
-      }
-
-      try {
-        setIsAssigning(true);
-        setAssignError(null);
-        setArchiveError(null);
-        const result = await sendOrQueueMutation({
-          url: `${API_URL}/contacts/bulk-assign`,
-          method: 'POST',
-          token,
-          body: {
-            contact_ids: contactIds,
-            assigned_to: assignedTo,
-          },
-        });
-
-        if (!result.queued && !result.response.ok) {
-          throw new Error(`Request failed with status ${result.response.status}`);
-        }
-
-        setSelectedContactIds([]);
-        setIsAssignModalVisible(false);
-        setSelectedUserId(null);
-        setError(null);
-        setArchiveError(null);
-        setAssignError(null);
-        setUsersError(null);
-      } catch (e: unknown) {
-        setAssignError(e instanceof Error ? e.message : t('errors.serverError'));
-      } finally {
-        setIsAssigning(false);
-      }
+      setAssignError(null);
+      setArchiveError(null);
+      assignMutation.mutate({ contactIds, assignedTo });
     },
-    [isArchiving, token, t],
+    [assignMutation, isArchiving],
   );
 
   const handleConfirmAssign = useCallback((): void => {
@@ -435,7 +442,7 @@ export default function ContactsScreen(): JSX.Element {
     }
 
     const contactIdsToAssign = [...selectedContactIds];
-    void assignSelectedContacts(contactIdsToAssign, selectedUserId);
+    assignSelectedContacts(contactIdsToAssign, selectedUserId);
   }, [
     assignSelectedContacts,
     isBulkActionRunning,
@@ -591,13 +598,13 @@ export default function ContactsScreen(): JSX.Element {
       <View style={styles.circle2} pointerEvents="none" />
       <View style={styles.circle3} pointerEvents="none" />
       <View style={styles.searchWrapper}>
-        <Search size={16} color="#9ca3af" />
+        <Search size={16} color="#CFADA3" />
         <TextInput
           style={styles.searchInput}
           placeholder={t('contacts.searchPlaceholder')}
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor="#CFADA3"
           value={search}
-          onChangeText={setSearch}
+          onChangeText={handleSearchChange}
           autoCapitalize="none"
           autoCorrect={false}
           clearButtonMode="while-editing"
@@ -616,10 +623,7 @@ export default function ContactsScreen(): JSX.Element {
         <View style={styles.filterBar}>
           <TouchableOpacity
             style={[styles.filterChip, showNoContact30d ? styles.filterChipActive : null]}
-            onPress={() => {
-              setShowNoContact30d((current) => !current);
-              setPage(1);
-            }}
+            onPress={handleToggleNoContactFilter}
             accessibilityRole="button"
             accessibilityState={{ selected: showNoContact30d }}
           >
@@ -640,8 +644,8 @@ export default function ContactsScreen(): JSX.Element {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={['#065f46']}
-            tintColor="#065f46"
+            colors={['#C45A10']}
+            tintColor="#C45A10"
           />
         }
         onEndReached={loadMore}
@@ -681,7 +685,7 @@ export default function ContactsScreen(): JSX.Element {
         ListFooterComponent={
           isFetchingMore ? (
             <View style={styles.footer}>
-              <ActivityIndicator size="small" color="#065f46" />
+              <ActivityIndicator size="small" color="#C45A10" />
             </View>
           ) : null
         }
@@ -756,7 +760,7 @@ export default function ContactsScreen(): JSX.Element {
             <View style={styles.userListContainer}>
               {isLoadingUsers ? (
                 <View style={styles.modalStateContainer}>
-                  <ActivityIndicator size="small" color="#065f46" />
+                  <ActivityIndicator size="small" color="#C45A10" />
                   <Text style={styles.modalStateText}>{t('contacts.loadingUsers')}</Text>
                 </View>
               ) : usersError ? (
@@ -866,7 +870,7 @@ const styles = StyleSheet.create({
   },
   skeletonRow: {
     height: 64,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#FAF6F3',
     borderRadius: 12,
     marginBottom: 8,
   },
@@ -884,7 +888,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
@@ -906,14 +910,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     minHeight: 44,
     gap: 10,
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: '#111827',
+    color: '#383432',
     paddingVertical: 10,
   },
   importRow: {
@@ -923,7 +927,7 @@ const styles = StyleSheet.create({
   },
   importRowText: {
     fontSize: 13,
-    color: '#065f46',
+    color: '#C45A10',
     fontWeight: '500',
     paddingVertical: 4,
   },
@@ -934,23 +938,23 @@ const styles = StyleSheet.create({
   },
   filterChip: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#E8DDD6',
     borderRadius: 16,
     paddingHorizontal: 10,
     paddingVertical: 6,
     backgroundColor: '#FFFFFF',
   },
   filterChipActive: {
-    borderColor: '#065f46',
-    backgroundColor: '#ecfdf5',
+    borderColor: '#C45A10',
+    backgroundColor: '#FEF0E8',
   },
   filterChipText: {
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 12,
     fontWeight: '600',
   },
   filterChipTextActive: {
-    color: '#065f46',
+    color: '#C45A10',
   },
   avatar: {
     width: 40,
@@ -991,13 +995,13 @@ const styles = StyleSheet.create({
   },
   checkboxEmpty: {
     borderWidth: 1.5,
-    borderColor: '#9ca3af',
+    borderColor: '#CFADA3',
     backgroundColor: '#FFFFFF',
   },
   checkboxSelected: {
     borderWidth: 1.5,
-    borderColor: '#065f46',
-    backgroundColor: '#065f46',
+    borderColor: '#C45A10',
+    backgroundColor: '#C45A10',
   },
   rowMain: {
     flex: 1,
@@ -1007,21 +1011,21 @@ const styles = StyleSheet.create({
   rowName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#111827',
+    color: '#383432',
   },
   rowSub: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#B07868',
     marginTop: 2,
   },
   lastContactText: {
     fontSize: 11,
-    color: '#9ca3af',
+    color: '#CFADA3',
     marginTop: 2,
   },
   rowPhone: {
     fontSize: 13,
-    color: '#6b7280',
+    color: '#B07868',
     maxWidth: '38%',
   },
   emptyContainer: {
@@ -1031,7 +1035,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#9ca3af',
+    color: '#CFADA3',
     textAlign: 'center',
   },
   emptyActions: {
@@ -1040,7 +1044,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyPrimaryButton: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 12,
     minHeight: 44,
     alignItems: 'center',
@@ -1054,7 +1058,7 @@ const styles = StyleSheet.create({
   },
   emptySecondaryButton: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     minHeight: 44,
     alignItems: 'center',
@@ -1063,7 +1067,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   emptySecondaryText: {
-    color: '#065f46',
+    color: '#C45A10',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1089,7 +1093,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
+    borderTopColor: '#FAF6F3',
   },
   cancelSelectionButton: {
     minHeight: 44,
@@ -1098,10 +1102,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
   },
   cancelSelectionText: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1110,7 +1114,7 @@ const styles = StyleSheet.create({
     minWidth: 96,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -1161,12 +1165,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   modalTitle: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 18,
     fontWeight: '700',
   },
   modalSubtitle: {
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 13,
     marginTop: 4,
   },
@@ -1186,7 +1190,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   modalStateText: {
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 14,
     marginTop: 10,
     textAlign: 'center',
@@ -1201,7 +1205,7 @@ const styles = StyleSheet.create({
     minHeight: 40,
     paddingHorizontal: 18,
     borderRadius: 12,
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1214,7 +1218,7 @@ const styles = StyleSheet.create({
     minHeight: 64,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 8,
@@ -1223,8 +1227,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   userRowSelected: {
-    borderColor: '#065f46',
-    backgroundColor: '#ecfdf5',
+    borderColor: '#C45A10',
+    backgroundColor: '#FEF0E8',
   },
   userRowText: {
     flex: 1,
@@ -1232,12 +1236,12 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   userName: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 15,
     fontWeight: '600',
   },
   userEmail: {
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 13,
     marginTop: 3,
   },
@@ -1250,13 +1254,13 @@ const styles = StyleSheet.create({
   },
   userSelectionIndicatorEmpty: {
     borderWidth: 1.5,
-    borderColor: '#9ca3af',
+    borderColor: '#CFADA3',
     backgroundColor: '#FFFFFF',
   },
   userSelectionIndicatorSelected: {
     borderWidth: 1.5,
-    borderColor: '#065f46',
-    backgroundColor: '#065f46',
+    borderColor: '#C45A10',
+    backgroundColor: '#C45A10',
   },
   modalActions: {
     flexDirection: 'row',
@@ -1270,10 +1274,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
   },
   modalCancelText: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1281,7 +1285,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',

@@ -2,7 +2,9 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { CalendarEventStatus, ContactStatus, Prisma, TaskStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
 import { evaluateWorkflows } from '../../services/workflows';
-import { getLastContactedMap } from '../../services/lastContacted';
+import { getContactIdsLastContactedBefore, getLastContactedMap } from '../../services/lastContacted';
+import { encryptField, decryptField } from '../../services/encryption';
+import { logActivity } from './activities';
 
 type ContactBody = {
   first_name: string;
@@ -111,6 +113,15 @@ class ScopedMutationMissError extends Error {
   }
 }
 
+function decryptContact<T extends { email?: string | null; phone?: string | null; mobile?: string | null }>(c: T): T {
+  return {
+    ...c,
+    email: decryptField(c.email ?? undefined) ?? null,
+    phone: decryptField(c.phone ?? undefined) ?? null,
+    mobile: decryptField(c.mobile ?? undefined) ?? null,
+  };
+}
+
 function optionalTrimmedString(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined;
@@ -145,9 +156,32 @@ function phoneMatchKeys(value: string | null | undefined): Set<string> {
   return keys;
 }
 
-function hasMatchingPhone(contact: { phone: string | null; mobile: string | null }, searchKeys: Set<string>): boolean {
-  const contactKeys = new Set<string>([...phoneMatchKeys(contact.phone), ...phoneMatchKeys(contact.mobile)]);
-  return [...contactKeys].some((key) => searchKeys.has(key));
+function intersectIds(idSets: string[][]): string[] {
+  if (idSets.length === 0) {
+    return [];
+  }
+
+  const [firstSet, ...remainingSets] = idSets.map((ids) => new Set(ids));
+  return Array.from(firstSet).filter((id) => remainingSets.every((set) => set.has(id)));
+}
+
+async function findContactIdsByPhone(orgId: string, searchKeys: Set<string>): Promise<string[]> {
+  if (searchKeys.size === 0) {
+    return [];
+  }
+
+  const keys = Array.from(searchKeys);
+  const rows = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT id
+    FROM "Contact"
+    WHERE organization_id = ${orgId}::uuid
+      AND (
+        regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') IN (${Prisma.join(keys)})
+        OR regexp_replace(coalesce(mobile, ''), '[^0-9]', '', 'g') IN (${Prisma.join(keys)})
+      )
+  `);
+
+  return rows.map((row) => row.id);
 }
 
 function getYandexConfig(serviceName: 'Vision' | 'SpeechKit'): { apiKey: string; folderId: string } {
@@ -171,7 +205,7 @@ function sendServiceNotConfigured(reply: FastifyReply, error: ServiceNotConfigur
 
 async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
   const user = await db.user.findFirst({
-    where: { id: userId, organization_id: orgId },
+    where: { id: userId, organization_id: orgId, is_active: true },
     select: { id: true },
   });
   return user !== null;
@@ -462,42 +496,27 @@ export const ContactsController = {
 
     const lastContactedBefore = last_contacted_before ? new Date(last_contacted_before) : null;
 
-    if (phone !== undefined || lastContactedBefore !== null) {
-      const searchKeys = phone !== undefined ? phoneMatchKeys(phone) : null;
+    const idFilters: string[][] = [];
 
-      if (searchKeys !== null && searchKeys.size === 0) {
+    if (phone !== undefined) {
+      const searchKeys = phoneMatchKeys(phone);
+      if (searchKeys.size === 0) {
         return reply.send({ data: [], meta: { total: 0, page, per_page } });
       }
 
-      const [contacts, lastContactedMap] = await Promise.all([
-        db.contact.findMany({
-          where,
-          orderBy: { [sort]: order },
-        }),
-        getLastContactedMap(request.user.org_id),
-      ]);
+      idFilters.push(await findContactIdsByPhone(request.user.org_id, searchKeys));
+    }
 
-      const matchedContacts = contacts.filter((contact) => {
-        if (searchKeys !== null && !hasMatchingPhone(contact, searchKeys)) {
-          return false;
-        }
+    if (lastContactedBefore !== null) {
+      idFilters.push(await getContactIdsLastContactedBefore(request.user.org_id, lastContactedBefore));
+    }
 
-        if (lastContactedBefore !== null) {
-          const lastContactedAt = lastContactedMap.get(contact.id);
-          return !lastContactedAt || lastContactedAt < lastContactedBefore;
-        }
-
-        return true;
-      });
-
-      const start = (page - 1) * per_page;
-      const paginatedContacts = matchedContacts.slice(start, start + per_page);
-      const contactsWithActivity = paginatedContacts.map(c => ({
-        ...c,
-        last_contacted_at: lastContactedMap.get(c.id) ?? null,
-      }));
-
-      return reply.send({ data: contactsWithActivity, meta: { total: matchedContacts.length, page, per_page } });
+    if (idFilters.length > 0) {
+      const matchedIds = intersectIds(idFilters);
+      if (matchedIds.length === 0) {
+        return reply.send({ data: [], meta: { total: 0, page, per_page } });
+      }
+      where.id = { in: matchedIds };
     }
 
     const [contacts, total] = await Promise.all([
@@ -512,9 +531,9 @@ export const ContactsController = {
 
     const contactIds = contacts.map(c => c.id);
     const lastContactedMap = contactIds.length > 0
-      ? await getLastContactedMap(request.user.org_id)
+      ? await getLastContactedMap(request.user.org_id, contactIds)
       : new Map<string, Date>();
-    const contactsWithActivity = contacts.map(c => ({
+    const contactsWithActivity = contacts.map(c => decryptContact({
       ...c,
       last_contacted_at: lastContactedMap.get(c.id) ?? null,
     }));
@@ -538,9 +557,9 @@ export const ContactsController = {
       first_name: body.first_name,
       last_name: body.last_name,
       company: body.company,
-      email: body.email,
-      phone: body.phone,
-      mobile: body.mobile,
+      email: body.email ? encryptField(body.email) : undefined,
+      phone: body.phone ? encryptField(body.phone) : undefined,
+      mobile: body.mobile ? encryptField(body.mobile) : undefined,
       tags: body.tags,
       source: body.source,
       notes: body.notes,
@@ -561,7 +580,8 @@ export const ContactsController = {
       triggerRecordId: contact.id,
     });
 
-    return reply.code(201).send({ data: contact, meta: {} });
+    void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'contact', entityId: contact.id, action: 'created' });
+    return reply.code(201).send({ data: decryptContact(contact), meta: {} });
   },
 
   getById: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -576,7 +596,7 @@ export const ContactsController = {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
     }
 
-    return reply.send({ data: contact });
+    return reply.send({ data: decryptContact(contact) });
   },
 
   update: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -605,9 +625,9 @@ export const ContactsController = {
     if (body.first_name !== undefined) updateData.first_name = body.first_name;
     if (body.last_name !== undefined) updateData.last_name = body.last_name;
     if (body.company !== undefined) updateData.company = body.company;
-    if (body.email !== undefined) updateData.email = body.email;
-    if (body.phone !== undefined) updateData.phone = body.phone;
-    if (body.mobile !== undefined) updateData.mobile = body.mobile;
+    if (body.email !== undefined) updateData.email = body.email ? encryptField(body.email) : body.email;
+    if (body.phone !== undefined) updateData.phone = body.phone ? encryptField(body.phone) : body.phone;
+    if (body.mobile !== undefined) updateData.mobile = body.mobile ? encryptField(body.mobile) : body.mobile;
     if (body.tags !== undefined) updateData.tags = body.tags;
     if (body.source !== undefined) updateData.source = body.source;
     if (body.notes !== undefined) updateData.notes = body.notes;
@@ -632,7 +652,18 @@ export const ContactsController = {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
     }
 
-    return reply.send({ data: contact });
+    const PII_FIELDS = new Set(['email', 'phone', 'mobile']);
+    const changes: Record<string, unknown> = {};
+    for (const key of Object.keys(updateData) as (keyof typeof updateData)[]) {
+      if (PII_FIELDS.has(key)) {
+        changes[key] = '[changed]';
+      } else {
+        changes[key] = { from: existing[key as keyof typeof existing], to: updateData[key] };
+      }
+    }
+    void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'contact', entityId: id, action: 'updated', changes });
+
+    return reply.send({ data: decryptContact(contact) });
   },
 
   archive: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -662,6 +693,8 @@ export const ContactsController = {
     if (!contact) {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
     }
+
+    void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'contact', entityId: id, action: 'archived' });
 
     return reply.send({ data: contact });
   },
@@ -823,7 +856,9 @@ export const ContactsController = {
       include: { assignee: { select: { id: true, name: true } } },
     });
 
-    return reply.send({ data: updated ?? target });
+    void logActivity({ organizationId: org_id, userId: request.user.sub, entityType: 'contact', entityId: target.id, action: 'merged', changes: { source_id } });
+
+    return reply.send({ data: decryptContact(updated ?? target) });
   },
   getCalendarEvents: async (_request: FastifyRequest, reply: FastifyReply) => {
     const request = _request;
@@ -858,9 +893,9 @@ export const ContactsController = {
       first_name: row.first_name.trim(),
       last_name: optionalTrimmedString(row.last_name),
       company: optionalTrimmedString(row.company),
-      email: optionalTrimmedString(row.email),
-      phone: optionalTrimmedString(row.phone),
-      mobile: optionalTrimmedString(row.mobile),
+      email: optionalTrimmedString(row.email) ? encryptField(optionalTrimmedString(row.email)!) : undefined,
+      phone: optionalTrimmedString(row.phone) ? encryptField(optionalTrimmedString(row.phone)!) : undefined,
+      mobile: optionalTrimmedString(row.mobile) ? encryptField(optionalTrimmedString(row.mobile)!) : undefined,
       source: optionalTrimmedString(row.source),
       notes: optionalTrimmedString(row.notes),
       type: row.type,
@@ -879,9 +914,9 @@ export const ContactsController = {
       first_name: row.first_name.trim(),
       last_name: optionalTrimmedString(row.last_name),
       company: optionalTrimmedString(row.company),
-      email: optionalTrimmedString(row.email),
-      phone: optionalTrimmedString(row.phone),
-      mobile: optionalTrimmedString(row.mobile),
+      email: optionalTrimmedString(row.email) ? encryptField(optionalTrimmedString(row.email)!) : undefined,
+      phone: optionalTrimmedString(row.phone) ? encryptField(optionalTrimmedString(row.phone)!) : undefined,
+      mobile: optionalTrimmedString(row.mobile) ? encryptField(optionalTrimmedString(row.mobile)!) : undefined,
       source: optionalTrimmedString(row.source) ?? 'phone_contacts',
       notes: optionalTrimmedString(row.notes),
       type: row.type,
@@ -1075,8 +1110,8 @@ export const ContactsController = {
             first_name: extracted.first_name,
             last_name: extracted.last_name,
             company: extracted.company,
-            email: extracted.email,
-            phone: extracted.phone,
+            email: extracted.email ? encryptField(extracted.email) : undefined,
+            phone: extracted.phone ? encryptField(extracted.phone) : undefined,
             source: extracted.source,
             notes: extracted.notes,
           },
@@ -1091,7 +1126,7 @@ export const ContactsController = {
         });
       }
 
-      return reply.send({ data: { ...fields, raw_text: rawText, extracted, contact }, meta: {} });
+      return reply.send({ data: { ...fields, raw_text: rawText, extracted, contact: contact ? decryptContact(contact) : null }, meta: {} });
     } catch (error) {
       if (error instanceof ServiceNotConfiguredError) {
         return sendServiceNotConfigured(reply, error);

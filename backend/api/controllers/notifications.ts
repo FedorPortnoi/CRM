@@ -1,8 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { Expo } from 'expo-server-sdk';
 import { db } from '../../services/db';
-
-const expo = new Expo();
+import { sendPush } from '../../services/push';
 
 type RegisterTokenBody = {
   token: string;
@@ -17,9 +16,13 @@ type SendNotificationBody = {
 async function registerToken(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const { token } = request.body as RegisterTokenBody;
 
-  if (!Expo.isExpoPushToken(token)) {
+  const isExpo = Expo.isExpoPushToken(token);
+  // Accept Expo tokens and raw FCM tokens (32+ char alphanumeric strings)
+  const isFcm = !isExpo && /^[A-Za-z0-9_:%-]{32,}$/.test(token);
+
+  if (!isExpo && !isFcm) {
     reply.status(400).send({
-      error: { code: 'INVALID_PUSH_TOKEN', message: 'Invalid Expo push token' },
+      error: { code: 'INVALID_PUSH_TOKEN', message: 'Invalid push token' },
     });
     return;
   }
@@ -36,12 +39,9 @@ async function registerToken(request: FastifyRequest, reply: FastifyReply): Prom
     return;
   }
 
-  if (existingUser?.push_token === token) {
+  if (existingUser.push_token === token) {
     reply.send({
-      data: {
-        message: 'Push token already registered',
-        already_registered: true,
-      },
+      data: { message: 'Push token already registered', already_registered: true },
       meta: {},
     });
     return;
@@ -76,10 +76,7 @@ async function sendNotification(request: FastifyRequest, reply: FastifyReply): P
   const { user_id, title, body } = request.body as SendNotificationBody;
 
   const user = await db.user.findFirst({
-    where: {
-      id: user_id,
-      organization_id: request.user.org_id,
-    },
+    where: { id: user_id, organization_id: request.user.org_id },
     select: { id: true, push_token: true },
   });
 
@@ -92,57 +89,33 @@ async function sendNotification(request: FastifyRequest, reply: FastifyReply): P
 
   if (!user.push_token) {
     reply.status(422).send({
-      error: {
-        code: 'NO_PUSH_TOKEN',
-        message: 'User has no registered push token',
-      },
+      error: { code: 'NO_PUSH_TOKEN', message: 'User has no registered push token' },
     });
     return;
   }
 
-  if (!Expo.isExpoPushToken(user.push_token)) {
-    await db.user.updateMany({
-      where: { id: user.id, organization_id: request.user.org_id },
-      data: { push_token: null },
-    });
+  const result = await sendPush(user.push_token, title, body);
 
-    reply.status(422).send({
-      error: {
-        code: 'INVALID_PUSH_TOKEN',
-        message: 'User has an invalid registered push token',
-      },
-    });
-    return;
-  }
-
-  const message = {
-    to: user.push_token,
-    sound: 'default' as const,
-    title,
-    body,
-  };
-
-  const [ticket] = await expo.sendPushNotificationsAsync([message]);
-
-  if (ticket?.status === 'error') {
-    if (ticket.details?.error === 'DeviceNotRegistered') {
+  if (!result.ok) {
+    if (result.code === 'DEVICE_NOT_REGISTERED') {
       await db.user.updateMany({
         where: { id: user.id, organization_id: request.user.org_id },
         data: { push_token: null },
       });
+      reply.status(422).send({
+        error: { code: 'DEVICE_NOT_REGISTERED', message: 'Device is no longer registered' },
+      });
+      return;
     }
 
     reply.status(502).send({
-      error: {
-        code: 'PUSH_SEND_FAILED',
-        message: ticket.message,
-      },
+      error: { code: 'PUSH_SEND_FAILED', message: result.message },
     });
     return;
   }
 
   reply.send({
-    data: { message: 'Notification sent', ticket_id: ticket?.id ?? null },
+    data: { message: 'Notification sent' },
     meta: {},
   });
 }

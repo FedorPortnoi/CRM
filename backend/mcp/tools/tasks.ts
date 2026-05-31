@@ -1,7 +1,8 @@
-import { Prisma, TaskStatus } from '@prisma/client';
+import { Prisma, TaskStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
+import { evaluateWorkflows } from '../../services/workflows';
 import { registerTool, McpUser } from '../server';
-import { validateMcpWriteReferences } from '../validation';
+import { requireMcpWrite, validateMcpWriteReferences } from '../validation';
 
 type TaskStatusValue = 'pending' | 'in_progress' | 'done' | 'cancelled';
 type TaskPriorityValue = 'low' | 'medium' | 'high' | 'urgent';
@@ -123,6 +124,9 @@ registerTool(
     required: ['title', 'assigned_to'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const writeErr = requireMcpWrite(user);
+    if (writeErr) return writeErr;
+
     const title = typeof args.title === 'string' ? args.title : '';
     const assigned_to = typeof args.assigned_to === 'string' ? args.assigned_to : '';
     const description = typeof args.description === 'string' ? args.description : undefined;
@@ -151,6 +155,14 @@ registerTool(
       include: taskInclude,
     });
 
+    void evaluateWorkflows({
+      organizationId: user.org_id,
+      trigger: WorkflowTrigger.task_created,
+      record: task as unknown as Record<string, unknown>,
+      userId: user.sub,
+      triggerRecordId: task.id,
+    });
+
     return { data: task };
   },
 );
@@ -167,11 +179,16 @@ registerTool(
       assigned_to: { type: 'string' },
       due_date: { type: 'string', description: 'ISO 8601 date' },
       priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+      status: { type: 'string', enum: ['pending', 'in_progress', 'done', 'cancelled'] },
     },
     required: ['id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const writeErr = requireMcpWrite(user);
+    if (writeErr) return writeErr;
+
     const id = typeof args.id === 'string' ? args.id : '';
+    const status = isTaskStatus(args.status) ? args.status : undefined;
 
     const task = await db.task.findFirst({
       where: { id, organization_id: user.org_id },
@@ -193,6 +210,16 @@ registerTool(
       updateData.due_date = args.due_date ? new Date(args.due_date) : null;
     }
     if (isTaskPriority(args.priority)) updateData.priority = args.priority;
+    if (status !== undefined) {
+      updateData.status = status;
+      if (status === TaskStatus.done && task.status !== TaskStatus.done) {
+        updateData.completed_at = new Date();
+        updateData.completed_by = user.sub;
+      } else if (status !== TaskStatus.done && task.status === TaskStatus.done) {
+        updateData.completed_at = null;
+        updateData.completed_by = null;
+      }
+    }
 
     const referenceError = await validateMcpWriteReferences(user, {
       assigned_to: typeof args.assigned_to === 'string' ? args.assigned_to : undefined,
@@ -206,6 +233,16 @@ registerTool(
       data: updateData,
       include: taskInclude,
     });
+
+    if (updated.status === TaskStatus.done && task.status !== TaskStatus.done) {
+      void evaluateWorkflows({
+        organizationId: user.org_id,
+        trigger: WorkflowTrigger.task_completed,
+        record: updated as unknown as Record<string, unknown>,
+        userId: user.sub,
+        triggerRecordId: updated.id,
+      });
+    }
 
     return { data: updated };
   },
@@ -222,6 +259,9 @@ registerTool(
     required: ['id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const writeErr = requireMcpWrite(user);
+    if (writeErr) return writeErr;
+
     const id = typeof args.id === 'string' ? args.id : '';
 
     const task = await db.task.findFirst({
@@ -244,6 +284,16 @@ registerTool(
           : { status: TaskStatus.done, completed_at: new Date(), completed_by: user.sub },
       include: taskInclude,
     });
+
+    if (updated.status === TaskStatus.done && task.status !== TaskStatus.done) {
+      void evaluateWorkflows({
+        organizationId: user.org_id,
+        trigger: WorkflowTrigger.task_completed,
+        record: updated as unknown as Record<string, unknown>,
+        userId: user.sub,
+        triggerRecordId: updated.id,
+      });
+    }
 
     return { data: updated };
   },

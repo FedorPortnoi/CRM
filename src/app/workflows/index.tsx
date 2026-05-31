@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState } from 'react';
 import {
   FlatList,
   RefreshControl,
@@ -38,7 +38,7 @@ interface SkeletonBoxProps {
 }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: '#d1fae5', borderRadius, marginBottom }} />;
+  return <View style={{ width, height, backgroundColor: '#FEF0E8', borderRadius, marginBottom }} />;
 }
 
 const TRIGGER_KEY_MAP: Record<string, string> = {
@@ -204,7 +204,7 @@ export default function WorkflowsScreen(): JSX.Element {
           return (
             <View style={styles.row}>
               <View style={styles.iconBox}>
-                <WorkflowIcon size={20} color='#10b981' />
+                <WorkflowIcon size={20} color='#C4704F' />
               </View>
               <TouchableOpacity
                 style={styles.rowBody}
@@ -221,8 +221,8 @@ export default function WorkflowsScreen(): JSX.Element {
                 <Switch
                   value={isEnabled}
                   onValueChange={(val) => { handleToggle(item, val); }}
-                  trackColor={{ false: '#D1D5DB', true: '#93C5FD' }}
-                  thumbColor={isEnabled ? '#10b981' : '#9CA3AF'}
+                  trackColor={{ false: '#E8DDD6', true: '#93C5FD' }}
+                  thumbColor={isEnabled ? '#C4704F' : '#CFADA3'}
                 />
               </View>
             </View>
@@ -234,7 +234,7 @@ export default function WorkflowsScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F7F8FA' },
+  safe: { flex: 1, backgroundColor: '#FAF6F3' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   header: {
     padding: 16,
@@ -242,24 +242,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  title: { fontSize: 26, fontWeight: '700', color: '#111827' },
+  title: { fontSize: 26, fontWeight: '700', color: '#383432' },
   addButton: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
     alignItems: 'center',
     justifyContent: 'center',
   },
   list: { paddingHorizontal: 16, paddingBottom: 24 },
   emptyList: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  emptyText: { color: '#6B7280', fontSize: 16, textAlign: 'center' },
+  emptyText: { color: '#B07868', fontSize: 16, textAlign: 'center' },
   row: {
     minHeight: 72,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E8DDD6',
     padding: 12,
     marginBottom: 10,
     flexDirection: 'row',
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E8DDD6',
     padding: 12,
     marginBottom: 10,
     flexDirection: 'row',
@@ -281,31 +281,31 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 12,
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#FEF0E8',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   rowBody: { flex: 1 },
-  rowTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
-  rowMeta: { marginTop: 4, color: '#6B7280', fontSize: 13 },
+  rowTitle: { fontSize: 16, fontWeight: '700', color: '#383432' },
+  rowMeta: { marginTop: 4, color: '#B07868', fontSize: 13 },
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 8 },
   badge: {
     minWidth: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#FEF0E8',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
-  badgeText: { fontSize: 12, fontWeight: '700', color: '#10b981' },
+  badgeText: { fontSize: 12, fontWeight: '700', color: '#C4704F' },
   errorText: { color: '#C5221F', marginBottom: 12, textAlign: 'center' },
   retryButton: {
     paddingHorizontal: 16,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
     justifyContent: 'center',
   },
   retryText: { color: '#FFFFFF', fontWeight: '700' },

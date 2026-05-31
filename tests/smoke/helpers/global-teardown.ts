@@ -85,6 +85,12 @@ async function deleteSmokeOrgs(
       Prisma.sql`DELETE FROM "UserCalendarSync" WHERE user_id IN (SELECT id FROM "User" WHERE organization_id IN (${uuidList(orgIds)}))`,
     );
     await tx.$executeRaw(
+      Prisma.sql`DELETE FROM "AuthSession" WHERE organization_id IN (${uuidList(orgIds)})`,
+    );
+    await tx.$executeRaw(
+      Prisma.sql`DELETE FROM "AuditEvent" WHERE organization_id IN (${uuidList(orgIds)}) OR user_id IN (SELECT id FROM "User" WHERE organization_id IN (${uuidList(orgIds)}))`,
+    );
+    await tx.$executeRaw(
       Prisma.sql`DELETE FROM "PendingCapture" WHERE org_id IN (${uuidList(orgIds)})`,
     );
     await tx.$executeRaw(

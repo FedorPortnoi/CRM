@@ -109,7 +109,7 @@ deals
   pipeline_id     UUID FK → pipelines.id
   stage_id        UUID FK → pipeline_stages.id
   value           NUMERIC(15,2)
-  currency        CHAR(3) DEFAULT 'USD'
+  currency        CHAR(3) DEFAULT 'RUB'
   expected_close  DATE
   actual_close    DATE
   probability     SMALLINT                   -- 0-100

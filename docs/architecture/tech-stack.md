@@ -47,7 +47,7 @@ Every technology was evaluated against:
 
 ### Key Backend Decisions
 
-**Fastify over Express:** Fastify is 2–3x faster than Express in benchmarks, has built-in JSON schema validation hooks, and is fully compatible with WebSockets via `@fastify/websocket`. Required for Railway persistent server hosting.
+**Fastify over Express:** Fastify is 2–3x faster than Express in benchmarks, has built-in JSON schema validation hooks, and is fully compatible with WebSockets via `@fastify/websocket`. Required for persistent server hosting on Yandex Cloud.
 
 **Prisma over Drizzle ORM:** Prisma's Supabase integration is mature, its migration system (`prisma migrate`) is more ergonomic than Drizzle's, and its generated client provides excellent autocomplete and type safety.
 
@@ -60,25 +60,20 @@ Every technology was evaluated against:
 | Technology | Purpose |
 |-----------|---------|
 | **Supabase (hosted PostgreSQL)** | Primary data store — managed Postgres with built-in connection pooling (pgBouncer), backups, and dashboard |
-| **Supabase Realtime** | WebSocket subscriptions for live deal updates, team presence, and inbound message delivery |
-| **Supabase Auth** | JWT issuance, OAuth, magic links, and Row-Level Security integration; handles refresh token management |
+| **@fastify/websocket** | WebSocket support for real-time features (planned, not yet live) |
+| **bcrypt + @fastify/jwt (custom auth)** | JWT issuance, password hashing, and refresh token management; handles session lifecycle |
 
-### Why Supabase Instead of Self-Managed Stack
+### Database: Supabase (Current) → Yandex Managed PostgreSQL (Planned)
 
-The original plan (self-managed PostgreSQL + Redis + custom JWT + PgBouncer + Socket.io) requires maintaining five separate infrastructure components. Supabase replaces all of them:
+Supabase is used as the current PostgreSQL host. It provides managed Postgres with built-in connection pooling (pgBouncer), backups, and a web dashboard.
 
-| Was | Now |
-|-----|-----|
-| Self-managed PostgreSQL 16 | Supabase hosted PostgreSQL |
-| PgBouncer | Supabase built-in connection pooler |
-| Custom JWT auth + bcrypt + refresh token table | Supabase Auth |
-| Redis (session cache) | Supabase Auth handles sessions |
-| Socket.io + WebSocket server | Supabase Realtime |
-| Redis (pub/sub for real-time) | Supabase Realtime |
+**Authentication** is handled entirely by the backend: bcrypt for password hashing and `@fastify/jwt` for JWT issuance and refresh token management. The Supabase Auth SDK is not used.
 
-**Row-Level Security** still works identically — Supabase Auth automatically populates `auth.uid()` and RLS policies reference it. Multi-tenant isolation is enforced at the DB layer as originally designed.
+**Planned migration:** Supabase PostgreSQL will be migrated to Yandex Managed PostgreSQL for FZ-242 (Russian data residency) compliance.
 
-**Supabase Realtime** covers: live deal board updates when a teammate moves a card, team presence (who is online), and real-time delivery of inbound Twilio messages. Previously required Socket.io + Redis pub/sub.
+**Multi-tenancy** is enforced at the application layer — every Prisma query includes an `organization_id` filter derived from the verified JWT. Row-Level Security (RLS) is not used.
+
+**Real-time:** `@fastify/websocket` is planned for live deal board updates and team presence (not yet live).
 
 ---
 
@@ -95,7 +90,7 @@ The original plan (self-managed PostgreSQL + Redis + custom JWT + PgBouncer + So
 
 | Component | Technology | Monthly Cost (MVP) |
 |-----------|-----------|-------------------|
-| **API Server** | Railway (Node.js/Fastify) | ~$5/month |
+| **API Server** | Yandex Cloud (Node.js/Fastify) | ~$5/month |
 | **Database + Auth + Real-time** | Supabase free tier | $0 |
 | **Mobile Builds + OTA** | Expo EAS | Free tier for MVP |
 | **CI/CD** | GitHub Actions | Free for private repos |
@@ -105,11 +100,11 @@ The original plan (self-managed PostgreSQL + Redis + custom JWT + PgBouncer + So
 
 ### Why Railway for the API (not Vercel or Render)
 
-**Vercel is explicitly ruled out:** Vercel's serverless model cannot hold persistent WebSocket connections. The Fastify API must accept Twilio inbound SMS webhooks reliably — serverless cold starts make this impossible. **Vercel = eliminated for the backend.**
+**Vercel is explicitly ruled out:** Vercel's serverless model cannot hold persistent WebSocket connections. The Fastify API must handle inbound webhooks reliably — serverless cold starts make this impossible. **Vercel = eliminated for the backend.**
 
 **AWS/GCP ruled out:** Overkill for MVP. The operational overhead (VPC, IAM, ECS/EKS, RDS, ElastiCache) requires DevOps expertise we don't have or need at this stage. Revisit when monthly revenue exceeds ~$50K.
 
-**Railway chosen:** Git-push deploys, persistent Node.js process (required for WebSocket compatibility and webhook reliability), ~$5/month, log tailing built in.
+**Railway chosen:** Persistent Node.js process on Yandex Cloud (required for WebSocket compatibility and webhook reliability), log tailing built in.
 
 ---
 
@@ -117,16 +112,16 @@ The original plan (self-managed PostgreSQL + Redis + custom JWT + PgBouncer + So
 
 | Rejected | Why |
 |---------|-----|
-| **Vercel (hosting)** | Serverless — cannot hold WebSocket connections; incompatible with Twilio webhook reliability |
+| **Vercel (hosting)** | Serverless — cannot hold WebSocket connections; incompatible with webhook reliability |
 | **AWS / GCP (hosting)** | Overkill for MVP; requires DevOps expertise; revisit at scale (~$50K MRR) |
-| **Firebase** | Firestore is document-based and poorly suited for relational CRM data (contacts → deals → pipeline stages → tasks). PostgreSQL's relational model + Supabase RLS are the right fit. |
+| **Firebase** | Firestore is document-based and poorly suited for relational CRM data (contacts → deals → pipeline stages → tasks). PostgreSQL's relational model is the right fit; multi-tenancy is enforced at the application layer via organization_id in every Prisma query. |
 | **Express** | Replaced by Fastify — 2–3x faster, better schema validation hooks, WebSocket-compatible |
 | **Drizzle ORM** | Replaced by Prisma — better Supabase integration, more ergonomic migrations |
-| **Socket.io** | Replaced by Supabase Realtime — eliminates a separate WebSocket server entirely |
+| **Socket.io** | Replaced by @fastify/websocket — eliminates a separate WebSocket server entirely |
 | **Redis (standalone)** | No longer needed — Supabase replaces the session cache, pub/sub, and real-time use cases |
 | **Redux Toolkit** | Replaced by Zustand — simpler, less boilerplate for the amount of local state needed |
 | **React Navigation** | Replaced by Expo Router — file-based navigation, typed routes, deep linking for free |
-| **GraphQL** | Overkill for MVP; REST + Supabase Realtime covers all use cases |
+| **GraphQL** | Overkill for MVP; REST + @fastify/websocket covers all use cases |
 | **NestJS** | Decorator/DI complexity unnecessary at MVP scale |
 | **Self-managed PostgreSQL** | Replaced by Supabase — eliminates ops burden of managing DB, backups, connections |
 
@@ -136,4 +131,4 @@ The original plan (self-managed PostgreSQL + Redis + custom JWT + PgBouncer + So
 
 - `docs/architecture/system-overview.md` — how these technologies fit together as a system
 - `docs/architecture/api-design.md` — Fastify + Zod + Supabase Auth design
-- `docs/architecture/data-models.md` — PostgreSQL schema; RLS policies
+- `docs/architecture/data-models.md` — PostgreSQL schema; multi-tenancy via organization_id

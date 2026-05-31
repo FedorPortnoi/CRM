@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -196,7 +196,7 @@ export default function EditContactScreen(): JSX.Element {
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#065f46" />
+            <ActivityIndicator size="large" color="#C45A10" />
           </View>
         ) : (
           <>
@@ -292,34 +292,34 @@ const styles = StyleSheet.create({
   },
   errorBannerText: { color: '#ef4444' },
   bannerRetry: { marginTop: 8, alignSelf: 'flex-start' },
-  bannerRetryText: { color: '#065f46', fontWeight: '600' },
+  bannerRetryText: { color: '#C45A10', fontWeight: '600' },
   fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#111827', marginBottom: 4 },
+  label: { fontSize: 13, fontWeight: '600', color: '#383432', marginBottom: 4 },
   input: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     minHeight: 44,
     fontSize: 15,
-    color: '#111827',
+    color: '#383432',
   },
   notesInput: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     height: 100,
     fontSize: 15,
-    color: '#111827',
+    color: '#383432',
   },
   fieldError: { color: '#ef4444', fontSize: 12, marginTop: 4 },
   submitButton: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 12,
     minHeight: 48,
     justifyContent: 'center',

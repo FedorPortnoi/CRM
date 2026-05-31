@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -222,17 +222,17 @@ export default function ContactsImportScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f0fdf8' },
+  safe: { flex: 1, backgroundColor: '#FEF0E8' },
   header: {
     backgroundColor: '#FFF',
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#E8DDD6',
   },
   backBtn: { marginBottom: 4 },
-  backText: { fontSize: 14, color: '#10b981', fontWeight: '500' },
+  backText: { fontSize: 14, color: '#C4704F', fontWeight: '500' },
   title: { fontSize: 20, fontWeight: '700', color: '#111' },
   body: { flex: 1 },
   bodyContent: { padding: 16 },
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   },
   error: { fontSize: 13, color: '#ef4444' },
   primaryBtn: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
     borderRadius: 12,
     height: 50,
     alignItems: 'center',
@@ -275,13 +275,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
   },
   tableHeaderRow: {
     flexDirection: 'row',
     backgroundColor: '#F8F8F8',
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#E8DDD6',
   },
   tableHeader: { flex: 1, fontSize: 11, fontWeight: '700', color: '#666', padding: 8 },
   tableRow: {
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     gap: 8,
   },
   resultTitle: { fontSize: 18, fontWeight: '700', color: '#111' },

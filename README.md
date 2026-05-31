@@ -96,36 +96,23 @@ crm/
 │   ├── utils/                   # Pure utility functions
 │   └── types/                   # TypeScript type definitions
 ├── backend/
-│   ├── api/                     # Express routes, middleware, controllers
+│   ├── api/                     # Fastify routes, middleware, controllers
 │   ├── db/                      # Migrations, seeds, schema SQL
 │   └── services/                # Business logic services
 ├── mobile/
 │   ├── ios/                     # iOS-specific native config
 │   └── android/                 # Android-specific native config
 ├── tests/
-│   ├── unit/                    # Jest unit tests
-│   ├── integration/             # API integration tests
+│   ├── unit/                    # tsx unit tests
+│   ├── integration/             # Playwright / tsx integration tests
 │   └── e2e/                     # Detox end-to-end tests
-└── brain/                       # Obsidian knowledge vault (see below)
 ```
 
 ---
 
-## Obsidian Knowledge Brain
+## Knowledge Base (Obsidian)
 
-The `brain/` folder is a fully-linked Obsidian vault containing the complete product knowledge base:
-
-- **`brain/00 - Home.md`** — Dashboard index linking all notes
-- **`brain/01 - Product/`** — Vision, MVP scope, competitive landscape, pricing
-- **`brain/02 - Features/`** — Deep-dive notes for all 14 MVP features
-- **`brain/03 - Users/`** — User segment profiles and personas
-- **`brain/04 - Architecture/`** — System design notes
-- **`brain/05 - Decisions/`** — Decision log and open questions
-- **`brain/06 - Competitors/`** — Competitor analysis (Bitrix24, Salesforce, HubSpot)
-- **`brain/07 - Journal/`** — Development journal
-
-To open: launch Obsidian → Open Vault → select `C:\Users\fedor\crm\brain`
-
+The product knowledge base lives in the Obsidian vault at `C:\Users\fedor\Obsidian\Brain\Projects\CRM\` (not in this repository). To open it: launch Obsidian, choose Open Vault, and select that path.
 ---
 
 ## Getting Started (Dev Setup)
@@ -141,16 +128,13 @@ cp .env.example .env
 # 3. Install dependencies
 npm install
 
-# 4. Start the database (Docker)
-docker-compose up -d postgres redis
-
-# 5. Run migrations
+# 4. Run migrations
 npm run db:migrate
 
-# 6. Start backend API
+# 5. Start backend API
 npm run backend:dev
 
-# 7. Start mobile app
+# 6. Start mobile app
 npm run start
 # Then press 'i' for iOS, 'a' for Android
 ```

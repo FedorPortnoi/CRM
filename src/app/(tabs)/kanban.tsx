@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import KanbanBoard from '../../screens/KanbanBoard';
 import { useDealsStore } from '../../store/dealsStore';
 import { usePipelinesStore } from '../../store/pipelinesStore';
+import { formatMoney } from '../../market/profile';
 
 type ViewMode = 'board' | 'list';
 
@@ -28,9 +29,8 @@ type PipelineStage = {
 
 type DealRow = { type: 'header'; stageId: string; stageName: string; count: number } | { type: 'deal'; deal: Deal };
 
-function formatValue(value: number | null): string {
-  if (value === null) return '—';
-  return '$' + value.toLocaleString('en-US');
+function formatValue(value: number | null, currency: string | null): string {
+  return formatMoney(value, currency, { empty: '--' });
 }
 
 function DealListView(): JSX.Element {
@@ -77,7 +77,7 @@ function DealListView(): JSX.Element {
   if (isLoading || pipelinesLoading) {
     return (
       <View style={listStyles.centered}>
-        <ActivityIndicator size="large" color="#065f46" />
+        <ActivityIndicator size="large" color="#C45A10" />
       </View>
     );
   }
@@ -114,8 +114,8 @@ function DealListView(): JSX.Element {
         <RefreshControl
           refreshing={isRefreshing}
           onRefresh={handleRefresh}
-          colors={['#065f46']}
-          tintColor="#065f46"
+          colors={['#C45A10']}
+          tintColor="#C45A10"
         />
       }
       renderItem={({ item }) => {
@@ -140,7 +140,7 @@ function DealListView(): JSX.Element {
               <Text style={listStyles.dealTitle} numberOfLines={1}>{deal.title}</Text>
               <Text style={listStyles.dealContact} numberOfLines={1}>{contactName}</Text>
             </View>
-            <Text style={listStyles.dealValue}>{formatValue(deal.value)}</Text>
+            <Text style={listStyles.dealValue}>{formatValue(deal.value, deal.currency)}</Text>
           </TouchableOpacity>
         );
       }}
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: '#FAF6F3',
     paddingHorizontal: 16,
     paddingVertical: 8,
     gap: 8,
@@ -202,10 +202,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#FAF6F3',
   },
-  toggleActive: { backgroundColor: '#065f46' },
-  toggleText: { fontSize: 14, fontWeight: '600', color: '#6b7280' },
+  toggleActive: { backgroundColor: '#C45A10' },
+  toggleText: { fontSize: 14, fontWeight: '600', color: '#B07868' },
   toggleTextActive: { color: '#FFFFFF' },
   content: { flex: 1 },
 });
@@ -215,9 +215,9 @@ const listStyles = StyleSheet.create({
   listContent: { paddingBottom: 24 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   errorText: { fontSize: 14, color: '#ef4444', textAlign: 'center', marginBottom: 12 },
-  retryButton: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#065f46', borderRadius: 12 },
+  retryButton: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#C45A10', borderRadius: 12 },
   retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
-  emptyText: { fontSize: 15, color: '#9ca3af' },
+  emptyText: { fontSize: 15, color: '#CFADA3' },
   stageHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -226,11 +226,11 @@ const listStyles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#E8DDD6',
     marginTop: 8,
   },
-  stageHeaderText: { fontSize: 13, fontWeight: '700', color: '#111827', textTransform: 'uppercase', letterSpacing: 0.5 },
-  stageCount: { fontSize: 12, color: '#9ca3af', fontWeight: '600' },
+  stageHeaderText: { fontSize: 13, fontWeight: '700', color: '#383432', textTransform: 'uppercase', letterSpacing: 0.5 },
+  stageCount: { fontSize: 12, color: '#CFADA3', fontWeight: '600' },
   dealRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -238,10 +238,10 @@ const listStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: '#FAF6F3',
   },
   dealMain: { flex: 1, marginRight: 12 },
-  dealTitle: { fontSize: 15, fontWeight: '500', color: '#111827', marginBottom: 2 },
-  dealContact: { fontSize: 13, color: '#9ca3af' },
-  dealValue: { fontSize: 14, fontWeight: '600', color: '#065f46' },
+  dealTitle: { fontSize: 15, fontWeight: '500', color: '#383432', marginBottom: 2 },
+  dealContact: { fontSize: 13, color: '#CFADA3' },
+  dealValue: { fontSize: 14, fontWeight: '600', color: '#C45A10' },
 });

@@ -2,7 +2,9 @@
   "_notes": [
     "PLACEHOLDER VALUES: ascAppId and appleTeamId in submit.production.ios must be filled before first iOS build/submit.",
     "google-play-service-account.json must be created from Google Play Console before Android submit.",
-    "Set EXPO_PUBLIC_API_URL as an EAS environment variable for preview and production; app.config.js rejects missing or placeholder deployment URLs."
+    "Set EXPO_PUBLIC_API_URL as an EAS environment variable for preview and production; app.config.js rejects missing or placeholder deployment URLs.",
+    "RuStore: build with 'eas build --profile rustore --platform android', then upload APK manually at developers.rustore.ru. Requires RUSTORE_KEY_ID and RUSTORE_KEY_SECRET env vars for signing.",
+    "Huawei AppGallery: build with 'eas build --profile huawei --platform android', then upload APK manually at developer.huawei.com/consumer/en/appgallery. Requires HUAWEI_CLIENT_ID and HUAWEI_CLIENT_SECRET for API upload."
   ],
   "cli": {
     "version": ">= 10.0.0",
@@ -27,6 +29,16 @@
       "env": { "APP_ENV": "production" },
       "ios": { "resourceClass": "m-medium" },
       "android": { "buildType": "app-bundle" }
+    },
+    "rustore": {
+      "distribution": "internal",
+      "env": { "APP_ENV": "production", "MARKET_CODE": "RU" },
+      "android": { "buildType": "apk" }
+    },
+    "huawei": {
+      "distribution": "internal",
+      "env": { "APP_ENV": "production", "MARKET_CODE": "RU" },
+      "android": { "buildType": "apk" }
     }
   },
   "submit": {

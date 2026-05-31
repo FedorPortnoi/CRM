@@ -1,8 +1,26 @@
 import React, { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { initI18n } from '../i18n';
 import { getStoredLanguage, hasSelectedLanguage } from '../i18n/storage';
+
+type StoredUser = {
+  onboarding_completed?: boolean;
+};
+
+function parseStoredUser(value: string | null): StoredUser | null {
+  if (value === null) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as StoredUser;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function AppIndex() {
   useEffect(() => {
@@ -21,8 +39,20 @@ export default function AppIndex() {
 
       const lang = await getStoredLanguage();
       await initI18n(lang ?? 'ru');
+
+      const [token, userJson] = await Promise.all([
+        SecureStore.getItemAsync('crm_auth_token'),
+        SecureStore.getItemAsync('crm_auth_user'),
+      ]);
+
       if (mounted) {
-        router.replace('/onboarding' as never);
+        const user = parseStoredUser(userJson);
+        if (!token || !user) {
+          router.replace('/login');
+          return;
+        }
+
+        router.replace((user.onboarding_completed === false ? '/onboarding' : '/(tabs)') as never);
       }
     }
 

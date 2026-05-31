@@ -15,8 +15,9 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { API_URL } from '../../utils/api';
 import { useUserStore } from '../../store/userStore';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
+import { formatMarketDate, formatMoney } from '../../market/profile';
 
-const TEAL = '#065f46';
+const TEAL = '#C45A10';
 
 interface Deal {
   id: string;
@@ -50,18 +51,17 @@ interface ErrorApiResponse {
 }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: '#d1fae5', borderRadius, marginBottom }} />;
+  return <View style={{ width, height, backgroundColor: '#FEF0E8', borderRadius, marginBottom }} />;
 }
 
 function formatValue(value: number | null, _currency: string | null): string {
-  if (value === null) return '—';
-  return '$' + value.toLocaleString('en-US');
+  return formatMoney(value, _currency, { empty: '—' });
 }
 
 function getStatusColor(status: Deal['status']): string {
   if (status === 'lost') return '#ef4444';
-  if (status === 'archived') return '#9ca3af';
-  return '#34A853';
+  if (status === 'archived') return '#CFADA3';
+  return '#C4704F';
 }
 
 export default function DealDetailScreen(): JSX.Element {
@@ -266,7 +266,7 @@ export default function DealDetailScreen(): JSX.Element {
         <Text style={styles.value}>{formatValue(deal.value, deal.currency)}</Text>
         <View style={styles.badgeRow}>
           {deal.stage !== null && (
-            <View style={[styles.badge, { backgroundColor: '#10b981' }]}>
+            <View style={[styles.badge, { backgroundColor: '#C4704F' }]}>
               <Text style={styles.badgeText}>{deal.stage.name}</Text>
             </View>
           )}
@@ -284,7 +284,7 @@ export default function DealDetailScreen(): JSX.Element {
           <Text style={styles.nextActionLabel}>Next Action</Text>
           <Text style={styles.nextActionText}>{deal.next_action}</Text>
           {deal.next_action_due && (
-            <Text style={styles.nextActionDue}>{new Date(deal.next_action_due).toLocaleDateString()}</Text>
+            <Text style={styles.nextActionDue}>{formatMarketDate(deal.next_action_due)}</Text>
           )}
         </View>
       )}
@@ -370,7 +370,7 @@ export default function DealDetailScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#FEF0E8',
   },
   card: {
     backgroundColor: '#fff',
@@ -395,13 +395,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#111827',
+    color: '#383432',
     marginBottom: 8,
   },
   value: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: '#383432',
     marginBottom: 12,
   },
   badgeRow: {
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
   },
   mutedText: {
     fontSize: 13,
-    color: '#6b7280',
+    color: '#B07868',
   },
   nextActionLabel: {
     color: TEAL,
@@ -431,25 +431,25 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   nextActionText: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 15,
     fontWeight: '500',
   },
   nextActionDue: {
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 13,
     marginTop: 6,
   },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#6b7280',
+    color: '#B07868',
     letterSpacing: 0.5,
     marginBottom: 8,
   },
   linkText: {
     fontSize: 15,
-    color: '#10b981',
+    color: '#C4704F',
     fontWeight: '500',
   },
   detailRow: {
@@ -459,11 +459,11 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#B07868',
   },
   detailValue: {
     fontSize: 14,
-    color: '#111827',
+    color: '#383432',
     fontWeight: '500',
     flexShrink: 1,
     textAlign: 'right',
@@ -475,7 +475,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   buttonPrimary: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
   },
   buttonDestructive: {
     backgroundColor: '#ef4444',
@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#FEF0E8',
     padding: 24,
   },
   errorText: {
@@ -509,7 +509,7 @@ const styles = StyleSheet.create({
   },
   retryText: {
     fontSize: 15,
-    color: '#10b981',
+    color: '#C4704F',
     fontWeight: '600',
   },
   headerEditButton: {
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   headerEditText: {
-    color: '#10b981',
+    color: '#C4704F',
     fontSize: 16,
     fontWeight: '600',
   },

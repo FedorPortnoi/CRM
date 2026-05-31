@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "768253300303",
+    "project_id": "crmapp-610be",
+    "storage_bucket": "crmapp-610be.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:768253300303:android:5d8bd88b658329a7eb643a",
+        "android_client_info": {
+          "package_name": "com.fedorportnoi.crm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDE9eWOa5n4xGrWnIab6Yfx7ItEiyCexos"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

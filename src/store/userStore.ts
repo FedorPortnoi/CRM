@@ -106,6 +106,18 @@ export const useUserStore = create<UserState>()((set) => ({
   },
 
   logout: async (): Promise<void> => {
+    const token = await SecureStore.getItemAsync('crm_auth_token');
+    if (token) {
+      try {
+        await fetch(`${API_URL}/auth/logout`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        // Local logout must still clear credentials if the network is unavailable.
+      }
+    }
+
     await SecureStore.deleteItemAsync('crm_auth_token');
     await SecureStore.deleteItemAsync('crm_auth_user');
     set({ user: null, token: null, error: null });
@@ -114,7 +126,9 @@ export const useUserStore = create<UserState>()((set) => ({
   completeOnboarding: async (): Promise<void> => {
     const token = await SecureStore.getItemAsync('crm_auth_token');
     const userJson = await SecureStore.getItemAsync('crm_auth_user');
-    if (!token || !userJson) return;
+    if (!token || !userJson) {
+      throw new Error('Cannot complete onboarding without an active session');
+    }
 
     const response = await fetch(`${API_URL}/onboarding`, {
       method: 'PATCH',

@@ -8,8 +8,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
+"splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#065f46"
@@ -67,7 +66,7 @@
     },
     "extra": {
       "apiUrls": {
-        "development": "http://192.168.5.249:3000/api/v1"
+        "development": "http://10.80.1.215:3000/api/v1"
       }
     }
   }

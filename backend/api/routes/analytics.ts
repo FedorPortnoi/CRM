@@ -2,6 +2,9 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AnalyticsController } from '../controllers/analytics';
+import { DEFAULT_MARKET_PROFILE, normalizeCurrencyCode } from '../../config/market';
+
+const CurrencySchema = z.string().trim().length(3).transform(normalizeCurrencyCode);
 
 const DateRangeSchema = z.object({
   start: z.string().date().optional(),
@@ -13,7 +16,7 @@ const DateRangeSchema = z.object({
 
 const RevenueSchema = DateRangeSchema.extend({
   group_by: z.enum(['day', 'week', 'month', 'quarter']).default('month'),
-  currency: z.string().length(3).default('USD'),
+  currency: CurrencySchema.default(DEFAULT_MARKET_PROFILE.currency),
 });
 
 const ExportSchema = z.object({

@@ -172,19 +172,23 @@ function taskReminderDate(dueDate: string): Date {
   return new Date(`${dateOnly}T09:00:00`);
 }
 
-export async function scheduleTaskDueReminder(taskId: string, title: string, dueDate: string | null | undefined): Promise<void> {
-  if (!dueDate) return;
-
-  const triggerDate = taskReminderDate(dueDate);
-
+export async function scheduleTaskDueReminder(
+  taskId: string,
+  title: string,
+  dueDate: string | null | undefined,
+  reminderAt?: string | null,
+): Promise<void> {
+  let triggerDate: Date;
+  if (reminderAt) {
+    triggerDate = new Date(reminderAt);
+  } else {
+    if (!dueDate) return;
+    triggerDate = taskReminderDate(dueDate);
+  }
   if (Number.isNaN(triggerDate.getTime())) return;
-
   await cancelTaskDueReminder(taskId);
-
   if (triggerDate <= new Date()) return;
-
   await ensureDefaultNotificationChannel();
-
   await Notifications.scheduleNotificationAsync({
     identifier: taskReminderIdentifier(taskId),
     content: {
@@ -193,10 +197,7 @@ export async function scheduleTaskDueReminder(taskId: string, title: string, due
       data: { taskId },
       sound: 'default',
     },
-    trigger: {
-      date: triggerDate,
-      channelId: DEFAULT_NOTIFICATION_CHANNEL_ID,
-    },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: triggerDate },
   });
 }
 

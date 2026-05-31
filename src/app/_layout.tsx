@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { Stack, useRouter } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
@@ -15,6 +16,10 @@ import { initCallCapture } from '../utils/callCapture';
 import { useOnboardingStore } from '../store/onboardingStore';
 import { hasSelectedLanguage, getStoredLanguage } from '../i18n/storage';
 import { initI18n } from '../i18n';
+import '../utils/network';
+import { initSentry } from '../utils/sentry';
+
+initSentry();
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -125,6 +130,7 @@ export default function RootLayout() {
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: asyncStoragePersister }}>
       <GestureHandlerRootView style={{ flex: 1 }}>
+        <StatusBar style="dark" />
         <OfflineBanner />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

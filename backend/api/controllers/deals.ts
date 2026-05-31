@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { DealStatus, Prisma, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
 import { evaluateWorkflows } from '../../services/workflows';
+import { logActivity } from './activities';
 
 // ─── Local request types ──────────────────────────────────────────────────────
 
@@ -71,117 +72,42 @@ const dealInclude = {
   stage: { select: { id: true, name: true, position: true } },
 } as const;
 
-const contactOrgCache = new Set<string>();
-const pipelineOrgCache = new Set<string>();
-const stagePipelineCache = new Set<string>();
-const userOrgCache = new Set<string>();
 const MS_PER_DAY = 86_400_000;
 
-function contactOrgCacheKey(contactId: string, orgId: string): string {
-  return `${orgId}:${contactId}`;
-}
-
-function pipelineOrgCacheKey(pipelineId: string, orgId: string): string {
-  return `${orgId}:${pipelineId}`;
-}
-
-function stagePipelineCacheKey(stageId: string, pipelineId: string, orgId: string): string {
-  return `${orgId}:${pipelineId}:${stageId}`;
-}
-
-function userOrgCacheKey(userId: string, orgId: string): string {
-  return `${orgId}:${userId}`;
-}
-
 async function contactBelongsToOrg(contactId: string, orgId: string): Promise<boolean> {
-  const key = contactOrgCacheKey(contactId, orgId);
-  if (contactOrgCache.has(key)) {
-    return true;
-  }
-
   const contact = await db.contact.findFirst({
     where: { id: contactId, organization_id: orgId },
     select: { id: true },
   });
 
-  if (contact !== null) {
-    contactOrgCache.add(key);
-    return true;
-  }
-
-  return false;
+  return contact !== null;
 }
 
 async function pipelineBelongsToOrg(pipelineId: string, orgId: string): Promise<boolean> {
-  const key = pipelineOrgCacheKey(pipelineId, orgId);
-  if (pipelineOrgCache.has(key)) {
-    return true;
-  }
-
   const pipeline = await db.pipeline.findFirst({
     where: { id: pipelineId, organization_id: orgId },
     select: { id: true },
   });
 
-  if (pipeline !== null) {
-    pipelineOrgCache.add(key);
-    return true;
-  }
-
-  return false;
+  return pipeline !== null;
 }
 
 async function stageBelongsToPipeline(stageId: string, pipelineId: string, orgId: string): Promise<boolean> {
-  const key = stagePipelineCacheKey(stageId, pipelineId, orgId);
-  if (stagePipelineCache.has(key)) {
-    return true;
-  }
-
   const stage = await db.pipelineStage.findFirst({
     where: { id: stageId, pipeline_id: pipelineId, pipeline: { organization_id: orgId } },
     select: { id: true },
   });
 
-  if (stage !== null) {
-    stagePipelineCache.add(key);
-    return true;
-  }
-
-  return false;
+  return stage !== null;
 }
 
 async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
-  const key = userOrgCacheKey(userId, orgId);
-  if (userOrgCache.has(key)) {
-    return true;
-  }
-
   const user = await db.user.findFirst({
-    where: { id: userId, organization_id: orgId },
+    where: { id: userId, organization_id: orgId, is_active: true },
     select: { id: true },
   });
 
-  if (user !== null) {
-    userOrgCache.add(key);
-    return true;
-  }
-
-  return false;
-}
-
-function invalidatePipelineCaches(pipelineId: string, orgId: string): void {
-  pipelineOrgCache.delete(pipelineOrgCacheKey(pipelineId, orgId));
-
-  const stagePrefix = `${orgId}:${pipelineId}:`;
-  for (const key of stagePipelineCache) {
-    if (key.startsWith(stagePrefix)) {
-      stagePipelineCache.delete(key);
-    }
-  }
-}
-
-function invalidateStagePipelineCache(stageId: string, pipelineId: string, orgId: string): void {
-  stagePipelineCache.delete(stagePipelineCacheKey(stageId, pipelineId, orgId));
+  return user !== null;
 }
 
 function daysSince(date: Date, now: Date): number {
@@ -334,6 +260,7 @@ async function create(
     triggerRecordId: deal.id,
   });
 
+  void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: deal.id, action: 'created' });
   reply.status(201).send({ data: deal, meta: {} });
 }
 
@@ -451,6 +378,7 @@ async function update(
     include: dealInclude,
   });
 
+  void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: 'updated' });
   reply.send({ data: updated, meta: {} });
 }
 
@@ -480,6 +408,7 @@ async function archive(
     include: dealInclude,
   });
 
+  void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: 'archived' });
   reply.send({ data: updated, meta: {} });
 }
 
@@ -527,6 +456,7 @@ async function moveStage(
     triggerRecordId: updated.id,
   });
 
+  void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: 'stage_changed', changes: { stage_id } });
   reply.send({ data: updated, meta: {} });
 }
 
@@ -602,6 +532,7 @@ async function markLost(
     include: dealInclude,
   });
 
+  void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: updated.status === DealStatus.won ? 'won' : 'lost' });
   reply.send({ data: updated, meta: {} });
 }
 
@@ -743,7 +674,6 @@ async function deletePipeline(
   await db.pipelineStage.deleteMany({
     where: { pipeline_id: id, pipeline: { organization_id: request.user.org_id } },
   });
-  invalidatePipelineCaches(id, request.user.org_id);
 
   const deleted = await db.pipeline.deleteMany({ where: { id, organization_id: request.user.org_id } });
   if (deleted.count !== 1) {
@@ -891,7 +821,6 @@ async function deleteStage(
     reply.status(404).send({ error: { code: 'STAGE_NOT_FOUND', message: 'Stage not found' } });
     return;
   }
-  invalidateStagePipelineCache(id, stage.pipeline_id, request.user.org_id);
 
   reply.send({ data: { deleted: true }, meta: {} });
 }

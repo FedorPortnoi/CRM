@@ -1,9 +1,26 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl } from 'react-native';
+﻿import React, { useState, useCallback, useEffect } from 'react';
+import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, Modal, TextInput, Linking, Alert } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { MessageCircle } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { formatMarketDate, formatMoney } from '../../market/profile';
+
+interface AuditEntry {
+  id: string;
+  user_id: string | null;
+  action: string;
+  created_at: string;
+}
+
+interface Attachment {
+  id: string;
+  filename: string;
+  file_url: string;
+  mime_type: string | null;
+  size: number | null;
+  created_at: string;
+}
 
 interface Assignee { id: string; name: string; }
 
@@ -30,14 +47,12 @@ interface Deal { id: string; title: string; value: number | null; currency: stri
 
 interface Task { id: string; title: string; status: 'pending' | 'in_progress' | 'done' | 'cancelled'; due_date: string | null; priority: 'low' | 'medium' | 'high' | 'urgent'; }
 
-function formatValue(value: number | null): string {
-  if (value === null) return 'No value';
-  return '$' + value.toLocaleString('en-US');
+function formatValue(value: number | null, currency: string | null): string {
+  return formatMoney(value, currency, { empty: 'No value' });
 }
 
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatMarketDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function isOverdue(due_date: string | null, status: string): boolean {
@@ -52,22 +67,22 @@ function activityIcon(type: 'message' | 'task' | 'meeting'): string {
 }
 
 function statusBadgeColor(status: string): string {
-  if (status === 'active') return '#34A853';
+  if (status === 'active') return '#C4704F';
   if (status === 'inactive') return '#E8A000';
-  return '#9ca3af';
+  return '#CFADA3';
 }
 
 function taskBadgeColor(status: 'pending' | 'in_progress' | 'done' | 'cancelled'): string {
-  if (status === 'done') return '#34A853';
-  if (status === 'in_progress') return '#10b981';
+  if (status === 'done') return '#C4704F';
+  if (status === 'in_progress') return '#C4704F';
   if (status === 'pending') return '#E8A000';
-  return '#9ca3af';
+  return '#CFADA3';
 }
 
 interface SkeletonBoxProps { width: number; height: number; borderRadius?: number; marginRight?: number; marginBottom?: number; }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginRight = 0, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: '#d1fae5', borderRadius, marginRight, marginBottom }} />;
+  return <View style={{ width, height, backgroundColor: '#FEF0E8', borderRadius, marginRight, marginBottom }} />;
 }
 
 export default function ContactDetailScreen(): JSX.Element {
@@ -83,6 +98,11 @@ export default function ContactDetailScreen(): JSX.Element {
   const [activityError, setActivityError] = useState<string | null>(null);
   const [dealsError, setDealsError] = useState<string | null>(null);
   const [tasksError, setTasksError] = useState<string | null>(null);
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [showAddAttachment, setShowAddAttachment] = useState(false);
+  const [attachmentUrl, setAttachmentUrl] = useState('');
+  const [attachmentFilename, setAttachmentFilename] = useState('');
 
   const fetchContact = useCallback(async (): Promise<void> => {
     try {
@@ -123,11 +143,44 @@ export default function ContactDetailScreen(): JSX.Element {
     } catch { setTasksError('Failed to load tasks'); }
   }, [id, token]);
 
+  const fetchAuditLog = useCallback(async (): Promise<void> => {
+    if (!token || !id) return;
+    try {
+      const res = await fetch(`${API_URL}/activities?entity_type=contact&entity_id=${id}`, { headers: { Authorization: 'Bearer ' + token } });
+      if (!res.ok) return;
+      const body = (await res.json()) as { data: AuditEntry[] };
+      setAuditLog(body.data);
+    } catch { /* silent */ }
+  }, [id, token]);
+
+  const fetchAttachments = useCallback(async (): Promise<void> => {
+    if (!token || !id) return;
+    try {
+      const res = await fetch(`${API_URL}/attachments?entity_type=contact&entity_id=${id}`, { headers: { Authorization: 'Bearer ' + token } });
+      if (!res.ok) return;
+      const body = (await res.json()) as { data: Attachment[] };
+      setAttachments(body.data);
+    } catch { /* silent */ }
+  }, [id, token]);
+
+  const addAttachment = useCallback(async (): Promise<void> => {
+    if (!attachmentUrl.trim() || !attachmentFilename.trim()) return;
+    try {
+      const res = await fetch(`${API_URL}/attachments`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity_type: 'contact', entity_id: id, filename: attachmentFilename.trim(), file_url: attachmentUrl.trim() }),
+      });
+      if (res.ok) { setShowAddAttachment(false); setAttachmentUrl(''); setAttachmentFilename(''); void fetchAttachments(); }
+      else { const b = (await res.json()) as { error?: { message: string } }; Alert.alert('Error', b.error?.message ?? 'Failed to add'); }
+    } catch { Alert.alert('Error', 'Network error'); }
+  }, [attachmentUrl, attachmentFilename, id, token, fetchAttachments]);
+
   const fetchAll = useCallback(async (refreshing: boolean): Promise<void> => {
     if (refreshing) { setIsRefreshing(true); } else { setIsLoading(true); }
-    await Promise.all([fetchContact(), fetchActivity(), fetchDeals(), fetchTasks()]);
+    await Promise.all([fetchContact(), fetchActivity(), fetchDeals(), fetchTasks(), fetchAuditLog(), fetchAttachments()]);
     setIsLoading(false); setIsRefreshing(false);
-  }, [fetchContact, fetchActivity, fetchDeals, fetchTasks]);
+  }, [fetchContact, fetchActivity, fetchDeals, fetchTasks, fetchAuditLog, fetchAttachments]);
 
   useEffect(() => { fetchAll(false); }, [fetchAll]);
   const onRefresh = useCallback((): void => { fetchAll(true); }, [fetchAll]);
@@ -293,7 +346,7 @@ export default function ContactDetailScreen(): JSX.Element {
                       <Text style={styles.stageBadgeText}>{deal.stage.name}</Text>
                     </View>
                   ) : null}
-                  <Text style={styles.dealValue}>{formatValue(deal.value)}</Text>
+                  <Text style={styles.dealValue}>{formatValue(deal.value, deal.currency)}</Text>
                 </View>
               </View>
             ))
@@ -343,52 +396,113 @@ export default function ContactDetailScreen(): JSX.Element {
             ))
           )}
         </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Activity Log</Text>
+          {auditLog.length === 0 ? (
+            <Text style={styles.emptyText}>No activity yet</Text>
+          ) : auditLog.map((entry) => (
+            <View key={entry.id} style={styles.auditRow}>
+              <View style={[styles.auditBadge, { backgroundColor: entry.action === 'created' ? '#FEF0E8' : entry.action === 'updated' ? '#dbeafe' : '#FAF6F3' }]}>
+                <Text style={[styles.auditBadgeText, { color: entry.action === 'created' ? '#C45A10' : entry.action === 'updated' ? '#1d4ed8' : '#383432' }]}>{entry.action}</Text>
+              </View>
+              <Text style={styles.auditDate}>{new Date(entry.created_at).toLocaleDateString()}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Attachments</Text>
+            <TouchableOpacity onPress={() => setShowAddAttachment(true)}>
+              <Text style={styles.addLink}>+ Add</Text>
+            </TouchableOpacity>
+          </View>
+          {attachments.length === 0 ? (
+            <Text style={styles.emptyText}>No attachments</Text>
+          ) : attachments.map((att) => (
+            <TouchableOpacity key={att.id} style={styles.attachmentRow} onPress={() => void Linking.openURL(att.file_url)}>
+              <Text style={styles.attachmentName}>{att.filename}</Text>
+              {att.size != null && <Text style={styles.attachmentSize}>{Math.round(att.size / 1024)} KB</Text>}
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Modal visible={showAddAttachment} animationType="slide" onRequestClose={() => setShowAddAttachment(false)}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Add Attachment</Text>
+            <TextInput style={styles.modalInput} value={attachmentFilename} onChangeText={setAttachmentFilename} placeholder="Filename" placeholderTextColor="#B07868" />
+            <TextInput style={styles.modalInput} value={attachmentUrl} onChangeText={setAttachmentUrl} placeholder="https://..." placeholderTextColor="#B07868" autoCapitalize="none" keyboardType="url" />
+            <TouchableOpacity style={styles.modalSave} onPress={() => void addAttachment()}>
+              <Text style={styles.modalSaveText}>Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowAddAttachment(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Modal>
       </ScrollView>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0fdf8' },
+  container: { flex: 1, backgroundColor: '#FEF0E8' },
   content: { padding: 16, paddingBottom: 32 },
   card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   section: { marginTop: 20 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
-  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#B07868', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#C4704F', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   avatarText: { color: '#FFFFFF', fontSize: 22, fontWeight: '700' },
-  contactName: { fontSize: 20, fontWeight: '700', color: '#111827', marginBottom: 4 },
-  secondaryText: { fontSize: 14, color: '#6b7280', marginBottom: 6 },
+  contactName: { fontSize: 20, fontWeight: '700', color: '#383432', marginBottom: 4 },
+  secondaryText: { fontSize: 14, color: '#B07868', marginBottom: 6 },
   statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, marginTop: 4 },
   badgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600', textTransform: 'capitalize' },
   detailRows: { marginTop: 14, borderTopWidth: 1, borderTopColor: '#F0F0F0', paddingTop: 12 },
   detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  detailLabel: { fontSize: 13, color: '#9ca3af', width: 64 },
-  detailValue: { fontSize: 13, color: '#111827', flex: 1 },
+  detailLabel: { fontSize: 13, color: '#CFADA3', width: 64 },
+  detailValue: { fontSize: 13, color: '#383432', flex: 1 },
   conversationButton: {
     marginTop: 14,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   conversationButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  activitySummary: { fontSize: 14, color: '#111827', marginBottom: 2 },
-  activityDate: { fontSize: 12, color: '#9ca3af' },
-  dealTitle: { fontSize: 15, fontWeight: '600', color: '#111827', marginBottom: 8 },
-  stageBadge: { backgroundColor: '#10b981', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
+  activitySummary: { fontSize: 14, color: '#383432', marginBottom: 2 },
+  activityDate: { fontSize: 12, color: '#CFADA3' },
+  dealTitle: { fontSize: 15, fontWeight: '600', color: '#383432', marginBottom: 8 },
+  stageBadge: { backgroundColor: '#C4704F', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
   stageBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
-  dealValue: { fontSize: 13, color: '#6b7280' },
-  taskTitle: { fontSize: 15, fontWeight: '500', color: '#111827', marginBottom: 8 },
+  dealValue: { fontSize: 13, color: '#B07868' },
+  taskTitle: { fontSize: 15, fontWeight: '500', color: '#383432', marginBottom: 8 },
   taskBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
-  taskDueDate: { fontSize: 12, color: '#6b7280' },
+  taskDueDate: { fontSize: 12, color: '#B07868' },
   overdueText: { color: '#ef4444', fontWeight: '500' },
   errorText: { fontSize: 14, color: '#ef4444', marginBottom: 8 },
-  retryButton: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#10b981', borderRadius: 6 },
+  retryButton: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#C4704F', borderRadius: 6 },
   retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
-  emptyText: { fontSize: 14, color: '#9ca3af', textAlign: 'center', paddingVertical: 8 },
+  emptyText: { fontSize: 14, color: '#CFADA3', textAlign: 'center', paddingVertical: 8 },
   headerEditButton: { paddingHorizontal: 8, paddingVertical: 4 },
-  headerEditText: { color: '#10b981', fontSize: 16, fontWeight: '600' },
+  headerEditText: { color: '#C4704F', fontSize: 16, fontWeight: '600' },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  addLink: { color: '#C45A10', fontSize: 14, fontWeight: '600' },
+  auditRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  auditBadge: { borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2 },
+  auditBadgeText: { fontSize: 12, fontWeight: '600' },
+  auditDate: { fontSize: 12, color: '#CFADA3' },
+  attachmentRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#FAF6F3', flexDirection: 'row', justifyContent: 'space-between' },
+  attachmentName: { fontSize: 14, color: '#C45A10', flex: 1 },
+  attachmentSize: { fontSize: 12, color: '#CFADA3' },
+  modalContent: { flex: 1, backgroundColor: '#FAF6F3', padding: 24, paddingTop: 60 },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: '#383432', marginBottom: 20 },
+  modalInput: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#E8DDD6', padding: 12, fontSize: 15, color: '#383432', marginBottom: 12 },
+  modalSave: { backgroundColor: '#C45A10', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 8 },
+  modalSaveText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  modalCancel: { padding: 14, alignItems: 'center' },
+  modalCancelText: { color: '#B07868', fontSize: 15 },
 });

@@ -3,9 +3,10 @@ import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { MessagesController } from '../controllers/messages';
 
-const SendSmsSchema = z.object({
+const SendEmailSchema = z.object({
   contact_id: z.string().uuid(),
-  body: z.string().min(1).max(1600),
+  subject: z.string().min(1).max(200).optional(),
+  body: z.string().min(1).max(10000),
 });
 
 const SendInAppSchema = z.object({
@@ -58,10 +59,10 @@ export default async function messagesRoutes(fastify: FastifyInstance) {
 
   f.get('/:id', { preHandler: [authenticate] }, MessagesController.getById);
 
-  f.post('/sms', {
+  f.post('/email', {
     preHandler: [authenticate],
-    schema: { body: SendSmsSchema },
-  }, MessagesController.sendSms);
+    schema: { body: SendEmailSchema },
+  }, MessagesController.sendEmail);
 
   f.post('/in-app', {
     preHandler: [authenticate],
@@ -74,8 +75,4 @@ export default async function messagesRoutes(fastify: FastifyInstance) {
   }, MessagesController.logCall);
 
   f.post('/:id/read', { preHandler: [authenticate] }, MessagesController.markRead);
-
-  // SMS.ru webhooks use provider payload fields and do not require JWT auth.
-  f.post('/webhooks/sms/inbound', MessagesController.smsruInboundWebhook);
-  f.post('/webhooks/sms/status', MessagesController.smsruStatusWebhook);
 }

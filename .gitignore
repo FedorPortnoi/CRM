@@ -7,14 +7,23 @@ node_modules/
 .env
 .env.local
 .env.*.local
+firebase-service-account.json
 
 # Build outputs
 dist/
 build/
+web-build/
 .expo/
+.expo-shared/
 ios/build/
 android/build/
 android/.gradle/
+coverage/
+
+# Release artifacts
+*.apk
+*.aab
+*.ipa
 
 # Logs
 *.log

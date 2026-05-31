@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -204,6 +204,18 @@ export default function SettingsScreen(): JSX.Element {
         </View>
       </View>
 
+      {(user?.role === 'owner' || user?.role === 'admin') && (
+        <>
+          <Text style={styles.sectionHeader}>Team</Text>
+          <TouchableOpacity style={styles.card} onPress={() => router.push('/settings/team' as never)} accessibilityRole="button">
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Manage Team</Text>
+              <Text style={styles.chevron}>{'>'}</Text>
+            </View>
+          </TouchableOpacity>
+        </>
+      )}
+
       <Text style={styles.sectionHeader}>{t('settings.language')}</Text>
       <TouchableOpacity
         style={styles.card}
@@ -234,7 +246,7 @@ export default function SettingsScreen(): JSX.Element {
             value={notificationsEnabled}
             onValueChange={(value) => { void handleNotificationsToggle(value); }}
             disabled={notificationsDisabled}
-            trackColor={{ false: '#e5e7eb', true: '#065f46' }}
+            trackColor={{ false: '#E8DDD6', true: '#C45A10' }}
             thumbColor='#FFFFFF'
           />
         </View>
@@ -353,7 +365,7 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#111827',
+    color: '#383432',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 8,
@@ -361,7 +373,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6b7280',
+    color: '#B07868',
     paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: 6,
@@ -373,7 +385,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     overflow: 'hidden',
   },
   profileRow: {
@@ -388,11 +400,11 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: '#383432',
   },
   profileEmail: {
     fontSize: 13,
-    color: '#6b7280',
+    color: '#B07868',
     marginTop: 2,
   },
   roleBadge: {
@@ -405,7 +417,7 @@ const styles = StyleSheet.create({
   roleBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#065f46',
+    color: '#C45A10',
     textTransform: 'capitalize',
   },
   row: {
@@ -420,12 +432,12 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     fontSize: 15,
-    color: '#111827',
+    color: '#383432',
     fontWeight: '500',
   },
   rowValue: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#B07868',
     marginLeft: 8,
     flex: 1,
     textAlign: 'right',
@@ -444,16 +456,16 @@ const styles = StyleSheet.create({
   languageChipText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#065f46',
+    color: '#C45A10',
   },
   chevron: {
     fontSize: 20,
-    color: '#9ca3af',
+    color: '#CFADA3',
     lineHeight: 22,
   },
   comingSoon: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: '#CFADA3',
     marginTop: 2,
   },
   notificationSettingsButton: {
@@ -464,7 +476,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   notificationSettingsText: {
-    color: '#065f46',
+    color: '#C45A10',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -475,13 +487,13 @@ const styles = StyleSheet.create({
   },
   helperText: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#B07868',
     marginTop: 4,
     lineHeight: 17,
   },
   divider: {
     height: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#FAF6F3',
   },
   exportActions: {
     flexDirection: 'row',
@@ -492,7 +504,7 @@ const styles = StyleSheet.create({
   },
   exportButton: {
     flex: 1,
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 10,
     minHeight: 44,
     alignItems: 'center',
@@ -510,7 +522,7 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#B07868',
     paddingHorizontal: 14,
     paddingBottom: 12,
   },
@@ -526,23 +538,23 @@ const styles = StyleSheet.create({
   },
   successText: {
     fontSize: 13,
-    color: '#065f46',
+    color: '#C45A10',
     fontWeight: '700',
   },
   savedPath: {
     fontSize: 11,
-    color: '#6b7280',
+    color: '#B07868',
     marginTop: 2,
   },
   openButton: {
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#065f46',
+    borderColor: '#C45A10',
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
   openButtonText: {
-    color: '#065f46',
+    color: '#C45A10',
     fontSize: 12,
     fontWeight: '700',
   },

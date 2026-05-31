@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -164,19 +164,19 @@ export default function ImportCsvScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F7F8FA' },
+  safe: { flex: 1, backgroundColor: '#FAF6F3' },
   container: { flex: 1 },
   content: { padding: 16 },
-  title: { fontSize: 26, fontWeight: '700', color: '#111827', marginBottom: 12 },
+  title: { fontSize: 26, fontWeight: '700', color: '#383432', marginBottom: 12 },
   input: {
     minHeight: 260,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E8DDD6',
     backgroundColor: '#FFFFFF',
     padding: 12,
     fontSize: 14,
-    color: '#111827',
+    color: '#383432',
   },
   preview: {
     marginTop: 12,
@@ -184,14 +184,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E8DDD6',
   },
-  previewText: { color: '#374151', fontWeight: '600' },
+  previewText: { color: '#383432', fontWeight: '600' },
   error: { color: '#C5221F', marginTop: 12 },
   button: {
     height: 52,
     borderRadius: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',

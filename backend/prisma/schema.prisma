@@ -128,7 +128,7 @@ enum PendingCaptureStatus {
 model User {
   id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organization_id   String    @db.Uuid
-  email             String    @unique
+  email             String    @unique @db.Citext
   password_hash     String
   name              String
   role              UserRole  @default(member)
@@ -160,6 +160,10 @@ model User {
   calendarSyncs         UserCalendarSync[]
   createdPipelines      Pipeline[]          @relation("PipelineCreatedBy")
   createdWorkflows      Workflow[]          @relation("WorkflowCreatedBy")
+  authSessions          AuthSession[]
+  auditEvents           AuditEvent[]
+  activityLogs          ActivityLog[] @relation("ActivityLogUser")
+  uploadedAttachments   Attachment[]  @relation("AttachmentUploader")
 }
 
 model Org {
@@ -186,8 +190,54 @@ model Org {
   pipelines       Pipeline[]
   workflows       Workflow[]
   pendingCaptures PendingCapture[]
+  authSessions    AuthSession[]
+  auditEvents     AuditEvent[]
+  activityLogs    ActivityLog[]
+  attachments     Attachment[]
 
   @@map("organizations")
+}
+
+model AuthSession {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String    @db.Uuid
+  user_id         String    @db.Uuid
+  token_hash      String    @unique
+  user_agent      String?
+  ip_address      String?
+  revoked_at      DateTime?
+  revoked_reason  String?
+  last_seen_at    DateTime?
+  expires_at      DateTime?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  organization Org  @relation(fields: [organization_id], references: [id])
+  user         User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id, revoked_at])
+  @@index([organization_id, created_at])
+}
+
+model AuditEvent {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String?  @db.Uuid
+  user_id         String?  @db.Uuid
+  action          String
+  outcome         String   @default("success")
+  target_type     String?
+  target_id       String?
+  ip_address      String?
+  user_agent      String?
+  metadata        Json?
+  created_at      DateTime @default(now())
+
+  organization Org?  @relation(fields: [organization_id], references: [id])
+  user         User? @relation(fields: [user_id], references: [id])
+
+  @@index([organization_id, created_at])
+  @@index([user_id, created_at])
+  @@index([action, created_at])
 }
 
 model Contact {
@@ -236,7 +286,7 @@ model Deal {
   pipeline_id     String?    @db.Uuid
   stage_id        String?    @db.Uuid
   value           Decimal?
-  currency        String?
+  currency        String?    @default("RUB")
   expected_close  DateTime?
   actual_close    DateTime?
   probability     Int?
@@ -466,4 +516,34 @@ model PendingCapture {
 
   @@index([org_id, status])
   @@index([org_id, created_at])
+}
+
+model ActivityLog {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String   @db.Uuid
+  user_id         String?  @db.Uuid
+  entity_type     String
+  entity_id       String   @db.Uuid
+  action          String
+  changes         Json?
+  created_at      DateTime @default(now())
+  organization Org   @relation(fields: [organization_id], references: [id])
+  user         User? @relation("ActivityLogUser", fields: [user_id], references: [id])
+  @@index([organization_id, entity_type, entity_id])
+  @@index([organization_id, created_at])
+}
+model Attachment {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String   @db.Uuid
+  entity_type     String
+  entity_id       String   @db.Uuid
+  filename        String
+  file_url        String
+  size            Int?
+  mime_type       String?
+  uploaded_by     String?  @db.Uuid
+  created_at      DateTime @default(now())
+  organization Org   @relation(fields: [organization_id], references: [id])
+  uploader     User? @relation("AttachmentUploader", fields: [uploaded_by], references: [id])
+  @@index([organization_id, entity_type, entity_id])
 }

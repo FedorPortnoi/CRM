@@ -1,7 +1,8 @@
-import { Prisma, ContactStatus } from '@prisma/client';
+import { Prisma, ContactStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
+import { evaluateWorkflows } from '../../services/workflows';
 import { registerTool, McpUser } from '../server';
-import { validateMcpWriteReferences } from '../validation';
+import { requireMcpWrite, validateMcpWriteReferences } from '../validation';
 
 type ContactTypeValue = 'lead' | 'customer' | 'partner' | 'other';
 type ContactStatusValue = 'active' | 'inactive' | 'archived';
@@ -110,6 +111,9 @@ registerTool(
     required: ['first_name'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const writeErr = requireMcpWrite(user);
+    if (writeErr) return writeErr;
+
     const first_name = typeof args.first_name === 'string' ? args.first_name.trim() : '';
     if (!first_name) {
       return { error: { code: 'VALIDATION_ERROR', message: 'first_name is required' } };
@@ -148,6 +152,14 @@ registerTool(
       },
     });
 
+    void evaluateWorkflows({
+      organizationId: user.org_id,
+      trigger: WorkflowTrigger.contact_created,
+      record: contact as unknown as Record<string, unknown>,
+      userId: user.sub,
+      triggerRecordId: contact.id,
+    });
+
     return { data: contact };
   },
 );
@@ -174,6 +186,9 @@ registerTool(
     required: ['id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const writeErr = requireMcpWrite(user);
+    if (writeErr) return writeErr;
+
     const id = typeof args.id === 'string' ? args.id : '';
 
     const existing = await db.contact.findFirst({
@@ -221,6 +236,9 @@ registerTool(
     required: ['id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const writeErr = requireMcpWrite(user);
+    if (writeErr) return writeErr;
+
     const id = typeof args.id === 'string' ? args.id : '';
 
     const existing = await db.contact.findFirst({
@@ -252,6 +270,9 @@ registerTool(
     required: ['target_id', 'source_id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const writeErr = requireMcpWrite(user);
+    if (writeErr) return writeErr;
+
     const target_id = typeof args.target_id === 'string' ? args.target_id : '';
     const source_id = typeof args.source_id === 'string' ? args.source_id : '';
 

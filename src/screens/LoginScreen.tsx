@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -26,7 +26,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (!isLoading && error === null && user !== null) {
-      router.replace('/(tabs)');
+      router.replace((user.onboarding_completed === false ? '/onboarding' : '/(tabs)') as never);
     }
   }, [user, isLoading, error, router]);
 
@@ -59,11 +59,11 @@ export default function LoginScreen() {
 
         <View style={styles.card}>
           <View style={styles.fieldWrapper}>
-            <Mail size={18} color="#9ca3af" />
+            <Mail size={18} color="#CFADA3" />
             <TextInput
               style={styles.input}
               placeholder={t('auth.email')}
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor="#CFADA3"
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -73,11 +73,11 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.fieldWrapper}>
-            <Lock size={18} color="#9ca3af" />
+            <Lock size={18} color="#CFADA3" />
             <TextInput
               style={[styles.input, styles.inputFlex]}
               placeholder={t('auth.password')}
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor="#CFADA3"
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
@@ -88,8 +88,8 @@ export default function LoginScreen() {
               accessibilityRole="button"
             >
               {showPassword
-                ? <EyeOff size={18} color="#9ca3af" />
-                : <Eye size={18} color="#9ca3af" />}
+                ? <EyeOff size={18} color="#CFADA3" />
+                : <Eye size={18} color="#CFADA3" />}
             </TouchableOpacity>
           </View>
 
@@ -180,10 +180,10 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 20,
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#065f46',
+    shadowColor: '#C45A10',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -192,13 +192,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#111827',
+    color: '#383432',
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#B07868',
     textAlign: 'center',
     marginBottom: 32,
     lineHeight: 20,
@@ -220,9 +220,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#FAF6F3',
     paddingHorizontal: 14,
     marginBottom: 14,
     height: 52,
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 15,
-    color: '#111827',
+    color: '#383432',
   },
   inputFlex: {
     flex: 1,
@@ -246,13 +246,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   forgotText: {
-    color: '#065f46',
+    color: '#C45A10',
     fontSize: 13,
     fontWeight: '500',
   },
   button: {
     height: 52,
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -279,10 +279,10 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: '#E8DDD6',
   },
   dividerText: {
-    color: '#9ca3af',
+    color: '#CFADA3',
     fontSize: 13,
     marginHorizontal: 12,
   },
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   registerLinkText: {
-    color: '#065f46',
+    color: '#C45A10',
     fontSize: 14,
     fontWeight: '500',
   },

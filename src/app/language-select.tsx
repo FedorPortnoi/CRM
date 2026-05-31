@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -58,7 +58,7 @@ export default function LanguageSelectScreen() {
             accessibilityRole="button"
           >
             {loading === 'en' ? (
-              <ActivityIndicator color="#065f46" />
+              <ActivityIndicator color="#C45A10" />
             ) : (
               <>
                 <Text style={styles.langFlag}>EN</Text>
@@ -82,7 +82,7 @@ export default function LanguageSelectScreen() {
             accessibilityRole="button"
           >
             {loading === 'ru' ? (
-              <ActivityIndicator color="#065f46" />
+              <ActivityIndicator color="#C45A10" />
             ) : (
               <>
                 <Text style={styles.langFlag}>RU</Text>
@@ -145,10 +145,10 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 20,
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#065f46',
+    shadowColor: '#C45A10',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -157,14 +157,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#111827',
+    color: '#383432',
     textAlign: 'center',
     marginBottom: 10,
     lineHeight: 34,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#B07868',
     textAlign: 'center',
     marginBottom: 40,
     lineHeight: 20,
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderWidth: 1.5,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 16,
     padding: 18,
     gap: 14,
@@ -191,17 +191,17 @@ const styles = StyleSheet.create({
   },
   langCardPressed: {
     backgroundColor: 'rgba(6,95,70,0.04)',
-    borderColor: '#065f46',
+    borderColor: '#C45A10',
   },
   langCardActive: {
     backgroundColor: 'rgba(6,95,70,0.06)',
-    borderColor: '#065f46',
+    borderColor: '#C45A10',
     justifyContent: 'center',
   },
   langFlag: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#065f46',
+    color: '#C45A10',
     width: 44,
   },
   langTextBlock: {
@@ -210,11 +210,11 @@ const styles = StyleSheet.create({
   langName: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#111827',
+    color: '#383432',
   },
   langNative: {
     fontSize: 13,
-    color: '#6b7280',
+    color: '#B07868',
     marginTop: 2,
   },
   langArrow: {
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
   },
   langArrowText: {
     fontSize: 18,
-    color: '#065f46',
+    color: '#C45A10',
     fontWeight: '600',
     lineHeight: 22,
   },

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
+import { formatMarketDateTime } from '../../market/profile';
 
 type CreateCalendarEventResponse = {
   data: { id: string };
@@ -68,12 +69,12 @@ function buildLocalDate(dateValue: string, timeValue: string): Date | null {
 }
 
 function formatPreview(date: Date): string {
-  return date.toLocaleString('en-US', {
-    weekday: 'short',
-    month: 'short',
+  return formatMarketDateTime(date, {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    month: 'short',
+    weekday: 'short',
   });
 }
 
@@ -189,7 +190,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'New Event', headerShown: true }} />
+      <Stack.Screen options={{ title: t('calendar.new'), headerShown: true, headerBackTitle: '' }} />
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -202,7 +203,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
         ) : null}
 
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Title *</Text>
+          <Text style={styles.label}>{t('calendar.titleLabel')} *</Text>
           <TextInput
             style={styles.input}
             value={title}
@@ -211,7 +212,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
               setFieldErrors((prev) => ({ ...prev, title: undefined }));
             }}
             placeholder={t('calendar.titlePlaceholder')}
-            placeholderTextColor="#6b7280"
+            placeholderTextColor="#B07868"
             autoCapitalize="sentences"
           />
           {fieldErrors.title ? <Text style={styles.fieldError}>{fieldErrors.title}</Text> : null}
@@ -219,7 +220,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
 
         <View style={styles.row}>
           <View style={styles.rowField}>
-            <Text style={styles.label}>Start Date *</Text>
+            <Text style={styles.label}>{t('calendar.startDate')} *</Text>
             <TextInput
               style={styles.input}
               value={startDate}
@@ -228,12 +229,12 @@ export default function NewCalendarEventScreen(): JSX.Element {
                 setFieldErrors((prev) => ({ ...prev, start: undefined }));
               }}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor="#6b7280"
+              placeholderTextColor="#B07868"
               keyboardType="numbers-and-punctuation"
             />
           </View>
           <View style={styles.timeField}>
-            <Text style={styles.label}>Time *</Text>
+            <Text style={styles.label}>{t('calendar.time')} *</Text>
             <TextInput
               style={styles.input}
               value={startTime}
@@ -242,7 +243,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
                 setFieldErrors((prev) => ({ ...prev, start: undefined }));
               }}
               placeholder="HH:mm"
-              placeholderTextColor="#6b7280"
+              placeholderTextColor="#B07868"
               keyboardType="numbers-and-punctuation"
             />
           </View>
@@ -251,7 +252,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
 
         <View style={styles.row}>
           <View style={styles.rowField}>
-            <Text style={styles.label}>End Date *</Text>
+            <Text style={styles.label}>{t('calendar.endDate')} *</Text>
             <TextInput
               style={styles.input}
               value={endDate}
@@ -260,12 +261,12 @@ export default function NewCalendarEventScreen(): JSX.Element {
                 setFieldErrors((prev) => ({ ...prev, end: undefined }));
               }}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor="#6b7280"
+              placeholderTextColor="#B07868"
               keyboardType="numbers-and-punctuation"
             />
           </View>
           <View style={styles.timeField}>
-            <Text style={styles.label}>Time *</Text>
+            <Text style={styles.label}>{t('calendar.time')} *</Text>
             <TextInput
               style={styles.input}
               value={endTime}
@@ -274,7 +275,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
                 setFieldErrors((prev) => ({ ...prev, end: undefined }));
               }}
               placeholder="HH:mm"
-              placeholderTextColor="#6b7280"
+              placeholderTextColor="#B07868"
               keyboardType="numbers-and-punctuation"
             />
           </View>
@@ -283,30 +284,30 @@ export default function NewCalendarEventScreen(): JSX.Element {
 
         {preview ? (
           <View style={styles.previewBox}>
-            <Text style={styles.previewLabel}>Scheduled</Text>
+            <Text style={styles.previewLabel}>{t('calendar.scheduled')}</Text>
             <Text style={styles.previewText}>{preview}</Text>
           </View>
         ) : null}
 
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Location</Text>
+          <Text style={styles.label}>{t('calendar.locationLabel')}</Text>
           <TextInput
             style={styles.input}
             value={location}
             onChangeText={setLocation}
-            placeholder="Office, phone, or video link"
-            placeholderTextColor="#6b7280"
+            placeholder={t('calendar.locationPlaceholder')}
+            placeholderTextColor="#B07868"
           />
         </View>
 
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Notes</Text>
+          <Text style={styles.label}>{t('calendar.notesLabel')}</Text>
           <TextInput
             style={styles.notesInput}
             value={notes}
             onChangeText={setNotes}
             placeholder={t('calendar.notesPlaceholder')}
-            placeholderTextColor="#6b7280"
+            placeholderTextColor="#B07868"
             multiline
             numberOfLines={5}
             textAlignVertical="top"
@@ -357,15 +358,15 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#111827',
+    color: '#383432',
     marginBottom: 5,
   },
   input: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     borderWidth: 1,
-    color: '#111827',
+    color: '#383432',
     fontSize: 15,
     minHeight: 44,
     paddingHorizontal: 12,
@@ -373,10 +374,10 @@ const styles = StyleSheet.create({
   },
   notesInput: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     borderWidth: 1,
-    color: '#111827',
+    color: '#383432',
     fontSize: 15,
     height: 112,
     paddingHorizontal: 12,
@@ -400,26 +401,26 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   previewBox: {
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#FEF0E8',
     borderRadius: 12,
     padding: 12,
     marginTop: 4,
     marginBottom: 16,
   },
   previewLabel: {
-    color: '#065f46',
+    color: '#C45A10',
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 4,
     textTransform: 'uppercase',
   },
   previewText: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 14,
   },
   submitButton: {
     alignItems: 'center',
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 12,
     justifyContent: 'center',
     marginTop: 12,

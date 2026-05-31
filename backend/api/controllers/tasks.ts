@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { TaskPriority, TaskStatus, Prisma, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
 import { evaluateWorkflows } from '../../services/workflows';
+import { logActivity } from './activities';
 
 // ─── Local request types ──────────────────────────────────────────────────────
 
@@ -37,55 +38,30 @@ type UpdateBody = Partial<CreateBody>;
 
 type IdParams = { id: string };
 
-const contactOrgCache = new Set<string>();
-const dealOrgCache = new Set<string>();
-
-function orgCacheKey(recordId: string, orgId: string): string {
-  return `${orgId}:${recordId}`;
-}
-
 async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
   const user = await db.user.findFirst({
-    where: { id: userId, organization_id: orgId },
+    where: { id: userId, organization_id: orgId, is_active: true },
     select: { id: true },
   });
   return user !== null;
 }
 
 async function contactBelongsToOrg(contactId: string, orgId: string): Promise<boolean> {
-  const key = orgCacheKey(contactId, orgId);
-  if (contactOrgCache.has(key)) {
-    return true;
-  }
-
   const contact = await db.contact.findFirst({
     where: { id: contactId, organization_id: orgId },
     select: { id: true },
   });
-  if (contact) {
-    contactOrgCache.add(key);
-    return true;
-  }
 
-  return false;
+  return contact !== null;
 }
 
 async function dealBelongsToOrg(dealId: string, orgId: string): Promise<boolean> {
-  const key = orgCacheKey(dealId, orgId);
-  if (dealOrgCache.has(key)) {
-    return true;
-  }
-
   const deal = await db.deal.findFirst({
     where: { id: dealId, organization_id: orgId },
     select: { id: true },
   });
-  if (deal) {
-    dealOrgCache.add(key);
-    return true;
-  }
 
-  return false;
+  return deal !== null;
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -198,6 +174,7 @@ async function create(
     triggerRecordId: task.id,
   });
 
+  void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'task', entityId: task.id, action: 'created' });
   reply.status(201).send({ data: task, meta: {} });
 }
 
@@ -301,6 +278,7 @@ async function update(
     return;
   }
 
+  void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'task', entityId: updatedTask.id, action: 'updated' });
   reply.send({ data: updatedTask, meta: {} });
 }
 
@@ -357,6 +335,7 @@ async function complete(
     });
   }
 
+  void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'task', entityId: updatedTask.id, action: updatedTask.status === TaskStatus.done ? 'completed' : 'updated' });
   reply.send({ data: updatedTask, meta: {} });
 }
 

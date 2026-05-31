@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   ActivityIndicator,
   Linking,
@@ -14,6 +15,7 @@ import { Plus } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { formatMarketDate, formatMarketTime } from '../../market/profile';
 
 type CalendarEventStatus = 'scheduled' | 'completed' | 'cancelled';
 
@@ -91,15 +93,15 @@ function localDateKey(dateString: string): string {
 
 function formatDayLabel(dateKey: string): string {
   const date = new Date(dateKey + 'T00:00:00');
-  return date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
+  return formatMarketDate(date, {
     day: 'numeric',
+    month: 'short',
+    weekday: 'short',
   });
 }
 
 function formatTime(dateString: string): string {
-  return new Date(dateString).toLocaleTimeString('en-US', {
+  return formatMarketTime(dateString, {
     hour: 'numeric',
     minute: '2-digit',
   });
@@ -114,8 +116,8 @@ function contactName(contact: CalendarContact): string {
 }
 
 function statusColor(status: CalendarEventStatus): string {
-  if (status === 'completed') return '#065f46';
-  if (status === 'cancelled') return '#9ca3af';
+  if (status === 'completed') return '#C45A10';
+  if (status === 'cancelled') return '#CFADA3';
   return '#6366f1';
 }
 
@@ -174,10 +176,7 @@ function ErrorState({ message, onRetry, retryLabel }: ErrorStateProps): JSX.Elem
 export default function CalendarAgendaScreen(): JSX.Element {
   const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<CalendarSyncStatus | null>(null);
   const [isSyncLoading, setIsSyncLoading] = useState<boolean>(true);
   const [syncAction, setSyncAction] = useState<'connect' | 'disconnect' | null>(null);
@@ -207,44 +206,26 @@ export default function CalendarAgendaScreen(): JSX.Element {
     }
   }, [token, t]);
 
-  const fetchEvents = useCallback(
-    async (refreshing: boolean): Promise<void> => {
-      if (!token) return;
-      if (refreshing) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading(true);
+  const { data: events = [], isLoading, error: eventsError, refetch } = useQuery({
+    queryKey: ['calendar-events', token],
+    queryFn: async () => {
+      const start = startOfToday().toISOString();
+      const end = addDays(startOfToday(), 90).toISOString();
+      const res = await fetch(
+        `${API_URL}/calendar?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&per_page=100`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: { message?: string } };
+        throw new Error(body.error?.message ?? `Calendar failed with status ${res.status}`);
       }
-      setError(null);
-
-      try {
-        const start = startOfToday().toISOString();
-        const end = addDays(startOfToday(), 90).toISOString();
-        const res = await fetch(
-          `${API_URL}/calendar?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&per_page=100`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-
-        if (!res.ok) {
-          const body = (await res.json()) as { error?: { message?: string } };
-          throw new Error(body.error?.message ?? `Calendar failed with status ${res.status}`);
-        }
-
-        const body = (await res.json()) as CalendarResponse;
-        setEvents(body.data);
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : t('errors.serverError'));
-      } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
+      const body = (await res.json()) as CalendarResponse;
+      return body.data;
     },
-    [token, t],
-  );
+    enabled: !!token,
+  });
 
-  useEffect(() => {
-    void fetchEvents(false);
-  }, [fetchEvents]);
+  const error = eventsError instanceof Error ? eventsError.message : eventsError ? t('errors.serverError') : null;
 
   useEffect(() => {
     void fetchSyncStatus();
@@ -253,13 +234,13 @@ export default function CalendarAgendaScreen(): JSX.Element {
   const sections = useMemo(() => buildSections(events), [events]);
 
   const handleRetry = useCallback((): void => {
-    void fetchEvents(false);
-  }, [fetchEvents]);
+    void refetch();
+  }, [refetch]);
 
   const handleRefresh = useCallback((): void => {
-    void fetchEvents(true);
-    void fetchSyncStatus();
-  }, [fetchEvents, fetchSyncStatus]);
+    setIsRefreshing(true);
+    void Promise.all([refetch(), fetchSyncStatus()]).finally(() => setIsRefreshing(false));
+  }, [refetch, fetchSyncStatus]);
 
   const handleConnectYandex = async (): Promise<void> => {
     if (!token) return;
@@ -278,7 +259,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
 
       const body = (await res.json()) as YandexAuthResponse;
       await Linking.openURL(body.data.auth_url);
-      setSyncMessage('Yandex authorization opened. Refresh status after completing sign-in.');
+      setSyncMessage(t('calendar.yandexAuthOpened'));
     } catch (e: unknown) {
       setSyncError(e instanceof Error ? e.message : t('errors.serverError'));
     } finally {
@@ -308,7 +289,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
         yandex_calendar_slug: null,
         expires_at: null,
       });
-      setSyncMessage('Yandex Calendar disconnected.');
+      setSyncMessage(t('calendar.yandexDisconnected'));
     } catch (e: unknown) {
       setSyncError(e instanceof Error ? e.message : t('errors.serverError'));
     } finally {
@@ -329,7 +310,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
               accessibilityRole="button"
               accessibilityLabel={t('calendar.newEvent')}
             >
-              <Plus size={24} color="#065f46" />
+              <Plus size={24} color="#C45A10" />
             </TouchableOpacity>
           ),
         }}
@@ -341,8 +322,8 @@ export default function CalendarAgendaScreen(): JSX.Element {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={['#065f46']}
-            tintColor="#065f46"
+            colors={['#C45A10']}
+            tintColor="#C45A10"
           />
         }
       >
@@ -363,11 +344,11 @@ export default function CalendarAgendaScreen(): JSX.Element {
         <View style={styles.syncCard}>
           <View style={styles.syncHeader}>
             <View style={styles.rowMain}>
-              <Text style={styles.syncTitle}>Yandex Calendar</Text>
+              <Text style={styles.syncTitle}>{t('calendar.yandexCalendar')}</Text>
               <Text style={styles.syncSubtitle}>
                 {syncStatus?.connected
-                  ? `Connected${syncStatus.yandex_username ? ` as ${syncStatus.yandex_username}` : ''}`
-                  : 'Connect Yandex to sync new and updated CRM events.'}
+                  ? syncStatus.yandex_username ? t('calendar.connectedAs', { name: syncStatus.yandex_username }) : t('calendar.connected')
+                  : t('calendar.yandexConnectDesc')}
               </Text>
             </View>
             <View
@@ -384,19 +365,19 @@ export default function CalendarAgendaScreen(): JSX.Element {
                     : styles.syncBadgeTextDisconnected,
                 ]}
               >
-                {syncStatus?.connected ? 'Connected' : 'Off'}
+                {syncStatus?.connected ? t('calendar.connected') : t('calendar.off')}
               </Text>
             </View>
           </View>
           {isSyncLoading ? (
             <View style={styles.syncInline}>
-              <ActivityIndicator color="#065f46" size="small" />
-              <Text style={styles.syncInlineText}>Checking sync...</Text>
+              <ActivityIndicator color="#C45A10" size="small" />
+              <Text style={styles.syncInlineText}>{t('calendar.checkingSync')}</Text>
             </View>
           ) : (
             <>
               {syncStatus?.connected && syncStatus.yandex_calendar_slug ? (
-                <Text style={styles.syncMeta}>Calendar: {syncStatus.yandex_calendar_slug}</Text>
+                <Text style={styles.syncMeta}>{t('calendar.calendarLabel', { name: syncStatus.yandex_calendar_slug })}</Text>
               ) : null}
               {syncMessage ? <Text style={styles.syncSuccess}>{syncMessage}</Text> : null}
               {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
@@ -409,9 +390,9 @@ export default function CalendarAgendaScreen(): JSX.Element {
                     accessibilityRole="button"
                   >
                     {syncAction === 'disconnect' ? (
-                      <ActivityIndicator color="#065f46" size="small" />
+                      <ActivityIndicator color="#C45A10" size="small" />
                     ) : (
-                      <Text style={styles.syncSecondaryText}>Disconnect</Text>
+                      <Text style={styles.syncSecondaryText}>{t('calendar.disconnect')}</Text>
                     )}
                   </TouchableOpacity>
                 ) : (
@@ -424,7 +405,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
                     {syncAction === 'connect' ? (
                       <ActivityIndicator color="#FFFFFF" size="small" />
                     ) : (
-                      <Text style={styles.syncPrimaryText}>Connect</Text>
+                      <Text style={styles.syncPrimaryText}>{t('calendar.connect')}</Text>
                     )}
                   </TouchableOpacity>
                 )}
@@ -433,7 +414,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
                   onPress={() => { void fetchSyncStatus(); }}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.syncGhostText}>Refresh</Text>
+                  <Text style={styles.syncGhostText}>{t('calendar.refresh')}</Text>
                 </TouchableOpacity>
               </View>
             </>
@@ -510,7 +491,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
 
         {isRefreshing ? (
           <View style={styles.refreshIndicator}>
-            <ActivityIndicator color="#065f46" />
+            <ActivityIndicator color="#C45A10" />
           </View>
         ) : null}
       </ScrollView>
@@ -540,15 +521,15 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#111827',
+    color: '#383432',
   },
   pageSubtitle: {
     fontSize: 13,
-    color: '#6b7280',
+    color: '#B07868',
     marginTop: 2,
   },
   newButton: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -567,7 +548,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     padding: 14,
     marginBottom: 18,
   },
@@ -578,12 +559,12 @@ const styles = StyleSheet.create({
   },
   syncTitle: {
     fontSize: 15,
-    color: '#111827',
+    color: '#383432',
     fontWeight: '700',
   },
   syncSubtitle: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#B07868',
     lineHeight: 17,
     marginTop: 3,
   },
@@ -596,17 +577,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0fdf4',
   },
   syncBadgeDisconnected: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#FAF6F3',
   },
   syncBadgeText: {
     fontSize: 11,
     fontWeight: '700',
   },
   syncBadgeTextConnected: {
-    color: '#065f46',
+    color: '#C45A10',
   },
   syncBadgeTextDisconnected: {
-    color: '#6b7280',
+    color: '#B07868',
   },
   syncInline: {
     flexDirection: 'row',
@@ -615,17 +596,17 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   syncInlineText: {
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 12,
   },
   syncMeta: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#B07868',
     marginTop: 10,
   },
   syncSuccess: {
     fontSize: 12,
-    color: '#065f46',
+    color: '#C45A10',
     marginTop: 10,
   },
   syncError: {
@@ -640,7 +621,7 @@ const styles = StyleSheet.create({
   },
   syncPrimaryButton: {
     flex: 1,
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 10,
     minHeight: 42,
     alignItems: 'center',
@@ -659,10 +640,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#065f46',
+    borderColor: '#C45A10',
   },
   syncSecondaryText: {
-    color: '#065f46',
+    color: '#C45A10',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -673,7 +654,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   syncGhostText: {
-    color: '#065f46',
+    color: '#C45A10',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -686,7 +667,7 @@ const styles = StyleSheet.create({
   skeletonRow: {
     height: 88,
     borderRadius: 12,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#FAF6F3',
   },
   centerState: {
     minHeight: 360,
@@ -697,16 +678,16 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#111827',
+    color: '#383432',
     marginBottom: 6,
   },
   emptyText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#B07868',
     textAlign: 'center',
   },
   emptyButton: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -726,7 +707,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   retryButton: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 12,
     paddingHorizontal: 18,
     paddingVertical: 10,
@@ -743,7 +724,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 13,
-    color: '#6b7280',
+    color: '#B07868',
     fontWeight: '700',
     textTransform: 'uppercase',
     marginBottom: 8,
@@ -759,13 +740,13 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#B07868',
     fontWeight: '600',
   },
   timeLine: {
     width: 1,
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#FAF6F3',
     marginTop: 8,
   },
   eventBody: {
@@ -773,7 +754,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     padding: 12,
     minHeight: 92,
   },
@@ -786,17 +767,17 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '700',
-    color: '#111827',
+    color: '#383432',
     lineHeight: 20,
   },
   eventMeta: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#B07868',
     marginTop: 4,
   },
   eventSub: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#B07868',
     marginTop: 4,
   },
   statusBadge: {

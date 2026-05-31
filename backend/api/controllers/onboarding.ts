@@ -99,6 +99,34 @@ async function loadExampleData(request: FastifyRequest, reply: FastifyReply): Pr
   const orgId = request.user.org_id;
   const userId = request.user.sub;
 
+  const current = await readUserState(userId, orgId);
+  const existingExampleCounts = await Promise.all([
+    db.contact.count({ where: { organization_id: orgId, is_example_data: true } }),
+    db.deal.count({ where: { organization_id: orgId, is_example_data: true } }),
+    db.task.count({ where: { organization_id: orgId, is_example_data: true } }),
+  ]);
+
+  if (current.example_data_loaded || existingExampleCounts.some((count) => count > 0)) {
+    const updated = current.example_data_loaded
+      ? true
+      : await updateUserState(userId, orgId, { ...current, example_data_loaded: true });
+
+    if (!updated) {
+      await reply.status(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
+      return;
+    }
+
+    await reply.status(201).send({
+      data: {
+        contacts: existingExampleCounts[0],
+        deals: existingExampleCounts[1],
+        tasks: existingExampleCounts[2],
+      },
+      meta: { already_loaded: true },
+    });
+    return;
+  }
+
   const stage = await db.pipelineStage.findFirst({
     where: { pipeline: { organization_id: orgId } },
     orderBy: { position: 'asc' },
@@ -112,92 +140,98 @@ async function loadExampleData(request: FastifyRequest, reply: FastifyReply): Pr
     { first_name: 'Сергей', last_name: 'Морозов', email: 's.morozov@gamma-service.ru', phone: '+79565678901', company: 'Гамма-Сервис' },
   ];
 
-  const contacts = await Promise.all(
-    contactData.map((c) =>
-      db.contact.create({
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + 7);
+
+  const loaded = await db.$transaction(async (tx) => {
+    const contacts: Array<{ id: string }> = [];
+    for (const contact of contactData) {
+      contacts.push(await tx.contact.create({
         data: {
-          ...c,
+          ...contact,
           organization_id: orgId,
           created_by: userId,
           is_example_data: true,
           notes: '[example] Тестовый контакт для демонстрации.',
         },
+      }));
+    }
+
+    await Promise.all([
+      tx.deal.create({
+        data: {
+          title: 'Пример сделки — Новый клиент',
+          organization_id: orgId,
+          created_by: userId,
+          contact_id: contacts[0].id,
+          pipeline_id: stage?.pipeline_id ?? undefined,
+          stage_id: stage?.id ?? undefined,
+          status: 'open',
+          is_example_data: true,
+        },
       }),
-    ),
-  );
+      tx.deal.create({
+        data: {
+          title: 'Пример сделки — Закрытая',
+          organization_id: orgId,
+          created_by: userId,
+          contact_id: contacts[1].id,
+          pipeline_id: stage?.pipeline_id ?? undefined,
+          stage_id: stage?.id ?? undefined,
+          status: 'won',
+          is_example_data: true,
+        },
+      }),
+      tx.task.create({
+        data: {
+          title: 'Позвонить Алексею Смирнову',
+          organization_id: orgId,
+          created_by: userId,
+          assigned_to: userId,
+          contact_id: contacts[0].id,
+          due_date: dueDate,
+          status: 'pending',
+          priority: 'medium',
+          is_example_data: true,
+        },
+      }),
+      tx.task.create({
+        data: {
+          title: 'Отправить коммерческое предложение',
+          organization_id: orgId,
+          created_by: userId,
+          assigned_to: userId,
+          contact_id: contacts[1].id,
+          due_date: dueDate,
+          status: 'pending',
+          priority: 'high',
+          is_example_data: true,
+        },
+      }),
+      tx.task.create({
+        data: {
+          title: 'Согласовать условия договора',
+          organization_id: orgId,
+          created_by: userId,
+          assigned_to: userId,
+          contact_id: contacts[2].id,
+          due_date: dueDate,
+          status: 'pending',
+          priority: 'low',
+          is_example_data: true,
+        },
+      }),
+    ]);
 
-  const dueDate = new Date();
-  dueDate.setDate(dueDate.getDate() + 7);
+    const userUpdate = await tx.user.updateMany({
+      where: { id: userId, organization_id: orgId },
+      data: { onboarding_state: toJson({ ...current, example_data_loaded: true }) },
+    });
 
-  await Promise.all([
-    db.deal.create({
-      data: {
-        title: 'Пример сделки — Новый клиент',
-        organization_id: orgId,
-        created_by: userId,
-        contact_id: contacts[0].id,
-        pipeline_id: stage?.pipeline_id ?? undefined,
-        stage_id: stage?.id ?? undefined,
-        status: 'open',
-        is_example_data: true,
-      },
-    }),
-    db.deal.create({
-      data: {
-        title: 'Пример сделки — Закрытая',
-        organization_id: orgId,
-        created_by: userId,
-        contact_id: contacts[1].id,
-        pipeline_id: stage?.pipeline_id ?? undefined,
-        stage_id: stage?.id ?? undefined,
-        status: 'won',
-        is_example_data: true,
-      },
-    }),
-    db.task.create({
-      data: {
-        title: 'Позвонить Алексею Смирнову',
-        organization_id: orgId,
-        created_by: userId,
-        assigned_to: userId,
-        contact_id: contacts[0].id,
-        due_date: dueDate,
-        status: 'pending',
-        priority: 'medium',
-        is_example_data: true,
-      },
-    }),
-    db.task.create({
-      data: {
-        title: 'Отправить коммерческое предложение',
-        organization_id: orgId,
-        created_by: userId,
-        assigned_to: userId,
-        contact_id: contacts[1].id,
-        due_date: dueDate,
-        status: 'pending',
-        priority: 'high',
-        is_example_data: true,
-      },
-    }),
-    db.task.create({
-      data: {
-        title: 'Согласовать условия договора',
-        organization_id: orgId,
-        created_by: userId,
-        assigned_to: userId,
-        contact_id: contacts[2].id,
-        due_date: dueDate,
-        status: 'pending',
-        priority: 'low',
-        is_example_data: true,
-      },
-    }),
-  ]);
+    return userUpdate.count === 1;
+  });
 
-  const current = await readUserState(userId, orgId);
-  const updated = await updateUserState(userId, orgId, { ...current, example_data_loaded: true });
-  if (!updated) {
+  if (!loaded) {
     await reply.status(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
     return;
   }

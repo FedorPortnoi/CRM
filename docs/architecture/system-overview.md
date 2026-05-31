@@ -22,7 +22,7 @@ The core principle: **the app must work without an internet connection.** A sale
                            │ HTTPS / REST + WebSocket
                            ▼
 ┌──────────────────────────────────────────────────────────┐
-│               API Gateway (Express + TypeScript)          │
+│               API Gateway (Fastify + TypeScript)          │
 │  ┌─────────────────────────────────────────────────────┐ │
 │  │  JWT Auth  │  Rate Limit  │  Zod Validation  │  CORS│ │
 │  └─────────────────────────────────────────────────────┘ │
@@ -32,7 +32,7 @@ The core principle: **the app must work without an internet connection.** A sale
              │                          │
 ┌────────────▼──────┐       ┌───────────▼──────────────────┐
 │  Business Logic   │       │  Real-Time & Push             │
-│  Service Layer    │       │  WebSocket (Socket.io)        │
+│  Service Layer    │       │  WebSocket (@fastify/websocket, planned)        │
 │  (contacts,       │       │  FCM → Android                │
 │   deals, tasks,   │       │  APNS → iOS                   │
 │   pipeline, etc.) │       │  Expo Push (dev)              │
@@ -42,7 +42,7 @@ The core principle: **the app must work without an internet connection.** A sale
 │                    PostgreSQL (Primary DB)                  │
 │  organizations │ users │ contacts │ deals │ tasks          │
 │  messages │ calendar_events │ activity_log │ pipelines      │
-│  (Row-Level Security: every row scoped to organization_id) │
+│  (multi-tenancy enforced at application layer via organization_id in every Prisma query) │
 └────────────────────────────────────────────────────────────┘
 ┌────────────────────────────────────────────────────────────┐
 │                       Redis                                 │
@@ -51,8 +51,8 @@ The core principle: **the app must work without an internet connection.** A sale
 └────────────────────────────────────────────────────────────┘
 ┌──────────────────────────────────────────────────────────┐
 │                  Third-Party Integrations                   │
-│  Twilio (SMS)  │  Google Calendar  │  Apple Calendar      │
-│  AWS S3 (file storage)  │  Google Vision (OCR)            │
+│  SMS.ru (SMS)  │  Yandex CalDAV  │  Apple Calendar      │
+│  Yandex Object Storage (file storage)  │  Yandex Vision (OCR)            │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -62,7 +62,7 @@ The core principle: **the app must work without an internet connection.** A sale
 The app stores a local copy of all data the user has accessed using SQLite (via expo-sqlite) for structured data and MMKV for key-value cache. Mutations are queued locally and replayed against the server when online. Conflicts use a last-write-wins strategy with server timestamp as authority.
 
 ### 2. Multi-Tenant Data Model
-Every database table has an `organization_id` column. PostgreSQL Row-Level Security (RLS) policies enforce that users can only see data belonging to their organization. The API never issues cross-tenant queries — `organization_id` comes from the verified JWT, not from the request body.
+Every database table has an `organization_id` column. Multi-tenancy is enforced at the application layer — every Prisma query includes an `organization_id` filter derived from the verified JWT. The API never issues cross-tenant queries; `organization_id` is never accepted from the request body.
 
 ### 3. REST over GraphQL (MVP)
 REST is simpler to build, cache, debug, and version. GraphQL can be evaluated for v2 once access patterns are well understood. All endpoints follow `GET/POST/PATCH/DELETE` conventions with consistent response envelopes.
@@ -80,21 +80,21 @@ A dedicated sync service on the client reconciles local mutations with the serve
 | Mobile App | React Native + Expo | UI, local cache, offline ops, push receipt |
 | API Gateway | Fastify + TypeScript | Auth, validation, routing, rate limiting |
 | Business Services | Node.js services | CRM logic, automation rules, notifications |
-| PostgreSQL | PostgreSQL 16 | Primary data store, audit logs, RLS |
+| PostgreSQL | PostgreSQL 16 (Supabase, migrating to Yandex Managed PostgreSQL for FZ-242) | Primary data store, audit logs |
 | Redis | Redis 7 | Caching, job queues, rate limit counters |
 | Push Delivery | FCM + APNS + Expo | Cross-platform push notifications |
 | SMS | SMS.ru | Outbound SMS from contact profiles |
-| Calendar Sync | Yandex Calendar | Appointment sync through OAuth and CalDAV |
-| File Storage | AWS S3 | Attachments, business card photos |
+| Calendar Sync | Yandex CalDAV | Appointment sync via CalDAV |
+| File Storage | Yandex Object Storage | Attachments, business card photos |
 
 ## Security Boundaries
 
 - All API endpoints require a valid JWT except `/api/v1/auth/*`
-- Organization isolation enforced at DB layer via RLS + `organization_id` in JWT claims
+- Organization isolation enforced at application layer via `organization_id` in every Prisma query, derived from the verified JWT
 - Phone numbers and emails are encrypted at rest (AES-256-GCM)
 - TLS 1.3 required for all communication — no HTTP in production
 - API keys for integrations stored server-side only, never shipped to mobile client
-- File uploads validated for type and size before S3 storage; pre-signed URLs for download
+- File uploads validated for type and size before storage in Yandex Object Storage; pre-signed URLs for download
 
 ## Scalability Path
 
@@ -102,4 +102,4 @@ MVP targets single-server deployment (1 API server, 1 DB, 1 Redis). When load re
 - API: horizontally scale behind a load balancer (stateless design supports this from day one)
 - DB: read replicas for analytics queries; connection pooling via PgBouncer
 - Jobs: Bull queue workers scale independently from API workers
-- Real-time: migrate from Socket.io to a managed WS service (Ably, Pusher) at scale
+- Real-time: migrate from @fastify/websocket to a managed WS service (Ably, Pusher) at scale

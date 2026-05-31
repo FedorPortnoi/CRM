@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
 import { sendOrQueueMutation } from '../../../utils/offlineMutation';
+import { formatMarketDateTime } from '../../../market/profile';
 
 type CalendarContact = {
   id: string;
@@ -116,12 +117,12 @@ function buildLocalDate(dateValue: string, timeValue: string): Date | null {
 }
 
 function formatPreview(date: Date): string {
-  return date.toLocaleString('en-US', {
-    weekday: 'short',
-    month: 'short',
+  return formatMarketDateTime(date, {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    month: 'short',
+    weekday: 'short',
   });
 }
 
@@ -391,7 +392,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator color="#065f46" size="large" />
+            <ActivityIndicator color="#C45A10" size="large" />
           </View>
         ) : original !== null ? (
           <>
@@ -405,7 +406,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                   setFieldErrors((prev) => ({ ...prev, title: undefined }));
                 }}
                 placeholder={t('calendar.titlePlaceholder')}
-                placeholderTextColor="#6b7280"
+                placeholderTextColor="#B07868"
                 autoCapitalize="sentences"
               />
               {fieldErrors.title ? <Text style={styles.fieldError}>{fieldErrors.title}</Text> : null}
@@ -422,7 +423,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     setFieldErrors((prev) => ({ ...prev, start: undefined }));
                   }}
                   placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#6b7280"
+                  placeholderTextColor="#B07868"
                   keyboardType="numbers-and-punctuation"
                 />
               </View>
@@ -436,7 +437,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     setFieldErrors((prev) => ({ ...prev, start: undefined }));
                   }}
                   placeholder="HH:mm"
-                  placeholderTextColor="#6b7280"
+                  placeholderTextColor="#B07868"
                   keyboardType="numbers-and-punctuation"
                 />
               </View>
@@ -454,7 +455,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     setFieldErrors((prev) => ({ ...prev, end: undefined }));
                   }}
                   placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#6b7280"
+                  placeholderTextColor="#B07868"
                   keyboardType="numbers-and-punctuation"
                 />
               </View>
@@ -468,7 +469,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     setFieldErrors((prev) => ({ ...prev, end: undefined }));
                   }}
                   placeholder="HH:mm"
-                  placeholderTextColor="#6b7280"
+                  placeholderTextColor="#B07868"
                   keyboardType="numbers-and-punctuation"
                 />
               </View>
@@ -489,7 +490,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                 value={notes}
                 onChangeText={setNotes}
                 placeholder={t('calendar.notesPlaceholder')}
-                placeholderTextColor="#6b7280"
+                placeholderTextColor="#B07868"
                 multiline
                 numberOfLines={5}
                 textAlignVertical="top"
@@ -521,7 +522,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     value={contactQuery}
                     onChangeText={setContactQuery}
                     placeholder={t('contacts.searchByName')}
-                    placeholderTextColor="#6b7280"
+                    placeholderTextColor="#B07868"
                   />
                   {visibleContactResults.length > 0 ? (
                     <View style={styles.contactResultsContainer}>
@@ -598,17 +599,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 13,
     fontWeight: '600',
     marginBottom: 5,
   },
   input: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     borderWidth: 1,
-    color: '#111827',
+    color: '#383432',
     fontSize: 15,
     justifyContent: 'center',
     minHeight: 44,
@@ -617,10 +618,10 @@ const styles = StyleSheet.create({
   },
   notesInput: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     borderWidth: 1,
-    color: '#111827',
+    color: '#383432',
     fontSize: 15,
     height: 112,
     paddingHorizontal: 12,
@@ -644,28 +645,28 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   previewBox: {
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#FEF0E8',
     borderRadius: 12,
     marginBottom: 16,
     marginTop: 4,
     padding: 12,
   },
   previewLabel: {
-    color: '#065f46',
+    color: '#C45A10',
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 4,
     textTransform: 'uppercase',
   },
   previewText: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 14,
   },
   contactChip: {
     alignItems: 'center',
     alignSelf: 'flex-start',
     backgroundColor: '#FFFFFF',
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 20,
     borderWidth: 1,
     flexDirection: 'row',
@@ -674,36 +675,36 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   contactChipText: {
-    color: '#111827',
+    color: '#383432',
     flexShrink: 1,
     fontSize: 14,
     marginRight: 8,
   },
   contactChipRemove: {
-    color: '#065f46',
+    color: '#C45A10',
     fontSize: 14,
     fontWeight: '600',
   },
   contactResultsContainer: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     borderWidth: 1,
     marginTop: 4,
   },
   contactResultItem: {
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#E8DDD6',
     borderBottomWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
   contactResultText: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 15,
   },
   submitButton: {
     alignItems: 'center',
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 12,
     justifyContent: 'center',
     marginBottom: 32,
@@ -721,7 +722,7 @@ const styles = StyleSheet.create({
   retryButton: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 12,
     justifyContent: 'center',
     marginTop: 16,

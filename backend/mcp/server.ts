@@ -9,13 +9,13 @@ import { createVerifier } from 'fast-jwt';
 import { getJwtSecret } from '../config/security';
 import { validateMcpPrincipal } from './validation';
 
-export type McpUser = { sub: string; org_id: string; role: string };
+export type McpUser = { sub: string; org_id: string; role: string; sid?: string };
 
 const verify = createVerifier({ key: getJwtSecret() });
 
 export function verifyToken(token: string): McpUser {
   const payload = verify(token) as Record<string, string>;
-  return { sub: payload['sub'], org_id: payload['org_id'], role: payload['role'] };
+  return { sub: payload['sub'], org_id: payload['org_id'], role: payload['role'], sid: payload['sid'] };
 }
 
 type ToolHandler = (
@@ -107,12 +107,13 @@ export function registerTool(
 }
 
 export async function startMcp(): Promise<void> {
+  // Dynamic imports prevent circular-init: tool files call registerTool() at
+  // module scope, so they must load after tools[] and registerTool are ready.
+  await import('./tools/contacts');
+  await import('./tools/deals');
+  await import('./tools/tasks');
+  await import('./tools/calendar');
+  await import('./tools/analytics');
   const transport = new StdioServerTransport();
   await mcpServer.connect(transport);
 }
-
-import './tools/contacts';
-import './tools/deals';
-import './tools/tasks';
-import './tools/calendar';
-import './tools/analytics';

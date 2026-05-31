@@ -106,26 +106,6 @@ let scheduleTaskDueReminder: typeof import('../../../src/utils/notifications').s
 
 describe('notifications utilities', () => {
   beforeAll(async () => {
-    const expoNotifications = await import('expo-notifications');
-    vi.spyOn(expoNotifications, 'setNotificationChannelAsync').mockImplementation((...args) =>
-      mocks.setNotificationChannelAsync(...args),
-    );
-    vi.spyOn(expoNotifications, 'getPermissionsAsync').mockImplementation((...args) =>
-      mocks.getPermissionsAsync(...args),
-    );
-    vi.spyOn(expoNotifications, 'requestPermissionsAsync').mockImplementation((...args) =>
-      mocks.requestPermissionsAsync(...args),
-    );
-    vi.spyOn(expoNotifications, 'getExpoPushTokenAsync').mockImplementation((...args) =>
-      mocks.getExpoPushTokenAsync(...args),
-    );
-    vi.spyOn(expoNotifications, 'scheduleNotificationAsync').mockImplementation((...args) =>
-      mocks.scheduleNotificationAsync(...args),
-    );
-    vi.spyOn(expoNotifications, 'cancelScheduledNotificationAsync').mockImplementation(
-      (...args) => mocks.cancelScheduledNotificationAsync(...args),
-    );
-
     const notifications = await import('../../../src/utils/notifications');
     notifyUnknownCallCapture = notifications.notifyUnknownCallCapture;
     notifyPendingCaptureCount = notifications.notifyPendingCaptureCount;

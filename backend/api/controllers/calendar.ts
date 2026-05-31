@@ -1,7 +1,14 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { CalendarEventStatus, Prisma } from '@prisma/client';
-import crypto from 'crypto';
-import { getJwtSecret } from '../../config/security';
+import crypto from 'node:crypto';
+import {
+  ConfigurationError,
+  getDeploymentSafeUrl,
+  getJwtSecret,
+  getYandexWebhookSecret,
+} from '../../config/security';
+import { encryptField as encryptToken, decryptField as decryptToken } from '../../services/encryption';
+import { auditLog } from '../../services/audit';
 import { db } from '../../services/db';
 
 // ─── Local request types ──────────────────────────────────────────────────────
@@ -90,56 +97,7 @@ function hasInvalidEventWindow(startTime: Date, endTime: Date): boolean {
   return endTime.getTime() <= startTime.getTime();
 }
 
-function base64Url(input: string | Buffer): string {
-  return Buffer.from(input).toString('base64url');
-}
 
-const ENCRYPTED_TOKEN_PREFIX = 'enc:v1:';
-
-function getTokenEncryptionKey(): Buffer {
-  const secret = process.env.TOKEN_ENCRYPTION_KEY?.trim() || getJwtSecret();
-  return crypto.createHash('sha256').update(secret).digest();
-}
-
-function encryptToken(token: string): string;
-function encryptToken(token: null): null;
-function encryptToken(token: undefined): undefined;
-function encryptToken(token: string | null | undefined): string | null | undefined;
-function encryptToken(token: string | null | undefined): string | null | undefined {
-  if (!token || token.startsWith(ENCRYPTED_TOKEN_PREFIX)) {
-    return token;
-  }
-
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', getTokenEncryptionKey(), iv);
-  const encrypted = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-
-  return `${ENCRYPTED_TOKEN_PREFIX}${iv.toString('base64url')}.${tag.toString('base64url')}.${encrypted.toString('base64url')}`;
-}
-
-function decryptToken(token: string): string {
-  if (!token.startsWith(ENCRYPTED_TOKEN_PREFIX)) {
-    return token;
-  }
-
-  const [ivValue, tagValue, encryptedValue] = token.slice(ENCRYPTED_TOKEN_PREFIX.length).split('.');
-  if (!ivValue || !tagValue || !encryptedValue) {
-    throw new Error('Invalid encrypted Yandex token payload');
-  }
-
-  const decipher = crypto.createDecipheriv(
-    'aes-256-gcm',
-    getTokenEncryptionKey(),
-    Buffer.from(ivValue, 'base64url'),
-  );
-  decipher.setAuthTag(Buffer.from(tagValue, 'base64url'));
-
-  return Buffer.concat([
-    decipher.update(Buffer.from(encryptedValue, 'base64url')),
-    decipher.final(),
-  ]).toString('utf8');
-}
 
 function decryptYandexSync<T extends { access_token: string; refresh_token: string | null }>(sync: T): T {
   return {
@@ -150,8 +108,8 @@ function decryptYandexSync<T extends { access_token: string; refresh_token: stri
 }
 
 function signState(payload: OAuthState): string {
-  const encoded = base64Url(JSON.stringify(payload));
-  const secret = process.env.JWT_SECRET ?? '';
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const secret = getJwtSecret();
   const signature = crypto.createHmac('sha256', secret).update(encoded).digest('base64url');
   return `${encoded}.${signature}`;
 }
@@ -161,7 +119,7 @@ function verifyState(state: string): OAuthState | null {
   if (!encoded || !signature) return null;
 
   const expected = crypto
-    .createHmac('sha256', process.env.JWT_SECRET ?? '')
+    .createHmac('sha256', getJwtSecret())
     .update(encoded)
     .digest('base64url');
 
@@ -187,8 +145,58 @@ function yandexConfigured(): boolean {
   return Boolean(process.env.YANDEX_CLIENT_ID && process.env.YANDEX_CLIENT_SECRET);
 }
 
+function headerValue(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+}
+
+function timingSafeEqualString(actual: string, expected: string): boolean {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+function yandexWebhookSecretFromRequest(request: FastifyRequest): string | undefined {
+  const headerSecret = headerValue(request.headers['x-yandex-webhook-secret']);
+  if (headerSecret?.trim()) {
+    return headerSecret.trim();
+  }
+
+  const authorization = headerValue(request.headers.authorization);
+  const bearerPrefix = 'bearer ';
+  if (authorization?.toLowerCase().startsWith(bearerPrefix)) {
+    const bearerSecret = authorization.slice(bearerPrefix.length).trim();
+    return bearerSecret.length > 0 ? bearerSecret : undefined;
+  }
+
+  return undefined;
+}
+
+function readYandexWebhookSecret(reply: FastifyReply): string | null {
+  try {
+    return getYandexWebhookSecret() ?? '';
+  } catch (err: unknown) {
+    if (err instanceof ConfigurationError) {
+      reply.status(503).send({
+        error: { code: 'YANDEX_WEBHOOK_SECRET_NOT_CONFIGURED', message: 'Yandex webhook secret is not configured' },
+      });
+      return null;
+    }
+
+    throw err;
+  }
+}
+
 function yandexRedirectUri(request: FastifyRequest): string {
-  if (process.env.YANDEX_REDIRECT_URI) return process.env.YANDEX_REDIRECT_URI;
+  const configuredRedirectUri = getDeploymentSafeUrl('YANDEX_REDIRECT_URI', {
+    requiredInProduction: true,
+    allowedProtocols: ['https:'],
+  });
+  if (configuredRedirectUri) return configuredRedirectUri;
+
   const host = request.headers.host ?? `localhost:${process.env.PORT ?? '3000'}`;
   return `${request.protocol}://${host}/api/v1/calendar/sync/yandex/callback`;
 }
@@ -844,7 +852,18 @@ async function yandexOAuthCallback(
     });
   }
 
-  const successUrl = process.env.YANDEX_CALENDAR_SUCCESS_URL;
+  await auditLog({
+    action: 'calendar.oauth_connect',
+    outcome: 'success',
+    request,
+    organizationId: payload.org_id,
+    userId: payload.sub,
+    metadata: { provider: 'yandex', yandex_username: yandexLogin },
+  });
+
+  const successUrl = getDeploymentSafeUrl('YANDEX_CALENDAR_SUCCESS_URL', {
+    allowedProtocols: ['https:', 'crm:'],
+  });
   if (successUrl) {
     reply.redirect(successUrl);
     return;
@@ -880,6 +899,13 @@ async function yandexDisconnect(
     return;
   }
 
+  await auditLog({
+    action: 'calendar.oauth_disconnect',
+    outcome: 'success',
+    request,
+    metadata: { provider: 'yandex' },
+  });
+
   reply.send({ data: { disconnected: true }, meta: {} });
 }
 
@@ -907,9 +933,41 @@ async function syncStatus(
 }
 
 async function yandexWebhook(
-  _request: FastifyRequest,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
+  const expectedSecret = readYandexWebhookSecret(reply);
+  if (expectedSecret === null) {
+    await auditLog({
+      action: 'webhook.yandex',
+      outcome: 'failure',
+      request,
+      metadata: { reason: 'missing_server_secret' },
+    });
+    return;
+  }
+
+  if (expectedSecret) {
+    const providedSecret = yandexWebhookSecretFromRequest(request);
+    if (!providedSecret || !timingSafeEqualString(providedSecret, expectedSecret)) {
+      await auditLog({
+        action: 'webhook.yandex',
+        outcome: 'denied',
+        request,
+        metadata: { reason: 'invalid_secret' },
+      });
+      reply.status(401).send({
+        error: { code: 'YANDEX_WEBHOOK_UNAUTHORIZED', message: 'Invalid Yandex webhook secret' },
+      });
+      return;
+    }
+  }
+
+  await auditLog({
+    action: 'webhook.yandex',
+    outcome: 'success',
+    request,
+  });
   reply.send({ data: { received: true }, meta: {} });
 }
 

@@ -1,12 +1,15 @@
-import './config/env';
+﻿import './config/env';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
+import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
+import websocket from '@fastify/websocket';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
-import { getCorsOrigin, getJwtSecret } from './config/security';
+import { getCorsOrigin, getJwtSecret, validateProductionConfig } from './config/security';
 import { enforceAuthenticatedApiRequest } from './api/authenticate';
+import { auditSensitiveApiRequest } from './services/audit';
 import authRoutes from './api/routes/auth';
 import contactsRoutes from './api/routes/contacts';
 import dealsRoutes from './api/routes/deals';
@@ -20,6 +23,10 @@ import syncRoutes from './api/routes/sync';
 import capturesRoutes from './api/routes/captures';
 import onboardingRoutes from './api/routes/onboarding';
 import exportRoutes from './api/routes/export';
+import { activitiesRoutes } from './api/routes/activities';
+import { attachmentsRoutes } from './api/routes/attachments';
+import { wsRoutes } from './api/routes/ws';
+import { startScheduler } from './services/scheduler';
 
 type ApiError = Error & {
   code?: string;
@@ -73,13 +80,29 @@ function getRateLimitWindowMs(): number {
 }
 
 async function start() {
+  validateProductionConfig();
+
   const useMcp = process.env.ENABLE_MCP === 'true';
   const server = Fastify({
+    bodyLimit: readPositiveIntEnv('REQUEST_BODY_LIMIT_BYTES', 16 * 1024 * 1024),
     logger: useMcp ? { stream: process.stderr } : true,
   });
 
   server.setValidatorCompiler(validatorCompiler);
   server.setSerializerCompiler(serializerCompiler);
+
+  server.addHook('onSend', async (request, reply, payload) => {
+    if (request.url.startsWith('/api/')) {
+      reply.header('Cache-Control', 'no-store');
+      reply.header('Pragma', 'no-cache');
+    }
+
+    return payload;
+  });
+
+  server.addHook('onResponse', async (request, reply) => {
+    await auditSensitiveApiRequest(request, reply.statusCode);
+  });
 
   server.setErrorHandler((err, request, reply) => {
     const apiError = toApiError(err);
@@ -110,6 +133,18 @@ async function start() {
     reply.status(404).send({ error: 'Not Found', message: 'Route not found', statusCode: 404 });
   });
 
+  await server.register(helmet, {
+    global: true,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+        objectSrc: ["'none'"],
+      },
+    },
+  });
   await server.register(cors, { origin: getCorsOrigin() });
   await server.register(formbody);
   await server.register(jwt, { secret: getJwtSecret() });
@@ -117,6 +152,9 @@ async function start() {
     max: getRateLimitMax(),
     timeWindow: getRateLimitWindowMs(),
   });
+
+  await server.register(websocket);
+  await server.register(wsRoutes, { prefix: '/api/v1' });
 
   server.addHook('preHandler', enforceAuthenticatedApiRequest);
 
@@ -133,6 +171,8 @@ async function start() {
   await server.register(capturesRoutes, { prefix: '/api/v1/captures' });
   await server.register(onboardingRoutes, { prefix: '/api/v1/onboarding' });
   await server.register(exportRoutes, { prefix: '/api/v1/export' });
+  await server.register(activitiesRoutes, { prefix: '/api/v1' });
+  await server.register(attachmentsRoutes, { prefix: '/api/v1' });
 
   server.get('/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() };
@@ -152,6 +192,7 @@ async function start() {
 
   try {
     await server.listen({ port, host: '0.0.0.0' });
+    startScheduler();
 
     if (process.env.ENABLE_MCP === 'true') {
       const { startMcp } = await import('./mcp/server');

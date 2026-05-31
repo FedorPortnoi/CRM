@@ -40,7 +40,7 @@ CREATE TABLE deals (
     pipeline_id     UUID NOT NULL REFERENCES pipelines(id) ON DELETE RESTRICT,
     stage_id        UUID NOT NULL REFERENCES pipeline_stages(id) ON DELETE RESTRICT,
     value           NUMERIC(15, 2),
-    currency        CHAR(3) NOT NULL DEFAULT 'USD',
+    currency        CHAR(3) NOT NULL DEFAULT 'RUB',
     expected_close  DATE,
     actual_close    DATE,
     probability     SMALLINT CHECK (probability >= 0 AND probability <= 100),

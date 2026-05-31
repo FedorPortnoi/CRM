@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+﻿import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,9 @@ import { TrendingUp, CheckSquare, Activity, Zap, UserPlus, PlusCircle, ListCheck
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { notifyPendingCaptureCount } from '../../utils/notifications';
+import { formatMarketDate, formatMarketNumber, formatMoney } from '../../market/profile';
 
-const TEAL = '#065f46';
+const TEAL = '#C45A10';
 const CAPTURE_COUNT_POLL_INTERVAL_MS = 60000;
 
 type DashboardData = {
@@ -64,17 +65,17 @@ function errorMessage(e: unknown, fallback: string): string {
 }
 
 function formatCurrency(value: number): string {
-  return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return formatMoney(value, undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 function formatPipelineHealth(score: number): string {
   const percent = score <= 1 ? score * 100 : score;
-  return percent.toLocaleString('en-US', { maximumFractionDigits: 1 }) + '%';
+  return formatMarketNumber(percent, { maximumFractionDigits: 1 }) + '%';
 }
 
 function formatDueDate(date: string | null): string {
   if (!date) return '';
-  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return formatMarketDate(date, { month: 'short', day: 'numeric' });
 }
 
 function contactName(contact: RecentContact): string {
@@ -417,12 +418,12 @@ export default function DashboardScreen(): JSX.Element {
               onPress={() => { router.push({ pathname: '/task/[id]', params: { id: task.id } }); }}
               accessibilityRole="button"
             >
-              <View style={[styles.statusDot, { backgroundColor: task.status === 'done' ? TEAL : task.status === 'in_progress' ? '#f59e0b' : '#d1d5db' }]} />
+              <View style={[styles.statusDot, { backgroundColor: task.status === 'done' ? TEAL : task.status === 'in_progress' ? '#f59e0b' : '#E8DDD6' }]} />
               <View style={styles.listCardContent}>
                 <Text style={styles.listCardTitle} numberOfLines={1}>{task.title}</Text>
                 <Text style={styles.listCardSub}>{formatDueDate(task.due_date) || t('tasks.today')}</Text>
               </View>
-              <ChevronRight size={16} color="#9ca3af" />
+              <ChevronRight size={16} color="#CFADA3" />
             </TouchableOpacity>
           ))
         ) : (
@@ -504,7 +505,7 @@ export default function DashboardScreen(): JSX.Element {
                 <Text style={styles.listCardTitle} numberOfLines={1}>{contactName(contact)}</Text>
                 <Text style={styles.listCardSub} numberOfLines={1}>{contact.company ?? contact.email ?? ''}</Text>
               </View>
-              <ChevronRight size={16} color="#9ca3af" />
+              <ChevronRight size={16} color="#CFADA3" />
             </TouchableOpacity>
           ))
         ) : (
@@ -593,18 +594,18 @@ const styles = StyleSheet.create({
   greetingText: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#111827',
+    color: '#383432',
   },
   greetingSub: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#B07868',
     marginTop: 2,
   },
   avatarCircle: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 12,
@@ -638,7 +639,7 @@ const styles = StyleSheet.create({
   metricSkeleton: {
     flex: 1,
     height: 110,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: '#E8DDD6',
     borderRadius: 16,
   },
   metricIconBox: {
@@ -652,17 +653,17 @@ const styles = StyleSheet.create({
   metricNumber: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#111827',
+    color: '#383432',
   },
   metricLabel: {
     fontSize: 11,
-    color: '#6b7280',
+    color: '#B07868',
     fontWeight: '600',
     marginTop: 2,
   },
   metricSub: {
     fontSize: 11,
-    color: '#9ca3af',
+    color: '#CFADA3',
     marginTop: 2,
   },
   section: {
@@ -678,14 +679,14 @@ const styles = StyleSheet.create({
   sectionHeader: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6b7280',
+    color: '#B07868',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: 12,
   },
   viewAllText: {
     fontSize: 13,
-    color: '#065f46',
+    color: '#C45A10',
     fontWeight: '500',
   },
   quickActionsRow: {
@@ -697,7 +698,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#065f46',
+    borderColor: '#C45A10',
     paddingVertical: 14,
     alignItems: 'center',
     gap: 6,
@@ -712,7 +713,7 @@ const styles = StyleSheet.create({
   },
   quickActionLabel: {
     fontSize: 11,
-    color: '#065f46',
+    color: '#C45A10',
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -741,11 +742,11 @@ const styles = StyleSheet.create({
   listCardTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#111827',
+    color: '#383432',
   },
   listCardSub: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: '#CFADA3',
     marginTop: 2,
   },
   contactAvatar: {
@@ -759,22 +760,22 @@ const styles = StyleSheet.create({
   contactAvatarText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#065f46',
+    color: '#C45A10',
   },
   emptyText: {
-    color: '#9ca3af',
+    color: '#CFADA3',
     fontSize: 14,
     paddingVertical: 8,
   },
   rowSkeleton: {
     height: 60,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: '#E8DDD6',
     borderRadius: 12,
     marginBottom: 8,
   },
   closingSkeleton: {
     height: 116,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: '#E8DDD6',
     borderRadius: 12,
   },
   closingScroll: {
@@ -788,7 +789,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#d1fae5',
+    borderColor: '#FEF0E8',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
@@ -808,24 +809,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   closingTitle: {
-    color: '#065f46',
+    color: '#C45A10',
     fontSize: 14,
     fontWeight: '700',
   },
   closingContact: {
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 12,
     marginTop: 4,
   },
   closingValue: {
-    color: '#111827',
+    color: '#383432',
     fontSize: 13,
     fontWeight: '600',
     marginTop: 8,
   },
   outlineButton: {
     borderWidth: 1.5,
-    borderColor: '#065f46',
+    borderColor: '#C45A10',
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -835,7 +836,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   outlineButtonText: {
-    color: '#065f46',
+    color: '#C45A10',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -855,7 +856,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   inlineRetryButton: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,

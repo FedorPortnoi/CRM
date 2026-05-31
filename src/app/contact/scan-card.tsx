@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -333,16 +333,16 @@ export default function ScanCardScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F7F8FA' },
+  safe: { flex: 1, backgroundColor: '#FAF6F3' },
   container: { padding: 16, paddingBottom: 28 },
-  title: { fontSize: 26, fontWeight: '700', color: '#111827', marginBottom: 8 },
+  title: { fontSize: 26, fontWeight: '700', color: '#383432', marginBottom: 8 },
   helperText: { color: '#4B5563', lineHeight: 20, marginBottom: 12 },
   capturePanel: {
     minHeight: 190,
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E8DDD6',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     height: 52,
     minWidth: 180,
     borderRadius: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -383,17 +383,17 @@ const styles = StyleSheet.create({
   sectionLabel: {
     marginTop: 16,
     marginBottom: 8,
-    color: '#111827',
+    color: '#383432',
     fontWeight: '700',
   },
   input: {
     minHeight: 160,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E8DDD6',
     backgroundColor: '#FFFFFF',
     padding: 12,
-    color: '#111827',
+    color: '#383432',
   },
   errorBox: {
     marginTop: 12,
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
   button: {
     height: 52,
     borderRadius: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',

@@ -2,6 +2,9 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { DealsController } from '../controllers/deals';
+import { DEFAULT_MARKET_PROFILE, normalizeCurrencyCode } from '../../config/market';
+
+const CurrencySchema = z.string().trim().length(3).transform(normalizeCurrencyCode);
 
 const CreateDealSchema = z.object({
   title: z.string().min(1).max(200),
@@ -9,7 +12,7 @@ const CreateDealSchema = z.object({
   pipeline_id: z.string().uuid(),
   stage_id: z.string().uuid(),
   value: z.number().nonnegative().optional(),
-  currency: z.string().length(3).default('USD'),
+  currency: CurrencySchema.default(DEFAULT_MARKET_PROFILE.currency),
   expected_close: z.string().date().optional(),
   probability: z.number().min(0).max(100).optional(),
   next_action: z.string().max(500).optional(),

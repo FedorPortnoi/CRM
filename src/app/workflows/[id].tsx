@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -63,7 +63,7 @@ interface SkeletonBoxProps {
 }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: '#d1fae5', borderRadius, marginBottom }} />;
+  return <View style={{ width, height, backgroundColor: '#FEF0E8', borderRadius, marginBottom }} />;
 }
 
 const TRIGGER_KEY_MAP: Record<string, string> = {
@@ -83,9 +83,9 @@ function getConditionRows(conditions: ConditionsValue): WorkflowCondition[] {
 }
 
 function getStatusColor(status: WorkflowDetail['status']): string {
-  if (status === 'active') return '#34A853';
+  if (status === 'active') return '#C4704F';
   if (status === 'paused') return '#F9AB00';
-  return '#9ca3af';
+  return '#CFADA3';
 }
 
 function getActionLabel(action: ActionItem): string {
@@ -316,7 +316,7 @@ export default function WorkflowDetailScreen(): JSX.Element {
                 <View
                   style={[
                     styles.runBadge,
-                    { backgroundColor: run.status === 'success' ? '#34A853' : '#C5221F' },
+                    { backgroundColor: run.status === 'success' ? '#C4704F' : '#C5221F' },
                   ]}
                 >
                   <Text style={styles.runBadgeText}>
@@ -343,7 +343,7 @@ export default function WorkflowDetailScreen(): JSX.Element {
             <TouchableOpacity
               style={[
                 styles.bottomButton,
-                { backgroundColor: workflow.status === 'active' ? '#F9AB00' : '#34A853' },
+                { backgroundColor: workflow.status === 'active' ? '#F9AB00' : '#C4704F' },
                 isActionLoading ? styles.buttonDisabled : null,
               ]}
               onPress={handleToggle}
@@ -361,7 +361,7 @@ export default function WorkflowDetailScreen(): JSX.Element {
           <TouchableOpacity
             style={[
               styles.bottomButton,
-              { backgroundColor: '#10b981' },
+              { backgroundColor: '#C4704F' },
               isActionLoading ? styles.buttonDisabled : null,
             ]}
             onPress={() => router.push(('/workflows/edit/' + id) as never)}
@@ -386,8 +386,8 @@ export default function WorkflowDetailScreen(): JSX.Element {
   );
 }
 const styles = StyleSheet.create({
-  outerContainer: { flex: 1, backgroundColor: '#f0fdf8' },
-  container: { flex: 1, backgroundColor: '#f0fdf8' },
+  outerContainer: { flex: 1, backgroundColor: '#FEF0E8' },
+  container: { flex: 1, backgroundColor: '#FEF0E8' },
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -412,41 +412,41 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#FEF0E8',
     padding: 24,
   },
   errorText: { fontSize: 15, color: '#C5221F', textAlign: 'center', marginBottom: 16 },
-  retryText: { fontSize: 15, color: '#10b981', fontWeight: '600' },
-  workflowName: { fontSize: 22, fontWeight: '700', color: '#111827', marginBottom: 6 },
-  triggerText: { fontSize: 14, color: '#6B7280', marginBottom: 10 },
+  retryText: { fontSize: 15, color: '#C4704F', fontWeight: '600' },
+  workflowName: { fontSize: 22, fontWeight: '700', color: '#383432', marginBottom: 6 },
+  triggerText: { fontSize: 14, color: '#B07868', marginBottom: 10 },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   badgeText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  descriptionText: { fontSize: 13, color: '#6B7280', marginTop: 4 },
-  sectionLabel: { fontSize: 11, fontWeight: '600', color: '#6b7280', letterSpacing: 0.5, marginBottom: 10 },
-  conditionRow: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  conditionText: { fontSize: 14, color: '#374151' },
+  descriptionText: { fontSize: 13, color: '#B07868', marginTop: 4 },
+  sectionLabel: { fontSize: 11, fontWeight: '600', color: '#B07868', letterSpacing: 0.5, marginBottom: 10 },
+  conditionRow: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#FAF6F3' },
+  conditionText: { fontSize: 14, color: '#383432' },
   actionRow: {
     flexDirection: 'row',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#FAF6F3',
     gap: 6,
   },
-  actionIndex: { fontSize: 14, fontWeight: '600', color: '#6B7280', minWidth: 20 },
-  actionText: { fontSize: 14, color: '#374151', flex: 1 },
-  emptyText: { fontSize: 14, color: '#9CA3AF', fontStyle: 'italic' },
-  runRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', gap: 4 },
-  runDate: { fontSize: 13, color: '#6B7280', marginBottom: 4 },
+  actionIndex: { fontSize: 14, fontWeight: '600', color: '#B07868', minWidth: 20 },
+  actionText: { fontSize: 14, color: '#383432', flex: 1 },
+  emptyText: { fontSize: 14, color: '#CFADA3', fontStyle: 'italic' },
+  runRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#FAF6F3', gap: 4 },
+  runDate: { fontSize: 13, color: '#B07868', marginBottom: 4 },
   runBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   runBadgeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
   runError: { fontSize: 12, color: '#C5221F', marginTop: 2 },
-  bottomBar: { backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E5E7EB', padding: 16 },
+  bottomBar: { backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E8DDD6', padding: 16 },
   actionError: { color: '#C5221F', fontSize: 13, textAlign: 'center', marginBottom: 8 },
   bottomButtons: { flexDirection: 'row', gap: 8 },
   bottomButton: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
   bottomButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   buttonDisabled: { opacity: 0.6 },
   headerEditButton: { paddingHorizontal: 8, paddingVertical: 4 },
-  headerEditText: { color: '#10b981', fontSize: 16, fontWeight: '600' },
+  headerEditText: { color: '#C4704F', fontSize: 16, fontWeight: '600' },
 });

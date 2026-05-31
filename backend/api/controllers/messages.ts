@@ -1,14 +1,13 @@
-import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
+import { FastifyRequest, FastifyReply } from 'fastify';
 import {
   MessageDirection,
   MessageChannel,
   MessageStatus,
-  PendingCaptureStatus,
-  PendingCaptureType,
   Prisma,
 } from '@prisma/client';
 import { db } from '../../services/db';
-import { isSmsSendingEnabled, sendSms as sendSmsViaSmsRu } from '../../services/sms';
+import { broadcastToOrg } from '../../services/wsRooms';
+import { isEmailSendingEnabled, sendEmail as sendEmailViaResend } from '../../services/email';
 
 // --- Local request types ---
 
@@ -25,8 +24,9 @@ type ContactIdParams = { contact_id: string };
 
 type IdParams = { id: string };
 
-type SendSmsBody = {
+type SendEmailBody = {
   contact_id: string;
+  subject?: string;
   body: string;
 };
 
@@ -42,34 +42,6 @@ type CreateMessageBody = {
   body: string;
 };
 
-type SmsWebhookBody = Record<string, unknown> & {
-  api_id?: unknown;
-  from?: unknown;
-  From?: unknown;
-  text?: unknown;
-  Body?: unknown;
-  sms_id?: unknown;
-  SmsId?: unknown;
-  status?: unknown;
-  Status?: unknown;
-  org_id?: unknown;
-  organization_id?: unknown;
-};
-
-type WebSocketClientLike = {
-  readyState?: number;
-  OPEN?: number;
-  send: (payload: string) => void;
-};
-
-type WebSocketServerLike = {
-  clients?: Iterable<WebSocketClientLike>;
-};
-
-type FastifyWithWebSocket = FastifyInstance & {
-  websocketServer?: WebSocketServerLike;
-  ws?: WebSocketServerLike;
-};
 
 type LogCallBody = {
   contact_id: string;
@@ -79,183 +51,17 @@ type LogCallBody = {
   occurred_at?: string;
 };
 
-type SmsWebhookContact = {
-  id: string;
-  organization_id: string;
-};
-
-type WebhookOrgContext = {
-  provided: boolean;
-  orgId?: string;
-};
-
-const contactOrgCache = new Set<string>();
-
-function contactOrgCacheKey(contactId: string, orgId: string): string {
-  return `${orgId}:${contactId}`;
-}
-
 async function contactBelongsToOrg(contactId: string, orgId: string): Promise<boolean> {
-  const key = contactOrgCacheKey(contactId, orgId);
-  if (contactOrgCache.has(key)) {
-    return true;
-  }
-
   const contact = await db.contact.findFirst({
     where: { id: contactId, organization_id: orgId },
     select: { id: true },
   });
 
-  if (contact) {
-    contactOrgCache.add(key);
-    return true;
-  }
-
-  return false;
+  return contact !== null;
 }
 
-function toRequiredString(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function toUnknownRecord(value: unknown): Record<string, unknown> {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-
-  return {};
-}
-
-function toSmsWebhookBody(value: unknown): SmsWebhookBody {
-  return toUnknownRecord(value);
-}
-
-function getSmsRuApiId(): string | undefined {
-  return toRequiredString(process.env.SMSRU_API_ID);
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-}
-
-function getWebhookOrgContext(body: SmsWebhookBody, query: SmsWebhookBody): WebhookOrgContext {
-  const orgId = toRequiredString(body.org_id)
-    ?? toRequiredString(body.organization_id)
-    ?? toRequiredString(query.org_id)
-    ?? toRequiredString(query.organization_id);
-
-  if (!orgId) {
-    return { provided: false };
-  }
-
-  return isUuid(orgId) ? { provided: true, orgId } : { provided: true };
-}
-
-function buildSmsInboundCaptureRawData(
-  from: string,
-  text: string,
-  smsId: string | undefined,
-  apiId: string | undefined,
-  orgId: string,
-): Prisma.InputJsonObject {
-  return {
-    provider: 'smsru',
-    direction: 'inbound',
-    from,
-    From: from,
-    text,
-    Body: text,
-    org_id: orgId,
-    organization_id: orgId,
-    ...(smsId ? { sms_id: smsId, SmsId: smsId } : {}),
-    ...(apiId ? { api_id: apiId } : {}),
-  };
-}
-
-async function findSmsWebhookContact(from: string, orgId: string): Promise<SmsWebhookContact | null> {
-  const phoneWhere = {
-    OR: [
-      { phone: from },
-      { mobile: from },
-    ],
-  };
-
-  return db.contact.findFirst({
-    where: {
-      organization_id: orgId,
-      ...phoneWhere,
-    },
-    select: { id: true, organization_id: true },
-  });
-}
-
-async function orgExists(orgId: string): Promise<boolean> {
-  const org = await db.org.findUnique({
-    where: { id: orgId },
-    select: { id: true },
-  });
-
-  return Boolean(org);
-}
-
-function broadcastMessageIfAvailable(request: FastifyRequest, message: unknown): void {
-  const server = request.server as FastifyWithWebSocket;
-  const webSocketServer = server.websocketServer ?? server.ws;
-  if (!webSocketServer?.clients) {
-    return;
-  }
-
-  const payload = JSON.stringify({ type: 'message.created', data: message });
-  for (const client of webSocketServer.clients) {
-    const openState = client.OPEN ?? 1;
-    if (client.readyState !== undefined && client.readyState !== openState) {
-      continue;
-    }
-
-    try {
-      client.send(payload);
-    } catch {
-      // Broadcast is best-effort; webhook processing should not fail because a socket closed.
-    }
-  }
-}
-
-function sendSmsWebhookReceived(reply: FastifyReply): void {
-  reply.status(200).send({ data: { received: true }, meta: {} });
-}
-
-function rejectUnauthorizedSmsRuWebhook(
-  reply: FastifyReply,
-  configuredApiId: string | undefined,
-  apiId: string | undefined,
-): boolean {
-  if (!configuredApiId) {
-    reply.status(503).send({
-      error: { code: 'SERVICE_NOT_CONFIGURED', message: 'SMSRU_API_ID is not configured' },
-    });
-    return true;
-  }
-
-  if (!apiId) {
-    reply.status(401).send({
-      error: { code: 'SMSRU_API_ID_REQUIRED', message: 'SMS.ru api_id is required' },
-    });
-    return true;
-  }
-
-  if (apiId !== configuredApiId) {
-    reply.status(403).send({
-      error: { code: 'FORBIDDEN', message: 'Invalid SMS.ru api_id' },
-    });
-    return true;
-  }
-
-  return false;
+function broadcastMessageIfAvailable(orgId: string, message: unknown): void {
+  broadcastToOrg(orgId, { type: 'message.created', data: message });
 }
 
 // --- Handlers ---
@@ -348,7 +154,7 @@ async function create(
       direction: body.direction ?? MessageDirection.outbound,
       channel: body.channel,
       body: body.body,
-      status: body.channel === MessageChannel.sms
+      status: body.channel === MessageChannel.email
         ? MessageStatus.pending
         : body.channel === MessageChannel.call
           ? MessageStatus.delivered
@@ -359,16 +165,16 @@ async function create(
   reply.status(201).send({ data: message, meta: {} });
 }
 
-async function sendSms(
+async function sendEmail(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { contact_id, body } = request.body as SendSmsBody;
+  const { contact_id, subject, body } = request.body as SendEmailBody;
   const organization_id = request.user.org_id;
 
   const contact = await db.contact.findFirst({
     where: { id: contact_id, organization_id },
-    select: { id: true, phone: true, mobile: true },
+    select: { id: true, email: true },
   });
 
   if (!contact) {
@@ -376,78 +182,56 @@ async function sendSms(
     return;
   }
 
-  contactOrgCache.add(contactOrgCacheKey(contact_id, organization_id));
-
   const message = await db.message.create({
     data: {
       organization_id,
       contact_id,
       user_id: request.user.sub,
       direction: MessageDirection.outbound,
-      channel: MessageChannel.sms,
+      channel: MessageChannel.email,
       body,
       status: MessageStatus.pending,
     },
   });
 
-  const to = contact.mobile ?? contact.phone;
-
-  const apiId = getSmsRuApiId();
-  if (!apiId) {
-    reply.status(201).send({ data: message, meta: { delivery: 'queued_without_smsru_config' } });
+  if (!isEmailSendingEnabled()) {
+    reply.status(201).send({ data: message, meta: { delivery: 'queued_without_resend_config' } });
     return;
   }
 
-  if (!isSmsSendingEnabled()) {
-    reply.status(201).send({
-      data: message,
-      meta: { delivery: 'queued_without_smsru_config', reason: 'smsru_send_disabled' },
-    });
-    return;
-  }
-
-  if (!to) {
+  if (!contact.email) {
     const failed = await db.message.update({
       where: { id: message.id, organization_id },
-      data: { status: MessageStatus.failed, error_message: 'Contact has no phone number' },
+      data: { status: MessageStatus.failed, error_message: 'Contact has no email address' },
     });
     void failed;
-    reply.status(422).send({ error: { code: 'CONTACT_PHONE_MISSING', message: 'Contact has no phone number' } });
+    reply.status(422).send({ error: { code: 'CONTACT_EMAIL_MISSING', message: 'Contact has no email address' } });
     return;
   }
 
   try {
-    const result = await sendSmsViaSmsRu(to, body);
+    const result = await sendEmailViaResend(contact.email, subject ?? 'Message from CRM', body);
     if (!result.success) {
       const failed = await db.message.update({
         where: { id: message.id, organization_id },
-        data: {
-          status: MessageStatus.failed,
-          error_message: result.errorCode ?? 'SMS.ru send failed',
-        },
+        data: { status: MessageStatus.failed, error_message: result.errorCode ?? 'Resend send failed' },
       });
-      reply.status(201).send({ data: failed, meta: { delivery: 'smsru_failed' } });
+      reply.status(201).send({ data: failed, meta: { delivery: 'resend_failed' } });
       return;
     }
 
     const updated = await db.message.update({
       where: { id: message.id, organization_id },
-      data: {
-        twilio_sid: result.smsId,
-        status: MessageStatus.sent,
-      },
+      data: { twilio_sid: result.messageId, status: MessageStatus.sent },
     });
 
-    reply.status(201).send({ data: updated, meta: { delivery: 'sent_to_smsru' } });
+    reply.status(201).send({ data: updated, meta: { delivery: 'sent_via_resend' } });
   } catch (error) {
     const failed = await db.message.update({
       where: { id: message.id, organization_id },
-      data: {
-        status: MessageStatus.failed,
-        error_message: error instanceof Error ? error.message : 'SMS.ru send failed',
-      },
+      data: { status: MessageStatus.failed, error_message: error instanceof Error ? error.message : 'Resend send failed' },
     });
-    reply.status(201).send({ data: failed, meta: { delivery: 'smsru_failed' } });
+    reply.status(201).send({ data: failed, meta: { delivery: 'resend_failed' } });
   }
 }
 
@@ -534,113 +318,6 @@ async function markRead(
   reply.send({ data: updatedMessage, meta: {} });
 }
 
-async function smsruInboundWebhook(
-  request: FastifyRequest,
-  reply: FastifyReply,
-): Promise<void> {
-  const body = toSmsWebhookBody(request.body);
-  const query = toSmsWebhookBody(request.query);
-  const configuredApiId = getSmsRuApiId();
-  const apiId = toRequiredString(body.api_id) ?? toRequiredString(query.api_id);
-  const from = toRequiredString(body.From) ?? toRequiredString(body.from) ?? toRequiredString(query.From) ?? toRequiredString(query.from);
-  const text = toRequiredString(body.Body) ?? toRequiredString(body.text) ?? toRequiredString(query.Body) ?? toRequiredString(query.text);
-  const smsId = toRequiredString(body.SmsId) ?? toRequiredString(body.sms_id) ?? toRequiredString(query.SmsId) ?? toRequiredString(query.sms_id);
-  const orgContext = getWebhookOrgContext(body, query);
-  const orgId = orgContext.orgId;
-
-  if (rejectUnauthorizedSmsRuWebhook(reply, configuredApiId, apiId)) {
-    return;
-  }
-
-  if (!from || !text) {
-    reply.status(400).send({ error: { code: 'INVALID_WEBHOOK_PAYLOAD', message: 'from and text are required' } });
-    return;
-  }
-
-  if (orgContext.provided && !orgId) {
-    sendSmsWebhookReceived(reply);
-    return;
-  }
-
-  if (!orgId) {
-    sendSmsWebhookReceived(reply);
-    return;
-  }
-
-  const contact = await findSmsWebhookContact(from, orgId);
-
-  if (contact) {
-    const message = await db.message.create({
-      data: {
-        organization_id: contact.organization_id,
-        contact_id: contact.id,
-        direction: MessageDirection.inbound,
-        channel: MessageChannel.sms,
-        body: text,
-        status: MessageStatus.delivered,
-        twilio_sid: smsId,
-      },
-    });
-
-    broadcastMessageIfAvailable(request, message);
-  } else if (await orgExists(orgId)) {
-    await db.pendingCapture.create({
-      data: {
-        org_id: orgId,
-        type: PendingCaptureType.sms,
-        raw_data: buildSmsInboundCaptureRawData(from, text, smsId, apiId, orgId),
-        phone_number: from,
-        status: PendingCaptureStatus.pending,
-      },
-    });
-  }
-
-  sendSmsWebhookReceived(reply);
-}
-
-async function smsruStatusWebhook(
-  request: FastifyRequest,
-  reply: FastifyReply,
-): Promise<void> {
-  const body = toSmsWebhookBody(request.body);
-  const query = toSmsWebhookBody(request.query);
-  const configuredApiId = getSmsRuApiId();
-  const apiId = toRequiredString(body.api_id) ?? toRequiredString(query.api_id);
-  const smsId = toRequiredString(body.SmsId) ?? toRequiredString(body.sms_id) ?? toRequiredString(query.SmsId) ?? toRequiredString(query.sms_id);
-  const rawStatus = toRequiredString(body.Status) ?? toRequiredString(body.status) ?? toRequiredString(query.Status) ?? toRequiredString(query.status);
-  const orgContext = getWebhookOrgContext(body, query);
-  const orgId = orgContext.orgId;
-
-  if (rejectUnauthorizedSmsRuWebhook(reply, configuredApiId, apiId)) {
-    return;
-  }
-
-  if (!smsId || !rawStatus) {
-    reply.status(400).send({ error: { code: 'INVALID_WEBHOOK_PAYLOAD', message: 'SmsId and Status are required' } });
-    return;
-  }
-
-  if (!orgId) {
-    sendSmsWebhookReceived(reply);
-    return;
-  }
-
-  const normalized = rawStatus.toLowerCase();
-  const status =
-    normalized === 'delivered'
-      ? MessageStatus.delivered
-      : normalized === 'not_delivered' || normalized === 'expired'
-        ? MessageStatus.failed
-        : MessageStatus.sent;
-
-  await db.message.updateMany({
-    where: { twilio_sid: smsId, organization_id: orgId },
-    data: { status },
-  });
-
-  sendSmsWebhookReceived(reply);
-}
-
 // --- Export ---
 
 export const MessagesController = {
@@ -648,10 +325,8 @@ export const MessagesController = {
   getConversation,
   getById,
   create,
-  sendSms,
+  sendEmail,
   sendInApp,
   logCall,
   markRead,
-  smsruInboundWebhook,
-  smsruStatusWebhook,
 };

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -246,7 +246,7 @@ export default function NewDealScreen(): JSX.Element {
           setShowTitleError(false);
         }}
         placeholder={t('deals.titlePlaceholder')}
-        placeholderTextColor="#6b7280"
+        placeholderTextColor="#B07868"
       />
       {showTitleError && <Text style={styles.fieldError}>{t('deals.titleRequired')}</Text>}
 
@@ -257,13 +257,13 @@ export default function NewDealScreen(): JSX.Element {
         onChangeText={setValueStr}
         keyboardType="numeric"
         placeholder="0.00"
-        placeholderTextColor="#6b7280"
+        placeholderTextColor="#B07868"
       />
 
       <Text style={styles.label}>{t('deals.pipeline')} *</Text>
       <TouchableOpacity style={styles.pickerButton} onPress={() => setShowPipelineModal(true)}>
         {isLoading ? (
-          <ActivityIndicator color="#065f46" />
+          <ActivityIndicator color="#C45A10" />
         ) : (
           <Text style={styles.pickerButtonText}>
             {selectedPipelineId
@@ -355,7 +355,7 @@ export default function NewDealScreen(): JSX.Element {
             value={contactQuery}
             onChangeText={setContactQuery}
             placeholder={t('deals.searchContactsPlaceholder')}
-            placeholderTextColor="#6b7280"
+            placeholderTextColor="#B07868"
           />
           {contactResults.slice(0, 5).length > 0 && (
             <View style={styles.contactResultsContainer}>
@@ -376,7 +376,7 @@ export default function NewDealScreen(): JSX.Element {
         value={nextAction}
         onChangeText={setNextAction}
         placeholder="e.g. Send proposal"
-        placeholderTextColor="#6b7280"
+        placeholderTextColor="#B07868"
       />
 
       <Text style={styles.label}>Due Date</Text>
@@ -385,7 +385,7 @@ export default function NewDealScreen(): JSX.Element {
         value={nextActionDue}
         onChangeText={setNextActionDue}
         placeholder="YYYY-MM-DD"
-        placeholderTextColor="#6b7280"
+        placeholderTextColor="#B07868"
         autoCapitalize="none"
       />
 
@@ -424,19 +424,19 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111827',
+    color: '#383432',
     marginTop: 16,
     marginBottom: 6,
   },
   input: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    color: '#111827',
+    color: '#383432',
   },
   fieldError: {
     color: '#ef4444',
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
   pickerButton: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
@@ -457,7 +457,7 @@ const styles = StyleSheet.create({
   },
   pickerButtonText: {
     fontSize: 16,
-    color: '#111827',
+    color: '#383432',
   },
   modalContainer: {
     flex: 1,
@@ -469,30 +469,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#E8DDD6',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: '#383432',
   },
   modalClose: {
     fontSize: 18,
-    color: '#6b7280',
+    color: '#B07868',
     paddingHorizontal: 8,
   },
   modalItem: {
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#E8DDD6',
   },
   modalItemText: {
     fontSize: 16,
-    color: '#111827',
+    color: '#383432',
   },
   modalItemTextSelected: {
-    color: '#065f46',
+    color: '#C45A10',
     fontWeight: '600',
   },
   contactChip: {
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -508,17 +508,17 @@ const styles = StyleSheet.create({
   },
   contactChipText: {
     fontSize: 14,
-    color: '#111827',
+    color: '#383432',
     marginRight: 8,
   },
   contactChipRemove: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#B07868',
   },
   contactResultsContainer: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     marginTop: 4,
   },
@@ -526,14 +526,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#E8DDD6',
   },
   contactResultText: {
     fontSize: 15,
-    color: '#111827',
+    color: '#383432',
   },
   submitButton: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',

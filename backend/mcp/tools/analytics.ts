@@ -1,6 +1,7 @@
 import { DealStatus, TaskStatus, Prisma } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
+import { DEFAULT_MARKET_PROFILE, normalizeCurrencyCode } from '../../config/market';
 
 type PeriodValue = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
 type GroupByValue = 'day' | 'week' | 'month' | 'quarter';
@@ -326,6 +327,7 @@ registerTool(
     properties: {
       period: { type: 'string', enum: ['today', 'week', 'month', 'quarter', 'year', 'custom'], default: 'month' },
       group_by: { type: 'string', enum: ['day', 'week', 'month', 'quarter'], default: 'month' },
+      currency: { type: 'string', default: DEFAULT_MARKET_PROFILE.currency },
       start: { type: 'string', description: 'ISO 8601 start (required when period=custom)' },
       end: { type: 'string', description: 'ISO 8601 end (required when period=custom)' },
       pipeline_id: { type: 'string' },
@@ -335,6 +337,9 @@ registerTool(
   async (args: Record<string, unknown>, user: McpUser) => {
     const period = isPeriod(args.period) ? args.period : 'month';
     const group_by = isGroupBy(args.group_by) ? args.group_by : 'month';
+    const currency = typeof args.currency === 'string'
+      ? normalizeCurrencyCode(args.currency)
+      : DEFAULT_MARKET_PROFILE.currency;
     const start = typeof args.start === 'string' ? args.start : undefined;
     const end = typeof args.end === 'string' ? args.end : undefined;
     const pipeline_id = typeof args.pipeline_id === 'string' ? args.pipeline_id : undefined;
@@ -346,6 +351,7 @@ registerTool(
       where: {
         organization_id: user.org_id,
         status: DealStatus.won,
+        currency,
         actual_close: { gte: startDate, lte: endDate },
         ...(pipeline_id && { pipeline_id }),
         ...(assigned_to && { assigned_to }),
@@ -379,7 +385,7 @@ registerTool(
 
     return {
       data: {
-        period: { start: startDate, end: endDate, group_by },
+        period: { start: startDate, end: endDate, group_by, currency },
         periods,
         summary: {
           total_revenue: Math.round(totalRevenue * 100) / 100,

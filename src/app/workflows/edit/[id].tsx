@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   ScrollView,
   Modal,
@@ -265,7 +265,7 @@ export default function EditWorkflowScreen(): JSX.Element {
       <>
         <Stack.Screen options={{ title: t('workflows.edit') }} />
         <View style={styles.centered}>
-          <ActivityIndicator size='large' color='#10b981' />
+          <ActivityIndicator size='large' color='#C4704F' />
         </View>
       </>
     );
@@ -460,30 +460,30 @@ export default function EditWorkflowScreen(): JSX.Element {
 
 const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
-  container: { flex: 1, backgroundColor: '#F7F8FA' },
+  container: { flex: 1, backgroundColor: '#FAF6F3' },
   content: { padding: 16 },
-  label: { marginTop: 12, marginBottom: 6, color: '#374151', fontWeight: '700' },
-  input: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#D1D5DB', backgroundColor: '#FFFFFF', paddingHorizontal: 12, color: '#111827' },
+  label: { marginTop: 12, marginBottom: 6, color: '#383432', fontWeight: '700' },
+  input: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#E8DDD6', backgroundColor: '#FFFFFF', paddingHorizontal: 12, color: '#383432' },
   error: { color: '#C5221F', marginTop: 4 },
-  stepIndicator: { fontSize: 14, color: '#6B7280', marginBottom: 4 },
-  triggerRow: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: '#D1D5DB', backgroundColor: '#FFFFFF', justifyContent: 'center', paddingHorizontal: 12, marginBottom: 8 },
-  triggerRowSelected: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
-  triggerText: { color: '#374151' },
-  itemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  itemText: { flex: 1, color: '#111827' },
+  stepIndicator: { fontSize: 14, color: '#B07868', marginBottom: 4 },
+  triggerRow: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: '#E8DDD6', backgroundColor: '#FFFFFF', justifyContent: 'center', paddingHorizontal: 12, marginBottom: 8 },
+  triggerRowSelected: { borderColor: '#C4704F', backgroundColor: '#FEF0E8' },
+  triggerText: { color: '#383432' },
+  itemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: '#E8DDD6' },
+  itemText: { flex: 1, color: '#383432' },
   deleteBtn: { color: '#C5221F', paddingHorizontal: 8 },
-  retryBtn: { height: 48, borderRadius: 12, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center', marginTop: 16, paddingHorizontal: 32 },
-  primaryBtn: { flex: 1, height: 48, borderRadius: 12, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center', marginTop: 16 },
+  retryBtn: { height: 48, borderRadius: 12, backgroundColor: '#C4704F', alignItems: 'center', justifyContent: 'center', marginTop: 16, paddingHorizontal: 32 },
+  primaryBtn: { flex: 1, height: 48, borderRadius: 12, backgroundColor: '#C4704F', alignItems: 'center', justifyContent: 'center', marginTop: 16 },
   primaryBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
   btnDisabled: { opacity: 0.5 },
-  secondaryBtn: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#10b981', alignItems: 'center', justifyContent: 'center', marginTop: 12 },
-  secondaryBtnText: { color: '#10b981', fontWeight: '700' },
-  skipBtn: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#D1D5DB', alignItems: 'center', justifyContent: 'center', marginTop: 16, marginRight: 8 },
-  skipBtnText: { color: '#374151', fontWeight: '600' },
+  secondaryBtn: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#C4704F', alignItems: 'center', justifyContent: 'center', marginTop: 12 },
+  secondaryBtnText: { color: '#C4704F', fontWeight: '700' },
+  skipBtn: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#E8DDD6', alignItems: 'center', justifyContent: 'center', marginTop: 16, marginRight: 8 },
+  skipBtnText: { color: '#383432', fontWeight: '600' },
   rowBtns: { flexDirection: 'row', gap: 8 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalBox: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, maxHeight: '80%' },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 8 },
-  pickerRow: { height: 44, borderRadius: 12, borderWidth: 1, borderColor: '#D1D5DB', justifyContent: 'center', paddingHorizontal: 12, marginBottom: 6 },
-  pickerRowSelected: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#383432', marginBottom: 8 },
+  pickerRow: { height: 44, borderRadius: 12, borderWidth: 1, borderColor: '#E8DDD6', justifyContent: 'center', paddingHorizontal: 12, marginBottom: 6 },
+  pickerRowSelected: { borderColor: '#C4704F', backgroundColor: '#FEF0E8' },
 });

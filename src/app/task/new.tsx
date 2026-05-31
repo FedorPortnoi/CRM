@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +7,7 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { scheduleTaskDueReminder } from '../../utils/notifications';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
+import { formatMarketDate } from '../../market/profile';
 
 interface ContactPreview {
   id: string;
@@ -63,6 +64,8 @@ export default function NewTaskScreen(): JSX.Element | null {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [recurrencePreset, setRecurrencePreset] = useState<RecurrencePreset>('none');
   const [customRecurrenceRule, setCustomRecurrenceRule] = useState<string>('');
+  const [reminderDate, setReminderDate] = useState<string>('');
+  const [showReminderCalendar, setShowReminderCalendar] = useState<boolean>(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -83,8 +86,7 @@ export default function NewTaskScreen(): JSX.Element | null {
   if (!token || !user) return null;
 
   const formatDate = (dateStr: string): string => {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-US', {
+    return formatMarketDate(dateStr + 'T00:00:00', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -104,6 +106,7 @@ export default function NewTaskScreen(): JSX.Element | null {
       is_recurring: recurrenceRule !== null,
       recurrence_rule: recurrenceRule ?? '',
       ...(dueDate !== '' ? { due_date: new Date(dueDate + 'T00:00:00').toISOString() } : {}),
+      ...(reminderDate !== '' ? { reminder_at: new Date(reminderDate + 'T09:00:00').toISOString() } : {}),
       ...(selectedContactId !== '' ? { contact_id: selectedContactId } : {}),
     };
     try {
@@ -125,7 +128,7 @@ export default function NewTaskScreen(): JSX.Element | null {
         const taskId = (parsed as TaskApiResponse).data.id;
         if (dueDate !== '') {
           try {
-            await scheduleTaskDueReminder(taskId, title.trim(), dueDate);
+            await scheduleTaskDueReminder(taskId, title.trim(), dueDate, reminderDate || null);
           } catch {
             // Task creation should still succeed if local reminders are unavailable.
           }
@@ -161,7 +164,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           setShowTitleError(false);
         }}
         placeholder={t('tasks.titlePlaceholder')}
-        placeholderTextColor="#6b7280"
+        placeholderTextColor="#B07868"
       />
       {showTitleError && <Text style={styles.fieldError}>{t('tasks.titleRequired')}</Text>}
 
@@ -190,8 +193,38 @@ export default function NewTaskScreen(): JSX.Element | null {
           markedDates={
             dueDate
               ? ({
-                  [dueDate]: { selected: true, selectedColor: '#065f46' },
+                  [dueDate]: { selected: true, selectedColor: '#C45A10' },
                 } as Record<string, { selected?: boolean; selectedColor?: string }>)
+              : {}
+          }
+        />
+      </Modal>
+
+      <Text style={styles.label}>Reminder (optional)</Text>
+      <TouchableOpacity style={styles.input} onPress={() => setShowReminderCalendar(true)}>
+        <Text style={reminderDate ? styles.inputText : styles.placeholderText}>{reminderDate ? `Remind on ${formatDate(reminderDate)}` : 'No reminder'}</Text>
+      </TouchableOpacity>
+      {reminderDate !== '' && (
+        <TouchableOpacity onPress={() => setReminderDate('')}>
+          <Text style={styles.clearLink}>Clear</Text>
+        </TouchableOpacity>
+      )}
+
+      <Modal animationType="slide" visible={showReminderCalendar} onRequestClose={() => setShowReminderCalendar(false)}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Reminder Date</Text>
+          <TouchableOpacity onPress={() => setShowReminderCalendar(false)}>
+            <Text style={styles.modalDone}>Done</Text>
+          </TouchableOpacity>
+        </View>
+        <Calendar
+          onDayPress={(day: CalendarDay) => {
+            setReminderDate(day.dateString);
+            setShowReminderCalendar(false);
+          }}
+          markedDates={
+            reminderDate
+              ? ({ [reminderDate]: { selected: true, selectedColor: '#C45A10' } } as Record<string, { selected?: boolean; selectedColor?: string }>)
               : {}
           }
         />
@@ -219,7 +252,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           value={customRecurrenceRule}
           onChangeText={setCustomRecurrenceRule}
           placeholder="Every 2 weeks, weekdays, first Monday..."
-          placeholderTextColor="#6b7280"
+          placeholderTextColor="#B07868"
           autoCapitalize="sentences"
         />
       )}
@@ -250,7 +283,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           value={contactQuery}
           onChangeText={setContactQuery}
           placeholder={t('contacts.searchByName')}
-          placeholderTextColor="#6b7280"
+          placeholderTextColor="#B07868"
         />
       )}
       {contactResults.length > 0 && selectedContactId === '' && (
@@ -299,23 +332,23 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111827',
+    color: '#383432',
     marginBottom: 6,
     marginTop: 16,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     padding: 12,
     minHeight: 44,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
   },
-  inputText: { color: '#111827', fontSize: 16 },
-  placeholderText: { color: '#6b7280', fontSize: 16 },
+  inputText: { color: '#383432', fontSize: 16 },
+  placeholderText: { color: '#B07868', fontSize: 16 },
   fieldError: { color: '#ef4444', fontSize: 12, marginTop: 4 },
-  clearLink: { color: '#065f46', fontSize: 12, marginTop: 4 },
+  clearLink: { color: '#C45A10', fontSize: 12, marginTop: 4 },
   segmentedControl: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -323,18 +356,18 @@ const styles = StyleSheet.create({
   },
   segmentButton: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#E8DDD6',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
     backgroundColor: '#FFFFFF',
   },
   segmentButtonSelected: {
-    borderColor: '#065f46',
-    backgroundColor: '#ecfdf5',
+    borderColor: '#C45A10',
+    backgroundColor: '#FEF0E8',
   },
-  segmentText: { color: '#374151', fontSize: 14, fontWeight: '500' },
-  segmentTextSelected: { color: '#065f46' },
+  segmentText: { color: '#383432', fontSize: 14, fontWeight: '500' },
+  segmentTextSelected: { color: '#C45A10' },
   customRuleInput: { marginTop: 10 },
   modalHeader: {
     flexDirection: 'row',
@@ -343,13 +376,13 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#E8DDD6',
   },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: '#111827' },
-  modalDone: { fontSize: 16, color: '#065f46', fontWeight: '600' },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: '#383432' },
+  modalDone: { fontSize: 16, color: '#C45A10', fontWeight: '600' },
   disabledInput: {
     backgroundColor: '#ffffff',
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
@@ -359,14 +392,14 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#FEF0E8',
     borderRadius: 20,
     paddingVertical: 6,
     paddingHorizontal: 12,
     alignSelf: 'flex-start',
   },
-  chipText: { color: '#065f46', fontSize: 14, marginRight: 8 },
-  chipRemove: { color: '#065f46', fontSize: 14, fontWeight: '600' },
+  chipText: { color: '#C45A10', fontSize: 14, marginRight: 8 },
+  chipRemove: { color: '#C45A10', fontSize: 14, fontWeight: '600' },
   dropdown: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -380,11 +413,11 @@ const styles = StyleSheet.create({
   dropdownRow: {
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#E8DDD6',
   },
-  dropdownText: { color: '#111827', fontSize: 14 },
+  dropdownText: { color: '#383432', fontSize: 14 },
   submitButton: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',

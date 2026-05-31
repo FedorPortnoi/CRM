@@ -1,7 +1,9 @@
-import { Prisma, DealStatus } from '@prisma/client';
+import { Prisma, DealStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
-import { validateMcpWriteReferences } from '../validation';
+import { requireMcpWrite, validateMcpWriteReferences } from '../validation';
+import { DEFAULT_MARKET_PROFILE, normalizeCurrencyCode } from '../../config/market';
+import { evaluateWorkflows } from '../../services/workflows';
 
 type DealStatusValue = 'open' | 'won' | 'lost' | 'archived';
 
@@ -102,21 +104,26 @@ registerTool(
       contact_id: { type: 'string', description: 'Contact UUID' },
       pipeline_id: { type: 'string', description: 'Pipeline UUID' },
       stage_id: { type: 'string', description: 'Stage UUID (must belong to the pipeline)' },
-      currency: { type: 'string', description: 'ISO currency code e.g. USD' },
+      currency: { type: 'string', description: `ISO currency code; defaults to ${DEFAULT_MARKET_PROFILE.currency}` },
       value: { type: 'number', description: 'Deal value' },
       expected_close: { type: 'string', description: 'Expected close date (ISO 8601)' },
       probability: { type: 'number', description: 'Win probability 0-100' },
       source: { type: 'string' },
       assigned_to: { type: 'string', description: 'User UUID to assign to' },
     },
-    required: ['title', 'contact_id', 'pipeline_id', 'stage_id', 'currency'],
+    required: ['title', 'contact_id', 'pipeline_id', 'stage_id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const writeErr = requireMcpWrite(user);
+    if (writeErr) return writeErr;
+
     const title = typeof args.title === 'string' ? args.title : '';
     const contact_id = typeof args.contact_id === 'string' ? args.contact_id : '';
     const pipeline_id = typeof args.pipeline_id === 'string' ? args.pipeline_id : '';
     const stage_id = typeof args.stage_id === 'string' ? args.stage_id : '';
-    const currency = typeof args.currency === 'string' ? args.currency : 'USD';
+    const currency = typeof args.currency === 'string'
+      ? normalizeCurrencyCode(args.currency)
+      : DEFAULT_MARKET_PROFILE.currency;
     const value = typeof args.value === 'number' ? args.value : undefined;
     const expected_close = typeof args.expected_close === 'string' ? args.expected_close : undefined;
     const probability = typeof args.probability === 'number' ? args.probability : undefined;
@@ -180,11 +187,16 @@ registerTool(
       probability: { type: 'number' },
       source: { type: 'string' },
       assigned_to: { type: 'string' },
+      stage_id: { type: 'string', description: 'Stage UUID (must belong to the deal pipeline)' },
     },
     required: ['id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const writeErr = requireMcpWrite(user);
+    if (writeErr) return writeErr;
+
     const id = typeof args.id === 'string' ? args.id : '';
+    const stage_id = typeof args.stage_id === 'string' ? args.stage_id : undefined;
 
     const deal = await db.deal.findFirst({
       where: { id, organization_id: user.org_id },
@@ -206,6 +218,27 @@ registerTool(
     if (typeof args.source === 'string') updateData.source = args.source;
     if (typeof args.assigned_to === 'string') updateData.assigned_to = args.assigned_to;
 
+    if (stage_id !== undefined && stage_id !== deal.stage_id) {
+      if (deal.status !== DealStatus.open) {
+        return { error: { code: 'DEAL_NOT_OPEN', message: 'Only open deals can be moved between stages' } };
+      }
+
+      if (!deal.pipeline_id) {
+        return { error: { code: 'STAGE_NOT_FOUND', message: "Stage not found in this deal's pipeline" } };
+      }
+
+      const stage = await db.pipelineStage.findFirst({
+        where: { id: stage_id, pipeline_id: deal.pipeline_id },
+      });
+
+      if (!stage) {
+        return { error: { code: 'STAGE_NOT_FOUND', message: "Stage not found in this deal's pipeline" } };
+      }
+
+      updateData.stage_id = stage_id;
+      updateData.stage_entered_at = new Date();
+    }
+
     const referenceError = await validateMcpWriteReferences(user, {
       assigned_to: typeof args.assigned_to === 'string' ? args.assigned_to : undefined,
     });
@@ -218,6 +251,16 @@ registerTool(
       data: updateData,
       include: dealInclude,
     });
+
+    if (updated.stage_id !== deal.stage_id) {
+      void evaluateWorkflows({
+        organizationId: user.org_id,
+        trigger: WorkflowTrigger.deal_stage_changed,
+        record: updated as unknown as Record<string, unknown>,
+        userId: user.sub,
+        triggerRecordId: updated.id,
+      });
+    }
 
     return { data: updated };
   },
@@ -235,6 +278,9 @@ registerTool(
     required: ['id', 'stage_id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const writeErr = requireMcpWrite(user);
+    if (writeErr) return writeErr;
+
     const id = typeof args.id === 'string' ? args.id : '';
     const stage_id = typeof args.stage_id === 'string' ? args.stage_id : '';
 
@@ -250,8 +296,12 @@ registerTool(
       return { error: { code: 'DEAL_NOT_OPEN', message: 'Only open deals can be moved between stages' } };
     }
 
+    if (!deal.pipeline_id) {
+      return { error: { code: 'STAGE_NOT_FOUND', message: "Stage not found in this deal's pipeline" } };
+    }
+
     const stage = await db.pipelineStage.findFirst({
-      where: { id: stage_id, pipeline_id: deal.pipeline_id ?? undefined },
+      where: { id: stage_id, pipeline_id: deal.pipeline_id },
     });
 
     if (!stage) {
@@ -260,9 +310,19 @@ registerTool(
 
     const updated = await db.deal.update({
       where: { id },
-      data: { stage_id },
+      data: { stage_id, stage_entered_at: new Date() },
       include: dealInclude,
     });
+
+    if (updated.stage_id !== deal.stage_id) {
+      void evaluateWorkflows({
+        organizationId: user.org_id,
+        trigger: WorkflowTrigger.deal_stage_changed,
+        record: updated as unknown as Record<string, unknown>,
+        userId: user.sub,
+        triggerRecordId: updated.id,
+      });
+    }
 
     return { data: updated };
   },

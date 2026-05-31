@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dbMock = vi.hoisted(() => ({
+  $executeRaw: vi.fn(),
+  $queryRaw: vi.fn(),
   user: {
     findFirst: vi.fn(),
   },
@@ -24,11 +26,14 @@ import { validateMcpPrincipal, validateMcpWriteReferences } from '../../../backe
 const user = {
   sub: '00000000-0000-4000-a000-000000000001',
   org_id: '00000000-0000-4000-a000-000000000010',
+  sid: '00000000-0000-4000-a000-000000000100',
 };
 
 describe('MCP validation helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    dbMock.$queryRaw.mockResolvedValue([{ id: user.sid }]);
+    dbMock.$executeRaw.mockResolvedValue(1);
   });
 
   it('requires the token user to be active and scoped to an existing org', async () => {
@@ -52,6 +57,19 @@ describe('MCP validation helpers', () => {
     dbMock.org.findUnique.mockResolvedValue({ id: user.org_id });
 
     await expect(validateMcpPrincipal(user)).resolves.toBeNull();
+  });
+
+  it('rejects revoked MCP token sessions', async () => {
+    dbMock.user.findFirst.mockResolvedValue({ id: user.sub });
+    dbMock.org.findUnique.mockResolvedValue({ id: user.org_id });
+    dbMock.$queryRaw.mockResolvedValue([]);
+
+    await expect(validateMcpPrincipal(user)).resolves.toEqual({
+      error: {
+        code: 'SESSION_REVOKED',
+        message: 'Authentication session has expired or was revoked',
+      },
+    });
   });
 
   it('does not re-query the current user when assigning work to self', async () => {

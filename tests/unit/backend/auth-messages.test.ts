@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import bcrypt from 'bcryptjs';
 
 const dbMock = vi.hoisted(() => ({
+  $executeRaw: vi.fn(),
+  $queryRaw: vi.fn(),
   user: {
     findUnique: vi.fn(),
   },
@@ -63,6 +65,8 @@ function createReply(): TestReply {
 describe('AuthController.login', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    dbMock.$executeRaw.mockResolvedValue(1);
+    dbMock.$queryRaw.mockResolvedValue([]);
   });
 
   it('rejects inactive users with the generic invalid credentials envelope', async () => {
@@ -90,136 +94,97 @@ describe('AuthController.login', () => {
     });
     expect(reply.jwtSign).not.toHaveBeenCalled();
   });
-});
 
-describe('MessagesController SMS.ru webhooks', () => {
-  const previousApiId = process.env.SMSRU_API_ID;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    process.env.SMSRU_API_ID = 'expected-api-id';
-  });
-
-  afterEach(() => {
-    if (previousApiId === undefined) {
-      delete process.env.SMSRU_API_ID;
-    } else {
-      process.env.SMSRU_API_ID = previousApiId;
-    }
-  });
-
-  it('rejects inbound webhooks when SMSRU_API_ID is not configured before DB writes', async () => {
-    delete process.env.SMSRU_API_ID;
+  it('normalizes email before login lookup', async () => {
+    dbMock.user.findUnique.mockResolvedValue(null);
     const reply = createReply();
 
-    await MessagesController.smsruInboundWebhook(
-      {
-        body: { From: '+15550001000', Body: 'Hello', org_id: orgId },
-        query: {},
-      } as never,
+    await AuthController.login(
+      { body: { email: '  Owner@Example.COM ', password: 'Password123!' } } as never,
       reply as never,
     );
 
-    expect(reply.statusCode).toBe(503);
-    expect(reply.payload).toEqual({
-      error: { code: 'SERVICE_NOT_CONFIGURED', message: 'SMSRU_API_ID is not configured' },
+    expect(dbMock.user.findUnique).toHaveBeenCalledWith({
+      where: { email: 'owner@example.com' },
     });
-    expect(dbMock.contact.findFirst).not.toHaveBeenCalled();
-    expect(dbMock.message.create).not.toHaveBeenCalled();
-    expect(dbMock.pendingCapture.create).not.toHaveBeenCalled();
-  });
-
-  it('rejects inbound webhooks missing api_id before DB writes', async () => {
-    const reply = createReply();
-
-    await MessagesController.smsruInboundWebhook(
-      {
-        body: { From: '+15550001111', Body: 'Hello', org_id: orgId },
-        query: {},
-      } as never,
-      reply as never,
-    );
-
     expect(reply.statusCode).toBe(401);
-    expect(reply.payload).toEqual({
-      error: { code: 'SMSRU_API_ID_REQUIRED', message: 'SMS.ru api_id is required' },
-    });
-    expect(dbMock.contact.findFirst).not.toHaveBeenCalled();
-    expect(dbMock.message.create).not.toHaveBeenCalled();
-    expect(dbMock.pendingCapture.create).not.toHaveBeenCalled();
   });
 
-  it('rejects status webhooks with invalid api_id before DB writes', async () => {
+  it('creates a revocable session and signs the session id into successful login tokens', async () => {
+    const passwordHash = await bcrypt.hash('Password123!', 4);
+    dbMock.user.findUnique.mockResolvedValue({
+      id: '00000000-0000-4000-a000-000000000001',
+      email: 'owner@example.com',
+      password_hash: passwordHash,
+      name: 'Owner User',
+      role: 'owner',
+      organization_id: orgId,
+      is_active: true,
+      onboarding_state: null,
+    });
     const reply = createReply();
 
-    await MessagesController.smsruStatusWebhook(
+    await AuthController.login(
       {
-        body: { api_id: 'wrong-api-id', SmsId: 'SM123', Status: 'delivered', org_id: orgId },
-        query: {},
+        body: { email: 'owner@example.com', password: 'Password123!' },
+        headers: { 'user-agent': 'vitest' },
+        ip: '127.0.0.1',
       } as never,
       reply as never,
     );
 
-    expect(reply.statusCode).toBe(403);
-    expect(reply.payload).toEqual({
-      error: { code: 'FORBIDDEN', message: 'Invalid SMS.ru api_id' },
-    });
-    expect(dbMock.message.updateMany).not.toHaveBeenCalled();
-  });
-
-  it('keeps valid inbound webhook DB queries scoped to the provided org and returns an envelope', async () => {
-    dbMock.contact.findFirst.mockResolvedValue(null);
-    dbMock.org.findUnique.mockResolvedValue({ id: orgId });
-    const reply = createReply();
-
-    await MessagesController.smsruInboundWebhook(
-      {
-        body: {
-          api_id: 'expected-api-id',
-          From: '+15550002222',
-          Body: 'Capture me',
-          SmsId: 'SM456',
-          org_id: orgId,
-        },
-        query: {},
-        server: {},
-      } as never,
-      reply as never,
-    );
-
-    expect(dbMock.contact.findFirst).toHaveBeenCalledWith({
-      where: {
-        organization_id: orgId,
-        OR: [{ phone: '+15550002222' }, { mobile: '+15550002222' }],
-      },
-      select: { id: true, organization_id: true },
-    });
-    expect(dbMock.pendingCapture.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(reply.statusCode).toBe(200);
+    expect(dbMock.$executeRaw).toHaveBeenCalled();
+    expect(reply.jwtSign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: '00000000-0000-4000-a000-000000000001',
         org_id: orgId,
-        phone_number: '+15550002222',
-        raw_data: expect.objectContaining({ api_id: 'expected-api-id', org_id: orgId }),
+        role: 'owner',
+        sid: expect.any(String),
       }),
-    });
-    expect(reply.statusCode).toBe(200);
-    expect(reply.payload).toEqual({ data: { received: true }, meta: {} });
+      { expiresIn: '7d' },
+    );
   });
 
-  it('does not query or write org data when org_id is missing', async () => {
+  it('lists audit events scoped to the requester organization', async () => {
+    const createdAt = new Date('2026-05-23T00:00:00.000Z');
+    dbMock.$queryRaw
+      .mockResolvedValueOnce([{
+        id: 'audit-1',
+        organization_id: orgId,
+        user_id: 'user-1',
+        action: 'auth.login',
+        outcome: 'success',
+        target_type: null,
+        target_id: null,
+        ip_address: '127.0.0.1',
+        user_agent: 'vitest',
+        metadata: { email: 'owner@example.com' },
+        created_at: createdAt,
+      }])
+      .mockResolvedValueOnce([{ total: BigInt(1) }]);
     const reply = createReply();
 
-    await MessagesController.smsruInboundWebhook(
+    await AuthController.listAuditEvents(
       {
-        body: { api_id: 'expected-api-id', From: '+15550003333', Body: 'No org' },
-        query: {},
+        query: { page: 1, per_page: 50, action: 'auth.login' },
+        user: { org_id: orgId, sub: 'user-1' },
+        headers: { 'user-agent': 'vitest' },
+        ip: '127.0.0.1',
       } as never,
       reply as never,
     );
 
     expect(reply.statusCode).toBe(200);
-    expect(reply.payload).toEqual({ data: { received: true }, meta: {} });
-    expect(dbMock.contact.findFirst).not.toHaveBeenCalled();
-    expect(dbMock.message.create).not.toHaveBeenCalled();
-    expect(dbMock.pendingCapture.create).not.toHaveBeenCalled();
+    expect(reply.payload).toEqual({
+      data: [expect.objectContaining({
+        id: 'audit-1',
+        organization_id: orgId,
+        action: 'auth.login',
+      })],
+      meta: { total: 1, page: 1, per_page: 50 },
+    });
+    expect(dbMock.$executeRaw).toHaveBeenCalled();
   });
 });
+

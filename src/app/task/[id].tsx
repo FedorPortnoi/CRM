@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useEffect } from 'react';
+﻿import React, { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { cancelTaskDueReminder, scheduleTaskDueReminder } from '../../utils/notifications';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
+import { formatMarketDate } from '../../market/profile';
 
 interface TaskAssignee {
   id: string;
@@ -30,8 +31,7 @@ interface Task {
 }
 
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-US', {
+  return formatMarketDate(dateStr, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -47,15 +47,15 @@ function isOverdue(due_date: string | null, status: string): boolean {
 function priorityBadgeColor(priority: string): string {
   if (priority === 'urgent') return '#ef4444';
   if (priority === 'high') return '#E8A000';
-  if (priority === 'medium') return '#10b981';
-  return '#9ca3af';
+  if (priority === 'medium') return '#C4704F';
+  return '#CFADA3';
 }
 
 function statusBadgeColor(status: string): string {
-  if (status === 'done') return '#34A853';
-  if (status === 'in_progress') return '#10b981';
+  if (status === 'done') return '#C4704F';
+  if (status === 'in_progress') return '#C4704F';
   if (status === 'pending') return '#E8A000';
-  return '#9ca3af';
+  return '#CFADA3';
 }
 
 function formatRecurrence(isRecurring: boolean, rule: string | null): string {
@@ -79,7 +79,7 @@ function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: Skel
       style={{
         width,
         height,
-        backgroundColor: '#d1fae5',
+        backgroundColor: '#FEF0E8',
         borderRadius,
         marginBottom,
       }}
@@ -389,7 +389,7 @@ export default function TaskDetailScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0fdf8' },
+  container: { flex: 1, backgroundColor: '#FEF0E8' },
   content: { padding: 16, paddingBottom: 40 },
   card: {
     backgroundColor: '#FFFFFF',
@@ -404,10 +404,10 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
+    color: '#383432',
     marginBottom: 6,
   },
-  dueDate: { fontSize: 13, color: '#6b7280' },
+  dueDate: { fontSize: 13, color: '#B07868' },
   dueDateOverdue: { color: '#ef4444', fontWeight: '500' },
   badge: {
     alignSelf: 'flex-start',
@@ -435,32 +435,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  detailLabel: { fontSize: 13, color: '#9ca3af', width: 72 },
-  detailValue: { fontSize: 13, color: '#111827', flex: 1, textAlign: 'right' },
-  recurrenceValue: { fontSize: 13, color: '#065f46', flex: 1, textAlign: 'right', fontWeight: '600' },
+  detailLabel: { fontSize: 13, color: '#CFADA3', width: 72 },
+  detailValue: { fontSize: 13, color: '#383432', flex: 1, textAlign: 'right' },
+  recurrenceValue: { fontSize: 13, color: '#C45A10', flex: 1, textAlign: 'right', fontWeight: '600' },
   linkText: {
     fontSize: 13,
-    color: '#10b981',
+    color: '#C4704F',
     fontWeight: '500',
     textAlign: 'right',
   },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#9ca3af',
+    color: '#CFADA3',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
   },
-  notesText: { fontSize: 14, color: '#111827', lineHeight: 20 },
-  emptyText: { fontSize: 14, color: '#9ca3af' },
+  notesText: { fontSize: 14, color: '#383432', lineHeight: 20 },
+  emptyText: { fontSize: 14, color: '#CFADA3' },
   button: {
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  buttonPrimary: { backgroundColor: '#10b981' },
+  buttonPrimary: { backgroundColor: '#C4704F' },
   buttonDestructive: { backgroundColor: '#ef4444' },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
     borderRadius: 6,
   },
   retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
@@ -488,7 +488,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   headerEditText: {
-    color: '#10b981',
+    color: '#C4704F',
     fontSize: 16,
     fontWeight: '600',
   },

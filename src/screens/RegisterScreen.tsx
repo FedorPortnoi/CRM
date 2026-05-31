@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,16 @@ import { useTranslation } from 'react-i18next';
 import { Mail, Lock, Eye, EyeOff, User, Building2, Sparkles } from 'lucide-react-native';
 import { useUserStore } from '../store/userStore';
 
+function isStrongPassword(password: string): boolean {
+  return (
+    password.length >= 8 &&
+    /[a-z]/.test(password) &&
+    /[A-Z]/.test(password) &&
+    /[0-9]/.test(password) &&
+    /[^A-Za-z0-9]/.test(password)
+  );
+}
+
 export default function RegisterScreen() {
   const { t } = useTranslation();
   const [name, setName] = useState<string>('');
@@ -29,7 +39,7 @@ export default function RegisterScreen() {
 
   useEffect(() => {
     if (!isLoading && error === null && user !== null) {
-      router.replace('/(tabs)');
+      router.replace((user.onboarding_completed === false ? '/onboarding' : '/(tabs)') as never);
     }
   }, [user, isLoading, error, router]);
 
@@ -46,8 +56,8 @@ export default function RegisterScreen() {
       setValidationError(t('auth.emailInvalid'));
       return;
     }
-    if (password.length < 8) {
-      setValidationError(t('auth.passwordTooShort'));
+    if (!isStrongPassword(password)) {
+      setValidationError(t('auth.passwordRequirements'));
       return;
     }
     setValidationError(null);
@@ -79,11 +89,11 @@ export default function RegisterScreen() {
 
         <View style={styles.card}>
           <View style={styles.fieldWrapper}>
-            <User size={18} color="#9ca3af" />
+            <User size={18} color="#CFADA3" />
             <TextInput
               style={styles.input}
               placeholder={t('auth.name')}
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor="#CFADA3"
               value={name}
               onChangeText={(v) => { setName(v); setValidationError(null); }}
               autoCapitalize="words"
@@ -91,11 +101,11 @@ export default function RegisterScreen() {
           </View>
 
           <View style={styles.fieldWrapper}>
-            <Building2 size={18} color="#9ca3af" />
+            <Building2 size={18} color="#CFADA3" />
             <TextInput
               style={styles.input}
               placeholder={t('auth.orgName')}
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor="#CFADA3"
               value={orgName}
               onChangeText={(v) => { setOrgName(v); setValidationError(null); }}
               autoCapitalize="words"
@@ -103,11 +113,11 @@ export default function RegisterScreen() {
           </View>
 
           <View style={styles.fieldWrapper}>
-            <Mail size={18} color="#9ca3af" />
+            <Mail size={18} color="#CFADA3" />
             <TextInput
               style={styles.input}
               placeholder={t('auth.email')}
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor="#CFADA3"
               value={email}
               onChangeText={(v) => { setEmail(v); setValidationError(null); }}
               keyboardType="email-address"
@@ -117,11 +127,11 @@ export default function RegisterScreen() {
           </View>
 
           <View style={styles.fieldWrapper}>
-            <Lock size={18} color="#9ca3af" />
+            <Lock size={18} color="#CFADA3" />
             <TextInput
               style={[styles.input, styles.inputFlex]}
               placeholder={t('auth.password')}
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor="#CFADA3"
               value={password}
               onChangeText={(v) => { setPassword(v); setValidationError(null); }}
               secureTextEntry={!showPassword}
@@ -132,8 +142,8 @@ export default function RegisterScreen() {
               accessibilityRole="button"
             >
               {showPassword
-                ? <EyeOff size={18} color="#9ca3af" />
-                : <Eye size={18} color="#9ca3af" />}
+                ? <EyeOff size={18} color="#CFADA3" />
+                : <Eye size={18} color="#CFADA3" />}
             </TouchableOpacity>
           </View>
 
@@ -220,10 +230,10 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 20,
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#065f46',
+    shadowColor: '#C45A10',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -232,13 +242,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#111827',
+    color: '#383432',
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#B07868',
     textAlign: 'center',
     marginBottom: 32,
     lineHeight: 20,
@@ -260,9 +270,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#FAF6F3',
     paddingHorizontal: 14,
     marginBottom: 14,
     height: 52,
@@ -271,7 +281,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 15,
-    color: '#111827',
+    color: '#383432',
   },
   inputFlex: {
     flex: 1,
@@ -281,7 +291,7 @@ const styles = StyleSheet.create({
   },
   button: {
     height: 52,
-    backgroundColor: '#065f46',
+    backgroundColor: '#C45A10',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -309,10 +319,10 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: '#E8DDD6',
   },
   dividerText: {
-    color: '#9ca3af',
+    color: '#CFADA3',
     fontSize: 13,
     marginHorizontal: 12,
   },
@@ -322,7 +332,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loginLinkText: {
-    color: '#065f46',
+    color: '#C45A10',
     fontSize: 14,
     fontWeight: '500',
   },

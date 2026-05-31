@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useDealsStore } from '../store/dealsStore';
 import { usePipelinesStore } from '../store/pipelinesStore';
+import { formatMoney } from '../market/profile';
 
 type DealStatus = 'open' | 'won' | 'lost' | 'archived';
 
@@ -182,7 +183,7 @@ function DealCard({
         })()}
         <Text style={styles.dealValue}>
           {deal.value != null
-            ? '$' + deal.value.toLocaleString('en-US')
+            ? formatMoney(deal.value, deal.currency, { empty: '--' })
             : '--'}
         </Text>
         <Text style={styles.dealContact}>
@@ -249,7 +250,7 @@ const KanbanBoard: React.FC = () => {
   if (dealsLoading || pipelinesLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#065f46" />
+        <ActivityIndicator size="large" color="#C45A10" />
       </View>
     );
   }
@@ -314,7 +315,7 @@ const styles = StyleSheet.create({
   stageColumn: {
     width: STAGE_WIDTH,
     margin: 8,
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#FEF0E8',
     borderRadius: 12,
     padding: 8,
   },
@@ -329,11 +330,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontWeight: '700',
     fontSize: 15,
-    color: '#111827',
+    color: '#383432',
     marginRight: 8,
   },
   stageCount: {
-    color: '#9ca3af',
+    color: '#CFADA3',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -353,7 +354,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -364,7 +365,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
     marginBottom: 4,
-    color: '#111827',
+    color: '#383432',
   },
   warningBadge: {
     borderRadius: 4,
@@ -390,16 +391,16 @@ const styles = StyleSheet.create({
   },
   dealValue: {
     marginBottom: 4,
-    color: '#065f46',
+    color: '#C45A10',
     fontWeight: '600',
     fontSize: 13,
   },
   dealContact: {
-    color: '#6b7280',
+    color: '#B07868',
     fontSize: 12,
   },
   nextActionText: {
-    color: '#374151',
+    color: '#383432',
     fontSize: 12,
     marginBottom: 4,
   },

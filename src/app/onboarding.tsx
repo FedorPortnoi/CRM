@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -64,7 +64,7 @@ export default function OnboardingScreen(): JSX.Element {
       <View style={styles.container}>
         <View style={styles.slide}>
           <View style={styles.iconWrap}>
-            <Icon size={56} color="#10b981" />
+            <Icon size={56} color="#C4704F" />
           </View>
           <Text style={styles.title}>{t(titleKey)}</Text>
           <Text style={styles.subtitle}>{t(subtitleKey)}</Text>
@@ -109,33 +109,33 @@ export default function OnboardingScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F7F8FA' },
+  safe: { flex: 1, backgroundColor: '#FAF6F3' },
   container: { flex: 1, padding: 24, justifyContent: 'flex-end', paddingBottom: 48 },
   slide: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   iconWrap: {
     width: 112,
     height: 112,
     borderRadius: 28,
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#FEF0E8',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 32,
   },
-  title: { fontSize: 28, fontWeight: '700', color: '#111827', textAlign: 'center', marginBottom: 12 },
-  subtitle: { fontSize: 16, color: '#6B7280', textAlign: 'center', lineHeight: 24 },
+  title: { fontSize: 28, fontWeight: '700', color: '#383432', textAlign: 'center', marginBottom: 12 },
+  subtitle: { fontSize: 16, color: '#B07868', textAlign: 'center', lineHeight: 24 },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 32 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#E5E7EB' },
-  dotActive: { backgroundColor: '#10b981', width: 24 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#E8DDD6' },
+  dotActive: { backgroundColor: '#C4704F', width: 24 },
   error: { color: '#C5221F', textAlign: 'center', marginBottom: 12 },
   primary: {
     height: 52,
     borderRadius: 12,
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
   },
   primaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   skip: { alignItems: 'center', paddingVertical: 8 },
-  skipText: { color: '#6B7280', fontSize: 14 },
+  skipText: { color: '#B07868', fontSize: 14 },
 });

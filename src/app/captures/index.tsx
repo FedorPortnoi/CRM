@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -14,6 +14,7 @@ import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { formatMarketDateTime } from '../../market/profile';
 
 type PendingCapture = {
   id: string;
@@ -33,10 +34,12 @@ type ContactResult = {
 };
 
 function formatTimestamp(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
-    ' ' +
-    d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  return formatMarketDateTime(iso, {
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+  });
 }
 
 function contactDisplayName(c: ContactResult): string {
@@ -276,7 +279,7 @@ export default function CapturesScreen(): JSX.Element {
 
       {isLoading && captures.length === 0 ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#10b981" />
+          <ActivityIndicator size="large" color="#C4704F" />
         </View>
       ) : error ? (
         <View style={styles.centered}>
@@ -321,13 +324,13 @@ export default function CapturesScreen(): JSX.Element {
             value={contactSearch}
             onChangeText={handleSearchContacts}
             placeholder={t('captures.searchPlaceholder')}
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor="#CFADA3"
             autoFocus
             returnKeyType="search"
           />
 
           {isSearching ? (
-            <ActivityIndicator style={styles.searchSpinner} color="#10b981" />
+            <ActivityIndicator style={styles.searchSpinner} color="#C4704F" />
           ) : (
             <FlatList
               data={contactResults}
@@ -346,7 +349,7 @@ export default function CapturesScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#FEF0E8',
   },
   centered: {
     flex: 1,
@@ -361,7 +364,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     marginBottom: 10,
     padding: 12,
   },
@@ -373,13 +376,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   typeBadge: {
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#FEF0E8',
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   typeBadgeText: {
-    color: '#10b981',
+    color: '#C4704F',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -387,11 +390,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
-    color: '#111827',
+    color: '#383432',
   },
   timestampText: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: '#CFADA3',
   },
   cardActions: {
     flexDirection: 'row',
@@ -406,12 +409,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   cardButtonPrimary: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
   },
   cardButtonSecondary: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#10b981',
+    borderColor: '#C4704F',
   },
   cardButtonDanger: {
     backgroundColor: '#FFFFFF',
@@ -427,7 +430,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   cardButtonSecondaryText: {
-    color: '#10b981',
+    color: '#C4704F',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -437,7 +440,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   emptyText: {
-    color: '#9ca3af',
+    color: '#CFADA3',
     fontSize: 14,
     textAlign: 'center',
     paddingVertical: 24,
@@ -449,7 +452,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 12,
@@ -462,7 +465,7 @@ const styles = StyleSheet.create({
   // Modal
   modalContainer: {
     flex: 1,
-    backgroundColor: '#f0fdf8',
+    backgroundColor: '#FEF0E8',
     paddingTop: 16,
   },
   modalHeader: {
@@ -475,26 +478,26 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: '#383432',
   },
   closeButton: {
     padding: 8,
   },
   closeButtonText: {
-    color: '#10b981',
+    color: '#C4704F',
     fontSize: 15,
     fontWeight: '600',
   },
   searchInput: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     borderRadius: 12,
     marginHorizontal: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 15,
-    color: '#111827',
+    color: '#383432',
     marginBottom: 12,
   },
   searchSpinner: {
@@ -507,7 +510,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#E8DDD6',
     marginBottom: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -521,15 +524,15 @@ const styles = StyleSheet.create({
   contactRowName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#111827',
+    color: '#383432',
   },
   contactRowPhone: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#B07868',
     marginTop: 2,
   },
   selectLabel: {
-    color: '#10b981',
+    color: '#C4704F',
     fontSize: 13,
     fontWeight: '600',
   },

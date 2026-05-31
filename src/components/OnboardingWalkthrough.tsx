@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+﻿import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useOnboardingStore, WALKTHROUGH_STEPS } from '../store/onboardingStore';
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#DDD',
   },
   dotActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
     width: 16,
   },
   title: {
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   gotItBtn: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#C4704F',
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 12,
