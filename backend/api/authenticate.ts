@@ -38,11 +38,7 @@ function isPublicApiRoute(request: FastifyRequest): boolean {
     return true;
   }
 
-  return (
-    method === 'POST' &&
-    (path === '/api/v1/messages/webhooks/sms/inbound' ||
-      path === '/api/v1/messages/webhooks/sms/status')
-  );
+  return false;
 }
 
 function isAdminRole(role: AuthenticatedRole): boolean {
