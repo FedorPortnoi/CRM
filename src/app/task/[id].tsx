@@ -1,6 +1,7 @@
 ﻿import React, { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import AttachmentsSection from '../../components/AttachmentsSection';
@@ -16,6 +17,27 @@ interface TaskContact {
   id: string;
   first_name: string;
   last_name: string | null;
+}
+
+interface AuditEntry {
+  id: string;
+  action: string;
+  created_at: string;
+}
+
+function taskActionLabel(action: string): string {
+  const map: Record<string, string> = {
+    created: 'Создана',
+    updated: 'Обновлена',
+    completed: 'Завершена',
+  };
+  return map[action] ?? action;
+}
+
+function taskActionColor(action: string): { bg: string; text: string } {
+  if (action === 'created') return { bg: '#FEF0E8', text: '#C45A10' };
+  if (action === 'completed') return { bg: '#dcfce7', text: '#16a34a' };
+  return { bg: '#FAF6F3', text: '#383432' };
 }
 
 interface Task {
@@ -89,6 +111,7 @@ function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: Skel
 }
 
 export default function TaskDetailScreen(): JSX.Element {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
 
@@ -98,6 +121,7 @@ export default function TaskDetailScreen(): JSX.Element {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isActionLoading, setIsActionLoading] = useState<boolean>(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
 
   const fetchTask = useCallback(
     async (refreshing: boolean): Promise<void> => {
@@ -130,12 +154,26 @@ export default function TaskDetailScreen(): JSX.Element {
     [id, token],
   );
 
+  const fetchAuditLog = useCallback(async (): Promise<void> => {
+    if (!token || !id) return;
+    try {
+      const res = await fetch(`${API_URL}/activities?entity_type=task&entity_id=${id}`, {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      if (!res.ok) return;
+      const body = (await res.json()) as { data: AuditEntry[] };
+      setAuditLog(body.data);
+    } catch { /* silent */ }
+  }, [id, token]);
+
   useEffect(() => {
-    fetchTask(false);
-  }, [fetchTask]);
+    void fetchTask(false);
+    void fetchAuditLog();
+  }, [fetchTask, fetchAuditLog]);
   const onRefresh = useCallback((): void => {
-    fetchTask(true);
-  }, [fetchTask]);
+    void fetchTask(true);
+    void fetchAuditLog();
+  }, [fetchTask, fetchAuditLog]);
 
   async function handleComplete(): Promise<void> {
     setIsActionLoading(true);
@@ -384,6 +422,26 @@ export default function TaskDetailScreen(): JSX.Element {
             ) : null}
           </View>
         ) : null}
+        {/* Activity log */}
+        <View style={styles.auditSection}>
+          <Text style={styles.auditSectionTitle}>{t('contacts.activityLog')}</Text>
+          {auditLog.length === 0 ? (
+            <Text style={styles.auditEmpty}>{t('contacts.noActivity')}</Text>
+          ) : (
+            auditLog.map((entry) => {
+              const colors = taskActionColor(entry.action);
+              return (
+                <View key={entry.id} style={styles.auditRow}>
+                  <View style={[styles.auditBadge, { backgroundColor: colors.bg }]}>
+                    <Text style={[styles.auditBadgeText, { color: colors.text }]}>{taskActionLabel(entry.action)}</Text>
+                  </View>
+                  <Text style={styles.auditDate}>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</Text>
+                </View>
+              );
+            })
+          )}
+        </View>
+
         <AttachmentsSection entityType="task" entityId={id as string} />
       </ScrollView>
     </>
@@ -485,6 +543,42 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+  auditSection: {
+    marginTop: 16,
+  },
+  auditSectionTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#B07868',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  auditEmpty: {
+    fontSize: 13,
+    color: '#CFADA3',
+  },
+  auditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FAF6F3',
+  },
+  auditBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  auditBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  auditDate: {
+    fontSize: 12,
+    color: '#CFADA3',
+  },
   headerEditButton: {
     paddingHorizontal: 8,
     paddingVertical: 4,

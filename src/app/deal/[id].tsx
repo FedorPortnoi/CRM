@@ -11,6 +11,7 @@ import {
 }  from 'react-native';
 import type { DimensionValue } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { API_URL } from '../../utils/api';
 import { useUserStore } from '../../store/userStore';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
@@ -41,6 +42,12 @@ interface SkeletonBoxProps {
   marginBottom?: number;
 }
 
+interface AuditEntry {
+  id: string;
+  action: string;
+  created_at: string;
+}
+
 interface DealApiResponse {
   data: Deal;
   meta: Record<string, unknown>;
@@ -48,6 +55,26 @@ interface DealApiResponse {
 
 interface ErrorApiResponse {
   error: { code: string; message: string };
+}
+
+function dealActionLabel(action: string): string {
+  const map: Record<string, string> = {
+    created: 'Создана',
+    updated: 'Обновлена',
+    archived: 'Архивирована',
+    stage_changed: 'Этап изменён',
+    won: 'Выиграна',
+    lost: 'Проиграна',
+  };
+  return map[action] ?? action;
+}
+
+function dealActionColor(action: string): { bg: string; text: string } {
+  if (action === 'created') return { bg: '#FEF0E8', text: '#C45A10' };
+  if (action === 'won') return { bg: '#dcfce7', text: '#16a34a' };
+  if (action === 'lost') return { bg: '#fee2e2', text: '#dc2626' };
+  if (action === 'stage_changed') return { bg: '#dbeafe', text: '#1d4ed8' };
+  return { bg: '#FAF6F3', text: '#383432' };
 }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
@@ -65,6 +92,7 @@ function getStatusColor(status: Deal['status']): string {
 }
 
 export default function DealDetailScreen(): JSX.Element {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
 
@@ -74,6 +102,7 @@ export default function DealDetailScreen(): JSX.Element {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isActionLoading, setIsActionLoading] = useState<boolean>(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
 
   const fetchDeal = useCallback(
     (silent: boolean): void => {
@@ -111,13 +140,27 @@ export default function DealDetailScreen(): JSX.Element {
     [id, token],
   );
 
+  const fetchAuditLog = useCallback(async (): Promise<void> => {
+    if (!token || !id) return;
+    try {
+      const res = await fetch(`${API_URL}/activities?entity_type=deal&entity_id=${id}`, {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      if (!res.ok) return;
+      const body = (await res.json()) as { data: AuditEntry[] };
+      setAuditLog(body.data);
+    } catch { /* silent */ }
+  }, [id, token]);
+
   useEffect(() => {
     fetchDeal(false);
-  }, [fetchDeal]);
+    void fetchAuditLog();
+  }, [fetchDeal, fetchAuditLog]);
 
   const onRefresh = (): void => {
     setIsRefreshing(true);
     fetchDeal(true);
+    void fetchAuditLog();
   };
 
   const doMarkWon = async (): Promise<void> => {
@@ -363,6 +406,26 @@ export default function DealDetailScreen(): JSX.Element {
           </TouchableOpacity>
         </View>
       )}
+      {/* Activity log */}
+      <View style={styles.auditSection}>
+        <Text style={styles.auditSectionTitle}>{t('contacts.activityLog')}</Text>
+        {auditLog.length === 0 ? (
+          <Text style={styles.auditEmpty}>{t('contacts.noActivity')}</Text>
+        ) : (
+          auditLog.map((entry) => {
+            const colors = dealActionColor(entry.action);
+            return (
+              <View key={entry.id} style={styles.auditRow}>
+                <View style={[styles.auditBadge, { backgroundColor: colors.bg }]}>
+                  <Text style={[styles.auditBadgeText, { color: colors.text }]}>{dealActionLabel(entry.action)}</Text>
+                </View>
+                <Text style={styles.auditDate}>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</Text>
+              </View>
+            );
+          })
+        )}
+      </View>
+
       <AttachmentsSection entityType="deal" entityId={id as string} />
     </ScrollView>
   );
@@ -512,6 +575,43 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#C4704F',
     fontWeight: '600',
+  },
+  auditSection: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  auditSectionTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#B07868',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  auditEmpty: {
+    fontSize: 13,
+    color: '#CFADA3',
+  },
+  auditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FAF6F3',
+  },
+  auditBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  auditBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  auditDate: {
+    fontSize: 12,
+    color: '#CFADA3',
   },
   headerEditButton: {
     paddingHorizontal: 8,
