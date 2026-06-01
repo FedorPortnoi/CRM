@@ -14,7 +14,6 @@ import { OnboardingWalkthrough } from '../components/OnboardingWalkthrough';
 import { registerBackgroundSync } from '../utils/backgroundSync';
 import { initCallCapture } from '../utils/callCapture';
 import { useOnboardingStore } from '../store/onboardingStore';
-import { hasSelectedLanguage, getStoredLanguage } from '../i18n/storage';
 import { initI18n } from '../i18n';
 import '../utils/network';
 import { initSentry } from '../utils/sentry';
@@ -36,44 +35,27 @@ export default function RootLayout() {
   const { token, user, restoreSession } = useUserStore();
   const fetchOnboarding = useOnboardingStore((s) => s.fetch);
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
-  const [hasLanguage, setHasLanguage] = useState<boolean | undefined>(undefined);
   const pushRegistrationAttemptRef = useRef<string | null>(null);
   const callCaptureCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    void Promise.all([restoreSession(), hasSelectedLanguage()])
-      .then(async ([, selected]) => {
-        if (selected) {
-          const lang = await getStoredLanguage();
-          if (lang !== null) {
-            await initI18n(lang);
-          }
-        }
-        setHasLanguage(selected);
-      })
-      .finally(() => {
-        setIsRestoring(false);
-      });
+    void initI18n('ru')
+      .then(() => restoreSession())
+      .finally(() => setIsRestoring(false));
     void registerBackgroundSync();
   }, [restoreSession]);
 
   useEffect(() => {
-    if (!isRestoring && hasLanguage === false) {
-      router.replace('/language-select' as never);
-    }
-  }, [hasLanguage, isRestoring, router]);
-
-  useEffect(() => {
-    if (!isRestoring && hasLanguage !== false && token === null) {
+    if (!isRestoring && token === null) {
       router.replace('/login');
     }
-  }, [token, isRestoring, hasLanguage, router]);
+  }, [token, isRestoring, router]);
 
   useEffect(() => {
-    if (!isRestoring && hasLanguage !== false && token !== null && user?.onboarding_completed === false) {
+    if (!isRestoring && token !== null && user?.onboarding_completed === false) {
       router.replace('/onboarding' as never);
     }
-  }, [token, user?.onboarding_completed, isRestoring, hasLanguage, router]);
+  }, [token, user?.onboarding_completed, isRestoring, router]);
 
   useEffect(() => {
     if (token === null) {

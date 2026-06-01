@@ -1,7 +1,8 @@
 ﻿import React, { useState, useCallback, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, Modal, TextInput, Linking, Alert } from 'react-native';
+import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, Modal, TextInput, Linking, Alert, ActionSheetIOS, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { MessageCircle } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { formatMarketDate, formatMoney } from '../../market/profile';
@@ -87,6 +88,7 @@ function SkeletonBox({ width, height, borderRadius = 4, marginRight = 0, marginB
 }
 
 export default function ContactDetailScreen(): JSX.Element {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -241,20 +243,42 @@ export default function ContactDetailScreen(): JSX.Element {
               ) : null}
               <TouchableOpacity
                 style={styles.conversationButton}
-                onPress={() => router.push({ pathname: '/contact/[id]/messages', params: { id } })}
+                onPress={() => {
+                  const phone = contact?.phone ?? contact?.mobile ?? null;
+                  if (!phone) { Alert.alert('', t('contacts.noPhone')); return; }
+                  const clean = phone.replace(/[^\d+]/g, '');
+                  const digits = clean.replace(/^\+/, '');
+                  const options = [t('contacts.smsMessages'), 'Telegram', 'MAX', t('contacts.cancel')];
+                  if (Platform.OS === 'ios') {
+                    ActionSheetIOS.showActionSheetWithOptions(
+                      { options, cancelButtonIndex: 3, title: t('contacts.chooseMessenger') },
+                      (idx) => {
+                        if (idx === 0) void Linking.openURL(`sms:${clean}`);
+                        else if (idx === 1) void Linking.openURL(`tg://resolve?phone=${digits}`);
+                        else if (idx === 2) void Linking.openURL(`vkme://chat/by_phone?phone=${clean}`).catch(() => Linking.openURL(`https://vk.me/${digits}`));
+                      },
+                    );
+                  } else {
+                    Alert.alert(t('contacts.chooseMessenger'), undefined, [
+                      { text: t('contacts.smsMessages'), onPress: () => void Linking.openURL(`sms:${clean}`) },
+                      { text: 'Telegram', onPress: () => void Linking.openURL(`tg://resolve?phone=${digits}`) },
+                      { text: 'MAX', onPress: () => void Linking.openURL(`vkme://chat/by_phone?phone=${clean}`).catch(() => Linking.openURL(`https://vk.me/${digits}`)) },
+                      { text: t('contacts.cancel'), style: 'cancel' },
+                    ]);
+                  }
+                }}
                 activeOpacity={0.7}
                 accessibilityRole="button"
-                accessibilityLabel="Open conversation"
               >
                 <MessageCircle size={18} color="#FFFFFF" />
-                <Text style={styles.conversationButtonText}>Conversation</Text>
+                <Text style={styles.conversationButtonText}>{t('contacts.conversation')}</Text>
               </TouchableOpacity>
             </View>
           ) : null}
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Activity</Text>
+          <Text style={styles.sectionTitle}>{t('contacts.activity')}</Text>
           <View style={styles.card}>
             {isLoading ? (
               <>
@@ -276,7 +300,7 @@ export default function ContactDetailScreen(): JSX.Element {
                 </TouchableOpacity>
               </View>
             ) : !activity || activity.items.length === 0 ? (
-              <Text style={styles.emptyText}>No activity yet</Text>
+              <Text style={styles.emptyText}>{t('contacts.noActivity')}</Text>
             ) : (
               activity.items.slice(0, 20).map((item) => (
                 <View key={item.id} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -292,7 +316,7 @@ export default function ContactDetailScreen(): JSX.Element {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Deals</Text>
+          <Text style={styles.sectionTitle}>{t('contacts.deals')}</Text>
           {isLoading ? (
             <>
               {[0, 1].map((i) => (
@@ -310,7 +334,7 @@ export default function ContactDetailScreen(): JSX.Element {
               </TouchableOpacity>
             </View>
           ) : !deals || deals.length === 0 ? (
-            <View style={styles.card}><Text style={styles.emptyText}>No deals yet</Text></View>
+            <View style={styles.card}><Text style={styles.emptyText}>{t('contacts.noDeals')}</Text></View>
           ) : (
             deals.map((deal) => (
               <View key={deal.id} style={[styles.card, { marginBottom: 8 }]}>
@@ -329,7 +353,7 @@ export default function ContactDetailScreen(): JSX.Element {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tasks</Text>
+          <Text style={styles.sectionTitle}>{t('contacts.tasks')}</Text>
           {isLoading ? (
             <>
               {[0, 1].map((i) => (
@@ -347,7 +371,7 @@ export default function ContactDetailScreen(): JSX.Element {
               </TouchableOpacity>
             </View>
           ) : !tasks || tasks.length === 0 ? (
-            <View style={styles.card}><Text style={styles.emptyText}>No tasks yet</Text></View>
+            <View style={styles.card}><Text style={styles.emptyText}>{t('contacts.noTasks')}</Text></View>
           ) : (
             tasks.map((task) => (
               <TouchableOpacity
@@ -373,9 +397,9 @@ export default function ContactDetailScreen(): JSX.Element {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Activity Log</Text>
+          <Text style={styles.sectionTitle}>{t('contacts.activityLog')}</Text>
           {auditLog.length === 0 ? (
-            <Text style={styles.emptyText}>No activity yet</Text>
+            <Text style={styles.emptyText}>{t('contacts.noActivity')}</Text>
           ) : auditLog.map((entry) => (
             <View key={entry.id} style={styles.auditRow}>
               <View style={[styles.auditBadge, { backgroundColor: entry.action === 'created' ? '#FEF0E8' : entry.action === 'updated' ? '#dbeafe' : '#FAF6F3' }]}>

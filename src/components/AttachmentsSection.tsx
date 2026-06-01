@@ -10,6 +10,7 @@ import {
   ActionSheetIOS,
   StyleSheet,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Paperclip, Trash2, FileText, Image } from 'lucide-react-native';
@@ -44,6 +45,7 @@ function isImage(mimeType: string | null): boolean {
 }
 
 export default function AttachmentsSection({ entityType, entityId }: Props) {
+  const { t } = useTranslation();
   const { token } = useUserStore();
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -74,7 +76,7 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
       });
       if (!urlRes.ok) {
         const err = (await urlRes.json()) as { error?: { message: string } };
-        Alert.alert('Upload failed', err.error?.message ?? 'Could not get upload URL');
+        Alert.alert(t('attachments.uploadFailed'), err.error?.message ?? t('attachments.uploadError'));
         return;
       }
       const { data } = (await urlRes.json()) as {
@@ -87,7 +89,7 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
       formData.append('file', { uri, name: filename, type: mimeType } as unknown as Blob);
       const s3Res = await fetch(data.upload_url, { method: 'POST', body: formData });
       if (!s3Res.ok && s3Res.status !== 204) {
-        Alert.alert('Upload failed', 'Could not upload to storage');
+        Alert.alert(t('attachments.uploadFailed'), t('attachments.uploadError'));
         return;
       }
 
@@ -107,10 +109,10 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
       if (metaRes.ok) {
         void fetchAttachments();
       } else {
-        Alert.alert('Error', 'File uploaded but metadata save failed');
+        Alert.alert(t('attachments.uploadFailed'), t('attachments.metaError'));
       }
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Upload failed');
+      Alert.alert(t('attachments.uploadFailed'), e instanceof Error ? e.message : t('attachments.uploadError'));
     } finally {
       setUploading(false);
     }
@@ -118,7 +120,7 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
 
   const pickFromGallery = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Permission required', 'Allow photo access to attach images'); return; }
+    if (!perm.granted) { Alert.alert(t('attachments.permissionRequired'), t('attachments.permissionPhoto')); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       quality: 0.85,
@@ -134,7 +136,7 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
 
   const pickFromCamera = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Permission required', 'Allow camera access to take photos'); return; }
+    if (!perm.granted) { Alert.alert(t('attachments.permissionRequired'), t('attachments.permissionCamera')); return; }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.85, allowsEditing: false });
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
@@ -156,7 +158,7 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
   const showPicker = () => {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Cancel', 'Photo from Gallery', 'Take Photo', 'Document / File'], cancelButtonIndex: 0 },
+        { options: [t('attachments.cancel'), t('attachments.fromGallery'), t('attachments.takePhoto'), t('attachments.document')], cancelButtonIndex: 0 },
         (idx) => {
           if (idx === 1) void pickFromGallery();
           else if (idx === 2) void pickFromCamera();
@@ -164,27 +166,27 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
         },
       );
     } else {
-      Alert.alert('Add Attachment', undefined, [
-        { text: 'Photo from Gallery', onPress: () => void pickFromGallery() },
-        { text: 'Take Photo', onPress: () => void pickFromCamera() },
-        { text: 'Document / File', onPress: () => void pickDocument() },
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t('attachments.addTitle'), undefined, [
+        { text: t('attachments.fromGallery'), onPress: () => void pickFromGallery() },
+        { text: t('attachments.takePhoto'), onPress: () => void pickFromCamera() },
+        { text: t('attachments.document'), onPress: () => void pickDocument() },
+        { text: t('attachments.cancel'), style: 'cancel' },
       ]);
     }
   };
 
   const deleteAttachment = (att: Attachment) => {
-    Alert.alert('Delete attachment', `Remove "${att.filename}"?`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('attachments.deleteTitle'), t('attachments.deleteMessage', { filename: att.filename }), [
+      { text: t('attachments.cancel'), style: 'cancel' },
       {
-        text: 'Delete', style: 'destructive', onPress: async () => {
+        text: t('attachments.delete'), style: 'destructive', onPress: async () => {
           try {
             await fetch(`${API_URL}/attachments/${att.id}`, {
               method: 'DELETE',
               headers: { Authorization: `Bearer ${token}` },
             });
             setAttachments(prev => prev.filter(a => a.id !== att.id));
-          } catch { Alert.alert('Error', 'Could not delete attachment'); }
+          } catch { Alert.alert('', t('attachments.deleteError')); }
         },
       },
     ]);
@@ -193,7 +195,7 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
   return (
     <View style={styles.section}>
       <View style={styles.header}>
-        <Text style={styles.title}>Attachments</Text>
+        <Text style={styles.title}>{t('attachments.title')}</Text>
         <TouchableOpacity
           style={styles.addButton}
           onPress={showPicker}
@@ -202,12 +204,12 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
         >
           {uploading
             ? <ActivityIndicator size="small" color="#C45A10" />
-            : <Text style={styles.addButtonText}>+ Add</Text>}
+            : <Text style={styles.addButtonText}>{t('attachments.add')}</Text>}
         </TouchableOpacity>
       </View>
 
       {attachments.length === 0 && !uploading && (
-        <Text style={styles.empty}>No attachments</Text>
+        <Text style={styles.empty}>{t('attachments.empty')}</Text>
       )}
 
       {attachments.map((att) => (
@@ -240,7 +242,7 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
       {uploading && (
         <View style={styles.uploadingRow}>
           <Paperclip size={16} color="#CFADA3" />
-          <Text style={styles.uploadingText}>Uploading…</Text>
+          <Text style={styles.uploadingText}>{t('attachments.uploading')}</Text>
         </View>
       )}
     </View>
