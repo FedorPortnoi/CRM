@@ -87,6 +87,14 @@ function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : [];
 }
 
+// Fields an admin may reference in workflow action templates.
+// Dot-notation paths are intentionally rejected — they would allow
+// traversal into sensitive nested properties (e.g. assigned_to.password_hash).
+const INTERPOLATION_ALLOWLIST = new Set([
+  'first_name', 'last_name', 'company', 'source', 'notes', 'status', 'type',
+  'title', 'value', 'currency', 'description', 'priority', 'name', 'tags', 'due_date',
+]);
+
 function readField(record: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce<unknown>((current, key) => {
     const currentRecord = asRecord(current);
@@ -128,7 +136,8 @@ function workflowMatches(record: Record<string, unknown>, rawConditions: Prisma.
 
 function interpolate(template: string, record: Record<string, unknown>): string {
   return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, path: string) => {
-    const value = readField(record, path);
+    if (path.includes('.') || !INTERPOLATION_ALLOWLIST.has(path)) return '';
+    const value = record[path];
     return value === undefined || value === null ? '' : String(value);
   }).trim();
 }
@@ -142,7 +151,7 @@ function dateFromOffset(days: number | undefined): Date | undefined {
 
 async function userBelongsToOrganization(userId: string, organizationId: string): Promise<boolean> {
   const user = await db.user.findFirst({
-    where: { id: userId, organization_id: organizationId },
+    where: { id: userId, organization_id: organizationId, is_active: true },
     select: { id: true },
   });
 
