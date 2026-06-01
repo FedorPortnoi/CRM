@@ -1,5 +1,4 @@
-﻿﻿
-import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +15,7 @@ import { API_URL } from '../../utils/api';
 import { useUserStore } from '../../store/userStore';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { formatMarketDate, formatMoney } from '../../market/profile';
+import AttachmentsSection from '../../components/AttachmentsSection';
 
 const TEAL = '#C45A10';
 
@@ -363,6 +363,7 @@ export default function DealDetailScreen(): JSX.Element {
           </TouchableOpacity>
         </View>
       )}
+      <AttachmentsSection entityType="deal" entityId={id as string} />
     </ScrollView>
   );
 }

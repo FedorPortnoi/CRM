@@ -27,6 +27,9 @@
     "format": "prettier --write 'src/**/*.{ts,tsx}' 'backend/**/*.ts'"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1057.0",
+    "@aws-sdk/s3-presigned-post": "^3.1057.0",
+    "@aws-sdk/s3-request-presigner": "^3.1057.0",
     "@expo/vector-icons": "^15.0.3",
     "@fastify/cors": "^11.0.0",
     "@fastify/formbody": "^8.0.2",

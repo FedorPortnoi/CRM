@@ -3,6 +3,7 @@ import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, A
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import AttachmentsSection from '../../components/AttachmentsSection';
 import { cancelTaskDueReminder, scheduleTaskDueReminder } from '../../utils/notifications';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { formatMarketDate } from '../../market/profile';
@@ -383,6 +384,7 @@ export default function TaskDetailScreen(): JSX.Element {
             ) : null}
           </View>
         ) : null}
+        <AttachmentsSection entityType="task" entityId={id as string} />
       </ScrollView>
     </>
   );

@@ -1,6 +1,7 @@
 ﻿import { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../services/db';
+import { generateUploadUrl, deleteFile } from '../../services/storage';
 
 // --- Validation --------------------------------------------------------------
 
@@ -17,6 +18,14 @@ function isSafePublicUrl(url: string): boolean {
     return true;
   } catch { return false; }
 }
+
+const UploadUrlSchema = z.object({
+  entity_type: z.enum(['contact', 'deal', 'task', 'calendar_event']),
+  entity_id: z.string().uuid(),
+  filename: z.string().min(1).max(255),
+  mime_type: z.string().min(1),
+  size: z.number().int().positive(),
+});
 
 const CreateAttachmentSchema = z.object({
   entity_type: z.enum(['contact', 'deal', 'task', 'calendar_event']),
@@ -37,6 +46,51 @@ type ListQuery = {
 type IdParams = { id: string };
 
 // --- Handlers ----------------------------------------------------------------
+
+export async function getUploadUrl(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  await request.jwtVerify();
+
+  const parsed = UploadUrlSchema.safeParse(request.body);
+  if (!parsed.success) {
+    reply.status(400).send({
+      error: { code: 'VALIDATION_ERROR', message: parsed.error.errors[0]?.message ?? 'Invalid input' },
+    });
+    return;
+  }
+
+  const { entity_type, entity_id, filename, mime_type, size } = parsed.data;
+  const maxBytes = parseInt(process.env.MAX_UPLOAD_SIZE_MB ?? '10', 10) * 1024 * 1024;
+
+  if (size > maxBytes) {
+    reply.status(413).send({
+      error: { code: 'FILE_TOO_LARGE', message: `File exceeds ${process.env.MAX_UPLOAD_SIZE_MB ?? 10} MB limit` },
+    });
+    return;
+  }
+
+  const result = await generateUploadUrl(
+    request.user.org_id,
+    entity_type,
+    filename,
+    mime_type,
+    maxBytes,
+  );
+
+  reply.send({
+    data: {
+      upload_url: result.uploadUrl,
+      fields: result.fields,
+      file_url: result.fileUrl,
+      key: result.key,
+      entity_type,
+      entity_id,
+    },
+    meta: {},
+  });
+}
 
 export async function listAttachments(
   request: FastifyRequest,
@@ -134,6 +188,19 @@ export async function deleteAttachment(
   }
 
   await db.attachment.delete({ where: { id } });
+
+  // Best-effort S3 cleanup — extract key from file_url
+  try {
+    const endpoint = process.env.S3_ENDPOINT ?? 'https://storage.yandexcloud.net';
+    const bucket = process.env.S3_BUCKET ?? 'crm-uploads-users';
+    const prefix = `${endpoint}/${bucket}/`;
+    if (attachment.file_url.startsWith(prefix)) {
+      const key = attachment.file_url.slice(prefix.length);
+      await deleteFile(key);
+    }
+  } catch {
+    // S3 delete failure must not block the DB record deletion response
+  }
 
   reply.status(204).send();
 }

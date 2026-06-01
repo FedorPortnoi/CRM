@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Mail, Lock, Eye, EyeOff, User, Building2, Sparkles } from 'lucide-react-native';
+import { Mail, Lock, Eye, EyeOff, User, Building2, Sparkles, Phone } from 'lucide-react-native';
 import { useUserStore } from '../store/userStore';
 
 function isStrongPassword(password: string): boolean {
@@ -30,12 +30,19 @@ export default function RegisterScreen() {
   const [name, setName] = useState<string>('');
   const [orgName, setOrgName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
+  const [phone, setPhone] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const router = useRouter();
-  const { user, isLoading, error, register } = useUserStore();
+  const { user, isLoading, error, pendingVerification, register } = useUserStore();
+
+  useEffect(() => {
+    if (!isLoading && error === null && pendingVerification !== null) {
+      router.replace('/verify-otp' as never);
+    }
+  }, [pendingVerification, isLoading, error, router]);
 
   useEffect(() => {
     if (!isLoading && error === null && user !== null) {
@@ -56,12 +63,16 @@ export default function RegisterScreen() {
       setValidationError(t('auth.emailInvalid'));
       return;
     }
+    if (phone.trim().length < 10) {
+      setValidationError(t('auth.phoneInvalid'));
+      return;
+    }
     if (!isStrongPassword(password)) {
       setValidationError(t('auth.passwordRequirements'));
       return;
     }
     setValidationError(null);
-    await register(email, password, name, orgName);
+    await register(email, password, name, orgName, phone.trim());
   };
 
   return (
@@ -121,6 +132,20 @@ export default function RegisterScreen() {
               value={email}
               onChangeText={(v) => { setEmail(v); setValidationError(null); }}
               keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          <View style={styles.fieldWrapper}>
+            <Phone size={18} color="#CFADA3" />
+            <TextInput
+              style={styles.input}
+              placeholder={t('auth.phone')}
+              placeholderTextColor="#CFADA3"
+              value={phone}
+              onChangeText={(v) => { setPhone(v); setValidationError(null); }}
+              keyboardType="phone-pad"
               autoCapitalize="none"
               autoCorrect={false}
             />

@@ -5,6 +5,7 @@ import { MessageCircle } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { formatMarketDate, formatMoney } from '../../market/profile';
+import AttachmentsSection from '../../components/AttachmentsSection';
 
 interface AuditEntry {
   id: string;
@@ -99,10 +100,6 @@ export default function ContactDetailScreen(): JSX.Element {
   const [dealsError, setDealsError] = useState<string | null>(null);
   const [tasksError, setTasksError] = useState<string | null>(null);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [showAddAttachment, setShowAddAttachment] = useState(false);
-  const [attachmentUrl, setAttachmentUrl] = useState('');
-  const [attachmentFilename, setAttachmentFilename] = useState('');
 
   const fetchContact = useCallback(async (): Promise<void> => {
     try {
@@ -153,34 +150,12 @@ export default function ContactDetailScreen(): JSX.Element {
     } catch { /* silent */ }
   }, [id, token]);
 
-  const fetchAttachments = useCallback(async (): Promise<void> => {
-    if (!token || !id) return;
-    try {
-      const res = await fetch(`${API_URL}/attachments?entity_type=contact&entity_id=${id}`, { headers: { Authorization: 'Bearer ' + token } });
-      if (!res.ok) return;
-      const body = (await res.json()) as { data: Attachment[] };
-      setAttachments(body.data);
-    } catch { /* silent */ }
-  }, [id, token]);
-
-  const addAttachment = useCallback(async (): Promise<void> => {
-    if (!attachmentUrl.trim() || !attachmentFilename.trim()) return;
-    try {
-      const res = await fetch(`${API_URL}/attachments`, {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entity_type: 'contact', entity_id: id, filename: attachmentFilename.trim(), file_url: attachmentUrl.trim() }),
-      });
-      if (res.ok) { setShowAddAttachment(false); setAttachmentUrl(''); setAttachmentFilename(''); void fetchAttachments(); }
-      else { const b = (await res.json()) as { error?: { message: string } }; Alert.alert('Error', b.error?.message ?? 'Failed to add'); }
-    } catch { Alert.alert('Error', 'Network error'); }
-  }, [attachmentUrl, attachmentFilename, id, token, fetchAttachments]);
 
   const fetchAll = useCallback(async (refreshing: boolean): Promise<void> => {
     if (refreshing) { setIsRefreshing(true); } else { setIsLoading(true); }
-    await Promise.all([fetchContact(), fetchActivity(), fetchDeals(), fetchTasks(), fetchAuditLog(), fetchAttachments()]);
+    await Promise.all([fetchContact(), fetchActivity(), fetchDeals(), fetchTasks(), fetchAuditLog()]);
     setIsLoading(false); setIsRefreshing(false);
-  }, [fetchContact, fetchActivity, fetchDeals, fetchTasks, fetchAuditLog, fetchAttachments]);
+  }, [fetchContact, fetchActivity, fetchDeals, fetchTasks, fetchAuditLog]);
 
   useEffect(() => { fetchAll(false); }, [fetchAll]);
   const onRefresh = useCallback((): void => { fetchAll(true); }, [fetchAll]);
@@ -411,36 +386,7 @@ export default function ContactDetailScreen(): JSX.Element {
           ))}
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Attachments</Text>
-            <TouchableOpacity onPress={() => setShowAddAttachment(true)}>
-              <Text style={styles.addLink}>+ Add</Text>
-            </TouchableOpacity>
-          </View>
-          {attachments.length === 0 ? (
-            <Text style={styles.emptyText}>No attachments</Text>
-          ) : attachments.map((att) => (
-            <TouchableOpacity key={att.id} style={styles.attachmentRow} onPress={() => void Linking.openURL(att.file_url)}>
-              <Text style={styles.attachmentName}>{att.filename}</Text>
-              {att.size != null && <Text style={styles.attachmentSize}>{Math.round(att.size / 1024)} KB</Text>}
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Modal visible={showAddAttachment} animationType="slide" onRequestClose={() => setShowAddAttachment(false)}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add Attachment</Text>
-            <TextInput style={styles.modalInput} value={attachmentFilename} onChangeText={setAttachmentFilename} placeholder="Filename" placeholderTextColor="#B07868" />
-            <TextInput style={styles.modalInput} value={attachmentUrl} onChangeText={setAttachmentUrl} placeholder="https://..." placeholderTextColor="#B07868" autoCapitalize="none" keyboardType="url" />
-            <TouchableOpacity style={styles.modalSave} onPress={() => void addAttachment()}>
-              <Text style={styles.modalSaveText}>Save</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowAddAttachment(false)}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </Modal>
+        <AttachmentsSection entityType="contact" entityId={id as string} />
       </ScrollView>
     </>
   );
@@ -495,14 +441,4 @@ const styles = StyleSheet.create({
   auditBadge: { borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2 },
   auditBadgeText: { fontSize: 12, fontWeight: '600' },
   auditDate: { fontSize: 12, color: '#CFADA3' },
-  attachmentRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#FAF6F3', flexDirection: 'row', justifyContent: 'space-between' },
-  attachmentName: { fontSize: 14, color: '#C45A10', flex: 1 },
-  attachmentSize: { fontSize: 12, color: '#CFADA3' },
-  modalContent: { flex: 1, backgroundColor: '#FAF6F3', padding: 24, paddingTop: 60 },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: '#383432', marginBottom: 20 },
-  modalInput: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#E8DDD6', padding: 12, fontSize: 15, color: '#383432', marginBottom: 12 },
-  modalSave: { backgroundColor: '#C45A10', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 8 },
-  modalSaveText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  modalCancel: { padding: 14, alignItems: 'center' },
-  modalCancelText: { color: '#B07868', fontSize: 15 },
 });

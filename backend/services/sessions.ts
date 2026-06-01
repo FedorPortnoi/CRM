@@ -57,6 +57,7 @@ function sessionExpiresAt(expiresIn = process.env.JWT_EXPIRES_IN ?? '7d'): Date 
 
 export async function createAuthSession(input: SessionRequestInput): Promise<string> {
   const sessionId = crypto.randomUUID();
+  const now = new Date();
   await db.$executeRaw`
     INSERT INTO "AuthSession" (
       id,
@@ -66,7 +67,8 @@ export async function createAuthSession(input: SessionRequestInput): Promise<str
       ip_address,
       user_agent,
       last_seen_at,
-      expires_at
+      expires_at,
+      updated_at
     )
     VALUES (
       ${sessionId}::uuid,
@@ -75,8 +77,9 @@ export async function createAuthSession(input: SessionRequestInput): Promise<str
       ${sessionHash(sessionId)},
       ${input.request.ip ?? null},
       ${firstHeader(input.request.headers?.['user-agent']) ?? null},
-      ${new Date()},
-      ${sessionExpiresAt(input.expiresIn) ?? null}
+      ${now},
+      ${sessionExpiresAt(input.expiresIn) ?? null},
+      ${now}
     )
   `;
 

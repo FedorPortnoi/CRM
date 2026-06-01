@@ -20,6 +20,7 @@ import { API_URL } from '../../utils/api';
 import { enqueue } from '../../utils/offlineQueue';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { formatMarketDateTime, formatMarketTime } from '../../market/profile';
+import AttachmentsSection from '../../components/AttachmentsSection';
 
 type CalendarEventStatus = 'scheduled' | 'completed' | 'cancelled';
 
@@ -585,6 +586,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
             ) : null}
           </View>
         ) : null}
+        <AttachmentsSection entityType="calendar_event" entityId={id as string} />
       </ScrollView>
 
       <Modal
