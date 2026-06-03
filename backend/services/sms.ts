@@ -69,7 +69,11 @@ async function sendSmsRu(to: string, text: string): Promise<SendResult> {
   }
 }
 
-export async function sendOtp(phone: string, code: string): Promise<SendResult> {
+export async function sendSms(phone: string, text: string): Promise<SendResult> {
   if (!isSmsSendingEnabled()) return { success: false, errorCode: 'SMS_SEND_DISABLED', disabled: true };
-  return sendSmsRu(phone, `Ваш код подтверждения: ${code}. Действителен 10 минут.`);
+  return sendSmsRu(phone, text);
+}
+
+export async function sendOtp(phone: string, code: string): Promise<SendResult> {
+  return sendSms(phone, `Ваш код подтверждения: ${code}. Действителен 10 минут.`);
 }
