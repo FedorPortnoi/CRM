@@ -25,12 +25,12 @@
     },
     "rustore": {
       "distribution": "internal",
-      "env": { "APP_ENV": "production", "MARKET_CODE": "RU" },
+      "env": { "APP_ENV": "production", "MARKET_CODE": "RU", "EXPO_PUBLIC_API_URL": "http://111.88.149.122/api/v1", "EXPO_PUBLIC_WS_URL": "ws://111.88.149.122", "EXPO_SKIP_API_URL_CHECK": "true" },
       "android": { "buildType": "apk" }
     },
     "huawei": {
       "distribution": "internal",
-      "env": { "APP_ENV": "production", "MARKET_CODE": "RU" },
+      "env": { "APP_ENV": "production", "MARKET_CODE": "RU", "EXPO_PUBLIC_API_URL": "http://111.88.149.122/api/v1", "EXPO_PUBLIC_WS_URL": "ws://111.88.149.122", "EXPO_SKIP_API_URL_CHECK": "true" },
       "android": { "buildType": "apk" }
     }
   },

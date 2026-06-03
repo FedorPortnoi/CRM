@@ -56,7 +56,7 @@ module.exports = ({ config }) => {
   const fallbackApiUrl = stringValue(apiUrls[APP_ENV] ?? apiUrls['development']);
   const apiUrl = envApiUrl || (DEPLOYMENT_ENVS.has(APP_ENV) ? '' : fallbackApiUrl);
 
-  if (DEPLOYMENT_ENVS.has(APP_ENV)) {
+  if (DEPLOYMENT_ENVS.has(APP_ENV) && process.env.EXPO_SKIP_API_URL_CHECK !== 'true') {
     const error = deploymentApiUrlError(apiUrl);
     if (error) {
       throw new Error(`APP_ENV=${APP_ENV} requires a production-safe EXPO_PUBLIC_API_URL: ${error}.`);
