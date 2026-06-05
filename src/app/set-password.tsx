@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView,
-  ScrollView, ActivityIndicator, Platform, StyleSheet, Alert,
+  ScrollView, ActivityIndicator, Platform, StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -14,10 +14,8 @@ export default function SetPasswordScreen() {
   const router = useRouter();
   const { user, changePassword } = useUserStore();
 
-  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -35,7 +33,7 @@ export default function SetPasswordScreen() {
     }
     setIsLoading(true);
     try {
-      await changePassword(currentPassword, newPassword);
+      await changePassword(newPassword);
       router.replace((user?.onboarding_completed === false ? '/onboarding' : '/(tabs)') as never);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('errors.unknown'));
@@ -73,21 +71,6 @@ export default function SetPasswordScreen() {
             <Lock size={18} color="#CFADA3" />
             <TextInput
               style={[styles.input, styles.inputFlex]}
-              placeholder={t('auth.tempPasswordCurrent')}
-              placeholderTextColor="#CFADA3"
-              secureTextEntry={!showCurrent}
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-            />
-            <TouchableOpacity onPress={() => setShowCurrent(p => !p)} style={styles.eyeButton} accessibilityRole="button">
-              {showCurrent ? <EyeOff size={18} color="#CFADA3" /> : <Eye size={18} color="#CFADA3" />}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.fieldWrapper}>
-            <Lock size={18} color="#CFADA3" />
-            <TextInput
-              style={[styles.input, styles.inputFlex]}
               placeholder={t('auth.newPassword')}
               placeholderTextColor="#CFADA3"
               secureTextEntry={!showNew}
@@ -117,7 +100,7 @@ export default function SetPasswordScreen() {
           <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
             onPress={() => { void handleSubmit(); }}
-            disabled={isLoading || !currentPassword || !newPassword || !confirmPassword}
+            disabled={isLoading || !newPassword || !confirmPassword}
             activeOpacity={0.8}
             accessibilityRole="button"
           >

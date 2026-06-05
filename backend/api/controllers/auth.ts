@@ -629,25 +629,11 @@ export const AuthController = {
   },
 
   changePassword: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { current_password, new_password } = request.body as { current_password: string; new_password: string };
-
-    const user = await db.user.findUnique({
-      where: { id: request.user.sub },
-      select: { id: true, password_hash: true },
-    });
-
-    if (!user) {
-      return reply.code(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
-    }
-
-    const valid = await bcrypt.compare(current_password, user.password_hash);
-    if (!valid) {
-      return reply.code(401).send({ error: { code: 'INVALID_PASSWORD', message: 'Current password is incorrect' } });
-    }
+    const { new_password } = request.body as { new_password: string };
 
     const newHash = await bcrypt.hash(new_password, saltRounds);
     await db.user.update({
-      where: { id: user.id },
+      where: { id: request.user.sub },
       data: { password_hash: newHash, must_change_password: false },
     });
 
@@ -656,7 +642,7 @@ export const AuthController = {
       outcome: 'success',
       request,
       organizationId: request.user.org_id,
-      userId: user.id,
+      userId: request.user.sub,
       metadata: {},
     });
 

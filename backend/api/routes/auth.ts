@@ -32,7 +32,6 @@ const LoginSchema = z.object({
 });
 
 const ChangePasswordSchema = z.object({
-  current_password: z.string().min(1),
   new_password: z.string().min(8).max(100)
     .regex(/[a-z]/, 'Password must include a lowercase letter')
     .regex(/[A-Z]/, 'Password must include an uppercase letter')

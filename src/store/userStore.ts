@@ -35,7 +35,7 @@ interface UserState {
   verifyOtp: (userId: string, code: string, channel: 'sms' | 'email') => Promise<void>;
   resendVerification: (userId: string, channel: 'sms' | 'email') => Promise<void>;
   clearPendingVerification: () => void;
-  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  changePassword: (newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   restoreSession: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
@@ -154,12 +154,12 @@ export const useUserStore = create<UserState>()((set) => ({
 
   clearPendingVerification: () => set({ pendingVerification: null }),
 
-  changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
+  changePassword: async (newPassword: string): Promise<void> => {
     const token = await SecureStore.getItemAsync('crm_auth_token');
     const response = await fetch(`${API_URL}/auth/me/password`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${token ?? ''}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      body: JSON.stringify({ new_password: newPassword }),
     });
     const body: unknown = await response.json();
     if (!response.ok) throw new Error(extractErrorMessage(body, response.status));

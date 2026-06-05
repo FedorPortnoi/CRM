@@ -25,6 +25,13 @@ const ROLE_COLORS: Record<Role, string> = {
   viewer: '#B07868',
 };
 
+const ROLE_LABELS: Record<Role, string> = {
+  owner: 'Владелец',
+  admin: 'Администратор',
+  member: 'Менеджер',
+  viewer: 'Только просмотр',
+};
+
 const ASSIGNABLE_ROLES: Role[] = ['admin', 'member', 'viewer'];
 
 export default function TeamScreen(): JSX.Element {
@@ -105,17 +112,17 @@ export default function TeamScreen(): JSX.Element {
   const isOwner = currentUser?.role === 'owner';
 
   const confirmDeactivate = useCallback((member: OrgMember) => {
-    Alert.alert('Deactivate member', `Remove ${member.name}'s access?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Deactivate', style: 'destructive', onPress: () => deactivateMutation.mutate(member.id) },
+    Alert.alert('Удалить доступ', `Убрать ${member.name} из команды?`, [
+      { text: 'Отмена', style: 'cancel' },
+      { text: 'Удалить', style: 'destructive', onPress: () => deactivateMutation.mutate(member.id) },
     ]);
   }, [deactivateMutation]);
 
   const promptRoleChange = useCallback((member: OrgMember) => {
-    Alert.alert('Change role', `Change role for ${member.name}`, ASSIGNABLE_ROLES.map((r) => ({
-      text: r.charAt(0).toUpperCase() + r.slice(1),
+    Alert.alert('Изменить роль', `Выберите роль для ${member.name}`, ASSIGNABLE_ROLES.map((r) => ({
+      text: ROLE_LABELS[r],
       onPress: () => roleMutation.mutate({ id: member.id, role: r }),
-    })).concat([{ text: 'Cancel', onPress: () => undefined }]));
+    })).concat([{ text: 'Отмена', onPress: () => undefined }]));
   }, [roleMutation]);
 
   const renderItem = useCallback(({ item }: ListRenderItemInfo<OrgMember>) => {
@@ -130,7 +137,7 @@ export default function TeamScreen(): JSX.Element {
           <Text style={styles.rowEmail}>{item.email}</Text>
         </View>
         <View style={[styles.badge, { backgroundColor: ROLE_COLORS[item.role] + '22' }]}>
-          <Text style={[styles.badgeText, { color: ROLE_COLORS[item.role] }]}>{item.role}</Text>
+          <Text style={[styles.badgeText, { color: ROLE_COLORS[item.role] }]}>{ROLE_LABELS[item.role]}</Text>
         </View>
         {canManage && !isSelf && item.role !== 'owner' && (
           <View style={styles.actions}>
@@ -200,7 +207,7 @@ export default function TeamScreen(): JSX.Element {
               style={styles.credShare}
               onPress={() => {
                 void Share.share({
-                  message: `Привет, ${credentials?.name ?? ''}!\n\nВойдите в приложение 4КУБ:\nEmail: ${credentials?.email ?? ''}\nВременный пароль: ${credentials?.tempPassword ?? ''}\n\nПри первом входе вас попросят сменить пароль.`,
+                  message: `Привет, ${credentials?.name ?? ''}! Тебя добавили в 4КУБ.\n\n1. Скачай приложение:\nhttps://4kub.ru\n\n2. Открой приложение и нажми «Я новый сотрудник»\n\n3. Введи:\nEmail: ${credentials?.email ?? ''}\nПароль: ${credentials?.tempPassword ?? ''}\n\nПри входе тебя попросят придумать свой пароль — это займёт 10 секунд.`,
                 });
               }}
             >
@@ -225,7 +232,7 @@ export default function TeamScreen(): JSX.Element {
           <View style={styles.roleRow}>
             {ASSIGNABLE_ROLES.map((r) => (
               <TouchableOpacity key={r} style={[styles.rolePill, inviteRole === r && styles.rolePillSelected]} onPress={() => setInviteRole(r)}>
-                <Text style={[styles.rolePillText, inviteRole === r && styles.rolePillTextSelected]}>{r}</Text>
+                <Text style={[styles.rolePillText, inviteRole === r && styles.rolePillTextSelected]}>{ROLE_LABELS[r]}</Text>
               </TouchableOpacity>
             ))}
           </View>
