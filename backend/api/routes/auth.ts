@@ -31,6 +31,15 @@ const LoginSchema = z.object({
   password: z.string().min(1),
 });
 
+const ChangePasswordSchema = z.object({
+  current_password: z.string().min(1),
+  new_password: z.string().min(8).max(100)
+    .regex(/[a-z]/, 'Password must include a lowercase letter')
+    .regex(/[A-Z]/, 'Password must include an uppercase letter')
+    .regex(/[0-9]/, 'Password must include a number')
+    .regex(/[^A-Za-z0-9]/, 'Password must include a symbol'),
+});
+
 const OnboardingSchema = z.object({
   completed: z.boolean().default(false),
   dismissed_steps: z.array(z.string().max(100)).max(20).optional(),
@@ -83,6 +92,10 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post('/users/invite', { preHandler: [authenticate] }, AuthController.inviteUser);
   fastify.patch('/users/:id/deactivate', { preHandler: [authenticate] }, AuthController.deactivateUser);
   fastify.patch('/users/:id/role', { preHandler: [authenticate] }, AuthController.changeUserRole);
+  fastify.patch('/me/password', {
+    preHandler: [authenticate],
+    schema: { body: ChangePasswordSchema },
+  }, AuthController.changePassword);
   fastify.get('/onboarding', { preHandler: [authenticate] }, AuthController.getOnboarding);
   fastify.patch('/onboarding', {
     preHandler: [authenticate],

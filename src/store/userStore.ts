@@ -9,6 +9,7 @@ type AuthUser = {
   role: string;
   org_id: string;
   onboarding_completed?: boolean;
+  must_change_password?: boolean;
 };
 
 type PendingVerification = {
@@ -34,6 +35,7 @@ interface UserState {
   verifyOtp: (userId: string, code: string, channel: 'sms' | 'email') => Promise<void>;
   resendVerification: (userId: string, channel: 'sms' | 'email') => Promise<void>;
   clearPendingVerification: () => void;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   restoreSession: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
@@ -151,6 +153,25 @@ export const useUserStore = create<UserState>()((set) => ({
   },
 
   clearPendingVerification: () => set({ pendingVerification: null }),
+
+  changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
+    const token = await SecureStore.getItemAsync('crm_auth_token');
+    const response = await fetch(`${API_URL}/auth/me/password`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token ?? ''}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    });
+    const body: unknown = await response.json();
+    if (!response.ok) throw new Error(extractErrorMessage(body, response.status));
+
+    const userJson = await SecureStore.getItemAsync('crm_auth_user');
+    if (userJson) {
+      const user = JSON.parse(userJson) as AuthUser;
+      const updated = { ...user, must_change_password: false };
+      await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(updated));
+      set({ user: updated });
+    }
+  },
 
   logout: async (): Promise<void> => {
     const token = await SecureStore.getItemAsync('crm_auth_token');

@@ -2,6 +2,7 @@
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, Modal, TextInput, ListRenderItemInfo,
+  Share, Clipboard,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -36,6 +37,8 @@ export default function TeamScreen(): JSX.Element {
   const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState<Role>('member');
 
+  const [credentials, setCredentials] = useState<{ name: string; email: string; tempPassword: string } | null>(null);
+
   const { data: members = [], isLoading, error } = useQuery<OrgMember[]>({
     queryKey: ['org-users', token],
     queryFn: async () => {
@@ -61,8 +64,8 @@ export default function TeamScreen(): JSX.Element {
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ['org-users'] });
       setShowInviteModal(false);
+      setCredentials({ name: data.name, email: inviteEmail.trim().toLowerCase(), tempPassword: data.temp_password });
       setInviteEmail(''); setInviteName(''); setInviteRole('member');
-      Alert.alert('Member invited', `${data.name} can log in with temporary password:\n${data.temp_password}\n\nAsk them to change it on first login.`);
     },
     onError: (e: Error) => Alert.alert('Error', e.message),
   });
@@ -167,6 +170,50 @@ export default function TeamScreen(): JSX.Element {
         </TouchableOpacity>
       )}
 
+      <Modal visible={credentials !== null} animationType="fade" transparent onRequestClose={() => setCredentials(null)}>
+        <View style={styles.credOverlay}>
+          <View style={styles.credCard}>
+            <Text style={styles.credTitle}>Участник добавлен</Text>
+            <Text style={styles.credSubtitle}>
+              Передайте <Text style={{ fontWeight: '700' }}>{credentials?.name}</Text> эти данные для входа:
+            </Text>
+
+            <Text style={styles.credLabel}>Email</Text>
+            <View style={styles.credRow}>
+              <Text style={styles.credValue} selectable>{credentials?.email}</Text>
+              <TouchableOpacity onPress={() => { Clipboard.setString(credentials?.email ?? ''); Alert.alert('Скопировано'); }}>
+                <Text style={styles.credCopy}>Копировать</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.credLabel}>Временный пароль</Text>
+            <View style={styles.credRow}>
+              <Text style={styles.credValue} selectable>{credentials?.tempPassword}</Text>
+              <TouchableOpacity onPress={() => { Clipboard.setString(credentials?.tempPassword ?? ''); Alert.alert('Скопировано'); }}>
+                <Text style={styles.credCopy}>Копировать</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.credHint}>Участник сменит пароль при первом входе</Text>
+
+            <TouchableOpacity
+              style={styles.credShare}
+              onPress={() => {
+                void Share.share({
+                  message: `Привет, ${credentials?.name ?? ''}!\n\nВойдите в приложение 4КУБ:\nEmail: ${credentials?.email ?? ''}\nВременный пароль: ${credentials?.tempPassword ?? ''}\n\nПри первом входе вас попросят сменить пароль.`,
+                });
+              }}
+            >
+              <Text style={styles.credShareText}>Поделиться</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.credDone} onPress={() => setCredentials(null)}>
+              <Text style={styles.credDoneText}>Готово</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showInviteModal} animationType="slide" onRequestClose={() => setShowInviteModal(false)}>
         <View style={styles.modal}>
           <Text style={styles.modalTitle}>Invite Member</Text>
@@ -228,4 +275,17 @@ const styles = StyleSheet.create({
   rolePillTextSelected: { color: '#fff', fontWeight: '600' },
   cancelBtn: { marginTop: 12, alignItems: 'center', padding: 12 },
   cancelBtnText: { color: '#B07868', fontSize: 15 },
+  credOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 },
+  credCard: { backgroundColor: '#fff', borderRadius: 16, padding: 24 },
+  credTitle: { fontSize: 20, fontWeight: '700', color: '#383432', marginBottom: 8 },
+  credSubtitle: { fontSize: 14, color: '#B07868', marginBottom: 20, lineHeight: 20 },
+  credLabel: { fontSize: 12, fontWeight: '600', color: '#B07868', marginBottom: 4, marginTop: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
+  credRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FAF6F3', borderRadius: 8, borderWidth: 1, borderColor: '#E8DDD6', paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
+  credValue: { flex: 1, fontSize: 15, color: '#383432', fontWeight: '600' },
+  credCopy: { fontSize: 13, color: '#C45A10', fontWeight: '600' },
+  credHint: { fontSize: 12, color: '#CFADA3', marginTop: 16, textAlign: 'center' },
+  credShare: { marginTop: 20, backgroundColor: '#383432', borderRadius: 10, padding: 14, alignItems: 'center' },
+  credShareText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  credDone: { marginTop: 10, alignItems: 'center', padding: 12 },
+  credDoneText: { color: '#B07868', fontSize: 15 },
 });

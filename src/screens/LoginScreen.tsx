@@ -27,7 +27,11 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (!isLoading && error === null && user !== null) {
-      router.replace((user.onboarding_completed === false ? '/onboarding' : '/(tabs)') as never);
+      if (user.must_change_password) {
+        router.replace('/set-password' as never);
+      } else {
+        router.replace((user.onboarding_completed === false ? '/onboarding' : '/(tabs)') as never);
+      }
     }
   }, [user, isLoading, error, router]);
 
@@ -127,6 +131,15 @@ export default function LoginScreen() {
             accessibilityRole="link"
           >
             <Text style={styles.registerLinkText}>{t('auth.newHereCreate')}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.registerLink, { marginTop: 8 }]}
+            onPress={() => router.push('/join-company' as never)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+          >
+            <Text style={styles.registerLinkText}>{t('auth.joinCompany')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

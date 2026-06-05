@@ -57,7 +57,7 @@ function onboardingCompleted(state: Prisma.JsonValue | null): boolean {
   return record.completed === true || typeof record.completed_at === 'string';
 }
 
-function publicUser(user: { id: string; email: string; name: string; role: string; organization_id: string; onboarding_state?: Prisma.JsonValue | null }) {
+function publicUser(user: { id: string; email: string; name: string; role: string; organization_id: string; onboarding_state?: Prisma.JsonValue | null; must_change_password?: boolean }) {
   return {
     id: user.id,
     email: user.email,
@@ -65,6 +65,7 @@ function publicUser(user: { id: string; email: string; name: string; role: strin
     role: user.role,
     org_id: user.organization_id,
     onboarding_completed: onboardingCompleted(user.onboarding_state ?? null),
+    must_change_password: user.must_change_password ?? false,
   };
 }
 
@@ -493,6 +494,7 @@ export const AuthController = {
         organization_id: request.user.org_id,
         is_active: true,
         is_verified: true,
+        must_change_password: true,
       },
       select: { id: true, email: true, name: true, role: true },
     });
@@ -506,11 +508,7 @@ export const AuthController = {
       : null;
 
     return reply.status(201).send({
-      data: {
-        ...user,
-        // Included only when email delivery is unavailable so the admin can share it manually.
-        ...(emailResult === null ? { temp_password: tempPassword } : {}),
-      },
+      data: { ...user, temp_password: tempPassword },
       meta: { email_sent: emailResult?.success ?? false },
     });
   },
@@ -628,6 +626,41 @@ export const AuthController = {
       },
       meta: {},
     });
+  },
+
+  changePassword: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { current_password, new_password } = request.body as { current_password: string; new_password: string };
+
+    const user = await db.user.findUnique({
+      where: { id: request.user.sub },
+      select: { id: true, password_hash: true },
+    });
+
+    if (!user) {
+      return reply.code(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
+    }
+
+    const valid = await bcrypt.compare(current_password, user.password_hash);
+    if (!valid) {
+      return reply.code(401).send({ error: { code: 'INVALID_PASSWORD', message: 'Current password is incorrect' } });
+    }
+
+    const newHash = await bcrypt.hash(new_password, saltRounds);
+    await db.user.update({
+      where: { id: user.id },
+      data: { password_hash: newHash, must_change_password: false },
+    });
+
+    await auditLog({
+      action: 'auth.change_password',
+      outcome: 'success',
+      request,
+      organizationId: request.user.org_id,
+      userId: user.id,
+      metadata: {},
+    });
+
+    return reply.send({ data: { updated: true }, meta: {} });
   },
 
   resendVerification: async (request: FastifyRequest, reply: FastifyReply) => {
