@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Подтверждение аккаунта — КУБ CRM</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23C45A10'/><text y='23' x='5' font-size='20' font-weight='800' fill='white' font-family='system-ui'>К</text></svg>">
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+
+<div class="auth-wrap">
+
+  <div class="auth-nav">
+    <a href="/" class="nav-logo">
+      <div class="logo-mark">К</div>
+      <span class="logo-text">КУБ</span>
+    </a>
+  </div>
+
+  <div class="auth-body">
+    <div class="auth-card">
+
+      <!-- Verify form (default state) -->
+      <div id="verify-view">
+        <div class="auth-logo">
+          <div class="auth-logo-mark">К</div>
+        </div>
+        <h1 class="auth-title">Подтвердите аккаунт</h1>
+        <p class="auth-sub" id="verify-sub">Мы отправили 6-значный код на ваш email.</p>
+
+        <div class="auth-form">
+          <div class="otp-row">
+            <input class="otp-cell" type="text" inputmode="numeric" maxlength="1" id="d0" autocomplete="one-time-code">
+            <input class="otp-cell" type="text" inputmode="numeric" maxlength="1" id="d1">
+            <input class="otp-cell" type="text" inputmode="numeric" maxlength="1" id="d2">
+            <input class="otp-cell" type="text" inputmode="numeric" maxlength="1" id="d3">
+            <input class="otp-cell" type="text" inputmode="numeric" maxlength="1" id="d4">
+            <input class="otp-cell" type="text" inputmode="numeric" maxlength="1" id="d5">
+          </div>
+
+          <div id="form-error" class="form-error"></div>
+
+          <button type="button" id="verify-btn" class="btn btn-primary btn-lg btn-full">
+            Подтвердить
+          </button>
+
+          <div class="resend-wrap">
+            <button id="resend-btn" disabled>Отправить повторно</button>
+            <span id="resend-timer"></span>
+          </div>
+
+          <div class="divider">
+            <div class="divider-line"></div>
+            <span>или</span>
+            <div class="divider-line"></div>
+          </div>
+
+          <a href="/register" class="auth-alt">Вернуться к регистрации</a>
+        </div>
+      </div>
+
+      <!-- Success state -->
+      <div id="success-view" style="display:none">
+        <div class="auth-logo">
+          <div class="auth-logo-mark">К</div>
+        </div>
+        <div class="auth-form">
+          <div class="success-wrap">
+            <div class="success-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <h3>Аккаунт создан!</h3>
+            <p>Скачайте приложение КУБ и войдите с вашим email и паролем.</p>
+            <div class="badges" style="flex-direction:column; align-items:stretch; margin-top:0">
+              <a href="https://apps.apple.com/app/id6776447873" class="store-badge" target="_blank" rel="noopener" style="justify-content:center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                <div class="store-badge-text">
+                  <small>Скачать в</small>
+                  <strong>App Store</strong>
+                </div>
+              </a>
+              <a href="https://apps.rustore.ru/app/com.fedorportnoi.crm" class="store-badge" target="_blank" rel="noopener" style="justify-content:center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                <div class="store-badge-text">
+                  <small>Доступно в</small>
+                  <strong>RuStore</strong>
+                </div>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer style="text-align:center; padding:20px 24px; font-size:12px; color:var(--text-subtle); border-top:1px solid var(--border)">
+    © 2026 КУБ · <a href="/" style="color:var(--text-muted)">4kub.ru</a>
+  </footer>
+
+</div>
+
+<script>
+  const API = '/api/v1';
+
+  const userId = sessionStorage.getItem('kub_user_id');
+  const userEmail = sessionStorage.getItem('kub_email');
+
+  // Redirect to register if arrived without a session
+  if (!userId) window.location.href = '/register';
+
+  if (userEmail) {
+    document.getElementById('verify-sub').textContent = 'Мы отправили 6-значный код на ' + userEmail;
+  }
+
+  // OTP cells
+  const cells = Array.from({ length: 6 }, (_, i) => document.getElementById('d' + i));
+
+  cells.forEach((cell, i) => {
+    cell.addEventListener('input', (e) => {
+      const val = e.target.value.replace(/\D/g, '');
+      cell.value = val ? val[val.length - 1] : '';
+      cell.classList.toggle('filled', !!cell.value);
+      if (cell.value && i < 5) cells[i + 1].focus();
+      clearError();
+    });
+
+    cell.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && !cell.value && i > 0) {
+        cells[i - 1].focus();
+        cells[i - 1].value = '';
+        cells[i - 1].classList.remove('filled');
+      }
+      if (e.key === 'ArrowLeft' && i > 0) cells[i - 1].focus();
+      if (e.key === 'ArrowRight' && i < 5) cells[i + 1].focus();
+    });
+
+    cell.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+      text.split('').slice(0, 6).forEach((ch, j) => {
+        if (cells[j]) { cells[j].value = ch; cells[j].classList.add('filled'); }
+      });
+      const next = Math.min(text.length, 5);
+      cells[next].focus();
+    });
+  });
+
+  function getCode() { return cells.map(c => c.value).join(''); }
+
+  function setError(msg) {
+    const el = document.getElementById('form-error');
+    el.textContent = msg;
+    el.classList.toggle('show', !!msg);
+    if (msg) cells.forEach(c => c.classList.add('is-error'));
+  }
+
+  function clearError() {
+    document.getElementById('form-error').classList.remove('show');
+    cells.forEach(c => c.classList.remove('is-error'));
+  }
+
+  // Verify button
+  document.getElementById('verify-btn').addEventListener('click', async () => {
+    clearError();
+    const code = getCode();
+    if (code.length !== 6) { setError('Введите все 6 цифр кода'); return; }
+
+    const btn = document.getElementById('verify-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+
+    try {
+      const res = await fetch(API + '/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, code, channel: 'email' }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        const msg = data?.error?.message || 'Неверный код. Попробуйте снова.';
+        setError(msg);
+        btn.disabled = false;
+        btn.textContent = 'Подтвердить';
+        return;
+      }
+
+      sessionStorage.removeItem('kub_user_id');
+      sessionStorage.removeItem('kub_email');
+
+      document.getElementById('verify-view').style.display = 'none';
+      document.getElementById('success-view').style.display = '';
+
+    } catch {
+      setError('Не удалось подключиться к серверу.');
+      btn.disabled = false;
+      btn.textContent = 'Подтвердить';
+    }
+  });
+
+  // Resend with 60s cooldown
+  let cooldown = 60;
+  const resendBtn = document.getElementById('resend-btn');
+  const timerEl = document.getElementById('resend-timer');
+
+  function startCooldown() {
+    cooldown = 60;
+    resendBtn.disabled = true;
+    const interval = setInterval(() => {
+      cooldown--;
+      timerEl.textContent = ' (' + cooldown + ' с)';
+      if (cooldown <= 0) {
+        clearInterval(interval);
+        timerEl.textContent = '';
+        resendBtn.disabled = false;
+      }
+    }, 1000);
+  }
+
+  startCooldown();
+
+  resendBtn.addEventListener('click', async () => {
+    resendBtn.disabled = true;
+    try {
+      await fetch(API + '/auth/verify/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, channel: 'email' }),
+      });
+    } catch { /* silent */ }
+    startCooldown();
+  });
+
+  // Focus first cell
+  cells[0].focus();
+</script>
+
+</body>
+</html>

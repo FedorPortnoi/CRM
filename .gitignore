@@ -25,6 +25,7 @@ coverage/
 *.apk
 *.aab
 *.ipa
+*.pem
 
 # Logs
 *.log

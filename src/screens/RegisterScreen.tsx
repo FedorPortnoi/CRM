@@ -1,79 +1,21 @@
-﻿import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   ScrollView,
-  ActivityIndicator,
   Platform,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Mail, Lock, Eye, EyeOff, User, Building2, Sparkles, Phone } from 'lucide-react-native';
-import { useUserStore } from '../store/userStore';
-
-function isStrongPassword(password: string): boolean {
-  return (
-    password.length >= 8 &&
-    /[a-z]/.test(password) &&
-    /[A-Z]/.test(password) &&
-    /[0-9]/.test(password) &&
-    /[^A-Za-z0-9]/.test(password)
-  );
-}
+import { Sparkles, ExternalLink } from 'lucide-react-native';
 
 export default function RegisterScreen() {
   const { t } = useTranslation();
-  const [name, setName] = useState<string>('');
-  const [orgName, setOrgName] = useState<string>('');
-  const [email, setEmail] = useState<string>('');
-  const [phone, setPhone] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
-
   const router = useRouter();
-  const { user, isLoading, error, pendingVerification, register } = useUserStore();
-
-  useEffect(() => {
-    if (!isLoading && error === null && pendingVerification !== null) {
-      router.replace('/verify-otp' as never);
-    }
-  }, [pendingVerification, isLoading, error, router]);
-
-  useEffect(() => {
-    if (!isLoading && error === null && user !== null) {
-      router.replace((user.onboarding_completed === false ? '/onboarding' : '/(tabs)') as never);
-    }
-  }, [user, isLoading, error, router]);
-
-  const handleRegister = async () => {
-    if (name.trim() === '') {
-      setValidationError(t('auth.fieldRequired'));
-      return;
-    }
-    if (orgName.trim() === '') {
-      setValidationError(t('auth.fieldRequired'));
-      return;
-    }
-    if (email.trim() === '' || !email.includes('@')) {
-      setValidationError(t('auth.emailInvalid'));
-      return;
-    }
-    if (phone.trim().length < 10) {
-      setValidationError(t('auth.phoneInvalid'));
-      return;
-    }
-    if (!isStrongPassword(password)) {
-      setValidationError(t('auth.passwordRequirements'));
-      return;
-    }
-    setValidationError(null);
-    await register(email, password, name, orgName, phone.trim());
-  };
 
   return (
     <KeyboardAvoidingView
@@ -95,98 +37,19 @@ export default function RegisterScreen() {
           </View>
         </View>
 
-        <Text style={styles.title}>{t('auth.createAccountTitle')}</Text>
-        <Text style={styles.subtitle}>{t('auth.createAccountSubtext')}</Text>
+        <Text style={styles.title}>{t('auth.registerOnWebTitle')}</Text>
+        <Text style={styles.subtitle}>{t('auth.registerOnWebSubtext')}</Text>
 
         <View style={styles.card}>
-          <View style={styles.fieldWrapper}>
-            <User size={18} color="#CFADA3" />
-            <TextInput
-              style={styles.input}
-              placeholder={t('auth.name')}
-              placeholderTextColor="#CFADA3"
-              value={name}
-              onChangeText={(v) => { setName(v); setValidationError(null); }}
-              autoCapitalize="words"
-            />
-          </View>
-
-          <View style={styles.fieldWrapper}>
-            <Building2 size={18} color="#CFADA3" />
-            <TextInput
-              style={styles.input}
-              placeholder={t('auth.orgName')}
-              placeholderTextColor="#CFADA3"
-              value={orgName}
-              onChangeText={(v) => { setOrgName(v); setValidationError(null); }}
-              autoCapitalize="words"
-            />
-          </View>
-
-          <View style={styles.fieldWrapper}>
-            <Mail size={18} color="#CFADA3" />
-            <TextInput
-              style={styles.input}
-              placeholder={t('auth.email')}
-              placeholderTextColor="#CFADA3"
-              value={email}
-              onChangeText={(v) => { setEmail(v); setValidationError(null); }}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          <View style={styles.fieldWrapper}>
-            <Phone size={18} color="#CFADA3" />
-            <TextInput
-              style={styles.input}
-              placeholder={t('auth.phone')}
-              placeholderTextColor="#CFADA3"
-              value={phone}
-              onChangeText={(v) => { setPhone(v); setValidationError(null); }}
-              keyboardType="phone-pad"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          <View style={styles.fieldWrapper}>
-            <Lock size={18} color="#CFADA3" />
-            <TextInput
-              style={[styles.input, styles.inputFlex]}
-              placeholder={t('auth.password')}
-              placeholderTextColor="#CFADA3"
-              value={password}
-              onChangeText={(v) => { setPassword(v); setValidationError(null); }}
-              secureTextEntry={!showPassword}
-            />
-            <TouchableOpacity
-              onPress={() => { setShowPassword(prev => !prev); }}
-              style={styles.eyeButton}
-              accessibilityRole="button"
-            >
-              {showPassword
-                ? <EyeOff size={18} color="#CFADA3" />
-                : <Eye size={18} color="#CFADA3" />}
-            </TouchableOpacity>
-          </View>
-
           <TouchableOpacity
-            style={[styles.button, isLoading && styles.buttonDisabled]}
-            onPress={() => { void handleRegister(); }}
-            disabled={isLoading}
+            style={styles.button}
+            onPress={() => { void Linking.openURL('https://4kub.ru/register'); }}
             activeOpacity={0.8}
-            accessibilityRole="button"
+            accessibilityRole="link"
           >
-            {isLoading
-              ? <ActivityIndicator color="#FFFFFF" />
-              : <Text style={styles.buttonText}>{t('auth.createAccountButton')}</Text>}
+            <ExternalLink size={18} color="#FFFFFF" style={styles.buttonIcon} />
+            <Text style={styles.buttonText}>{t('auth.registerOnWebButton')}</Text>
           </TouchableOpacity>
-
-          {(validationError !== null || error !== null) && (
-            <Text style={styles.errorText}>{validationError ?? error}</Text>
-          )}
 
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
@@ -196,7 +59,7 @@ export default function RegisterScreen() {
 
           <TouchableOpacity
             style={styles.loginLink}
-            onPress={() => { router.push('/login'); }}
+            onPress={() => { router.replace('/login'); }}
             activeOpacity={0.7}
             accessibilityRole="button"
           >
@@ -291,50 +154,22 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  fieldWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E8DDD6',
-    borderRadius: 12,
-    backgroundColor: '#FAF6F3',
-    paddingHorizontal: 14,
-    marginBottom: 14,
-    height: 52,
-    gap: 10,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: '#383432',
-  },
-  inputFlex: {
-    flex: 1,
-  },
-  eyeButton: {
-    padding: 4,
-  },
   button: {
     height: 52,
     backgroundColor: '#C45A10',
     borderRadius: 12,
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 4,
+    gap: 8,
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  buttonIcon: {
+    marginRight: 2,
   },
   buttonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 12,
   },
   dividerRow: {
     flexDirection: 'row',

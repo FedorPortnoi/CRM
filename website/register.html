@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Регистрация — КУБ CRM</title>
+  <meta name="description" content="Создайте аккаунт в КУБ CRM и начните управлять клиентами и продажами.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23C45A10'/><text y='23' x='5' font-size='20' font-weight='800' fill='white' font-family='system-ui'>К</text></svg>">
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+
+<div class="auth-wrap">
+
+  <div class="auth-nav">
+    <a href="/" class="nav-logo">
+      <div class="logo-mark">К</div>
+      <span class="logo-text">КУБ</span>
+    </a>
+  </div>
+
+  <div class="auth-body">
+    <div class="auth-card">
+
+      <div class="auth-logo">
+        <div class="auth-logo-mark">К</div>
+      </div>
+      <h1 class="auth-title">Создать аккаунт</h1>
+      <p class="auth-sub">Начните управлять бизнесом за несколько минут.</p>
+
+      <div class="auth-form">
+
+        <div class="field">
+          <div class="field-wrap" id="wrap-name">
+            <span class="field-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </span>
+            <input type="text" id="name" placeholder="Ваше имя" autocomplete="name" autocapitalize="words">
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-wrap" id="wrap-org">
+            <span class="field-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </span>
+            <input type="text" id="org_name" placeholder="Название компании" autocomplete="organization" autocapitalize="words">
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-wrap" id="wrap-email">
+            <span class="field-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            </span>
+            <input type="email" id="email" placeholder="Email" autocomplete="email" autocapitalize="none">
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-wrap" id="wrap-phone">
+            <span class="field-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.4 2 2 0 0 1 3.6 1.21h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.79a16 16 0 0 0 6.29 6.29l.95-.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </span>
+            <input type="tel" id="phone" placeholder="Номер телефона" autocomplete="tel">
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-wrap" id="wrap-password">
+            <span class="field-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </span>
+            <input type="password" id="password" placeholder="Пароль (мин. 8 символов)" autocomplete="new-password">
+            <button type="button" class="field-toggle" id="pw-toggle" aria-label="Показать пароль">
+              <svg id="eye-show" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg id="eye-hide" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="form-error" class="form-error"></div>
+
+        <button type="button" id="submit-btn" class="btn btn-primary btn-lg btn-full" style="margin-top:6px">
+          Создать аккаунт
+        </button>
+
+        <div class="divider">
+          <div class="divider-line"></div>
+          <span>или</span>
+          <div class="divider-line"></div>
+        </div>
+
+        <a href="/" class="auth-alt">Уже есть аккаунт? Войти в приложении</a>
+
+      </div>
+    </div>
+  </div>
+
+  <footer style="text-align:center; padding:20px 24px; font-size:12px; color:var(--text-subtle); border-top:1px solid var(--border)">
+    © 2026 КУБ · <a href="/" style="color:var(--text-muted)">4kub.ru</a>
+  </footer>
+
+</div>
+
+<script>
+  const API = '/api/v1';
+
+  const $ = (id) => document.getElementById(id);
+
+  // Password toggle
+  $('pw-toggle').addEventListener('click', () => {
+    const input = $('password');
+    const isText = input.type === 'text';
+    input.type = isText ? 'password' : 'text';
+    $('eye-show').style.display = isText ? '' : 'none';
+    $('eye-hide').style.display = isText ? 'none' : '';
+  });
+
+  function setError(msg) {
+    const el = $('form-error');
+    el.textContent = msg;
+    el.classList.toggle('show', !!msg);
+  }
+
+  function setFieldError(id, hasError) {
+    document.getElementById('wrap-' + id).classList.toggle('is-error', hasError);
+  }
+
+  function isStrongPassword(p) {
+    return p.length >= 8 && /[a-z]/.test(p) && /[A-Z]/.test(p) && /[0-9]/.test(p) && /[^A-Za-z0-9]/.test(p);
+  }
+
+  $('submit-btn').addEventListener('click', async () => {
+    setError('');
+    ['name','org','email','phone','password'].forEach(f => setFieldError(f, false));
+
+    const name = $('name').value.trim();
+    const org_name = $('org_name').value.trim();
+    const email = $('email').value.trim();
+    const phone = $('phone').value.trim();
+    const password = $('password').value;
+
+    if (!name) { setFieldError('name', true); setError('Введите ваше имя'); return; }
+    if (!org_name) { setFieldError('org', true); setError('Введите название компании'); return; }
+    if (!email || !email.includes('@')) { setFieldError('email', true); setError('Введите корректный email'); return; }
+    if (phone.replace(/\D/g, '').length < 10) { setFieldError('phone', true); setError('Введите корректный номер телефона'); return; }
+    if (!isStrongPassword(password)) {
+      setFieldError('password', true);
+      setError('Минимум 8 символов: заглавная и строчная буквы, цифра и специальный символ');
+      return;
+    }
+
+    const btn = $('submit-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+
+    try {
+      const res = await fetch(API + '/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, org_name, email, phone, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        const msg = data?.error?.message || 'Ошибка регистрации. Попробуйте снова.';
+        setError(msg);
+        btn.disabled = false;
+        btn.textContent = 'Создать аккаунт';
+        return;
+      }
+
+      // Store for verify page
+      sessionStorage.setItem('kub_user_id', data.user_id || data.data?.user_id || '');
+      sessionStorage.setItem('kub_email', email);
+
+      window.location.href = '/verify';
+
+    } catch {
+      setError('Не удалось подключиться к серверу. Проверьте интернет-соединение.');
+      btn.disabled = false;
+      btn.textContent = 'Создать аккаунт';
+    }
+  });
+
+  // Allow Enter key to submit
+  document.querySelectorAll('input').forEach(input => {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') $('submit-btn').click();
+    });
+  });
+</script>
+
+</body>
+</html>

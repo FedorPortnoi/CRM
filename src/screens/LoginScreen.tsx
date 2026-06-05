@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Platform,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -121,9 +122,9 @@ export default function LoginScreen() {
 
           <TouchableOpacity
             style={styles.registerLink}
-            onPress={() => { router.push('/register'); }}
+            onPress={() => { void Linking.openURL('https://4kub.ru/register'); }}
             activeOpacity={0.7}
-            accessibilityRole="button"
+            accessibilityRole="link"
           >
             <Text style={styles.registerLinkText}>{t('auth.newHereCreate')}</Text>
           </TouchableOpacity>
