@@ -30,6 +30,7 @@ interface ChatState {
   hasMore: Record<string, boolean>;
   ws: WebSocket | null;
   connected: boolean;
+  loadingChannels: boolean;
 
   connect: (token: string) => void;
   disconnect: () => void;
@@ -47,6 +48,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   hasMore: {},
   ws: null,
   connected: false,
+  loadingChannels: false,
 
   connect: (token: string) => {
     const existing = get().ws;
@@ -78,14 +80,24 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   fetchChannels: async () => {
     const token = await SecureStore.getItemAsync('crm_auth_token');
     if (!token) return;
+    set({ loadingChannels: true });
     try {
       const res = await fetch(`${API_URL}/chat/channels`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
       const json = (await res.json()) as { data: Channel[] };
-      set({ channels: json.data });
+      // General always pinned first, rest sorted by most recent message
+      const sorted = [...json.data].sort((a, b) => {
+        if (a.channel === 'general') return -1;
+        if (b.channel === 'general') return 1;
+        const aTime = a.last_message?.created_at ?? '';
+        const bTime = b.last_message?.created_at ?? '';
+        return bTime.localeCompare(aTime);
+      });
+      set({ channels: sorted });
     } catch { /* network error — ignore */ }
+    finally { set({ loadingChannels: false }); }
   },
 
   fetchMessages: async (channel: string, before?: string) => {

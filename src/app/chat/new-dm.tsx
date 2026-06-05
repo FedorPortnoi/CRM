@@ -4,6 +4,7 @@ import {
   ActivityIndicator, ListRenderItemInfo,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useUserStore } from '../../store/userStore';
@@ -57,6 +58,7 @@ export default function NewDmScreen() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ title: t('chat.newDmTitle') }} />
       {isLoading
         ? <ActivityIndicator style={{ marginTop: 40 }} color="#C45A10" />
         : (

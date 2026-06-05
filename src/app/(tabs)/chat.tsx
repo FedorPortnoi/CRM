@@ -23,8 +23,7 @@ export default function ChatListScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const token = useUserStore((s) => s.token);
-  const currentUser = useUserStore((s) => s.user);
-  const { channels, connected, connect, fetchChannels } = useChatStore();
+  const { channels, loadingChannels, connect, fetchChannels } = useChatStore();
 
   useEffect(() => {
     if (token) {
@@ -40,6 +39,17 @@ export default function ChatListScreen() {
     } as never);
   }, [router]);
 
+  const openGeneral = useCallback(() => {
+    router.push({
+      pathname: '/chat/[channel]',
+      params: { channel: 'general', name: t('chat.generalChannel') },
+    } as never);
+  }, [router, t]);
+
+  const openNewDm = useCallback(() => {
+    router.push('/chat/new-dm' as never);
+  }, [router]);
+
   const renderItem = useCallback(({ item }: ListRenderItemInfo<Channel>) => {
     const isGeneral = item.channel === 'general';
     const lastBody = item.last_message?.body;
@@ -47,7 +57,7 @@ export default function ChatListScreen() {
     const lastTime = item.last_message?.created_at ? timeAgo(item.last_message.created_at) : '';
     const preview = lastBody
       ? `${lastSender ? lastSender + ': ' : ''}${lastBody}`
-      : t('chat.noMessages');
+      : isGeneral ? t('chat.generalSubtitle') : t('chat.noMessages');
 
     return (
       <TouchableOpacity style={styles.row} onPress={() => handleOpen(item)} activeOpacity={0.7}>
@@ -58,10 +68,22 @@ export default function ChatListScreen() {
         </View>
         <View style={styles.info}>
           <View style={styles.infoTop}>
-            <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+            <View style={styles.nameLine}>
+              <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+              {!isGeneral && (
+                <View style={styles.dmPill}>
+                  <Text style={styles.dmPillText}>{t('chat.privatePill')}</Text>
+                </View>
+              )}
+            </View>
             {lastTime ? <Text style={styles.time}>{lastTime}</Text> : null}
           </View>
-          <Text style={styles.preview} numberOfLines={1}>{preview}</Text>
+          <Text
+            style={[styles.preview, !lastBody && isGeneral && styles.previewHint]}
+            numberOfLines={1}
+          >
+            {preview}
+          </Text>
         </View>
         {item.unread > 0 && (
           <View style={styles.badge}>
@@ -72,39 +94,49 @@ export default function ChatListScreen() {
     );
   }, [t, handleOpen]);
 
-  const totalUnread = channels.reduce((sum, c) => sum + c.unread, 0);
-
-  const startDm = useCallback(() => {
-    router.push('/chat/new-dm' as never);
-  }, [router]);
+  if (loadingChannels && channels.length === 0) {
+    return (
+      <View style={styles.loadingWrap}>
+        <ActivityIndicator color="#C45A10" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {channels.length === 0 ? (
-        <View style={styles.empty}>
-          <MessageSquare size={48} color="#E8DDD6" strokeWidth={1.5} />
-          <Text style={styles.emptyTitle}>{t('chat.emptyTitle')}</Text>
-          <Text style={styles.emptySub}>{t('chat.emptySub')}</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={channels}
-          keyExtractor={(item) => item.channel}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+      <FlatList
+        data={channels}
+        keyExtractor={(item) => item.channel}
+        renderItem={renderItem}
+        contentContainerStyle={[styles.list, { paddingBottom: 96 }]}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <MessageSquare size={48} color="#E8DDD6" strokeWidth={1.5} />
+            <Text style={styles.emptyTitle}>{t('chat.emptyTitle')}</Text>
+            <Text style={styles.emptySub}>{t('chat.emptySub')}</Text>
+          </View>
+        }
+      />
 
-      <TouchableOpacity style={styles.fab} onPress={startDm} activeOpacity={0.85}>
-        <Text style={styles.fabText}>+ {t('chat.newDm')}</Text>
-      </TouchableOpacity>
+      {/* Bottom action bar: two clear buttons */}
+      <View style={styles.actionBar}>
+        <TouchableOpacity style={[styles.actionBtn, styles.actionBtnGeneral]} onPress={openGeneral} activeOpacity={0.85}>
+          <Users size={16} color="#fff" strokeWidth={2.5} />
+          <Text style={styles.actionBtnText}>{t('chat.openGeneral')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.actionBtn, styles.actionBtnDm]} onPress={openNewDm} activeOpacity={0.85}>
+          <MessageSquare size={16} color="#C45A10" strokeWidth={2.5} />
+          <Text style={[styles.actionBtnText, styles.actionBtnDmText]}>{t('chat.newDm')}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FAF6F3' },
+  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { paddingVertical: 8 },
   row: {
     flexDirection: 'row', alignItems: 'center',
@@ -119,24 +151,38 @@ const styles = StyleSheet.create({
   avatarDm: { backgroundColor: '#B07868' },
   avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
   info: { flex: 1 },
-  infoTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
-  name: { fontSize: 15, fontWeight: '600', color: '#383432', flex: 1 },
+  infoTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 },
+  nameLine: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6 },
+  name: { fontSize: 15, fontWeight: '600', color: '#383432' },
+  dmPill: {
+    backgroundColor: '#F5EDE8', borderRadius: 4,
+    paddingHorizontal: 5, paddingVertical: 1,
+  },
+  dmPillText: { fontSize: 10, color: '#B07868', fontWeight: '600' },
   time: { fontSize: 12, color: '#CFADA3', marginLeft: 8 },
   preview: { fontSize: 13, color: '#B07868', lineHeight: 18 },
+  previewHint: { color: '#CFADA3', fontStyle: 'italic' },
   badge: {
     backgroundColor: '#C45A10', borderRadius: 10,
     minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5,
   },
   badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12, marginTop: 80 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#383432' },
   emptySub: { fontSize: 14, color: '#B07868', textAlign: 'center', lineHeight: 20 },
-  fab: {
-    position: 'absolute', bottom: 24, right: 20,
-    backgroundColor: '#C45A10', borderRadius: 24,
-    paddingHorizontal: 20, paddingVertical: 12,
-    shadowColor: '#C45A10', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35, shadowRadius: 8, elevation: 6,
+  actionBar: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    flexDirection: 'row', gap: 10,
+    backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 12,
+    borderTopWidth: 1, borderTopColor: '#F5EDE8',
+    paddingBottom: 24,
   },
-  fabText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  actionBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, height: 44, borderRadius: 10,
+  },
+  actionBtnGeneral: { backgroundColor: '#C45A10' },
+  actionBtnDm: { backgroundColor: '#FAF6F3', borderWidth: 1, borderColor: '#E8DDD6' },
+  actionBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  actionBtnDmText: { color: '#C45A10' },
 });
