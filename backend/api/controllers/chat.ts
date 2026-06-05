@@ -1,6 +1,42 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../services/db';
 import { broadcastToOrg } from '../../services/wsRooms';
+import { sendPush } from '../../services/push';
+
+async function pushChatNotification(
+  orgId: string,
+  senderId: string,
+  channel: string,
+  senderName: string,
+  body: string,
+): Promise<void> {
+  const isGeneral = channel === 'general';
+  const title = isGeneral ? 'Общий чат' : senderName;
+  const pushBody = isGeneral ? `${senderName}: ${body}` : body;
+
+  const recipients = await db.user.findMany({
+    where: {
+      organization_id: orgId,
+      id: { not: senderId },
+      is_active: true,
+      push_token: { not: null },
+    },
+    select: { id: true, push_token: true },
+  });
+
+  await Promise.allSettled(
+    recipients.map(async (u) => {
+      const result = await sendPush(u.push_token!, title, pushBody.slice(0, 200), {
+        type: 'chat:message',
+        channel,
+        channel_name: title,
+      });
+      if (!result.ok && result.code === 'DEVICE_NOT_REGISTERED') {
+        await db.user.update({ where: { id: u.id }, data: { push_token: null } });
+      }
+    }),
+  );
+}
 
 export function dmChannel(uid1: string, uid2: string): string {
   return uid1 < uid2 ? `dm:${uid1}:${uid2}` : `dm:${uid2}:${uid1}`;
@@ -156,6 +192,7 @@ export const ChatController = {
     };
 
     broadcastToOrg(org_id, payload);
+    void pushChatNotification(org_id, senderId, channel, sender?.name ?? '', body.trim());
 
     return reply.status(201).send({ data: payload.message, meta: {} });
   },

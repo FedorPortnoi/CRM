@@ -128,8 +128,8 @@ export async function notifyUnknownCallCapture(phone: string): Promise<void> {
 
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Unknown call',
-        body: `Unknown caller ${phone} - add to CRM?`,
+        title: 'Неизвестный звонок',
+        body: `Звонок с номера ${phone} — добавить в CRM?`,
         data: { type: 'call_capture', phone },
         sound: 'default',
       },
@@ -192,7 +192,7 @@ export async function scheduleTaskDueReminder(
   await Notifications.scheduleNotificationAsync({
     identifier: taskReminderIdentifier(taskId),
     content: {
-      title: 'Task Due Today',
+      title: 'Напоминание о задаче',
       body: title,
       data: { taskId },
       sound: 'default',

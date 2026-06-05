@@ -1,9 +1,7 @@
 import { RRule } from 'rrule';
-import Expo from 'expo-server-sdk';
 import { TaskStatus } from '@prisma/client';
 import { db } from './db';
-
-const expo = new Expo();
+import { sendPush } from './push';
 
 function nextOccurrence(rule: string, after: Date): Date | null {
   try {
@@ -33,16 +31,10 @@ async function runReminders(): Promise<void> {
       where: { id: task.assigned_to },
       select: { push_token: true },
     });
-    if (!user?.push_token || !Expo.isExpoPushToken(user.push_token)) continue;
-    try {
-      await expo.sendPushNotificationsAsync([{
-        to: user.push_token,
-        title: 'Reminder',
-        body: task.title,
-        data: { taskId: task.id },
-      }]);
-    } catch {
-      // best-effort
+    if (!user?.push_token) continue;
+    const result = await sendPush(user.push_token, 'Напоминание', task.title, { taskId: task.id });
+    if (!result.ok && result.code === 'DEVICE_NOT_REGISTERED') {
+      await db.user.update({ where: { id: task.assigned_to! }, data: { push_token: null } });
     }
   }
 }

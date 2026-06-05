@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Stack, useRouter } from 'expo-router';
@@ -37,6 +37,8 @@ export default function RootLayout() {
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
   const pushRegistrationAttemptRef = useRef<string | null>(null);
   const callCaptureCleanupRef = useRef<(() => void) | null>(null);
+  const handledNotifRef = useRef<string | null>(null);
+  const lastNotificationResponse = Notifications.useLastNotificationResponse();
 
   useEffect(() => {
     void initI18n('ru')
@@ -96,6 +98,26 @@ export default function RootLayout() {
       callCaptureCleanupRef.current = null;
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!lastNotificationResponse || !token || isRestoring) return;
+    const notifId = lastNotificationResponse.notification.request.identifier;
+    if (handledNotifRef.current === notifId) return;
+    handledNotifRef.current = notifId;
+
+    const data = lastNotificationResponse.notification.request.content.data as Record<string, string | undefined>;
+
+    if (data.type === 'chat:message' && data.channel) {
+      router.push({
+        pathname: '/chat/[channel]',
+        params: { channel: data.channel, name: data.channel_name ?? 'Чат' },
+      } as never);
+    } else if (data.taskId) {
+      router.push(`/task/${data.taskId}` as never);
+    } else if (data.type === 'pending_captures') {
+      router.push('/captures' as never);
+    }
+  }, [lastNotificationResponse, token, isRestoring, router]);
 
   if (isRestoring) {
     return (
