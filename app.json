@@ -19,7 +19,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.fedorportnoi.crm",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "infoPlist": {
         "CFBundleDisplayName": "4КУБ",
         "NSLocationWhenInUseUsageDescription": "CRM uses your location for field visit tracking.",
@@ -53,7 +53,10 @@
       "bundler": "metro"
     },
     "plugins": [
-      ["./plugins/withAndroidDisplayName", "4КУБ"],
+      [
+        "./plugins/withAndroidDisplayName",
+        "4КУБ"
+      ],
       "expo-router",
       "expo-font",
       "expo-secure-store",

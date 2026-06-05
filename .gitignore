@@ -27,6 +27,10 @@ coverage/
 *.ipa
 *.pem
 
+# Sensitive docs
+docs/Российские*
+docs/*доступы*
+
 # Logs
 *.log
 npm-debug.log*
