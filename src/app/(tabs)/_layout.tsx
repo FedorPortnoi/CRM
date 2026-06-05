@@ -1,13 +1,15 @@
 ﻿import { Alert, TouchableOpacity } from 'react-native';
 import { Tabs, router } from 'expo-router';
-import { CalendarDays, Kanban, LayoutDashboard, Users, CheckSquare, Plus, MoreVertical, Settings } from 'lucide-react-native';
+import { MessageSquare, Kanban, LayoutDashboard, Users, CheckSquare, Plus, MoreVertical, Settings } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { useChatStore } from '../../store/chatStore';
 
 const TEAL = '#C45A10';
 const INACTIVE = '#CFADA3';
 
 export default function TabsLayout() {
   const { t } = useTranslation();
+  const totalUnread = useChatStore((s) => s.channels.reduce((sum, c) => sum + c.unread, 0));
 
   return (
     <Tabs
@@ -103,23 +105,14 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="calendar"
+        name="chat"
         options={{
-          title: t('tabs.calendar'),
-          tabBarLabel: t('tabs.calendar'),
+          title: t('tabs.chat'),
+          tabBarLabel: t('tabs.chat'),
           tabBarIcon: ({ color, size }: { color: string | import('react-native').ColorValue; size: number }): JSX.Element => (
-            <CalendarDays color={color} size={size} />
+            <MessageSquare color={color} size={size} />
           ),
-          headerRight: (): JSX.Element => (
-            <TouchableOpacity
-              onPress={() => { router.push('/calendar/new'); }}
-              style={{ marginRight: 16, padding: 4 }}
-              accessibilityRole="button"
-              accessibilityLabel={t('calendar.newEvent')}
-            >
-              <Plus size={24} color={TEAL} />
-            </TouchableOpacity>
-          ),
+          tabBarBadge: totalUnread > 0 ? (totalUnread > 99 ? '99+' : totalUnread) : undefined,
         }}
       />
       <Tabs.Screen

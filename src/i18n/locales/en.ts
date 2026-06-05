@@ -64,6 +64,17 @@ const en = {
     messages: 'Messages',
     deals: 'Deals',
     settings: 'Settings',
+    chat: 'Chat',
+  },
+  chat: {
+    emptyTitle: 'No conversations',
+    emptySub: 'Start chatting with your team',
+    noMessages: 'No messages yet',
+    newDm: 'Message',
+    selectMember: 'Choose a team member',
+    startConversation: 'Send the first message',
+    inputPlaceholder: 'Message...',
+    generalChannel: 'General',
   },
   contacts: {
     title: 'Contacts',

@@ -26,6 +26,7 @@ import onboardingRoutes from './api/routes/onboarding';
 import exportRoutes from './api/routes/export';
 import { activitiesRoutes } from './api/routes/activities';
 import { attachmentsRoutes } from './api/routes/attachments';
+import chatRoutes from './api/routes/chat';
 import { wsRoutes } from './api/routes/ws';
 import { startScheduler } from './services/scheduler';
 
@@ -182,6 +183,7 @@ async function start() {
   await server.register(exportRoutes, { prefix: '/api/v1/export' });
   await server.register(activitiesRoutes, { prefix: '/api/v1' });
   await server.register(attachmentsRoutes, { prefix: '/api/v1' });
+  await server.register(chatRoutes, { prefix: '/api/v1/chat' });
 
   server.get('/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() };

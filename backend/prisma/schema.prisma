@@ -171,6 +171,8 @@ model User {
   activityLogs          ActivityLog[] @relation("ActivityLogUser")
   uploadedAttachments   Attachment[]  @relation("AttachmentUploader")
   verificationCodes     VerificationCode[]
+  chatMessages          ChatMessage[]      @relation("ChatMessageSender")
+  chatReadReceipts      ChatReadReceipt[]  @relation("ChatReadReceiptUser")
 }
 
 model Org {
@@ -201,6 +203,7 @@ model Org {
   auditEvents     AuditEvent[]
   activityLogs    ActivityLog[]
   attachments     Attachment[]
+  chatMessages    ChatMessage[]  @relation("ChatMessageOrg")
 
   @@map("organizations")
 }
@@ -567,4 +570,32 @@ model VerificationCode {
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id, channel])
+}
+model ChatMessage {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String   @db.Uuid
+  sender_id       String   @db.Uuid
+  channel         String
+  body            String
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Org  @relation("ChatMessageOrg", fields: [organization_id], references: [id])
+  sender       User @relation("ChatMessageSender", fields: [sender_id], references: [id])
+
+  @@index([organization_id, channel, created_at(sort: Desc)])
+}
+
+model ChatReadReceipt {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String   @db.Uuid
+  user_id         String   @db.Uuid
+  channel         String
+  last_read_at    DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  user User @relation("ChatReadReceiptUser", fields: [user_id], references: [id])
+
+  @@unique([user_id, channel])
+  @@index([organization_id, user_id])
 }

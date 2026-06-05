@@ -64,6 +64,17 @@ const ru = {
     messages: 'Сообщения',
     deals: 'Сделки',
     settings: 'Настройки',
+    chat: 'Чат',
+  },
+  chat: {
+    emptyTitle: 'Нет переписок',
+    emptySub: 'Начните общение с командой',
+    noMessages: 'Нет сообщений',
+    newDm: 'Написать',
+    selectMember: 'Выберите участника',
+    startConversation: 'Напишите первое сообщение',
+    inputPlaceholder: 'Сообщение...',
+    generalChannel: 'Общий чат',
   },
   contacts: {
     title: 'Контакты',
