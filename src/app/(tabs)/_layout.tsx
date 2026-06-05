@@ -1,8 +1,10 @@
 ﻿import { Alert, TouchableOpacity } from 'react-native';
 import { Tabs, router } from 'expo-router';
-import { MessageSquare, Kanban, LayoutDashboard, Users, CheckSquare, Plus, MoreVertical, Settings } from 'lucide-react-native';
+import { MessageSquare, Kanban, LayoutDashboard, Users, CheckSquare, Plus, MoreVertical, Settings, Bell } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../store/chatStore';
+import { useNotificationStore } from '../../store/notificationStore';
+import { useEffect } from 'react';
 
 const TEAL = '#C45A10';
 const INACTIVE = '#CFADA3';
@@ -10,6 +12,14 @@ const INACTIVE = '#CFADA3';
 export default function TabsLayout() {
   const { t } = useTranslation();
   const totalUnread = useChatStore((s) => s.channels.reduce((sum, c) => sum + c.unread, 0));
+  const notifUnread = useNotificationStore((s) => s.unreadCount);
+  const fetchUnreadCount = useNotificationStore((s) => s.fetchUnreadCount);
+
+  useEffect(() => {
+    void fetchUnreadCount();
+    const timer = setInterval(() => { void fetchUnreadCount(); }, 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <Tabs
@@ -113,6 +123,17 @@ export default function TabsLayout() {
             <MessageSquare color={color} size={size} />
           ),
           tabBarBadge: totalUnread > 0 ? (totalUnread > 99 ? '99+' : totalUnread) : undefined,
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Уведомления',
+          tabBarLabel: 'Уведомления',
+          tabBarIcon: ({ color, size }: { color: string | import('react-native').ColorValue; size: number }): JSX.Element => (
+            <Bell color={color} size={size} />
+          ),
+          tabBarBadge: notifUnread > 0 ? (notifUnread > 99 ? '99+' : notifUnread) : undefined,
         }}
       />
       <Tabs.Screen

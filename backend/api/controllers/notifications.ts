@@ -3,15 +3,9 @@ import { Expo } from 'expo-server-sdk';
 import { db } from '../../services/db';
 import { sendPush } from '../../services/push';
 
-type RegisterTokenBody = {
-  token: string;
-};
-
-type SendNotificationBody = {
-  user_id: string;
-  title: string;
-  body: string;
-};
+type RegisterTokenBody = { token: string };
+type SendNotificationBody = { user_id: string; title: string; body: string };
+type IdParams = { id: string };
 
 async function registerToken(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const { token } = request.body as RegisterTokenBody;
@@ -119,7 +113,66 @@ async function sendNotification(request: FastifyRequest, reply: FastifyReply): P
   });
 }
 
+async function list(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const { page = 1, per_page = 30 } = request.query as { page?: number; per_page?: number };
+
+  const where = { recipient_id: request.user.sub, organization_id: request.user.org_id };
+  const [notifications, total, unread] = await Promise.all([
+    db.notification.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+      skip: (page - 1) * per_page,
+      take: per_page,
+    }),
+    db.notification.count({ where }),
+    db.notification.count({ where: { ...where, is_read: false } }),
+  ]);
+
+  reply.send({ data: notifications, meta: { total, page, per_page, unread } });
+}
+
+async function markRead(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const { id } = request.params as IdParams;
+
+  const n = await db.notification.findFirst({
+    where: { id, recipient_id: request.user.sub },
+  });
+
+  if (!n) {
+    reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Notification not found' } });
+    return;
+  }
+
+  await db.notification.update({
+    where: { id },
+    data: { is_read: true, read_at: new Date() },
+  });
+
+  reply.send({ data: { ok: true }, meta: {} });
+}
+
+async function markAllRead(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const { count } = await db.notification.updateMany({
+    where: { recipient_id: request.user.sub, organization_id: request.user.org_id, is_read: false },
+    data: { is_read: true, read_at: new Date() },
+  });
+
+  reply.send({ data: { marked: count }, meta: {} });
+}
+
+async function unreadCount(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const count = await db.notification.count({
+    where: { recipient_id: request.user.sub, organization_id: request.user.org_id, is_read: false },
+  });
+
+  reply.send({ data: { count }, meta: {} });
+}
+
 export const NotificationsController = {
   registerToken,
   sendNotification,
+  list,
+  markRead,
+  markAllRead,
+  unreadCount,
 };

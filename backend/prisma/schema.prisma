@@ -173,6 +173,7 @@ model User {
   verificationCodes     VerificationCode[]
   chatMessages          ChatMessage[]      @relation("ChatMessageSender")
   chatReadReceipts      ChatReadReceipt[]  @relation("ChatReadReceiptUser")
+  notifications         Notification[]     @relation("NotificationRecipient")
 }
 
 model Org {
@@ -204,6 +205,7 @@ model Org {
   activityLogs    ActivityLog[]
   attachments     Attachment[]
   chatMessages    ChatMessage[]  @relation("ChatMessageOrg")
+  notifications   Notification[] @relation("NotificationOrg")
 
   @@map("organizations")
 }
@@ -598,4 +600,37 @@ model ChatReadReceipt {
 
   @@unique([user_id, channel])
   @@index([organization_id, user_id])
+}
+
+model Notification {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String    @db.Uuid
+  recipient_id    String    @db.Uuid
+  event_type      String
+  role            String
+  title           String
+  body            String
+  entity_type     String
+  entity_id       String    @db.Uuid
+  data            Json?
+  is_read         Boolean   @default(false)
+  read_at         DateTime?
+  created_at      DateTime  @default(now())
+
+  organization Org  @relation("NotificationOrg", fields: [organization_id], references: [id])
+  recipient    User @relation("NotificationRecipient", fields: [recipient_id], references: [id])
+
+  @@index([recipient_id, is_read, created_at(sort: Desc)])
+  @@index([organization_id, created_at])
+}
+
+model NotificationSent {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_type   String
+  entity_id    String   @db.Uuid
+  recipient_id String   @db.Uuid
+  created_at   DateTime @default(now())
+
+  @@unique([event_type, entity_id, recipient_id])
+  @@index([created_at])
 }

@@ -5,6 +5,7 @@ import { evaluateWorkflows } from '../../services/workflows';
 import { getContactIdsLastContactedBefore, getLastContactedMap } from '../../services/lastContacted';
 import { encryptField, decryptField } from '../../services/encryption';
 import { logActivity } from './activities';
+import { dispatchNotification, contactCtx } from '../../services/notificationEngine';
 
 type ContactBody = {
   first_name: string;
@@ -581,6 +582,13 @@ export const ContactsController = {
     });
 
     void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'contact', entityId: contact.id, action: 'created' });
+
+    if (contact.assigned_to && contact.assigned_to !== request.user.sub) {
+      void contactCtx(contact.id, request.user.sub).then((ctx) => {
+        if (ctx) void dispatchNotification({ eventType: 'contact.assigned', orgId: request.user.org_id, contact: ctx });
+      });
+    }
+
     return reply.code(201).send({ data: decryptContact(contact), meta: {} });
   },
 

@@ -3,6 +3,7 @@ import { DealStatus, Prisma, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
 import { evaluateWorkflows } from '../../services/workflows';
 import { logActivity } from './activities';
+import { dispatchNotification, dealCtx } from '../../services/notificationEngine';
 
 // ─── Local request types ──────────────────────────────────────────────────────
 
@@ -261,6 +262,13 @@ async function create(
   });
 
   void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: deal.id, action: 'created' });
+
+  if (deal.assigned_to) {
+    void dealCtx(deal.id).then((ctx) => {
+      if (ctx) void dispatchNotification({ eventType: 'deal.assigned', orgId: request.user.org_id, deal: ctx });
+    });
+  }
+
   reply.status(201).send({ data: deal, meta: {} });
 }
 
@@ -457,6 +465,11 @@ async function moveStage(
   });
 
   void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: 'stage_changed', changes: { stage_id } });
+
+  void dealCtx(updated.id, updated.stage?.name).then((ctx) => {
+    if (ctx) void dispatchNotification({ eventType: 'deal.stage_changed', orgId: request.user.org_id, deal: ctx });
+  });
+
   reply.send({ data: updated, meta: {} });
 }
 
@@ -498,6 +511,10 @@ async function markWon(
     triggerRecordId: updated.id,
   });
 
+  void dealCtx(updated.id).then((ctx) => {
+    if (ctx) void dispatchNotification({ eventType: 'deal.won', orgId: request.user.org_id, deal: ctx });
+  });
+
   reply.send({ data: updated, meta: {} });
 }
 
@@ -532,7 +549,12 @@ async function markLost(
     include: dealInclude,
   });
 
-  void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: updated.status === DealStatus.won ? 'won' : 'lost' });
+  void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: 'lost' });
+
+  void dealCtx(updated.id).then((ctx) => {
+    if (ctx) void dispatchNotification({ eventType: 'deal.lost', orgId: request.user.org_id, deal: ctx });
+  });
+
   reply.send({ data: updated, meta: {} });
 }
 

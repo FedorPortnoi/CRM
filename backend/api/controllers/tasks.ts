@@ -3,6 +3,7 @@ import { TaskPriority, TaskStatus, Prisma, WorkflowTrigger } from '@prisma/clien
 import { db } from '../../services/db';
 import { evaluateWorkflows } from '../../services/workflows';
 import { logActivity } from './activities';
+import { dispatchNotification, taskCtx } from '../../services/notificationEngine';
 
 // ─── Local request types ──────────────────────────────────────────────────────
 
@@ -175,6 +176,11 @@ async function create(
   });
 
   void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'task', entityId: task.id, action: 'created' });
+
+  void taskCtx(task.id).then((ctx) => {
+    if (ctx) void dispatchNotification({ eventType: 'task.assigned', orgId: request.user.org_id, task: ctx });
+  });
+
   reply.status(201).send({ data: task, meta: {} });
 }
 
@@ -279,6 +285,13 @@ async function update(
   }
 
   void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'task', entityId: updatedTask.id, action: 'updated' });
+
+  if (body.assigned_to && body.assigned_to !== task.assigned_to) {
+    void taskCtx(updatedTask.id).then((ctx) => {
+      if (ctx) void dispatchNotification({ eventType: 'task.reassigned', orgId: request.user.org_id, task: ctx });
+    });
+  }
+
   reply.send({ data: updatedTask, meta: {} });
 }
 
@@ -336,6 +349,13 @@ async function complete(
   }
 
   void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'task', entityId: updatedTask.id, action: updatedTask.status === TaskStatus.done ? 'completed' : 'updated' });
+
+  if (updatedTask.status === TaskStatus.done && task.status !== TaskStatus.done) {
+    void taskCtx(updatedTask.id).then((ctx) => {
+      if (ctx) void dispatchNotification({ eventType: 'task.completed', orgId: request.user.org_id, task: ctx });
+    });
+  }
+
   reply.send({ data: updatedTask, meta: {} });
 }
 

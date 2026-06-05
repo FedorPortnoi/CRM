@@ -1,7 +1,8 @@
 import { RRule } from 'rrule';
-import { TaskStatus } from '@prisma/client';
+import { DealStatus, TaskStatus } from '@prisma/client';
 import { db } from './db';
 import { sendPush } from './push';
+import { dispatchNotification, taskCtx, dealCtx } from './notificationEngine';
 
 function nextOccurrence(rule: string, after: Date): Date | null {
   try {
@@ -136,10 +137,90 @@ async function cleanupStaleUnverifiedAccounts(): Promise<void> {
   }
 }
 
+async function runDeadlineNotifications(): Promise<void> {
+  const now = new Date();
+
+  // Task: deadline in 24h window (23h to 25h from now)
+  const tasks24h = await db.task.findMany({
+    where: {
+      due_date: { gte: new Date(now.getTime() + 23 * 3600_000), lte: new Date(now.getTime() + 25 * 3600_000) },
+      status: { notIn: [TaskStatus.done, TaskStatus.cancelled] },
+    },
+    select: { id: true, organization_id: true },
+  });
+  for (const t of tasks24h) {
+    const ctx = await taskCtx(t.id);
+    if (ctx) {
+      await dispatchNotification({ eventType: 'task.deadline_24h', orgId: t.organization_id, task: ctx });
+    }
+  }
+
+  // Task: deadline in 2h window (1h45m to 2h15m from now)
+  const tasks2h = await db.task.findMany({
+    where: {
+      due_date: { gte: new Date(now.getTime() + 105 * 60_000), lte: new Date(now.getTime() + 135 * 60_000) },
+      status: { notIn: [TaskStatus.done, TaskStatus.cancelled] },
+    },
+    select: { id: true, organization_id: true },
+  });
+  for (const t of tasks2h) {
+    const ctx = await taskCtx(t.id);
+    if (ctx) {
+      await dispatchNotification({ eventType: 'task.deadline_2h', orgId: t.organization_id, task: ctx });
+    }
+  }
+
+  // Task: overdue (due_date < now, not done, not cancelled, not already notified twice)
+  const overdueTasks = await db.task.findMany({
+    where: {
+      due_date: { lt: now, gte: new Date(now.getTime() - 24 * 3600_000) },
+      status: { notIn: [TaskStatus.done, TaskStatus.cancelled] },
+    },
+    select: { id: true, organization_id: true },
+  });
+  for (const t of overdueTasks) {
+    const ctx = await taskCtx(t.id);
+    if (ctx) {
+      await dispatchNotification({ eventType: 'task.overdue', orgId: t.organization_id, task: ctx });
+    }
+  }
+
+  // Deal: closing in 7 days (6.5d to 7.5d from now)
+  const deals7d = await db.deal.findMany({
+    where: {
+      expected_close: { gte: new Date(now.getTime() + 6.5 * 86_400_000), lte: new Date(now.getTime() + 7.5 * 86_400_000) },
+      status: DealStatus.open,
+    },
+    select: { id: true, organization_id: true },
+  });
+  for (const d of deals7d) {
+    const ctx = await dealCtx(d.id);
+    if (ctx) {
+      await dispatchNotification({ eventType: 'deal.close_7d', orgId: d.organization_id, deal: ctx });
+    }
+  }
+
+  // Deal: closing in 1 day (20h to 28h from now)
+  const deals1d = await db.deal.findMany({
+    where: {
+      expected_close: { gte: new Date(now.getTime() + 20 * 3600_000), lte: new Date(now.getTime() + 28 * 3600_000) },
+      status: DealStatus.open,
+    },
+    select: { id: true, organization_id: true },
+  });
+  for (const d of deals1d) {
+    const ctx = await dealCtx(d.id);
+    if (ctx) {
+      await dispatchNotification({ eventType: 'deal.close_1d', orgId: d.organization_id, deal: ctx });
+    }
+  }
+}
+
 export function startScheduler(): void {
   setInterval(() => {
     void runReminders().catch(console.error);
     void runRecurrence().catch(console.error);
+    void runDeadlineNotifications().catch(console.error);
   }, 60_000);
 
   // Hourly cleanup of orgs whose owner never verified within 24 h
