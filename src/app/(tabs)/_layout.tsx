@@ -60,6 +60,7 @@ export default function TabsLayout() {
                 Alert.alert(t('contacts.add'), undefined, [
                   { text: t('contacts.new'), onPress: () => { router.push('/contact/new'); } },
                   { text: t('contacts.scanCard'), onPress: () => { router.push('/contact/scan-card'); } },
+                  { text: '📲 Импорт из приложений', onPress: () => { router.push('/import-hub' as never); } },
                   { text: t('contacts.importPhone'), onPress: () => { router.push('/contact/import-phone'); } },
                   { text: t('contacts.importCsv'), onPress: () => { router.push('/contact/import-csv'); } },
                   { text: t('common.cancel'), style: 'cancel' },
