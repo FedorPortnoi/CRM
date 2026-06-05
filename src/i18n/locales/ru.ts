@@ -65,6 +65,7 @@ const ru = {
     deals: 'Сделки',
     settings: 'Настройки',
     chat: 'Чат',
+    notifications: 'Уведомления',
   },
   chat: {
     emptyTitle: 'Нет переписок',

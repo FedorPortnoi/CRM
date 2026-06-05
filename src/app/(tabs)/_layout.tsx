@@ -128,8 +128,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="notifications"
         options={{
-          title: 'Уведомления',
-          tabBarLabel: 'Уведомления',
+          title: t('tabs.notifications'),
+          tabBarLabel: t('tabs.notifications'),
           tabBarIcon: ({ color, size }: { color: string | import('react-native').ColorValue; size: number }): JSX.Element => (
             <Bell color={color} size={size} />
           ),

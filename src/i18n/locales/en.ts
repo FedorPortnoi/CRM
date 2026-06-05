@@ -65,6 +65,7 @@ const en = {
     deals: 'Deals',
     settings: 'Settings',
     chat: 'Chat',
+    notifications: 'Notifications',
   },
   chat: {
     emptyTitle: 'No conversations',
