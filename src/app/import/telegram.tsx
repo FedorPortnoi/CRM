@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
+  ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Phone, Shield } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 
-type Phase = 'phone' | 'code' | 'importing' | 'done';
+type Phase = 'phone' | 'code' | 'loading' | 'done';
 
 export default function TelegramImportScreen() {
   const router = useRouter();
@@ -17,65 +16,56 @@ export default function TelegramImportScreen() {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [phoneCodeHash, setPhoneCodeHash] = useState('');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ imported: number; total: number } | null>(null);
+  const [imported, setImported] = useState(0);
 
-  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? ''}` };
+  const h = { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? ''}` };
 
   const sendCode = async () => {
     if (!phone.trim()) { setError('Введите номер телефона'); return; }
-    setLoading(true); setError('');
+    setError('');
+    setPhase('loading');
     try {
       const res = await fetch(`${API_URL}/import/telegram/send-code`, {
-        method: 'POST', headers, body: JSON.stringify({ phone: phone.trim() }),
+        method: 'POST', headers: h, body: JSON.stringify({ phone: phone.trim() }),
       });
       const json = await res.json() as { data?: { phoneCodeHash: string }; error?: { message: string } };
-      if (!res.ok) { setError(json.error?.message ?? 'Ошибка'); return; }
+      if (!res.ok) { setError(json.error?.message ?? 'Ошибка'); setPhase('phone'); return; }
       setPhoneCodeHash(json.data!.phoneCodeHash);
       setPhase('code');
-    } catch { setError('Нет соединения'); } finally { setLoading(false); }
+    } catch { setError('Нет соединения'); setPhase('phone'); }
   };
 
   const verify = async () => {
     if (!code.trim()) { setError('Введите код'); return; }
-    setLoading(true); setError(''); setPhase('importing');
+    setError('');
+    setPhase('loading');
     try {
       const res = await fetch(`${API_URL}/import/telegram/verify`, {
-        method: 'POST', headers,
+        method: 'POST', headers: h,
         body: JSON.stringify({ phone: phone.trim(), code: code.trim(), phoneCodeHash }),
       });
-      const json = await res.json() as { data?: { imported: number; total: number }; error?: { message: string } };
-      if (!res.ok) {
-        setError(json.error?.message ?? 'Неверный код');
-        setPhase('code');
-        return;
-      }
-      setResult(json.data!);
+      const json = await res.json() as { data?: { imported: number }; error?: { message: string } };
+      if (!res.ok) { setError(json.error?.message ?? 'Неверный код'); setPhase('code'); return; }
+      setImported(json.data!.imported);
       setPhase('done');
-    } catch { setError('Нет соединения'); setPhase('code'); } finally { setLoading(false); }
+    } catch { setError('Нет соединения'); setPhase('code'); }
   };
 
-  if (phase === 'importing') {
+  if (phase === 'loading') {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#2AABEE" />
-        <Text style={styles.loadingText}>Импортируем контакты из Telegram...</Text>
       </View>
     );
   }
 
-  if (phase === 'done' && result) {
+  if (phase === 'done') {
     return (
       <View style={styles.center}>
-        <View style={styles.successIcon}>
-          <Shield size={40} color="#2AABEE" strokeWidth={1.5} />
-        </View>
-        <Text style={styles.doneTitle}>Готово!</Text>
-        <Text style={styles.doneSub}>
-          Импортировано {result.imported} из {result.total} контактов
-        </Text>
-        <TouchableOpacity style={styles.btn} onPress={() => router.push('/(tabs)/contacts' as never)}>
+        <Text style={styles.doneEmoji}>✓</Text>
+        <Text style={styles.doneTitle}>Импортировано {imported} контактов</Text>
+        <TouchableOpacity style={[styles.btn, { backgroundColor: '#2AABEE' }]} onPress={() => router.push('/(tabs)/contacts' as never)}>
           <Text style={styles.btnText}>Перейти к контактам</Text>
         </TouchableOpacity>
       </View>
@@ -83,96 +73,79 @@ export default function TelegramImportScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.iconHeader}>
-          <View style={[styles.iconCircle, { backgroundColor: '#2AABEE' }]}>
-            <Phone size={28} color="#fff" strokeWidth={2} />
-          </View>
-          <Text style={styles.title}>Импорт из Telegram</Text>
-          <Text style={styles.sub}>
-            {phase === 'phone'
-              ? 'Введите номер телефона, привязанный к Telegram. Вы получите код подтверждения.'
-              : `Код отправлен на ${phone}. Проверьте Telegram или SMS.`}
-          </Text>
-        </View>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={styles.content}>
+        <Text style={styles.title}>
+          {phase === 'phone' ? 'Ваш номер Telegram' : 'Код из Telegram'}
+        </Text>
+        <Text style={styles.sub}>
+          {phase === 'phone'
+            ? 'Код придёт в приложение Telegram'
+            : `Код отправлен на ${phone}`}
+        </Text>
 
         {phase === 'phone' && (
-          <>
-            <TextInput
-              style={styles.input}
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="+7 999 123 45 67"
-              placeholderTextColor="#CFADA3"
-              keyboardType="phone-pad"
-              autoFocus
-            />
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-            <TouchableOpacity style={styles.btn} onPress={() => void sendCode()} disabled={loading}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Получить код</Text>}
-            </TouchableOpacity>
-          </>
+          <TextInput
+            style={styles.input}
+            value={phone}
+            onChangeText={setPhone}
+            placeholder="+7 999 000 00 00"
+            placeholderTextColor="#CFADA3"
+            keyboardType="phone-pad"
+            autoFocus
+          />
         )}
 
         {phase === 'code' && (
-          <>
-            <TextInput
-              style={[styles.input, styles.codeInput]}
-              value={code}
-              onChangeText={setCode}
-              placeholder="12345"
-              placeholderTextColor="#CFADA3"
-              keyboardType="number-pad"
-              maxLength={8}
-              autoFocus
-            />
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-            <TouchableOpacity style={styles.btn} onPress={() => void verify()} disabled={loading}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Импортировать контакты</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.linkBtn} onPress={() => { setPhase('phone'); setCode(''); setError(''); }}>
-              <Text style={styles.linkBtnText}>← Изменить номер</Text>
-            </TouchableOpacity>
-          </>
+          <TextInput
+            style={[styles.input, styles.codeInput]}
+            value={code}
+            onChangeText={setCode}
+            placeholder="·····"
+            placeholderTextColor="#CFADA3"
+            keyboardType="number-pad"
+            maxLength={8}
+            autoFocus
+          />
         )}
 
-        <View style={styles.notice}>
-          <Shield size={14} color="#CFADA3" />
-          <Text style={styles.noticeText}>
-            Мы используем официальный Telegram API. Пароль и переписка не передаются.
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <TouchableOpacity
+          style={[styles.btn, { backgroundColor: '#2AABEE' }]}
+          onPress={phase === 'phone' ? () => void sendCode() : () => void verify()}
+        >
+          <Text style={styles.btnText}>
+            {phase === 'phone' ? 'Получить код' : 'Импортировать'}
           </Text>
-        </View>
-      </ScrollView>
+        </TouchableOpacity>
+
+        {phase === 'code' && (
+          <TouchableOpacity style={styles.back} onPress={() => { setPhase('phone'); setCode(''); setError(''); }}>
+            <Text style={styles.backText}>← Изменить номер</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FAF6F3' },
-  content: { padding: 24, paddingTop: 32 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: '#FAF6F3' },
-  iconHeader: { alignItems: 'center', marginBottom: 32 },
-  iconCircle: { width: 72, height: 72, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  title: { fontSize: 22, fontWeight: '800', color: '#383432', marginBottom: 8, textAlign: 'center' },
-  sub: { fontSize: 14, color: '#B07868', textAlign: 'center', lineHeight: 20 },
+  content: { flex: 1, padding: 24, justifyContent: 'center' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F3', gap: 16 },
+  title: { fontSize: 24, fontWeight: '800', color: '#383432', marginBottom: 6 },
+  sub: { fontSize: 14, color: '#B07868', marginBottom: 28, lineHeight: 20 },
   input: {
-    height: 52, borderWidth: 1, borderColor: '#E8DDD6', borderRadius: 12,
-    backgroundColor: '#fff', paddingHorizontal: 16, fontSize: 16, color: '#383432', marginBottom: 12,
+    height: 54, borderWidth: 1, borderColor: '#E8DDD6', borderRadius: 12,
+    backgroundColor: '#fff', paddingHorizontal: 16, fontSize: 17, color: '#383432', marginBottom: 12,
   },
-  codeInput: { fontSize: 28, fontWeight: '700', textAlign: 'center', letterSpacing: 8 },
-  btn: {
-    height: 52, backgroundColor: '#2AABEE', borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 12,
-  },
+  codeInput: { fontSize: 30, fontWeight: '700', textAlign: 'center', letterSpacing: 10 },
+  btn: { height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  linkBtn: { alignItems: 'center', paddingVertical: 12 },
-  linkBtnText: { color: '#B07868', fontSize: 14 },
-  error: { color: '#ef4444', fontSize: 13, marginBottom: 8, textAlign: 'center' },
-  notice: { flexDirection: 'row', gap: 8, marginTop: 24, alignItems: 'flex-start' },
-  noticeText: { flex: 1, fontSize: 12, color: '#CFADA3', lineHeight: 16 },
-  loadingText: { marginTop: 16, fontSize: 16, color: '#383432', fontWeight: '600' },
-  successIcon: { width: 80, height: 80, borderRadius: 20, backgroundColor: '#EBF8FF', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  doneTitle: { fontSize: 24, fontWeight: '800', color: '#383432', marginBottom: 8 },
-  doneSub: { fontSize: 15, color: '#B07868', marginBottom: 32, textAlign: 'center' },
+  back: { alignItems: 'center', paddingVertical: 10 },
+  backText: { color: '#B07868', fontSize: 14 },
+  error: { color: '#ef4444', fontSize: 13, marginBottom: 10, textAlign: 'center' },
+  doneEmoji: { fontSize: 52, color: '#2AABEE', fontWeight: '700' },
+  doneTitle: { fontSize: 18, fontWeight: '700', color: '#383432' },
 });

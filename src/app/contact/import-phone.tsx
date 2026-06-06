@@ -54,7 +54,7 @@ function mapToPhoneContact(contact: Contacts.ExistingContact): PhoneContact {
   const fallbackName: string = [firstName, lastName]
     .filter((namePart: string): boolean => namePart.length > 0)
     .join(' ');
-  let displayName: string = 'Unknown';
+  let displayName: string = 'Контакт';
 
   if (trimmedName.length > 0) {
     displayName = trimmedName;
@@ -79,7 +79,7 @@ function mapToPhoneContact(contact: Contacts.ExistingContact): PhoneContact {
 function buildContactBody(contact: PhoneContact): ContactCreateBody {
   const displayNameParts: string[] = contact.displayName.split(' ');
   const displayNameIsFallback = contact.displayName === contact.phone || contact.displayName === contact.email;
-  const firstName: string = contact.firstName || (!displayNameIsFallback ? displayNameParts[0] : '') || 'Unknown';
+  const firstName: string = contact.firstName || (!displayNameIsFallback ? displayNameParts[0] : '') || 'Контакт';
   const lastName: string | null = contact.lastName
     ? contact.lastName
     : !displayNameIsFallback && contact.displayName.includes(' ')
@@ -142,7 +142,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
         .map((contact: Contacts.ExistingContact): PhoneContact => mapToPhoneContact(contact))
         .filter(
           (contact: PhoneContact): boolean =>
-            !(contact.displayName === 'Unknown' && contact.phone === null && contact.email === null),
+            !(contact.displayName === 'Контакт' && contact.phone === null && contact.email === null),
         );
 
       setDeviceContacts(mappedContacts);
@@ -233,12 +233,12 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
 
     const message: string =
       importedCount > 0 && failedCount === 0
-        ? `${importedCount} contact(s) imported successfully`
+        ? `Импортировано ${importedCount} контактов`
         : importedCount > 0
-          ? `${importedCount} imported, ${failedCount} failed`
-          : 'No contacts were imported';
+          ? `Импортировано ${importedCount}, ошибок ${failedCount}`
+          : 'Контакты не импортированы';
 
-    Alert.alert('Import Complete', message, [
+    Alert.alert('Готово', message, [
       {
         text: 'OK',
         onPress: (): void => {
@@ -290,7 +290,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
 
     return (
       <View style={styles.centeredContainer}>
-        <Text style={styles.errorText}>Contacts access is required to import from your phone.</Text>
+        <Text style={styles.errorText}>Для импорта контактов необходим доступ к телефонной книге.</Text>
         <TouchableOpacity
           style={styles.settingsButton}
           onPress={() => {
@@ -303,7 +303,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
           accessibilityRole="button"
         >
           <Text style={styles.settingsButtonText}>
-            {canAskContactsPermissionAgain ? 'Try Again' : 'Open Settings'}
+            {canAskContactsPermissionAgain ? 'Повторить' : 'Открыть настройки'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -323,7 +323,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
       <View style={styles.centeredContainer}>
         <ActivityIndicator size="large" color="#C4704F" />
         <Text style={styles.progressText}>
-          Importing {progress.done} of {progress.total}...
+          Импортируем {progress.done} из {progress.total}...
         </Text>
       </View>
     );
@@ -352,7 +352,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No contacts found</Text>
+            <Text style={styles.emptyStateText}>Контакты не найдены</Text>
           </View>
         }
       />
@@ -364,7 +364,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
           }}
           accessibilityRole="button"
         >
-          <Text style={styles.cancelButtonText}>Cancel</Text>
+          <Text style={styles.cancelButtonText}>Отмена</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
@@ -377,7 +377,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
           disabled={selectedIds.length === 0}
           accessibilityRole="button"
         >
-          <Text style={styles.importButtonText}>Import ({selectedIds.length})</Text>
+          <Text style={styles.importButtonText}>Импортировать ({selectedIds.length})</Text>
         </TouchableOpacity>
       </View>
     </View>
