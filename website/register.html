@@ -6,7 +6,7 @@
   <title>Регистрация — КУБ CRM</title>
   <meta name="description" content="Создайте аккаунт в КУБ CRM и начните управлять клиентами и продажами.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23C45A10'/><text y='23' x='5' font-size='20' font-weight='800' fill='white' font-family='system-ui'>К</text></svg>">
-  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/main.css?v=2">
 </head>
 <body>
 
@@ -156,7 +156,7 @@
     btn.innerHTML = '<span class="spinner"></span>';
 
     try {
-      const res = await fetch(API + '/auth/register', {
+      const res = await fetch(API + '/auth/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, org_name, email, phone, password }),

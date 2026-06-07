@@ -7,7 +7,7 @@ import { useNotificationStore } from '../../store/notificationStore';
 import { useEffect } from 'react';
 
 const TEAL = '#C45A10';
-const INACTIVE = '#CFADA3';
+const INACTIVE = '#7A6560';
 
 export default function TabsLayout() {
   const { t } = useTranslation();
@@ -28,8 +28,13 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: INACTIVE,
         tabBarStyle: {
           backgroundColor: '#ffffff',
-          borderTopColor: '#FAF6F3',
+          borderTopColor: '#D9C4BC',
           borderTopWidth: 1,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 4,
+          elevation: 8,
         },
         headerShown: true,
         headerTintColor: TEAL,
