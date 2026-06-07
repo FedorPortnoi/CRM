@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Platform,
   StyleSheet,
-  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -161,24 +160,6 @@ export default function LoginScreen() {
             <Text style={styles.errorText}>{error}</Text>
           )}
 
-          {!isJoin && (
-            <>
-              <View style={styles.dividerRow}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>{t('auth.orDivider')}</Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              <TouchableOpacity
-                style={styles.registerLink}
-                onPress={() => { void Linking.openURL('https://4kub.ru/register'); }}
-                activeOpacity={0.7}
-                accessibilityRole="link"
-              >
-                <Text style={styles.registerLinkText}>{t('auth.newHereCreate')}</Text>
-              </TouchableOpacity>
-            </>
-          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -264,9 +245,4 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
   errorText: { color: '#ef4444', fontSize: 14, textAlign: 'center', marginTop: 12 },
-  dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#E8DDD6' },
-  dividerText: { color: '#CFADA3', fontSize: 13, marginHorizontal: 12 },
-  registerLink: { minHeight: 44, justifyContent: 'center', alignItems: 'center' },
-  registerLinkText: { color: '#C45A10', fontSize: 14, fontWeight: '500' },
 });
