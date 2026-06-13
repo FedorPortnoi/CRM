@@ -15,6 +15,7 @@ import { Plus, Workflow as WorkflowIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import HomeBackButton from '../../components/HomeBackButton';
 
 interface WorkflowItem {
   id: string;
@@ -159,7 +160,10 @@ export default function WorkflowsScreen(): JSX.Element {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.header}>
-          <Text style={styles.title}>{t('workflows.title')}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <HomeBackButton />
+            <Text style={styles.title}>{t('workflows.title')}</Text>
+          </View>
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => { router.push('/workflows/new' as never); }}
@@ -181,7 +185,10 @@ export default function WorkflowsScreen(): JSX.Element {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Text style={styles.title}>{t('workflows.title')}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <HomeBackButton />
+          <Text style={styles.title}>{t('workflows.title')}</Text>
+        </View>
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => { router.push('/workflows/new' as never); }}

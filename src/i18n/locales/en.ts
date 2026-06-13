@@ -409,6 +409,7 @@ const en = {
   common: {
     save: 'Save',
     cancel: 'Cancel',
+    menu: 'Menu',
     delete: 'Delete',
     edit: 'Edit',
     search: 'Search',

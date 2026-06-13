@@ -143,7 +143,7 @@ export default function ContactsImportScreen(): JSX.Element {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.replace('/' as never)} accessibilityRole="button" style={styles.backBtn}>
           <Text style={styles.backText}>{'‹ ' + t('common.back')}</Text>
         </TouchableOpacity>
         <Text style={styles.title}>{t('contacts.importCsv')}</Text>

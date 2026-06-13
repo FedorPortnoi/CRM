@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
 import { Calendar } from 'react-native-calendars';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
@@ -155,6 +156,7 @@ function buildPatch(current: TaskForm, original: TaskForm): TaskPatch {
 
 export default function EditTaskScreen(): JSX.Element {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
   const user = useUserStore((s) => s.user);
@@ -410,7 +412,7 @@ export default function EditTaskScreen(): JSX.Element {
             </View>
 
             <Modal animationType="slide" visible={showCalendar} onRequestClose={() => setShowCalendar(false)}>
-              <View style={styles.modalHeader}>
+              <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
                 <Text style={styles.modalTitle}>{t('tasks.selectDate')}</Text>
                 <TouchableOpacity onPress={() => setShowCalendar(false)}>
                   <Text style={styles.modalDone}>{t('tasks.done')}</Text>
@@ -442,7 +444,7 @@ export default function EditTaskScreen(): JSX.Element {
                 </TouchableOpacity>
               )}
               <Modal animationType="slide" visible={showReminderCalendar} onRequestClose={() => setShowReminderCalendar(false)}>
-                <View style={styles.modalHeader}>
+                <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
                   <Text style={styles.modalTitle}>{t('tasks.reminderDate')}</Text>
                   <TouchableOpacity onPress={() => setShowReminderCalendar(false)}>
                     <Text style={styles.modalDone}>{t('tasks.done')}</Text>

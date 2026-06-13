@@ -11,6 +11,7 @@ import { queryClient, asyncStoragePersister } from '../utils/queryClient';
 import OfflineBanner from '../components/OfflineBanner';
 import { ConflictToast } from '../components/ConflictToast';
 import { OnboardingWalkthrough } from '../components/OnboardingWalkthrough';
+import NavHeader from '../components/NavHeader';
 import { registerBackgroundSync } from '../utils/backgroundSync';
 import { initCallCapture } from '../utils/callCapture';
 import { useOnboardingStore } from '../store/onboardingStore';
@@ -136,12 +137,24 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <StatusBar style="dark" />
         <OfflineBanner />
-        <Stack screenOptions={{ headerShown: false }}>
+        <Stack
+          screenOptions={{
+            headerShown: true,
+            header: ({ options }) => (
+              <NavHeader title={options.title} headerRight={options.headerRight} />
+            ),
+          }}
+        >
+          {/* Screens that manage their own full-screen UI — no global header */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="register" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ headerShown: false }} />
           <Stack.Screen name="language-select" options={{ headerShown: false }} />
+          <Stack.Screen name="set-password" options={{ headerShown: false }} />
+          <Stack.Screen name="join-company" options={{ headerShown: false }} />
+          <Stack.Screen name="contacts/import" options={{ headerShown: false }} />
+          <Stack.Screen name="workflows/index" options={{ headerShown: false }} />
         </Stack>
         <OnboardingWalkthrough />
         <ConflictToast />

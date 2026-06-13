@@ -5,9 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../store/chatStore';
 import { useNotificationStore } from '../../store/notificationStore';
 import { useEffect } from 'react';
+import NavHeader from '../../components/NavHeader';
 
 const TEAL = '#C45A10';
-const INACTIVE = '#7A6560';
 
 export default function TabsLayout() {
   const { t } = useTranslation();
@@ -23,22 +23,15 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      tabBar={() => null}
       screenOptions={{
-        tabBarActiveTintColor: TEAL,
-        tabBarInactiveTintColor: INACTIVE,
-        tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopColor: '#D9C4BC',
-          borderTopWidth: 1,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.06,
-          shadowRadius: 4,
-          elevation: 8,
-        },
         headerShown: true,
-        headerTintColor: TEAL,
-        headerStyle: { backgroundColor: '#ffffff' },
+        header: ({ options, route }) => (
+          <NavHeader
+            title={(options.title as string | undefined) ?? route.name}
+            headerRight={options.headerRight}
+          />
+        ),
       }}
     >
       <Tabs.Screen
@@ -151,6 +144,10 @@ export default function TabsLayout() {
             <Settings color={color} size={size} />
           ),
         }}
+      />
+      <Tabs.Screen
+        name="calendar"
+        options={{ title: t('tabs.calendar') }}
       />
     </Tabs>
   );

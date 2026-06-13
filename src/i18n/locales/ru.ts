@@ -409,6 +409,7 @@ const ru = {
   common: {
     save: 'Сохранить',
     cancel: 'Отмена',
+    menu: 'Меню',
     delete: 'Удалить',
     edit: 'Редактировать',
     search: 'Поиск',
