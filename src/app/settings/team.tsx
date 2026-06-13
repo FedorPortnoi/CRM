@@ -13,9 +13,15 @@ type Role = 'owner' | 'admin' | 'member' | 'viewer';
 
 interface OrgMember {
   id: string;
-  email: string;
+  email: string | null;
+  username: string | null;
   name: string;
   role: Role;
+}
+
+interface CompanyCode {
+  company_code: string;
+  expires_at: string;
 }
 
 const ROLE_COLORS: Record<Role, string> = {
@@ -40,11 +46,11 @@ export default function TeamScreen(): JSX.Element {
   const queryClient = useQueryClient();
 
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteName, setInviteName] = useState('');
+  const [inviteFirstName, setInviteFirstName] = useState('');
+  const [inviteLastName, setInviteLastName] = useState('');
   const [inviteRole, setInviteRole] = useState<Role>('member');
 
-  const [credentials, setCredentials] = useState<{ name: string; email: string; tempPassword: string } | null>(null);
+  const [credentials, setCredentials] = useState<{ name: string; username: string; tempPassword: string; companyCode: string | null } | null>(null);
 
   const { data: members = [], isLoading, error } = useQuery<OrgMember[]>({
     queryKey: ['org-users', token],
@@ -57,22 +63,48 @@ export default function TeamScreen(): JSX.Element {
     enabled: !!token,
   });
 
+  const { data: companyCode } = useQuery<CompanyCode | null>({
+    queryKey: ['company-code', token],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/auth/company-code`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return null;
+      const json = (await res.json()) as { data: CompanyCode };
+      return json.data;
+    },
+    enabled: !!token,
+  });
+
+  const rotateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${API_URL}/auth/company-code/rotate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const json = (await res.json()) as { error?: { message: string } };
+        throw new Error(json.error?.message ?? 'Failed to rotate');
+      }
+    },
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['company-code'] }),
+    onError: (e: Error) => Alert.alert('Ошибка', e.message),
+  });
+
   const inviteMutation = useMutation({
-    mutationFn: async (data: { email: string; name: string; role: Role }) => {
+    mutationFn: async (data: { first_name: string; last_name: string; role: Role }) => {
       const res = await fetch(`${API_URL}/auth/users/invite`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
-      const json = (await res.json()) as { data: { temp_password: string; name: string }; error?: { message: string } };
+      const json = (await res.json()) as { data: { temp_password: string; name: string; username: string; company_code: string | null }; error?: { message: string } };
       if (!res.ok) throw new Error(json.error?.message ?? 'Invite failed');
       return json.data;
     },
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ['org-users'] });
       setShowInviteModal(false);
-      setCredentials({ name: data.name, email: inviteEmail.trim().toLowerCase(), tempPassword: data.temp_password });
-      setInviteEmail(''); setInviteName(''); setInviteRole('member');
+      setCredentials({ name: data.name, username: data.username, tempPassword: data.temp_password, companyCode: data.company_code });
+      setInviteFirstName(''); setInviteLastName(''); setInviteRole('member');
     },
     onError: (e: Error) => Alert.alert('Error', e.message),
   });
@@ -133,8 +165,8 @@ export default function TeamScreen(): JSX.Element {
           <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
         </View>
         <View style={styles.rowInfo}>
-          <Text style={styles.rowName}>{item.name}{isSelf ? ' (you)' : ''}</Text>
-          <Text style={styles.rowEmail}>{item.email}</Text>
+          <Text style={styles.rowName}>{item.name}{isSelf ? ' (вы)' : ''}</Text>
+          <Text style={styles.rowEmail}>{item.email ?? item.username ?? ''}</Text>
         </View>
         <View style={[styles.badge, { backgroundColor: ROLE_COLORS[item.role] + '22' }]}>
           <Text style={[styles.badgeText, { color: ROLE_COLORS[item.role] }]}>{ROLE_LABELS[item.role]}</Text>
@@ -157,7 +189,7 @@ export default function TeamScreen(): JSX.Element {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: 'Team', headerBackTitle: 'Settings' }} />
+      <Stack.Screen options={{ title: 'Команда', headerBackTitle: 'Настройки' }} />
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color="#C45A10" />
       ) : error ? (
@@ -168,12 +200,41 @@ export default function TeamScreen(): JSX.Element {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
-          ListHeaderComponent={<Text style={styles.count}>{members.length} member{members.length !== 1 ? 's' : ''}</Text>}
+          ListHeaderComponent={
+            <View>
+              {canManage && companyCode && (
+                <View style={styles.codeCard}>
+                  <Text style={styles.codeLabel}>Код компании</Text>
+                  <Text style={styles.codeValue} selectable>{companyCode.company_code}</Text>
+                  <Text style={styles.codeHint}>
+                    Сотрудники вводят его при первом входе. Действует до {new Date(companyCode.expires_at).toLocaleDateString('ru-RU')}.
+                  </Text>
+                  <View style={styles.codeActions}>
+                    <TouchableOpacity onPress={() => { Clipboard.setString(companyCode.company_code); Alert.alert('Скопировано'); }}>
+                      <Text style={styles.codeCopy}>Копировать</Text>
+                    </TouchableOpacity>
+                    {isOwner && (
+                      <TouchableOpacity
+                        onPress={() => Alert.alert('Новый код', 'Старый код перестанет работать. Продолжить?', [
+                          { text: 'Отмена', style: 'cancel' },
+                          { text: 'Создать', onPress: () => rotateMutation.mutate() },
+                        ])}
+                        disabled={rotateMutation.isPending}
+                      >
+                        <Text style={styles.codeRotate}>{rotateMutation.isPending ? 'Обновление…' : 'Сгенерировать новый'}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              )}
+              <Text style={styles.count}>{members.length} {members.length === 1 ? 'участник' : 'участников'}</Text>
+            </View>
+          }
         />
       )}
       {canManage && (
         <TouchableOpacity style={styles.inviteButton} onPress={() => setShowInviteModal(true)}>
-          <Text style={styles.inviteButtonText}>+ Invite Member</Text>
+          <Text style={styles.inviteButtonText}>+ Добавить сотрудника</Text>
         </TouchableOpacity>
       )}
 
@@ -185,10 +246,22 @@ export default function TeamScreen(): JSX.Element {
               Передайте <Text style={{ fontWeight: '700' }}>{credentials?.name}</Text> эти данные для входа:
             </Text>
 
-            <Text style={styles.credLabel}>Email</Text>
+            {credentials?.companyCode != null && (
+              <>
+                <Text style={styles.credLabel}>Код компании</Text>
+                <View style={styles.credRow}>
+                  <Text style={styles.credValue} selectable>{credentials.companyCode}</Text>
+                  <TouchableOpacity onPress={() => { Clipboard.setString(credentials.companyCode ?? ''); Alert.alert('Скопировано'); }}>
+                    <Text style={styles.credCopy}>Копировать</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            <Text style={styles.credLabel}>Имя пользователя</Text>
             <View style={styles.credRow}>
-              <Text style={styles.credValue} selectable>{credentials?.email}</Text>
-              <TouchableOpacity onPress={() => { Clipboard.setString(credentials?.email ?? ''); Alert.alert('Скопировано'); }}>
+              <Text style={styles.credValue} selectable>{credentials?.username}</Text>
+              <TouchableOpacity onPress={() => { Clipboard.setString(credentials?.username ?? ''); Alert.alert('Скопировано'); }}>
                 <Text style={styles.credCopy}>Копировать</Text>
               </TouchableOpacity>
             </View>
@@ -201,13 +274,13 @@ export default function TeamScreen(): JSX.Element {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.credHint}>Участник сменит пароль при первом входе</Text>
+            <Text style={styles.credHint}>Участник укажет свой email и пароль при первом входе</Text>
 
             <TouchableOpacity
               style={styles.credShare}
               onPress={() => {
                 void Share.share({
-                  message: `Привет, ${credentials?.name ?? ''}! Тебя добавили в 4КУБ.\n\n1. Скачай приложение:\nhttps://4kub.ru\n\n2. Открой приложение и нажми «Я новый сотрудник»\n\n3. Введи:\nEmail: ${credentials?.email ?? ''}\nПароль: ${credentials?.tempPassword ?? ''}\n\nПри входе тебя попросят придумать свой пароль — это займёт 10 секунд.`,
+                  message: `Привет, ${credentials?.name ?? ''}! Тебя добавили в 4КУБ.\n\n1. Скачай приложение:\nhttps://4kub.ru\n\n2. Открой приложение и нажми «Я новый сотрудник»\n\n3. Введи:\nКод компании: ${credentials?.companyCode ?? ''}\nИмя: ${credentials?.username ?? ''}\nПароль: ${credentials?.tempPassword ?? ''}\n\nПри входе тебя попросят указать свой email и придумать пароль — это займёт 10 секунд.`,
                 });
               }}
             >
@@ -223,12 +296,12 @@ export default function TeamScreen(): JSX.Element {
 
       <Modal visible={showInviteModal} animationType="slide" onRequestClose={() => setShowInviteModal(false)}>
         <View style={styles.modal}>
-          <Text style={styles.modalTitle}>Invite Member</Text>
-          <Text style={styles.label}>Name</Text>
-          <TextInput style={styles.input} value={inviteName} onChangeText={setInviteName} placeholder="Full name" placeholderTextColor="#B07868" autoCapitalize="words" />
-          <Text style={styles.label}>Email</Text>
-          <TextInput style={styles.input} value={inviteEmail} onChangeText={setInviteEmail} placeholder="email@company.com" placeholderTextColor="#B07868" autoCapitalize="none" keyboardType="email-address" />
-          <Text style={styles.label}>Role</Text>
+          <Text style={styles.modalTitle}>Добавить сотрудника</Text>
+          <Text style={styles.label}>Имя</Text>
+          <TextInput style={styles.input} value={inviteFirstName} onChangeText={setInviteFirstName} placeholder="Иван" placeholderTextColor="#B07868" autoCapitalize="words" />
+          <Text style={styles.label}>Фамилия</Text>
+          <TextInput style={styles.input} value={inviteLastName} onChangeText={setInviteLastName} placeholder="Петров" placeholderTextColor="#B07868" autoCapitalize="words" />
+          <Text style={styles.label}>Роль</Text>
           <View style={styles.roleRow}>
             {ASSIGNABLE_ROLES.map((r) => (
               <TouchableOpacity key={r} style={[styles.rolePill, inviteRole === r && styles.rolePillSelected]} onPress={() => setInviteRole(r)}>
@@ -238,13 +311,13 @@ export default function TeamScreen(): JSX.Element {
           </View>
           <TouchableOpacity
             style={[styles.inviteButton, { marginTop: 24 }]}
-            onPress={() => inviteMutation.mutate({ email: inviteEmail, name: inviteName, role: inviteRole })}
-            disabled={inviteMutation.isPending || !inviteEmail.trim() || !inviteName.trim()}
+            onPress={() => inviteMutation.mutate({ first_name: inviteFirstName, last_name: inviteLastName, role: inviteRole })}
+            disabled={inviteMutation.isPending || !inviteFirstName.trim() || !inviteLastName.trim()}
           >
-            <Text style={styles.inviteButtonText}>{inviteMutation.isPending ? 'Inviting…' : 'Send Invite'}</Text>
+            <Text style={styles.inviteButtonText}>{inviteMutation.isPending ? 'Добавление…' : 'Добавить'}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowInviteModal(false)}>
-            <Text style={styles.cancelBtnText}>Cancel</Text>
+            <Text style={styles.cancelBtnText}>Отмена</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -256,6 +329,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FAF6F3' },
   list: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 80 },
   count: { fontSize: 13, color: '#B07868', marginBottom: 12 },
+  codeCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E8DDD6' },
+  codeLabel: { fontSize: 12, fontWeight: '600', color: '#B07868', textTransform: 'uppercase', letterSpacing: 0.5 },
+  codeValue: { fontSize: 22, fontWeight: '700', color: '#383432', marginTop: 6, letterSpacing: 1 },
+  codeHint: { fontSize: 12, color: '#B07868', marginTop: 8, lineHeight: 17 },
+  codeActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14 },
+  codeCopy: { fontSize: 14, color: '#C45A10', fontWeight: '600' },
+  codeRotate: { fontSize: 14, color: '#C45A10', fontWeight: '600' },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8, gap: 10 },
   avatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#fff', fontWeight: '700', fontSize: 15 },

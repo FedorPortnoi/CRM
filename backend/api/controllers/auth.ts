@@ -26,7 +26,8 @@ type AuthRole = 'owner' | 'admin' | 'member' | 'viewer';
 
 type AuthUserListItem = {
   id: string;
-  email: string;
+  email: string | null;
+  username: string | null;
   name: string;
   role: string;
 };
@@ -57,15 +58,17 @@ function onboardingCompleted(state: Prisma.JsonValue | null): boolean {
   return record.completed === true || typeof record.completed_at === 'string';
 }
 
-function publicUser(user: { id: string; email: string; name: string; role: string; organization_id: string; onboarding_state?: Prisma.JsonValue | null; must_change_password?: boolean }) {
+function publicUser(user: { id: string; email: string | null; username?: string | null; name: string; role: string; organization_id: string; onboarding_state?: Prisma.JsonValue | null; must_change_password?: boolean; must_change_email?: boolean }) {
   return {
     id: user.id,
     email: user.email,
+    username: user.username ?? null,
     name: user.name,
     role: user.role,
     org_id: user.organization_id,
     onboarding_completed: onboardingCompleted(user.onboarding_state ?? null),
     must_change_password: user.must_change_password ?? false,
+    must_change_email: user.must_change_email ?? false,
   };
 }
 
@@ -73,6 +76,51 @@ function generateSlug(name: string): string {
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const suffix = Math.random().toString(36).slice(2, 7);
   return `${base}-${suffix}`;
+}
+
+// Rotating company join code: a readable company prefix + a short random suffix.
+const JOIN_CODE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function generateJoinCode(orgName: string): string {
+  const prefix = orgName
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 16) || 'TEAM';
+  const suffix = crypto.randomBytes(3).toString('hex').toUpperCase(); // 6 hex chars
+  return `${prefix}-${suffix}`;
+}
+
+// Returns the org's current code, regenerating it first if missing or past its TTL.
+async function ensureFreshJoinCode(org: {
+  id: string;
+  name: string;
+  join_code: string | null;
+  join_code_expires_at: Date | null;
+}): Promise<{ join_code: string; join_code_expires_at: Date }> {
+  const expired = !org.join_code || !org.join_code_expires_at || org.join_code_expires_at <= new Date();
+  if (!expired) {
+    return { join_code: org.join_code!, join_code_expires_at: org.join_code_expires_at! };
+  }
+  const join_code = generateJoinCode(org.name);
+  const join_code_expires_at = new Date(Date.now() + JOIN_CODE_TTL_MS);
+  await db.org.update({ where: { id: org.id }, data: { join_code, join_code_expires_at } });
+  return { join_code, join_code_expires_at };
+}
+
+// Build a unique-within-org username from a person's name (e.g. "Ivan Petrov", "Ivan Petrov 2").
+async function uniqueUsernameForOrg(orgId: string, baseName: string): Promise<string> {
+  const base = baseName.replace(/\s+/g, ' ').trim();
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const candidate = attempt === 0 ? base : `${base} ${attempt + 1}`;
+    const existing = await db.user.findFirst({
+      where: { organization_id: orgId, username: candidate },
+      select: { id: true },
+    });
+    if (!existing) return candidate;
+  }
+  // Extremely unlikely fallback.
+  return `${base} ${crypto.randomBytes(2).toString('hex')}`;
 }
 
 function invalidCredentials(reply: FastifyReply) {
@@ -121,6 +169,8 @@ export const AuthController = {
         bcrypt.hash(password, saltRounds),
         Promise.resolve(generateSlug(org_name)),
       ]);
+      const join_code = generateJoinCode(org_name);
+      const join_code_expires_at = new Date(Date.now() + JOIN_CODE_TTL_MS);
 
       // Single SQL CTE: org + user + owner_id update + pipeline + stages in one round-trip.
       // The circular FK (org.owner_id → user, user.organization_id → org) is broken by
@@ -128,8 +178,8 @@ export const AuthController = {
       const rows = await db.$queryRaw<Array<{ org_id: string; user_id: string }>>`
         WITH
           org_cte AS (
-            INSERT INTO organizations (name, slug, plan, updated_at)
-            VALUES (${org_name}, ${slug}, 'starter'::"OrgPlan", NOW())
+            INSERT INTO organizations (name, slug, plan, join_code, join_code_expires_at, updated_at)
+            VALUES (${org_name}, ${slug}, 'starter'::"OrgPlan", ${join_code}, ${join_code_expires_at}, NOW())
             RETURNING id
           ),
           user_cte AS (
@@ -414,6 +464,7 @@ export const AuthController = {
       select: {
         id: true,
         email: true,
+        username: true,
         name: true,
         role: true,
       },
@@ -465,7 +516,7 @@ export const AuthController = {
       return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Only owners and admins can invite members' } });
     }
 
-    const { email, name, role } = request.body as { email: string; name: string; role: AuthRole };
+    const { first_name, last_name, role } = request.body as { first_name: string; last_name: string; role: AuthRole };
 
     const validRoles: AuthRole[] = ['admin', 'member', 'viewer'];
     if (!validRoles.includes(role)) {
@@ -475,42 +526,136 @@ export const AuthController = {
       return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Admins cannot invite other admins' } });
     }
 
-    const existing = await db.user.findFirst({
-      where: { email: email.trim().toLowerCase(), organization_id: request.user.org_id },
-    });
-    if (existing) {
-      return reply.status(409).send({ error: { code: 'EMAIL_TAKEN', message: 'A user with this email already exists in your organization' } });
+    const firstName = (first_name ?? '').trim();
+    const lastName = (last_name ?? '').trim();
+    if (firstName === '' || lastName === '') {
+      return reply.status(400).send({ error: { code: 'INVALID_NAME', message: 'First and last name are required' } });
     }
+
+    const fullName = `${firstName} ${lastName}`;
+    const username = await uniqueUsernameForOrg(request.user.org_id, fullName);
 
     const tempPassword = crypto.randomBytes(16).toString('base64url');
     const hashedPassword = await bcrypt.hash(tempPassword, saltRounds);
 
     const user = await db.user.create({
       data: {
-        email: email.trim().toLowerCase(),
-        name: name.trim(),
+        username,
+        name: fullName,
         password_hash: hashedPassword,
         role,
         organization_id: request.user.org_id,
         is_active: true,
         is_verified: true,
         must_change_password: true,
+        must_change_email: true,
       },
-      select: { id: true, email: true, name: true, role: true },
+      select: { id: true, username: true, name: true, role: true },
     });
 
-    const emailResult = isEmailSendingEnabled()
-      ? await sendEmail(
-          email.trim().toLowerCase(),
-          'Добро пожаловать — временный пароль',
-          `Здравствуйте, ${name.trim()}!\n\nВаш временный пароль: ${tempPassword}\n\nПожалуйста, смените его при первом входе в систему.`,
-        )
-      : null;
+    // Surface the (possibly freshly-rotated) company code so the owner can hand everything over at once.
+    const org = await db.org.findUnique({
+      where: { id: request.user.org_id },
+      select: { id: true, name: true, join_code: true, join_code_expires_at: true },
+    });
+    const code = org ? await ensureFreshJoinCode(org) : null;
 
     return reply.status(201).send({
-      data: { ...user, temp_password: tempPassword },
-      meta: { email_sent: emailResult?.success ?? false },
+      data: {
+        ...user,
+        temp_password: tempPassword,
+        company_code: code?.join_code ?? null,
+      },
+      meta: {},
     });
+  },
+
+  // Resolve org by a valid (non-expired) company code, then the employee by username within it.
+  join: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { company_code, username, password } = request.body as { company_code: string; username: string; password: string };
+
+    const org = await db.org.findFirst({
+      where: { join_code: company_code.trim() },
+      select: { id: true, join_code_expires_at: true },
+    });
+
+    if (!org || !org.join_code_expires_at || org.join_code_expires_at <= new Date()) {
+      await auditLog({ action: 'auth.join', outcome: 'failure', request, metadata: { reason: 'invalid_or_expired_code' } });
+      return reply.code(401).send({ error: { code: 'INVALID_JOIN', message: 'Invalid company code, username, or password' } });
+    }
+
+    const user = await db.user.findFirst({
+      where: { organization_id: org.id, username: username.trim() },
+    });
+
+    const hashToCompare = user?.password_hash ?? DUMMY_HASH;
+    const passwordMatches = await bcrypt.compare(password, hashToCompare);
+
+    if (!user || !user.is_active || !passwordMatches) {
+      await auditLog({ action: 'auth.join', outcome: 'failure', request, organizationId: org.id, userId: user?.id, metadata: { reason: 'invalid_credentials' } });
+      return reply.code(401).send({ error: { code: 'INVALID_JOIN', message: 'Invalid company code, username, or password' } });
+    }
+
+    const token = await signSessionToken(request, reply, { ...user, role: user.role as AuthRole });
+
+    await auditLog({ action: 'auth.join', outcome: 'success', request, organizationId: org.id, userId: user.id });
+
+    return reply.send({ data: { user: publicUser(user), token }, meta: {} });
+  },
+
+  // Owner/admin view of the current rotating company code (regenerates lazily if expired).
+  getCompanyCode: async (request: FastifyRequest, reply: FastifyReply) => {
+    const callerRole = request.user.role as AuthRole;
+    if (callerRole !== 'owner' && callerRole !== 'admin') {
+      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Only owners and admins can view the company code' } });
+    }
+    const org = await db.org.findUnique({
+      where: { id: request.user.org_id },
+      select: { id: true, name: true, join_code: true, join_code_expires_at: true },
+    });
+    if (!org) {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Organization not found' } });
+    }
+    const code = await ensureFreshJoinCode(org);
+    return reply.send({ data: { company_code: code.join_code, expires_at: code.join_code_expires_at }, meta: {} });
+  },
+
+  // Owner-triggered early rotation.
+  rotateCompanyCode: async (request: FastifyRequest, reply: FastifyReply) => {
+    const callerRole = request.user.role as AuthRole;
+    if (callerRole !== 'owner' && callerRole !== 'admin') {
+      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Only owners and admins can rotate the company code' } });
+    }
+    const org = await db.org.findUnique({ where: { id: request.user.org_id }, select: { name: true } });
+    if (!org) {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Organization not found' } });
+    }
+    const join_code = generateJoinCode(org.name);
+    const join_code_expires_at = new Date(Date.now() + JOIN_CODE_TTL_MS);
+    await db.org.update({ where: { id: request.user.org_id }, data: { join_code, join_code_expires_at } });
+    await auditLog({ action: 'auth.rotate_company_code', outcome: 'success', request, organizationId: request.user.org_id, userId: request.user.sub });
+    return reply.send({ data: { company_code: join_code, expires_at: join_code_expires_at }, meta: {} });
+  },
+
+  // First-login setup: employee sets their own email + new password, clearing both flags.
+  setCredentials: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { email: rawEmail, new_password } = request.body as { email: string; new_password: string };
+    const email = normalizeEmail(rawEmail);
+
+    const existing = await db.user.findUnique({ where: { email }, select: { id: true } });
+    if (existing && existing.id !== request.user.sub) {
+      return reply.status(409).send({ error: { code: 'EMAIL_ALREADY_EXISTS', message: 'An account with this email already exists' } });
+    }
+
+    const newHash = await bcrypt.hash(new_password, saltRounds);
+    const user = await db.user.update({
+      where: { id: request.user.sub },
+      data: { email, password_hash: newHash, email_verified: true, must_change_password: false, must_change_email: false },
+    });
+
+    await auditLog({ action: 'auth.set_credentials', outcome: 'success', request, organizationId: request.user.org_id, userId: request.user.sub, metadata: { email } });
+
+    return reply.send({ data: { user: publicUser(user) }, meta: {} });
   },
 
   deactivateUser: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -673,6 +818,9 @@ export const AuthController = {
       }
       await sendOtp(user.phone, code);
     } else {
+      if (!user.email) {
+        return reply.code(400).send({ error: { code: 'EMAIL_MISSING', message: 'No email on file' } });
+      }
       await sendEmail(user.email, 'Код подтверждения', `Ваш код: ${code}. Действителен 10 минут.`);
     }
 

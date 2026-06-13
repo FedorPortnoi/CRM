@@ -7,6 +7,8 @@ import { getStoredLanguage, hasSelectedLanguage } from '../i18n/storage';
 
 type StoredUser = {
   onboarding_completed?: boolean;
+  must_change_password?: boolean;
+  must_change_email?: boolean;
 };
 
 function parseStoredUser(value: string | null): StoredUser | null {
@@ -49,6 +51,11 @@ export default function AppIndex() {
         const user = parseStoredUser(userJson);
         if (!token || !user) {
           router.replace('/login');
+          return;
+        }
+
+        if (user.must_change_password || user.must_change_email) {
+          router.replace('/set-password' as never);
           return;
         }
 

@@ -8,6 +8,7 @@ import AttachmentsSection from '../../components/AttachmentsSection';
 import { cancelTaskDueReminder, scheduleTaskDueReminder } from '../../utils/notifications';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { formatMarketDate } from '../../market/profile';
+import { labelKeyForRule } from '../../utils/recurrence';
 
 interface TaskAssignee {
   id: string;
@@ -81,12 +82,34 @@ function statusBadgeColor(status: string): string {
   return '#CFADA3';
 }
 
-function formatRecurrence(isRecurring: boolean, rule: string | null): string {
-  if (!isRecurring || !rule) return 'None';
-  if (rule === 'daily') return 'Daily';
-  if (rule === 'weekly') return 'Weekly';
-  if (rule === 'monthly') return 'Monthly';
-  return rule;
+function formatRecurrence(isRecurring: boolean, rule: string | null, t: (key: string) => string): string {
+  if (!isRecurring || !rule) return t('tasks.recurrenceNone');
+  const labelKey = labelKeyForRule(rule);
+  return labelKey ? t(labelKey) : rule;
+}
+
+const PRIORITY_LABEL_KEYS: Record<string, string> = {
+  low: 'tasks.priorityLow',
+  medium: 'tasks.priorityMedium',
+  high: 'tasks.priorityHigh',
+  urgent: 'tasks.priorityUrgent',
+};
+
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  pending: 'tasks.statusPending',
+  in_progress: 'tasks.statusInProgress',
+  done: 'tasks.statusDone',
+  cancelled: 'tasks.statusCancelled',
+};
+
+function formatPriority(priority: string, t: (key: string) => string): string {
+  const key = PRIORITY_LABEL_KEYS[priority];
+  return key ? t(key) : priority;
+}
+
+function formatStatus(status: string, t: (key: string) => string): string {
+  const key = STATUS_LABEL_KEYS[status];
+  return key ? t(key) : status.replace('_', ' ');
 }
 
 interface SkeletonBoxProps {
@@ -334,31 +357,31 @@ export default function TaskDetailScreen(): JSX.Element {
         <View style={styles.card}>
           <Text style={styles.taskTitle}>{task.title}</Text>
           {task.due_date ? (
-            <Text style={[styles.dueDate, dueDateOverdue ? styles.dueDateOverdue : null]}>Due {formatDate(task.due_date)}</Text>
+            <Text style={[styles.dueDate, dueDateOverdue ? styles.dueDateOverdue : null]}>{t('tasks.dueOn', { date: formatDate(task.due_date) })}</Text>
           ) : null}
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
             <View style={[styles.badge, { backgroundColor: priorityBadgeColor(task.priority) }]}>
-              <Text style={styles.badgeText}>{task.priority}</Text>
+              <Text style={styles.badgeText}>{formatPriority(task.priority, t)}</Text>
             </View>
             <View style={[styles.badge, { backgroundColor: statusBadgeColor(task.status) }]}>
-              <Text style={styles.badgeText}>{task.status.replace('_', ' ')}</Text>
+              <Text style={styles.badgeText}>{formatStatus(task.status, t)}</Text>
             </View>
           </View>
         </View>
 
         {task.status === 'cancelled' ? (
           <View style={styles.cancelledBanner}>
-            <Text style={styles.cancelledText}>This task has been cancelled</Text>
+            <Text style={styles.cancelledText}>{t('tasks.cancelledBanner')}</Text>
           </View>
         ) : null}
 
         <View style={[styles.card, { marginTop: 16 }]}>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Assigned</Text>
+            <Text style={styles.detailLabel}>{t('tasks.assigned')}</Text>
             <Text style={styles.detailValue}>{task.assignee.name}</Text>
           </View>
           <View style={[styles.detailRow, { marginTop: 12 }]}>
-            <Text style={styles.detailLabel}>Contact</Text>
+            <Text style={styles.detailLabel}>{t('tasks.contact')}</Text>
             {task.contact !== null && contactName !== null ? (
               <TouchableOpacity
                 onPress={() =>
@@ -372,13 +395,13 @@ export default function TaskDetailScreen(): JSX.Element {
                 <Text style={styles.linkText}>{contactName}</Text>
               </TouchableOpacity>
             ) : (
-              <Text style={styles.detailValue}>None</Text>
+              <Text style={styles.detailValue}>{t('tasks.none')}</Text>
             )}
           </View>
           <View style={[styles.detailRow, { marginTop: 12 }]}>
-            <Text style={styles.detailLabel}>Repeat</Text>
+            <Text style={styles.detailLabel}>{t('tasks.repeat')}</Text>
             <Text style={task.is_recurring ? styles.recurrenceValue : styles.detailValue}>
-              {formatRecurrence(task.is_recurring, task.recurrence_rule)}
+              {formatRecurrence(task.is_recurring, task.recurrence_rule, t)}
             </Text>
           </View>
         </View>

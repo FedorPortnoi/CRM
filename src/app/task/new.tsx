@@ -8,12 +8,18 @@ import { API_URL } from '../../utils/api';
 import { scheduleTaskDueReminder } from '../../utils/notifications';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { formatMarketDate } from '../../market/profile';
+import { RECURRENCE_OPTIONS, labelKeyForRule } from '../../utils/recurrence';
 
 interface ContactPreview {
   id: string;
   first_name: string;
   last_name: string | null;
   company: string | null;
+}
+
+interface Assignee {
+  id: string;
+  name: string;
 }
 
 interface TaskApiResponse {
@@ -26,25 +32,6 @@ interface CalendarDay {
 
 interface ErrorApiResponse {
   error: { code: string; message: string };
-}
-
-type RecurrencePreset = 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
-
-const RECURRENCE_OPTIONS: Array<{ value: RecurrencePreset; label: string }> = [
-  { value: 'none', label: 'None' },
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'custom', label: 'Custom' },
-];
-
-function recurrenceRuleFromInput(preset: RecurrencePreset, customRule: string): string | null {
-  if (preset === 'none') return null;
-  if (preset === 'custom') {
-    const trimmedRule = customRule.trim();
-    return trimmedRule !== '' ? trimmedRule : null;
-  }
-  return preset;
 }
 
 export default function NewTaskScreen(): JSX.Element | null {
@@ -62,10 +49,14 @@ export default function NewTaskScreen(): JSX.Element | null {
   const [selectedContactName, setSelectedContactName] = useState<string>('');
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [recurrencePreset, setRecurrencePreset] = useState<RecurrencePreset>('none');
-  const [customRecurrenceRule, setCustomRecurrenceRule] = useState<string>('');
+  const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
+  const [showRepeatPicker, setShowRepeatPicker] = useState<boolean>(false);
   const [reminderDate, setReminderDate] = useState<string>('');
   const [showReminderCalendar, setShowReminderCalendar] = useState<boolean>(false);
+  const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [assigneeId, setAssigneeId] = useState<string>('');
+  const [assigneeName, setAssigneeName] = useState<string>('');
+  const [showAssigneePicker, setShowAssigneePicker] = useState<boolean>(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -83,6 +74,21 @@ export default function NewTaskScreen(): JSX.Element | null {
     return () => clearTimeout(timer);
   }, [contactQuery, token]);
 
+  // Default the assignee to the current user, then load the org's members so the
+  // task can be reassigned to a teammate if needed.
+  useEffect(() => {
+    if (!user) return;
+    setAssigneeId((prev) => (prev === '' ? user.id : prev));
+    setAssigneeName((prev) => (prev === '' ? user.name : prev));
+
+    fetch(`${API_URL}/tasks/assignees`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((body: { data: Assignee[] }) => setAssignees(body.data ?? []))
+      .catch(() => setAssignees([]));
+  }, [token, user]);
+
   if (!token || !user) return null;
 
   const formatDate = (dateStr: string): string => {
@@ -99,10 +105,9 @@ export default function NewTaskScreen(): JSX.Element | null {
       return;
     }
     setIsSubmitting(true);
-    const recurrenceRule = recurrenceRuleFromInput(recurrencePreset, customRecurrenceRule);
     const body = {
       title: title.trim(),
-      assigned_to: user.id,
+      assigned_to: assigneeId || user.id,
       is_recurring: recurrenceRule !== null,
       recurrence_rule: recurrenceRule ?? '',
       ...(dueDate !== '' ? { due_date: new Date(dueDate + 'T00:00:00').toISOString() } : {}),
@@ -168,21 +173,21 @@ export default function NewTaskScreen(): JSX.Element | null {
       />
       {showTitleError && <Text style={styles.fieldError}>{t('tasks.titleRequired')}</Text>}
 
-      <Text style={styles.label}>Due Date (optional)</Text>
+      <Text style={styles.label}>{t('tasks.dueDateOptional')}</Text>
       <TouchableOpacity style={styles.input} onPress={() => setShowCalendar(true)}>
-        <Text style={dueDate ? styles.inputText : styles.placeholderText}>{dueDate ? formatDate(dueDate) : 'Pick a date'}</Text>
+        <Text style={dueDate ? styles.inputText : styles.placeholderText}>{dueDate ? formatDate(dueDate) : t('tasks.pickDate')}</Text>
       </TouchableOpacity>
       {dueDate !== '' && (
         <TouchableOpacity onPress={() => setDueDate('')}>
-          <Text style={styles.clearLink}>Clear</Text>
+          <Text style={styles.clearLink}>{t('tasks.clear')}</Text>
         </TouchableOpacity>
       )}
 
       <Modal animationType="slide" visible={showCalendar} onRequestClose={() => setShowCalendar(false)}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Select Date</Text>
+          <Text style={styles.modalTitle}>{t('tasks.selectDate')}</Text>
           <TouchableOpacity onPress={() => setShowCalendar(false)}>
-            <Text style={styles.modalDone}>Done</Text>
+            <Text style={styles.modalDone}>{t('tasks.done')}</Text>
           </TouchableOpacity>
         </View>
         <Calendar
@@ -200,21 +205,21 @@ export default function NewTaskScreen(): JSX.Element | null {
         />
       </Modal>
 
-      <Text style={styles.label}>Reminder (optional)</Text>
+      <Text style={styles.label}>{t('tasks.reminderOptional')}</Text>
       <TouchableOpacity style={styles.input} onPress={() => setShowReminderCalendar(true)}>
-        <Text style={reminderDate ? styles.inputText : styles.placeholderText}>{reminderDate ? `Remind on ${formatDate(reminderDate)}` : 'No reminder'}</Text>
+        <Text style={reminderDate ? styles.inputText : styles.placeholderText}>{reminderDate ? t('tasks.remindOn', { date: formatDate(reminderDate) }) : t('tasks.noReminder')}</Text>
       </TouchableOpacity>
       {reminderDate !== '' && (
         <TouchableOpacity onPress={() => setReminderDate('')}>
-          <Text style={styles.clearLink}>Clear</Text>
+          <Text style={styles.clearLink}>{t('tasks.clear')}</Text>
         </TouchableOpacity>
       )}
 
       <Modal animationType="slide" visible={showReminderCalendar} onRequestClose={() => setShowReminderCalendar(false)}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Reminder Date</Text>
+          <Text style={styles.modalTitle}>{t('tasks.reminderDate')}</Text>
           <TouchableOpacity onPress={() => setShowReminderCalendar(false)}>
-            <Text style={styles.modalDone}>Done</Text>
+            <Text style={styles.modalDone}>{t('tasks.done')}</Text>
           </TouchableOpacity>
         </View>
         <Calendar
@@ -230,39 +235,71 @@ export default function NewTaskScreen(): JSX.Element | null {
         />
       </Modal>
 
-      <Text style={styles.label}>Repeat</Text>
-      <View style={styles.segmentedControl}>
-        {RECURRENCE_OPTIONS.map((option) => {
-          const selected = recurrencePreset === option.value;
-          return (
-            <TouchableOpacity
-              key={option.value}
-              style={[styles.segmentButton, selected ? styles.segmentButtonSelected : null]}
-              onPress={() => setRecurrencePreset(option.value)}
-              activeOpacity={0.75}
-            >
-              <Text style={[styles.segmentText, selected ? styles.segmentTextSelected : null]}>{option.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      {recurrencePreset === 'custom' && (
-        <TextInput
-          style={[styles.input, styles.customRuleInput]}
-          value={customRecurrenceRule}
-          onChangeText={setCustomRecurrenceRule}
-          placeholder="Every 2 weeks, weekdays, first Monday..."
-          placeholderTextColor="#B07868"
-          autoCapitalize="sentences"
-        />
-      )}
+      <Text style={styles.label}>{t('tasks.repeat')}</Text>
+      <TouchableOpacity style={styles.dropdownField} onPress={() => setShowRepeatPicker(true)} activeOpacity={0.75}>
+        <Text style={styles.inputText}>{t(labelKeyForRule(recurrenceRule) ?? 'tasks.recurrenceNone')}</Text>
+        <Text style={styles.dropdownChevron}>{'⌄'}</Text>
+      </TouchableOpacity>
 
-      <Text style={styles.label}>Assigned To</Text>
-      <View style={styles.disabledInput}>
-        <Text style={styles.inputText}>{user.name}</Text>
-      </View>
+      <Modal animationType="slide" transparent visible={showRepeatPicker} onRequestClose={() => setShowRepeatPicker(false)}>
+        <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setShowRepeatPicker(false)}>
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerTitle}>{t('tasks.selectRepeat')}</Text>
+            {RECURRENCE_OPTIONS.map((option) => {
+              const selected = (recurrenceRule ?? null) === option.rule;
+              return (
+                <TouchableOpacity
+                  key={option.labelKey}
+                  style={styles.pickerRow}
+                  onPress={() => {
+                    setRecurrenceRule(option.rule);
+                    setShowRepeatPicker(false);
+                  }}
+                >
+                  <Text style={[styles.pickerRowText, selected ? styles.pickerRowTextSelected : null]}>{t(option.labelKey)}</Text>
+                  {selected && <Text style={styles.pickerCheck}>{'✓'}</Text>}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
-      <Text style={styles.label}>Contact (optional)</Text>
+      <Text style={styles.label}>{t('tasks.assignedTo')}</Text>
+      <TouchableOpacity style={styles.dropdownField} onPress={() => setShowAssigneePicker(true)} activeOpacity={0.75}>
+        <Text style={styles.inputText}>
+          {assigneeId === user.id ? t('tasks.assignedToYou', { name: assigneeName || user.name }) : assigneeName}
+        </Text>
+        <Text style={styles.dropdownChevron}>{'⌄'}</Text>
+      </TouchableOpacity>
+
+      <Modal animationType="slide" transparent visible={showAssigneePicker} onRequestClose={() => setShowAssigneePicker(false)}>
+        <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setShowAssigneePicker(false)}>
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerTitle}>{t('tasks.selectAssignee')}</Text>
+            {(assignees.length > 0 ? assignees : [{ id: user.id, name: user.name }]).map((member) => {
+              const selected = member.id === assigneeId;
+              const display = member.id === user.id ? t('tasks.assignedToYou', { name: member.name }) : member.name;
+              return (
+                <TouchableOpacity
+                  key={member.id}
+                  style={styles.pickerRow}
+                  onPress={() => {
+                    setAssigneeId(member.id);
+                    setAssigneeName(member.name);
+                    setShowAssigneePicker(false);
+                  }}
+                >
+                  <Text style={[styles.pickerRowText, selected ? styles.pickerRowTextSelected : null]}>{display}</Text>
+                  {selected && <Text style={styles.pickerCheck}>{'✓'}</Text>}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Text style={styles.label}>{t('tasks.contactOptional')}</Text>
       {selectedContactId !== '' ? (
         <View style={styles.chip}>
           <Text style={styles.chipText}>{selectedContactName}</Text>
@@ -345,6 +382,43 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
   },
+  dropdownField: {
+    borderWidth: 1,
+    borderColor: '#E8DDD6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    minHeight: 44,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dropdownChevron: { color: '#B07868', fontSize: 18, marginLeft: 8 },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  pickerSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 32,
+  },
+  pickerTitle: { fontSize: 16, fontWeight: '600', color: '#383432', marginBottom: 8 },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0E8E2',
+  },
+  pickerRowText: { fontSize: 16, color: '#383432' },
+  pickerRowTextSelected: { color: '#C45A10', fontWeight: '600' },
+  pickerCheck: { color: '#C45A10', fontSize: 16, fontWeight: '700' },
   inputText: { color: '#383432', fontSize: 16 },
   placeholderText: { color: '#B07868', fontSize: 16 },
   fieldError: { color: '#ef4444', fontSize: 12, marginTop: 4 },

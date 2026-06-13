@@ -5,15 +5,20 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react-native';
+import { Lock, Mail, Eye, EyeOff, ShieldCheck } from 'lucide-react-native';
 import { Stack } from 'expo-router';
 import { useUserStore } from '../store/userStore';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function SetPasswordScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { user, changePassword } = useUserStore();
+  const { user, changePassword, setCredentials } = useUserStore();
 
+  const needsEmail = user?.must_change_email === true;
+
+  const [email, setEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNew, setShowNew] = useState(false);
@@ -23,6 +28,10 @@ export default function SetPasswordScreen() {
 
   const handleSubmit = async () => {
     setError(null);
+    if (needsEmail && !EMAIL_PATTERN.test(email.trim().toLowerCase())) {
+      setError(t('auth.emailInvalidShort'));
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setError(t('auth.passwordMismatch'));
       return;
@@ -33,7 +42,11 @@ export default function SetPasswordScreen() {
     }
     setIsLoading(true);
     try {
-      await changePassword(newPassword);
+      if (needsEmail) {
+        await setCredentials(email.trim().toLowerCase(), newPassword);
+      } else {
+        await changePassword(newPassword);
+      }
       router.replace((user?.onboarding_completed === false ? '/onboarding' : '/(tabs)') as never);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('errors.unknown'));
@@ -64,9 +77,26 @@ export default function SetPasswordScreen() {
         </View>
 
         <Text style={styles.title}>{t('auth.setPasswordTitle', { name: user?.name ?? '' })}</Text>
-        <Text style={styles.subtitle}>{t('auth.setPasswordSubtitle')}</Text>
+        <Text style={styles.subtitle}>{needsEmail ? t('auth.setCredentialsSubtitle') : t('auth.setPasswordSubtitle')}</Text>
 
         <View style={styles.card}>
+          {needsEmail && (
+            <View style={styles.fieldWrapper}>
+              <Mail size={18} color="#CFADA3" />
+              <TextInput
+                style={[styles.input, styles.inputFlex]}
+                placeholder={t('auth.emailPlaceholder')}
+                placeholderTextColor="#CFADA3"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                inputMode="email"
+                value={email}
+                onChangeText={setEmail}
+              />
+            </View>
+          )}
+
           <View style={styles.fieldWrapper}>
             <Lock size={18} color="#CFADA3" />
             <TextInput
@@ -100,13 +130,13 @@ export default function SetPasswordScreen() {
           <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
             onPress={() => { void handleSubmit(); }}
-            disabled={isLoading || !newPassword || !confirmPassword}
+            disabled={isLoading || !newPassword || !confirmPassword || (needsEmail && !email)}
             activeOpacity={0.8}
             accessibilityRole="button"
           >
             {isLoading
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.buttonText}>{t('auth.setPasswordButton')}</Text>}
+              : <Text style={styles.buttonText}>{needsEmail ? t('auth.setCredentialsButton') : t('auth.setPasswordButton')}</Text>}
           </TouchableOpacity>
 
           {error !== null && (

@@ -64,6 +64,7 @@ export default async function tasksRoutes(fastify: FastifyInstance) {
   }, TasksController.create);
 
   // Static convenience routes — registered before /:id so Fastify resolves them correctly
+  f.get('/assignees', { preHandler: [authenticate] }, TasksController.assignees);
   f.get('/today', { preHandler: [authenticate] }, TasksController.dueToday);
   f.get('/overdue', { preHandler: [authenticate] }, TasksController.overdue);
 

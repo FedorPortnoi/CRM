@@ -67,6 +67,26 @@ async function dealBelongsToOrg(dealId: string, orgId: string): Promise<boolean>
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
+async function assignees(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const members = await db.user.findMany({
+    where: { organization_id: request.user.org_id, is_active: true },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+
+  // Surface the current user first so self-assignment is the obvious default.
+  const sorted = members.sort((a, b) => {
+    if (a.id === request.user.sub) return -1;
+    if (b.id === request.user.sub) return 1;
+    return 0;
+  });
+
+  reply.send({ data: sorted, meta: { total: sorted.length } });
+}
+
 async function list(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -479,6 +499,7 @@ async function overdue(
 // ─── Export ───────────────────────────────────────────────────────────────────
 
 export const TasksController = {
+  assignees,
   list,
   create,
   getById,

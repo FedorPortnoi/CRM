@@ -128,7 +128,8 @@ enum PendingCaptureStatus {
 model User {
   id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organization_id   String    @db.Uuid
-  email             String    @unique @db.Citext
+  email             String?   @unique @db.Citext
+  username          String?   @db.Citext
   password_hash     String
   name              String
   role              UserRole  @default(member)
@@ -148,6 +149,7 @@ model User {
   phone_verified         Boolean   @default(false)
   email_verified         Boolean   @default(false)
   must_change_password   Boolean   @default(false)
+  must_change_email      Boolean   @default(false)
 
   // Relations
   organization     Org       @relation("UserOrg", fields: [organization_id], references: [id])
@@ -174,6 +176,9 @@ model User {
   chatMessages          ChatMessage[]      @relation("ChatMessageSender")
   chatReadReceipts      ChatReadReceipt[]  @relation("ChatReadReceiptUser")
   notifications         Notification[]     @relation("NotificationRecipient")
+
+  // Employees log in by username, which only needs to be unique inside their org.
+  @@unique([organization_id, username])
 }
 
 model Org {
@@ -186,6 +191,8 @@ model Org {
   plan_features           Json?
   stalled_threshold_days  Int     @default(30)
   decay_factor            Float   @default(0.5)
+  join_code               String?   @unique
+  join_code_expires_at    DateTime?
   created_at              DateTime @default(now())
   updated_at              DateTime @updatedAt
 

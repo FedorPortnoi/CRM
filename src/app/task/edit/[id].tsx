@@ -9,6 +9,7 @@ import { API_URL } from '../../../utils/api';
 import { scheduleTaskDueReminder } from '../../../utils/notifications';
 import { sendOrQueueMutation } from '../../../utils/offlineMutation';
 import { formatMarketDate } from '../../../market/profile';
+import { RECURRENCE_OPTIONS, labelKeyForRule, normalizeRule } from '../../../utils/recurrence';
 
 interface TaskContact {
   id: string;
@@ -49,6 +50,11 @@ interface ErrorApiResponse {
   error: { code: string; message: string };
 }
 
+interface Assignee {
+  id: string;
+  name: string;
+}
+
 type TaskForm = {
   title: string;
   due_date: string;
@@ -56,6 +62,7 @@ type TaskForm = {
   contact_id: string;
   is_recurring: boolean;
   recurrence_rule: string;
+  assigned_to: string;
 };
 
 type TaskPatch = {
@@ -66,17 +73,8 @@ type TaskPatch = {
   contact_id?: string | null;
   is_recurring?: boolean;
   recurrence_rule?: string;
+  assigned_to?: string;
 };
-
-type RecurrencePreset = 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
-
-const RECURRENCE_OPTIONS: Array<{ value: RecurrencePreset; label: string }> = [
-  { value: 'none', label: 'None' },
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'custom', label: 'Custom' },
-];
 
 function contactDisplayName(contact: { first_name: string; last_name: string | null }): string {
   return `${contact.first_name}${contact.last_name ? ' ' + contact.last_name : ''}`;
@@ -99,21 +97,6 @@ function toDateInputValue(dateStr: string | null): string {
   return `${year}-${month}-${day}`;
 }
 
-function recurrenceRuleFromInput(preset: RecurrencePreset, customRule: string): string | null {
-  if (preset === 'none') return null;
-  if (preset === 'custom') {
-    const trimmedRule = customRule.trim();
-    return trimmedRule !== '' ? trimmedRule : null;
-  }
-  return preset;
-}
-
-function recurrencePresetFromRule(isRecurring: boolean, rule: string | null): RecurrencePreset {
-  if (!isRecurring || !rule) return 'none';
-  if (rule === 'daily' || rule === 'weekly' || rule === 'monthly') return rule;
-  return 'custom';
-}
-
 function formatDate(dateStr: string): string {
   return formatMarketDate(`${dateStr}T00:00:00`, {
     month: 'short',
@@ -129,7 +112,8 @@ function toForm(task: Task): TaskForm {
     description: task.description ?? '',
     contact_id: task.contact_id ?? task.contact?.id ?? '',
     is_recurring: task.is_recurring,
-    recurrence_rule: task.recurrence_rule ?? '',
+    recurrence_rule: normalizeRule(task.recurrence_rule) ?? '',
+    assigned_to: task.assignee.id,
   };
 }
 
@@ -162,6 +146,10 @@ function buildPatch(current: TaskForm, original: TaskForm): TaskPatch {
     patch.recurrence_rule = current.is_recurring ? current.recurrence_rule : '';
   }
 
+  if (current.assigned_to !== original.assigned_to && current.assigned_to !== '') {
+    patch.assigned_to = current.assigned_to;
+  }
+
   return patch;
 }
 
@@ -169,6 +157,7 @@ export default function EditTaskScreen(): JSX.Element {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
+  const user = useUserStore((s) => s.user);
 
   const [original, setOriginal] = useState<TaskForm | null>(null);
   const [title, setTitle] = useState<string>('');
@@ -183,24 +172,26 @@ export default function EditTaskScreen(): JSX.Element {
   const [apiError, setApiError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [recurrencePreset, setRecurrencePreset] = useState<RecurrencePreset>('none');
-  const [customRecurrenceRule, setCustomRecurrenceRule] = useState<string>('');
+  const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
+  const [showRepeatPicker, setShowRepeatPicker] = useState<boolean>(false);
   const [reminderDate, setReminderDate] = useState<string>('');
   const [showReminderCalendar, setShowReminderCalendar] = useState<boolean>(false);
+  const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [assigneeId, setAssigneeId] = useState<string>('');
+  const [assigneeName, setAssigneeName] = useState<string>('');
+  const [showAssigneePicker, setShowAssigneePicker] = useState<boolean>(false);
 
   const form = useMemo<TaskForm>(
-    () => {
-      const recurrenceRule = recurrenceRuleFromInput(recurrencePreset, customRecurrenceRule);
-      return {
-        title,
-        due_date: dueDate,
-        description: notes,
-        contact_id: selectedContactId,
-        is_recurring: recurrenceRule !== null,
-        recurrence_rule: recurrenceRule ?? '',
-      };
-    },
-    [customRecurrenceRule, dueDate, notes, recurrencePreset, selectedContactId, title],
+    () => ({
+      title,
+      due_date: dueDate,
+      description: notes,
+      contact_id: selectedContactId,
+      is_recurring: recurrenceRule !== null,
+      recurrence_rule: recurrenceRule ?? '',
+      assigned_to: assigneeId,
+    }),
+    [assigneeId, dueDate, notes, recurrenceRule, selectedContactId, title],
   );
 
   const loadTask = useCallback(async (): Promise<void> => {
@@ -232,9 +223,9 @@ export default function EditTaskScreen(): JSX.Element {
       setNotes(loadedForm.description);
       setSelectedContactId(loadedForm.contact_id);
       setSelectedContactName(parsedBody.data.contact !== null ? contactDisplayName(parsedBody.data.contact) : '');
-      const loadedPreset = recurrencePresetFromRule(loadedForm.is_recurring, loadedForm.recurrence_rule);
-      setRecurrencePreset(loadedPreset);
-      setCustomRecurrenceRule(loadedPreset === 'custom' ? loadedForm.recurrence_rule : '');
+      setRecurrenceRule(loadedForm.is_recurring && loadedForm.recurrence_rule !== '' ? loadedForm.recurrence_rule : null);
+      setAssigneeId(parsedBody.data.assignee.id);
+      setAssigneeName(parsedBody.data.assignee.name);
       setReminderDate(toDateInputValue(parsedBody.data.reminder_at ?? null));
       setContactQuery('');
       setContactResults([]);
@@ -248,6 +239,17 @@ export default function EditTaskScreen(): JSX.Element {
   useEffect(() => {
     void loadTask();
   }, [loadTask]);
+
+  // Load org members so the task can be reassigned to any teammate (or back to self).
+  useEffect(() => {
+    if (!token) return;
+    fetch(`${API_URL}/tasks/assignees`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((body: { data: Assignee[] }) => setAssignees(body.data ?? []))
+      .catch(() => setAssignees([]));
+  }, [token]);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -394,24 +396,24 @@ export default function EditTaskScreen(): JSX.Element {
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Due Date</Text>
+              <Text style={styles.label}>{t('tasks.dueDate')}</Text>
               <TouchableOpacity style={styles.input} onPress={() => setShowCalendar(true)}>
                 <Text style={dueDate !== '' ? styles.inputText : styles.placeholderText}>
-                  {dueDate !== '' ? formatDate(dueDate) : 'Pick a date'}
+                  {dueDate !== '' ? formatDate(dueDate) : t('tasks.pickDate')}
                 </Text>
               </TouchableOpacity>
               {dueDate !== '' ? (
                 <TouchableOpacity onPress={() => setDueDate('')}>
-                  <Text style={styles.clearLink}>Clear</Text>
+                  <Text style={styles.clearLink}>{t('tasks.clear')}</Text>
                 </TouchableOpacity>
               ) : null}
             </View>
 
             <Modal animationType="slide" visible={showCalendar} onRequestClose={() => setShowCalendar(false)}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Date</Text>
+                <Text style={styles.modalTitle}>{t('tasks.selectDate')}</Text>
                 <TouchableOpacity onPress={() => setShowCalendar(false)}>
-                  <Text style={styles.modalDone}>Done</Text>
+                  <Text style={styles.modalDone}>{t('tasks.done')}</Text>
                 </TouchableOpacity>
               </View>
               <Calendar
@@ -430,20 +432,20 @@ export default function EditTaskScreen(): JSX.Element {
             </Modal>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Reminder (optional)</Text>
+              <Text style={styles.label}>{t('tasks.reminderOptional')}</Text>
               <TouchableOpacity style={styles.input} onPress={() => setShowReminderCalendar(true)}>
-                <Text style={reminderDate ? styles.inputText : styles.placeholderText}>{reminderDate ? `Remind on ${formatDate(reminderDate)}` : 'No reminder'}</Text>
+                <Text style={reminderDate ? styles.inputText : styles.placeholderText}>{reminderDate ? t('tasks.remindOn', { date: formatDate(reminderDate) }) : t('tasks.noReminder')}</Text>
               </TouchableOpacity>
               {reminderDate !== '' && (
                 <TouchableOpacity onPress={() => setReminderDate('')}>
-                  <Text style={styles.clearLink}>Clear</Text>
+                  <Text style={styles.clearLink}>{t('tasks.clear')}</Text>
                 </TouchableOpacity>
               )}
               <Modal animationType="slide" visible={showReminderCalendar} onRequestClose={() => setShowReminderCalendar(false)}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Reminder Date</Text>
+                  <Text style={styles.modalTitle}>{t('tasks.reminderDate')}</Text>
                   <TouchableOpacity onPress={() => setShowReminderCalendar(false)}>
-                    <Text style={styles.modalDone}>Done</Text>
+                    <Text style={styles.modalDone}>{t('tasks.done')}</Text>
                   </TouchableOpacity>
                 </View>
                 <Calendar
@@ -461,41 +463,80 @@ export default function EditTaskScreen(): JSX.Element {
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Repeat</Text>
-              <View style={styles.segmentedControl}>
-                {RECURRENCE_OPTIONS.map((option) => {
-                  const selected = recurrencePreset === option.value;
-                  return (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[styles.segmentButton, selected ? styles.segmentButtonSelected : null]}
-                      onPress={() => setRecurrencePreset(option.value)}
-                      activeOpacity={0.75}
-                    >
-                      <Text style={[styles.segmentText, selected ? styles.segmentTextSelected : null]}>{option.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              {recurrencePreset === 'custom' ? (
-                <TextInput
-                  style={[styles.input, styles.customRuleInput]}
-                  value={customRecurrenceRule}
-                  onChangeText={setCustomRecurrenceRule}
-                  placeholder="Every 2 weeks, weekdays, first Monday..."
-                  placeholderTextColor="#B07868"
-                  autoCapitalize="sentences"
-                />
-              ) : null}
+              <Text style={styles.label}>{t('tasks.repeat')}</Text>
+              <TouchableOpacity style={styles.dropdownField} onPress={() => setShowRepeatPicker(true)} activeOpacity={0.75}>
+                <Text style={styles.inputText}>{t(labelKeyForRule(recurrenceRule) ?? 'tasks.recurrenceNone')}</Text>
+                <Text style={styles.dropdownChevron}>{'⌄'}</Text>
+              </TouchableOpacity>
             </View>
 
+            <Modal animationType="slide" transparent visible={showRepeatPicker} onRequestClose={() => setShowRepeatPicker(false)}>
+              <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setShowRepeatPicker(false)}>
+                <View style={styles.pickerSheet}>
+                  <Text style={styles.pickerTitle}>{t('tasks.selectRepeat')}</Text>
+                  {RECURRENCE_OPTIONS.map((option) => {
+                    const selected = (recurrenceRule ?? null) === option.rule;
+                    return (
+                      <TouchableOpacity
+                        key={option.labelKey}
+                        style={styles.pickerRow}
+                        onPress={() => {
+                          setRecurrenceRule(option.rule);
+                          setShowRepeatPicker(false);
+                        }}
+                      >
+                        <Text style={[styles.pickerRowText, selected ? styles.pickerRowTextSelected : null]}>{t(option.labelKey)}</Text>
+                        {selected && <Text style={styles.pickerCheck}>{'✓'}</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </TouchableOpacity>
+            </Modal>
+
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Notes</Text>
+              <Text style={styles.label}>{t('tasks.assignedTo')}</Text>
+              <TouchableOpacity style={styles.dropdownField} onPress={() => setShowAssigneePicker(true)} activeOpacity={0.75}>
+                <Text style={styles.inputText}>
+                  {user && assigneeId === user.id ? t('tasks.assignedToYou', { name: assigneeName || user.name }) : assigneeName}
+                </Text>
+                <Text style={styles.dropdownChevron}>{'⌄'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Modal animationType="slide" transparent visible={showAssigneePicker} onRequestClose={() => setShowAssigneePicker(false)}>
+              <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setShowAssigneePicker(false)}>
+                <View style={styles.pickerSheet}>
+                  <Text style={styles.pickerTitle}>{t('tasks.selectAssignee')}</Text>
+                  {(assignees.length > 0 ? assignees : [{ id: assigneeId, name: assigneeName }]).map((member) => {
+                    const selected = member.id === assigneeId;
+                    const display = user && member.id === user.id ? t('tasks.assignedToYou', { name: member.name }) : member.name;
+                    return (
+                      <TouchableOpacity
+                        key={member.id}
+                        style={styles.pickerRow}
+                        onPress={() => {
+                          setAssigneeId(member.id);
+                          setAssigneeName(member.name);
+                          setShowAssigneePicker(false);
+                        }}
+                      >
+                        <Text style={[styles.pickerRowText, selected ? styles.pickerRowTextSelected : null]}>{display}</Text>
+                        {selected && <Text style={styles.pickerCheck}>{'✓'}</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </TouchableOpacity>
+            </Modal>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>{t('tasks.notes')}</Text>
               <TextInput
                 style={styles.notesInput}
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Add notes"
+                placeholder={t('tasks.notesPlaceholder')}
                 placeholderTextColor="#B07868"
                 multiline
                 numberOfLines={4}
@@ -504,7 +545,7 @@ export default function EditTaskScreen(): JSX.Element {
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Contact</Text>
+              <Text style={styles.label}>{t('tasks.contact')}</Text>
               {selectedContactId !== '' ? (
                 <View style={styles.contactChip}>
                   <Text style={styles.contactChipText} numberOfLines={1}>
@@ -596,6 +637,39 @@ const styles = StyleSheet.create({
   inputText: { color: '#383432', fontSize: 16 },
   placeholderText: { color: '#B07868', fontSize: 16 },
   clearLink: { color: '#C45A10', fontSize: 12, marginTop: 4 },
+  dropdownField: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8DDD6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dropdownChevron: { color: '#B07868', fontSize: 18, marginLeft: 8 },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  pickerSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 32,
+  },
+  pickerTitle: { fontSize: 16, fontWeight: '600', color: '#383432', marginBottom: 8 },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0E8E2',
+  },
+  pickerRowText: { fontSize: 16, color: '#383432' },
+  pickerRowTextSelected: { color: '#C45A10', fontWeight: '600' },
+  pickerCheck: { color: '#C45A10', fontSize: 16, fontWeight: '700' },
   segmentedControl: {
     flexDirection: 'row',
     flexWrap: 'wrap',

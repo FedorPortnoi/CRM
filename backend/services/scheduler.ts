@@ -1,8 +1,20 @@
+import crypto from 'node:crypto';
 import { RRule } from 'rrule';
 import { DealStatus, TaskStatus } from '@prisma/client';
 import { db } from './db';
 import { sendPush } from './push';
 import { dispatchNotification, taskCtx, dealCtx } from './notificationEngine';
+
+const JOIN_CODE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function buildJoinCode(orgName: string): string {
+  const prefix = orgName
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 16) || 'TEAM';
+  return `${prefix}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+}
 
 function nextOccurrence(rule: string, after: Date): Date | null {
   try {
@@ -216,6 +228,25 @@ async function runDeadlineNotifications(): Promise<void> {
   }
 }
 
+// Auto-rotate company join codes that have passed their 7-day TTL.
+async function rotateExpiredJoinCodes(): Promise<void> {
+  const expired = await db.org.findMany({
+    where: { join_code_expires_at: { lte: new Date() } },
+    select: { id: true, name: true },
+  });
+
+  for (const org of expired) {
+    try {
+      await db.org.update({
+        where: { id: org.id },
+        data: { join_code: buildJoinCode(org.name), join_code_expires_at: new Date(Date.now() + JOIN_CODE_TTL_MS) },
+      });
+    } catch {
+      // skip — unique-collision or transient error; will retry next run
+    }
+  }
+}
+
 export function startScheduler(): void {
   setInterval(() => {
     void runReminders().catch(console.error);
@@ -223,9 +254,11 @@ export function startScheduler(): void {
     void runDeadlineNotifications().catch(console.error);
   }, 60_000);
 
-  // Hourly cleanup of orgs whose owner never verified within 24 h
+  // Hourly cleanup of orgs whose owner never verified within 24 h, plus join-code rotation
   void cleanupStaleUnverifiedAccounts().catch(console.error);
+  void rotateExpiredJoinCodes().catch(console.error);
   setInterval(() => {
     void cleanupStaleUnverifiedAccounts().catch(console.error);
+    void rotateExpiredJoinCodes().catch(console.error);
   }, 60 * 60_000);
 }

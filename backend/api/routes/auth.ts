@@ -31,6 +31,27 @@ const LoginSchema = z.object({
   password: z.string().min(1),
 });
 
+const JoinSchema = z.object({
+  company_code: z.string().trim().min(1).max(64),
+  username: z.string().trim().min(1).max(201),
+  password: z.string().min(1),
+});
+
+const InviteSchema = z.object({
+  first_name: z.string().trim().min(1).max(100),
+  last_name: z.string().trim().min(1).max(100),
+  role: z.enum(['admin', 'member', 'viewer']),
+});
+
+const SetCredentialsSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  new_password: z.string().min(8).max(100)
+    .regex(/[a-z]/, 'Password must include a lowercase letter')
+    .regex(/[A-Z]/, 'Password must include an uppercase letter')
+    .regex(/[0-9]/, 'Password must include a number')
+    .regex(/[^A-Za-z0-9]/, 'Password must include a symbol'),
+});
+
 const ChangePasswordSchema = z.object({
   new_password: z.string().min(8).max(100)
     .regex(/[a-z]/, 'Password must include a lowercase letter')
@@ -80,6 +101,10 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     config: { rateLimit: authRateLimit(5, '15 minutes') },
     schema: { body: LoginSchema },
   }, AuthController.login);
+  fastify.post('/join', {
+    config: { rateLimit: authRateLimit(5, '15 minutes') },
+    schema: { body: JoinSchema },
+  }, AuthController.join);
   fastify.post('/logout', { preHandler: [authenticate] }, AuthController.logout);
   fastify.post('/logout-all', { preHandler: [authenticate] }, AuthController.logoutAll);
   fastify.get('/sessions', { preHandler: [authenticate] }, AuthController.listSessions);
@@ -88,13 +113,22 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: { querystring: AuditQuerySchema },
   }, AuthController.listAuditEvents);
   fastify.get('/users', { preHandler: [authenticate] }, AuthController.listUsers);
-  fastify.post('/users/invite', { preHandler: [authenticate] }, AuthController.inviteUser);
+  fastify.post('/users/invite', {
+    preHandler: [authenticate],
+    schema: { body: InviteSchema },
+  }, AuthController.inviteUser);
   fastify.patch('/users/:id/deactivate', { preHandler: [authenticate] }, AuthController.deactivateUser);
   fastify.patch('/users/:id/role', { preHandler: [authenticate] }, AuthController.changeUserRole);
+  fastify.get('/company-code', { preHandler: [authenticate] }, AuthController.getCompanyCode);
+  fastify.post('/company-code/rotate', { preHandler: [authenticate] }, AuthController.rotateCompanyCode);
   fastify.patch('/me/password', {
     preHandler: [authenticate],
     schema: { body: ChangePasswordSchema },
   }, AuthController.changePassword);
+  fastify.patch('/me/credentials', {
+    preHandler: [authenticate],
+    schema: { body: SetCredentialsSchema },
+  }, AuthController.setCredentials);
   fastify.get('/onboarding', { preHandler: [authenticate] }, AuthController.getOnboarding);
   fastify.patch('/onboarding', {
     preHandler: [authenticate],

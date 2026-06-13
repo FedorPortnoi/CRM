@@ -4,12 +4,14 @@ import { API_URL } from '../utils/api';
 
 type AuthUser = {
   id: string;
-  email: string;
+  email: string | null;
+  username?: string | null;
   name: string;
   role: string;
   org_id: string;
   onboarding_completed?: boolean;
   must_change_password?: boolean;
+  must_change_email?: boolean;
 };
 
 type PendingVerification = {
@@ -25,6 +27,7 @@ interface UserState {
   error: string | null;
   pendingVerification: PendingVerification | null;
   login: (email: string, password: string) => Promise<void>;
+  join: (companyCode: string, username: string, password: string) => Promise<void>;
   register: (
     email: string,
     password: string,
@@ -36,6 +39,7 @@ interface UserState {
   resendVerification: (userId: string, channel: 'sms' | 'email') => Promise<void>;
   clearPendingVerification: () => void;
   changePassword: (newPassword: string) => Promise<void>;
+  setCredentials: (email: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   restoreSession: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
@@ -75,6 +79,29 @@ export const useUserStore = create<UserState>()((set) => ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
+      });
+      const body: unknown = await response.json();
+      if (!response.ok) {
+        throw new Error(extractErrorMessage(body, response.status));
+      }
+      const { data } = body as { data: { user: AuthUser; token: string } };
+      const { user, token } = data;
+      await SecureStore.setItemAsync('crm_auth_token', token);
+      await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(user));
+      set({ user, token, isLoading: false });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      set({ error: msg, isLoading: false });
+    }
+  },
+
+  join: async (companyCode: string, username: string, password: string): Promise<void> => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await fetch(`${API_URL}/auth/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_code: companyCode, username, password }),
       });
       const body: unknown = await response.json();
       if (!response.ok) {
@@ -171,6 +198,21 @@ export const useUserStore = create<UserState>()((set) => ({
       await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(updated));
       set({ user: updated });
     }
+  },
+
+  setCredentials: async (email: string, newPassword: string): Promise<void> => {
+    const token = await SecureStore.getItemAsync('crm_auth_token');
+    const response = await fetch(`${API_URL}/auth/me/credentials`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token ?? ''}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, new_password: newPassword }),
+    });
+    const body: unknown = await response.json();
+    if (!response.ok) throw new Error(extractErrorMessage(body, response.status));
+
+    const { data } = body as { data: { user: AuthUser } };
+    await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(data.user));
+    set({ user: data.user });
   },
 
   logout: async (): Promise<void> => {
