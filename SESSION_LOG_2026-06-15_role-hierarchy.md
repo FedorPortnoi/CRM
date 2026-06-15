@@ -174,3 +174,44 @@ prevented secrets (`certs/`) from being committed/pushed via `.gitignore` + a st
 - App API base: `EXPO_PUBLIC_API_URL=https://4kub.ru/api/v1`. Test/owner login:
   `review@kubcrm.com` / `Review2026!` (owner → no manager toggle by design).
 - Deployed commit: `4bdc7c1`. Migration applied: `20260615_add_user_manager_hierarchy`.
+
+---
+
+## Part 2 — End-to-end verification on the emulator + cleanup (post-deploy)
+
+After the deploy, drove a real end-to-end check against the live prod backend, then cleaned up.
+
+### What was done
+- **Test hierarchy** created in the review org (DB script, bcrypt-hashed passwords):
+  `E2E Manager (M) ← E2E Report (R) ← E2E Deep (R2)` + 4 tasks (one each for M / R / R2, one for the owner).
+- **API proof first** (reliable, before any UI): logged in as M via `…/auth/login`, then `/tasks/assignees`
+  → 3 (so M is a manager), `?scope=direct` → 2 tasks (M + R), `?scope=subtree` → 3 tasks (+ R2). Owner's
+  task hidden in both.
+- **Emulator visual:** logged the owner out (`pm clear` + dev-client relaunch), logged in as M, opened the
+  drawer → Задачи, showed the **"Мои сотрудники / Вся команда" toggle**, and the list switching
+  2 (direct) → 3 (subtree) with the owner's task never appearing — matching the API proof exactly.
+- **Cleanup:** deleted the 3 test users + 4 tasks (and their auth sessions / audit rows); review org back to
+  just the owner. Removed the temp scripts. Committed the log.
+
+### Mistakes & fixes (this phase)
+1. **Emulator UI taps kept missing** — tapped the hamburger at y≈130 when it was at y≈279; a drawer tap hit
+   "Воронка" one row above "Задачи". **Fix:** stopped eyeballing — used `adb shell uiautomator dump` to read
+   exact element bounds (`Меню [21,224][131,334]`, `Задачи [157,697][630,754]`) and tapped the centers.
+   **Lesson:** for RN-on-emulator automation, dump the accessibility tree for coordinates instead of guessing.
+2. **The login "reload" recurred** (`adb input text` → dev-client `r`=reload when a field isn't focused),
+   plus a runtime **permission dialog** popped over the app on first launch. **Fix:** verified field focus via
+   screenshot before typing; dismissed the permission dialog with BACK.
+3. **A screenshot exceeded the image size limit** (1080×2400 > 2000 px after reading many images).
+   **Fix:** downscaled it with `System.Drawing` before viewing.
+
+### Reasoning
+- Ran the **API/curl proof before** the fiddly emulator drive, so the backend was confirmed correct
+  independently and the visual outcome was predictable despite UI-automation friction.
+- Built a **3-level tree on purpose** (M←R←R2) so direct vs subtree would differ visibly (R2's task only in
+  subtree); a 2-level tree wouldn't show the toggle's effect. Added an **owner-assigned task** to prove the
+  cone boundary (a manager can't see up the tree).
+- **Cleaned up** the test users/tasks afterward to avoid polluting the review org (it's used for App Store review).
+
+### Result
+Feature confirmed working **live on prod**, end-to-end, through the real app. Prod left clean. Session log
+committed (`87c2e8d`; this Part 2 appended after).
