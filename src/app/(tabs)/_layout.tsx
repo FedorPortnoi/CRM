@@ -1,6 +1,6 @@
-﻿import { Alert, TouchableOpacity } from 'react-native';
+﻿import { TouchableOpacity } from 'react-native';
 import { Tabs, router } from 'expo-router';
-import { MessageSquare, Kanban, LayoutDashboard, Users, CheckSquare, Plus, MoreVertical, Settings, Bell } from 'lucide-react-native';
+import { MessageSquare, Kanban, LayoutDashboard, Users, CheckSquare, Plus, Settings, Bell } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../store/chatStore';
 import { useNotificationStore } from '../../store/notificationStore';
@@ -49,27 +49,9 @@ export default function TabsLayout() {
         options={{
           title: t('tabs.contacts'),
           tabBarLabel: t('tabs.contacts'),
+          headerShown: false,
           tabBarIcon: ({ color, size }: { color: string | import('react-native').ColorValue; size: number }): JSX.Element => (
             <Users color={color} size={size} />
-          ),
-          headerRight: (): JSX.Element => (
-            <TouchableOpacity
-              onPress={() => {
-                Alert.alert(t('contacts.add'), undefined, [
-                  { text: t('contacts.new'), onPress: () => { router.push('/contact/new'); } },
-                  { text: t('contacts.scanCard'), onPress: () => { router.push('/contact/scan-card'); } },
-                  { text: '📲 Импорт из приложений', onPress: () => { router.push('/import-hub' as never); } },
-                  { text: t('contacts.importPhone'), onPress: () => { router.push('/contact/import-phone'); } },
-                  { text: t('contacts.importCsv'), onPress: () => { router.push('/contact/import-csv'); } },
-                  { text: t('common.cancel'), style: 'cancel' },
-                ]);
-              }}
-              style={{ marginRight: 16, padding: 4 }}
-              accessibilityRole="button"
-              accessibilityLabel={t('contacts.add')}
-            >
-              <MoreVertical size={24} color={TEAL} />
-            </TouchableOpacity>
           ),
         }}
       />

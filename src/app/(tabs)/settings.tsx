@@ -206,10 +206,10 @@ export default function SettingsScreen(): JSX.Element {
 
       {(user?.role === 'owner' || user?.role === 'admin') && (
         <>
-          <Text style={styles.sectionHeader}>Team</Text>
+          <Text style={styles.sectionHeader}>Команда</Text>
           <TouchableOpacity style={styles.card} onPress={() => router.push('/settings/team' as never)} accessibilityRole="button">
             <View style={styles.row}>
-              <Text style={styles.rowLabel}>Manage Team</Text>
+              <Text style={styles.rowLabel}>Структура команды</Text>
               <Text style={styles.chevron}>{'>'}</Text>
             </View>
           </TouchableOpacity>

@@ -1,6 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
   Alert,
+  Image,
+  ImageBackground,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,6 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../store/userStore';
@@ -90,24 +93,11 @@ export default function LoginScreen() {
   };
 
   return (
-    <LinearGradient
-      colors={[COLORS.charcoal, COLORS.darkBrown]}
-      locations={[0, 1]}
+    <ImageBackground
+      source={require('../../assets/login-bg.png')}
+      resizeMode="cover"
       style={styles.screen}
     >
-      {/* Background decorations */}
-      <View pointerEvents="none" style={styles.backgroundDecoration}>
-        <View style={styles.topRightGlow} />
-        <View style={styles.topLeftSmearLarge} />
-        <View style={styles.topLeftSmearSmall} />
-        <View style={styles.bottomRightSmearLarge} />
-        <View style={styles.bottomRightSmearSmall} />
-        <View style={styles.chalkSplashTop} />
-        <View style={styles.chalkSplashTopAccent} />
-        <View style={styles.chalkSplashBottom} />
-        <View style={styles.chalkSplashBottomAccent} />
-      </View>
-
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -120,21 +110,31 @@ export default function LoginScreen() {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.card}>
-              {/* Logo */}
-              <LinearGradient
-                colors={[COLORS.burntOrange, COLORS.terracotta]}
-                start={{ x: 0.05, y: 0.05 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.logo}
-              >
-                <Ionicons name="checkmark-sharp" color={COLORS.white} size={60} />
-              </LinearGradient>
+              {/* Frosted-glass backdrop */}
+              <BlurView
+                intensity={55}
+                tint="light"
+                experimentalBlurMethod="dimezisBlurView"
+                style={styles.cardGlass}
+              />
+              <View pointerEvents="none" style={styles.cardTint} />
 
-              <Text style={styles.title}>{t('auth.welcomeBack')}</Text>
+              {/* Logo — 4КУБ cube brand badge */}
+              <View style={styles.logo}>
+                <Image
+                  source={require('../../assets/icon.png')}
+                  style={styles.logoImage}
+                  resizeMode="cover"
+                  accessibilityRole="image"
+                  accessibilityLabel="4КУБ"
+                />
+              </View>
+
+              <Text style={styles.title}>4КУБ</Text>
               <Text style={styles.subtitle}>{t('auth.loginSubtext')}</Text>
 
               {/* Tab switcher */}
-              <View style={styles.tabContainer}>
+              <View style={styles.tabs}>
                 <Pressable
                   accessibilityRole="tab"
                   accessibilityState={{ selected: activeTab === 'login' }}
@@ -142,14 +142,14 @@ export default function LoginScreen() {
                   style={({ pressed }) => [
                     styles.tab,
                     styles.loginTab,
-                    activeTab === 'login' ? styles.activeTab : styles.inactiveTab,
+                    activeTab === 'login' ? styles.tabActive : styles.tabInactive,
                     pressed && styles.pressed,
                   ]}
                 >
                   <Text
                     style={[
                       styles.tabText,
-                      activeTab === 'login' ? styles.activeTabText : styles.inactiveTabText,
+                      activeTab === 'login' ? styles.tabTextActive : styles.tabTextInactive,
                     ]}
                   >
                     {t('auth.tabLogin')}
@@ -163,14 +163,14 @@ export default function LoginScreen() {
                   style={({ pressed }) => [
                     styles.tab,
                     styles.registerTab,
-                    activeTab === 'join' ? styles.activeTab : styles.inactiveTab,
+                    activeTab === 'join' ? styles.tabActive : styles.tabInactive,
                     pressed && styles.pressed,
                   ]}
                 >
                   <Text
                     style={[
                       styles.tabText,
-                      activeTab === 'join' ? styles.activeTabText : styles.inactiveTabText,
+                      activeTab === 'join' ? styles.tabTextActive : styles.tabTextInactive,
                     ]}
                   >
                     {t('auth.tabJoin')}
@@ -187,13 +187,13 @@ export default function LoginScreen() {
                   {/* Company code input */}
                   <View
                     style={[
-                      styles.inputContainer,
-                      focusedField === 'companyCode' && styles.inputContainerFocused,
+                      styles.inputWrapper,
+                      focusedField === 'companyCode' && styles.inputWrapperFocused,
                     ]}
                   >
                     <Ionicons
                       name="business-outline"
-                      size={23}
+                      size={25}
                       color={COLORS.mutedTerracotta}
                       style={styles.inputIcon}
                     />
@@ -216,13 +216,13 @@ export default function LoginScreen() {
                   {/* Username input */}
                   <View
                     style={[
-                      styles.inputContainer,
-                      focusedField === 'username' && styles.inputContainerFocused,
+                      styles.inputWrapper,
+                      focusedField === 'username' && styles.inputWrapperFocused,
                     ]}
                   >
                     <Ionicons
                       name="person-outline"
-                      size={23}
+                      size={25}
                       color={COLORS.mutedTerracotta}
                       style={styles.inputIcon}
                     />
@@ -246,13 +246,13 @@ export default function LoginScreen() {
                 /* Email input */
                 <View
                   style={[
-                    styles.inputContainer,
-                    focusedField === 'email' && styles.inputContainerFocused,
+                    styles.inputWrapper,
+                    focusedField === 'email' && styles.inputWrapperFocused,
                   ]}
                 >
                   <Ionicons
                     name="mail-outline"
-                    size={23}
+                    size={25}
                     color={COLORS.mutedTerracotta}
                     style={styles.inputIcon}
                   />
@@ -279,13 +279,13 @@ export default function LoginScreen() {
               {/* Password input */}
               <View
                 style={[
-                  styles.inputContainer,
-                  focusedField === 'password' && styles.inputContainerFocused,
+                  styles.inputWrapper,
+                  focusedField === 'password' && styles.inputWrapperFocused,
                 ]}
               >
                 <Ionicons
                   name="lock-closed-outline"
-                  size={23}
+                  size={25}
                   color={COLORS.mutedTerracotta}
                   style={styles.inputIcon}
                 />
@@ -314,7 +314,7 @@ export default function LoginScreen() {
                 >
                   <Ionicons
                     name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={24}
+                    size={26}
                     color={COLORS.mutedTerracotta}
                   />
                 </Pressable>
@@ -324,10 +324,10 @@ export default function LoginScreen() {
               {!isJoin && (
                 <Pressable
                   accessibilityRole="button"
-                  hitSlop={8}
-                  style={({ pressed }) => [styles.forgotPasswordButton, pressed && styles.pressed]}
+                  hitSlop={10}
+                  style={({ pressed }) => [styles.forgotButton, pressed && styles.pressed]}
                 >
-                  <Text style={styles.forgotPasswordText}>{t('auth.forgotPassword')}</Text>
+                  <Text style={styles.forgotText}>{t('auth.forgotPassword')}</Text>
                 </Pressable>
               )}
 
@@ -342,9 +342,9 @@ export default function LoginScreen() {
                 disabled={isLoading}
                 onPress={() => { void handleLogin(); }}
                 style={({ pressed }) => [
-                  styles.loginButtonWrapper,
+                  styles.loginButtonShadow,
                   pressed && !isLoading && styles.pressed,
-                  isLoading && styles.disabledButton,
+                  isLoading && styles.disabled,
                 ]}
               >
                 <LinearGradient
@@ -365,104 +365,22 @@ export default function LoginScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </LinearGradient>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
+  screen: {
+    flex: 1,
+    backgroundColor: COLORS.darkBrown,
+  },
   safeArea: { flex: 1 },
   keyboardArea: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 52,
-  },
-
-  // Background decorations
-  backgroundDecoration: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
-  topRightGlow: {
-    position: 'absolute',
-    top: -70, right: -75,
-    width: 240, height: 240,
-    borderRadius: 120,
-    backgroundColor: 'rgba(196, 105, 74, 0.15)',
-  },
-  topLeftSmearLarge: {
-    position: 'absolute',
-    top: 85, left: -96,
-    width: 255, height: 190,
-    borderTopLeftRadius: 90, borderTopRightRadius: 28,
-    borderBottomLeftRadius: 60, borderBottomRightRadius: 108,
-    backgroundColor: 'rgba(196, 105, 74, 0.24)',
-    transform: [{ rotate: '-14deg' }],
-  },
-  topLeftSmearSmall: {
-    position: 'absolute',
-    top: 205, left: -60,
-    width: 215, height: 164,
-    borderTopLeftRadius: 48, borderTopRightRadius: 104,
-    borderBottomLeftRadius: 90, borderBottomRightRadius: 22,
-    backgroundColor: 'rgba(201, 169, 154, 0.20)',
-    transform: [{ rotate: '7deg' }],
-  },
-  bottomRightSmearLarge: {
-    position: 'absolute',
-    right: -102, bottom: -10,
-    width: 290, height: 225,
-    borderTopLeftRadius: 105, borderTopRightRadius: 32,
-    borderBottomLeftRadius: 58, borderBottomRightRadius: 126,
-    backgroundColor: 'rgba(196, 105, 74, 0.23)',
-    transform: [{ rotate: '-10deg' }],
-  },
-  bottomRightSmearSmall: {
-    position: 'absolute',
-    right: 18, bottom: 82,
-    width: 230, height: 155,
-    borderTopLeftRadius: 114, borderTopRightRadius: 54,
-    borderBottomLeftRadius: 32, borderBottomRightRadius: 88,
-    backgroundColor: 'rgba(201, 169, 154, 0.22)',
-    transform: [{ rotate: '-18deg' }],
-  },
-  chalkSplashTop: {
-    position: 'absolute',
-    top: 188, right: 22,
-    width: 76, height: 44,
-    borderTopLeftRadius: 44, borderTopRightRadius: 12,
-    borderBottomLeftRadius: 18, borderBottomRightRadius: 38,
-    backgroundColor: 'rgba(232, 221, 214, 0.19)',
-    transform: [{ rotate: '-19deg' }],
-  },
-  chalkSplashTopAccent: {
-    position: 'absolute',
-    top: 172, right: 62,
-    width: 31, height: 25,
-    borderTopLeftRadius: 18, borderTopRightRadius: 7,
-    borderBottomLeftRadius: 5, borderBottomRightRadius: 16,
-    backgroundColor: 'rgba(232, 221, 214, 0.16)',
-    transform: [{ rotate: '23deg' }],
-  },
-  chalkSplashBottom: {
-    position: 'absolute',
-    bottom: 115, left: 28,
-    width: 82, height: 51,
-    borderTopLeftRadius: 17, borderTopRightRadius: 48,
-    borderBottomLeftRadius: 42, borderBottomRightRadius: 12,
-    backgroundColor: 'rgba(232, 221, 214, 0.18)',
-    transform: [{ rotate: '16deg' }],
-  },
-  chalkSplashBottomAccent: {
-    position: 'absolute',
-    bottom: 104, left: 83,
-    width: 36, height: 23,
-    borderTopLeftRadius: 6, borderTopRightRadius: 17,
-    borderBottomLeftRadius: 13, borderBottomRightRadius: 5,
-    backgroundColor: 'rgba(232, 221, 214, 0.15)',
-    transform: [{ rotate: '-22deg' }],
+    paddingVertical: 76,
   },
 
   // Card
@@ -470,48 +388,65 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 430,
     alignSelf: 'center',
-    paddingTop: 76,
-    paddingHorizontal: 22,
-    paddingBottom: 24,
+    paddingTop: 66,
+    paddingHorizontal: 28,
+    paddingBottom: 20,
     borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(232, 221, 214, 0.72)',
-    backgroundColor: 'rgba(232, 221, 214, 0.94)',
+    borderWidth: 1.25,
+    borderColor: 'rgba(255, 255, 255, 0.68)',
+    backgroundColor: 'transparent',
     shadowColor: COLORS.charcoal,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.32,
-    shadowRadius: 22,
-    elevation: 14,
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.36,
+    shadowRadius: 25,
+    elevation: 16,
+  },
+  cardGlass: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  cardTint: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 24,
+    backgroundColor: 'rgba(247, 241, 236, 0.35)',
   },
   logo: {
     position: 'absolute',
-    top: -54,
+    top: -60,
     alignSelf: 'center',
-    width: 108, height: 108,
+    width: 118,
+    height: 118,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 28,
-    borderWidth: 1.5,
+    borderRadius: 30,
+    borderWidth: 1.6,
     borderColor: COLORS.cream,
+    backgroundColor: '#0E0E0E',
     shadowColor: COLORS.darkBrown,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.38,
-    shadowRadius: 12,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 11 },
+    shadowOpacity: 0.42,
+    shadowRadius: 14,
+    elevation: 14,
+  },
+  logoImage: {
+    width: 114,
+    height: 114,
+    borderRadius: 28,
   },
   title: {
     color: COLORS.charcoal,
     fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: -0.4,
+    fontWeight: '900',
     textAlign: 'center',
+    letterSpacing: -0.45,
   },
   subtitle: {
-    marginTop: 12,
-    color: COLORS.mutedTerracotta,
+    marginTop: 13,
+    color: COLORS.darkBrown,
     fontSize: 15,
-    fontWeight: '500',
-    lineHeight: 21,
+    lineHeight: 22,
+    fontWeight: '600',
     textAlign: 'center',
   },
   joinHint: {
@@ -523,56 +458,89 @@ const styles = StyleSheet.create({
   },
 
   // Tabs
-  tabContainer: {
+  tabs: {
     flexDirection: 'row',
-    marginTop: 28,
+    marginTop: 30,
     padding: 4,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: COLORS.dustyRose,
-    backgroundColor: COLORS.cream,
+    borderColor: 'rgba(201, 169, 154, 0.78)',
+    backgroundColor: 'rgba(232, 221, 214, 0.82)',
   },
   tab: {
-    minHeight: 44,
+    minHeight: 46,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 20,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
   },
   loginTab: { flex: 0.9 },
   registerTab: { flex: 1.35 },
-  activeTab: { backgroundColor: COLORS.burntOrange },
-  inactiveTab: { backgroundColor: COLORS.cream },
-  tabText: { fontSize: 14, fontWeight: '700', textAlign: 'center' },
-  activeTabText: { color: COLORS.white },
-  inactiveTabText: { color: COLORS.dustyRose },
+  tabActive: {
+    backgroundColor: COLORS.burntOrange,
+    shadowColor: COLORS.darkBrown,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.24,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  tabInactive: {
+    backgroundColor: 'transparent',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  tabTextActive: {
+    color: COLORS.white,
+  },
+  tabTextInactive: {
+    color: COLORS.mutedTerracotta,
+  },
 
   // Inputs
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  inputWrapper: {
     minHeight: 58,
     marginTop: 20,
-    paddingHorizontal: 16,
-    borderRadius: 14,
+    paddingHorizontal: 18,
+    borderRadius: 12,
     borderWidth: 1.5,
     borderColor: COLORS.dustyRose,
-    backgroundColor: COLORS.cream,
+    backgroundColor: 'rgba(232, 221, 214, 0.78)',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  inputContainerFocused: { borderColor: COLORS.burntOrange },
-  inputIcon: { marginRight: 12 },
+  inputWrapperFocused: {
+    borderColor: COLORS.burntOrange,
+  },
+  inputIcon: {
+    marginRight: 15,
+  },
   input: {
     flex: 1,
-    paddingVertical: 15,
+    paddingVertical: 14,
     color: COLORS.charcoal,
     fontSize: 16,
     fontWeight: '500',
   },
-  eyeButton: { alignItems: 'center', justifyContent: 'center', marginLeft: 10 },
+  eyeButton: {
+    marginLeft: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // Forgot password
-  forgotPasswordButton: { alignSelf: 'flex-end', marginTop: 14, paddingVertical: 4 },
-  forgotPasswordText: { color: COLORS.burntOrange, fontSize: 14, fontWeight: '700' },
+  forgotButton: {
+    alignSelf: 'flex-end',
+    marginTop: 15,
+    paddingVertical: 4,
+  },
+  forgotText: {
+    color: COLORS.burntOrange,
+    fontSize: 15,
+    fontWeight: '700',
+  },
 
   // Error
   errorText: {
@@ -583,28 +551,28 @@ const styles = StyleSheet.create({
   },
 
   // Login button
-  loginButtonWrapper: {
-    marginTop: 22,
-    borderRadius: 14,
+  loginButtonShadow: {
+    marginTop: 27,
+    borderRadius: 13,
     shadowColor: COLORS.darkBrown,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 10,
-    elevation: 7,
+    shadowOpacity: 0.34,
+    shadowRadius: 12,
+    elevation: 8,
   },
   loginButton: {
-    minHeight: 58,
+    minHeight: 60,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 14,
     paddingHorizontal: 18,
   },
   loginButtonText: {
     color: COLORS.white,
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 0.2,
+    fontSize: 19,
+    fontWeight: '900',
+    letterSpacing: 0.1,
   },
   pressed: { opacity: 0.82 },
-  disabledButton: { opacity: 0.68 },
+  disabled: { opacity: 0.66 },
 });

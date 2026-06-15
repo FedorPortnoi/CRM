@@ -67,6 +67,7 @@ const ContactFilterSchema = z.object({
   status: z.enum(['active', 'inactive', 'archived']).optional(),
   type: z.enum(['lead', 'customer', 'partner', 'other']).optional(),
   assigned_to: z.string().uuid().optional(),
+  scope: z.enum(['direct', 'subtree']).optional(),
   tag: z.string().optional(),
   source: z.string().optional(),
   last_contacted_before: z.string().datetime().optional(),

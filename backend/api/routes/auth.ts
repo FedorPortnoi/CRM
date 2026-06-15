@@ -60,6 +60,10 @@ const ChangePasswordSchema = z.object({
     .regex(/[^A-Za-z0-9]/, 'Password must include a symbol'),
 });
 
+const SetManagerSchema = z.object({
+  manager_id: z.string().uuid().nullable(),
+});
+
 const OnboardingSchema = z.object({
   completed: z.boolean().default(false),
   dismissed_steps: z.array(z.string().max(100)).max(20).optional(),
@@ -119,6 +123,10 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   }, AuthController.inviteUser);
   fastify.patch('/users/:id/deactivate', { preHandler: [authenticate] }, AuthController.deactivateUser);
   fastify.patch('/users/:id/role', { preHandler: [authenticate] }, AuthController.changeUserRole);
+  fastify.patch('/users/:id/manager', {
+    preHandler: [authenticate],
+    schema: { body: SetManagerSchema },
+  }, AuthController.setUserManager);
   fastify.get('/company-code', { preHandler: [authenticate] }, AuthController.getCompanyCode);
   fastify.post('/company-code/rotate', { preHandler: [authenticate] }, AuthController.rotateCompanyCode);
   fastify.patch('/me/password', {

@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { DealStatus, Prisma, TaskStatus } from '@prisma/client';
 import { db } from '../../services/db';
+import { getAccessibleUserIds } from '../../services/visibility';
 
 // ─── Local request types ──────────────────────────────────────────────────────
 
@@ -124,12 +125,23 @@ async function funnel(
 ): Promise<void> {
   const { start, end, period, pipeline_id, assigned_to } = request.query as DateRangeQuery;
   const { startDate, endDate } = resolveDateRange(period, start, end);
+  const visibleIds = await getAccessibleUserIds(request.user);
+
+  // Resolve assigned_to filter: if visibleIds restricts the cone, narrow it
+  // to the intersection; a client-requested id outside the cone yields no rows.
+  const assignedToFilter = visibleIds
+    ? assigned_to
+      ? (visibleIds.includes(assigned_to) ? { in: [assigned_to] } : { in: [] })
+      : { in: visibleIds }
+    : assigned_to
+    ? assigned_to
+    : undefined;
 
   const where: Prisma.DealWhereInput = {
     organization_id: request.user.org_id,
     created_at: { gte: startDate, lte: endDate },
     ...(pipeline_id && { pipeline_id }),
-    ...(assigned_to && { assigned_to }),
+    ...(assignedToFilter !== undefined && { assigned_to: assignedToFilter }),
   };
 
   const groups = await db.deal.groupBy({
@@ -200,6 +212,15 @@ async function revenue(
 ): Promise<void> {
   const { start, end, period, pipeline_id, assigned_to, group_by, currency } = request.query as RevenueQuery;
   const { startDate, endDate } = resolveDateRange(period, start, end);
+  const visibleIds = await getAccessibleUserIds(request.user);
+
+  const assignedToFilter = visibleIds
+    ? assigned_to
+      ? (visibleIds.includes(assigned_to) ? { in: [assigned_to] } : { in: [] })
+      : { in: visibleIds }
+    : assigned_to
+    ? assigned_to
+    : undefined;
 
   const deals = await db.deal.findMany({
     where: {
@@ -208,7 +229,7 @@ async function revenue(
       currency,
       actual_close: { gte: startDate, lte: endDate },
       ...(pipeline_id && { pipeline_id }),
-      ...(assigned_to && { assigned_to }),
+      ...(assignedToFilter !== undefined && { assigned_to: assignedToFilter }),
     },
     select: { actual_close: true, value: true },
     orderBy: { actual_close: 'asc' },
@@ -263,22 +284,35 @@ async function teamActivity(
   const { start, end, period } = request.query as DateRangeQuery;
   const { startDate, endDate } = resolveDateRange(period, start, end);
   const orgId = request.user.org_id;
+  const visibleIds = await getAccessibleUserIds(request.user);
   const dateRange = { created_at: { gte: startDate, lte: endDate } };
 
   const [msgGroups, taskGroups, meetingGroups] = await Promise.all([
     db.message.groupBy({
       by: ['user_id'],
-      where: { organization_id: orgId, user_id: { not: null }, ...dateRange },
+      where: {
+        organization_id: orgId,
+        user_id: visibleIds ? { in: visibleIds } : { not: null },
+        ...dateRange,
+      },
       _count: { _all: true },
     }),
     db.task.groupBy({
       by: ['assigned_to'],
-      where: { organization_id: orgId, ...dateRange },
+      where: {
+        organization_id: orgId,
+        ...(visibleIds && { assigned_to: { in: visibleIds } }),
+        ...dateRange,
+      },
       _count: { _all: true },
     }),
     db.calendarEvent.groupBy({
       by: ['created_by'],
-      where: { organization_id: orgId, created_by: { not: null }, ...dateRange },
+      where: {
+        organization_id: orgId,
+        created_by: visibleIds ? { in: visibleIds } : { not: null },
+        ...dateRange,
+      },
       _count: { _all: true },
     }),
   ]);
@@ -319,9 +353,11 @@ async function repPerformance(
   const { start, end, period } = request.query as DateRangeQuery;
   const { startDate, endDate } = resolveDateRange(period, start, end);
   const orgId = request.user.org_id;
+  const visibleIds = await getAccessibleUserIds(request.user);
+
   const baseWhere: Prisma.DealWhereInput = {
     organization_id: orgId,
-    assigned_to: { not: null },
+    assigned_to: visibleIds ? { in: visibleIds } : { not: null },
     created_at: { gte: startDate, lte: endDate },
   };
 
@@ -380,6 +416,15 @@ async function leadSources(
 ): Promise<void> {
   const { start, end, period, pipeline_id, assigned_to } = request.query as DateRangeQuery;
   const { startDate, endDate } = resolveDateRange(period, start, end);
+  const visibleIds = await getAccessibleUserIds(request.user);
+
+  const assignedToFilter = visibleIds
+    ? assigned_to
+      ? (visibleIds.includes(assigned_to) ? { in: [assigned_to] } : { in: [] })
+      : { in: visibleIds }
+    : assigned_to
+    ? assigned_to
+    : undefined;
 
   const groups = await db.deal.groupBy({
     by: ['source'],
@@ -387,7 +432,7 @@ async function leadSources(
       organization_id: request.user.org_id,
       created_at: { gte: startDate, lte: endDate },
       ...(pipeline_id && { pipeline_id }),
-      ...(assigned_to && { assigned_to }),
+      ...(assignedToFilter !== undefined && { assigned_to: assignedToFilter }),
     },
     _count: { _all: true },
     _sum: { value: true },
@@ -408,12 +453,21 @@ async function winLoss(
 ): Promise<void> {
   const { start, end, period, pipeline_id, assigned_to } = request.query as DateRangeQuery;
   const { startDate, endDate } = resolveDateRange(period, start, end);
+  const visibleIds = await getAccessibleUserIds(request.user);
+
+  const assignedToFilter = visibleIds
+    ? assigned_to
+      ? (visibleIds.includes(assigned_to) ? { in: [assigned_to] } : { in: [] })
+      : { in: visibleIds }
+    : assigned_to
+    ? assigned_to
+    : undefined;
 
   const baseWhere: Prisma.DealWhereInput = {
     organization_id: request.user.org_id,
     created_at: { gte: startDate, lte: endDate },
     ...(pipeline_id && { pipeline_id }),
-    ...(assigned_to && { assigned_to }),
+    ...(assignedToFilter !== undefined && { assigned_to: assignedToFilter }),
   };
 
   const [statusGroups, reasonGroups] = await Promise.all([
@@ -456,6 +510,7 @@ async function winLoss(
 
 async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const orgId = request.user.org_id;
+  const visibleIds = await getAccessibleUserIds(request.user);
 
   const org = await db.org.findUniqueOrThrow({
     where: { id: orgId },
@@ -474,6 +529,7 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
       where: {
         organization_id: orgId,
         status: { in: [DealStatus.open, DealStatus.won, DealStatus.lost] },
+        ...(visibleIds && { assigned_to: { in: visibleIds } }),
       },
       _count: { _all: true },
       _sum: { value: true },
@@ -483,22 +539,32 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
         organization_id: orgId,
         status: { notIn: [TaskStatus.cancelled, TaskStatus.done] },
         due_date: { gte: todayUTC, lt: tomorrowUTC },
+        ...(visibleIds && { assigned_to: { in: visibleIds } }),
       },
     }),
     db.message.findMany({
-      where: { organization_id: orgId },
+      where: {
+        organization_id: orgId,
+        ...(visibleIds && { user_id: { in: visibleIds } }),
+      },
       orderBy: { created_at: 'desc' },
       take: 3,
       select: { id: true, body: true, channel: true, created_at: true },
     }),
     db.task.findMany({
-      where: { organization_id: orgId },
+      where: {
+        organization_id: orgId,
+        ...(visibleIds && { assigned_to: { in: visibleIds } }),
+      },
       orderBy: { created_at: 'desc' },
       take: 3,
       select: { id: true, title: true, created_at: true },
     }),
     db.calendarEvent.findMany({
-      where: { organization_id: orgId },
+      where: {
+        organization_id: orgId,
+        ...(visibleIds && { created_by: { in: visibleIds } }),
+      },
       orderBy: { created_at: 'desc' },
       take: 3,
       select: { id: true, title: true, created_at: true },
@@ -508,6 +574,7 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
         organization_id: orgId,
         status: DealStatus.open,
         updated_at: { lt: stalledThreshold },
+        ...(visibleIds && { assigned_to: { in: visibleIds } }),
       },
     }),
   ]);

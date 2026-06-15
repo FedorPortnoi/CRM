@@ -4,11 +4,18 @@ import { db } from '../../services/db';
 import { evaluateWorkflows } from '../../services/workflows';
 import { logActivity } from './activities';
 import { dispatchNotification, taskCtx } from '../../services/notificationEngine';
+import {
+  getVisibleUserIds,
+  getAccessibleUserIds,
+  canSeeUser,
+  type VisibilityScope,
+} from '../../services/visibility';
 
 // ─── Local request types ──────────────────────────────────────────────────────
 
 type ListQuery = {
   assigned_to?: string;
+  scope?: VisibilityScope;
   status?: TaskStatus;
   priority?: TaskPriority;
   contact_id?: string;
@@ -65,14 +72,37 @@ async function dealBelongsToOrg(dealId: string, orgId: string): Promise<boolean>
   return deal !== null;
 }
 
+// Translate a resolved visibility set (+ optional explicit client filter) into a
+// Prisma `assigned_to` where-condition. A `null` set means owner/admin — no
+// per-user restriction. Asking for someone outside your cone yields no rows.
+function resolveAssignedFilter(
+  visibleIds: string[] | null,
+  requested?: string,
+): Prisma.TaskWhereInput['assigned_to'] {
+  if (visibleIds === null) {
+    return requested ?? undefined;
+  }
+  if (requested) {
+    return visibleIds.includes(requested) ? requested : { in: [] };
+  }
+  return { in: visibleIds };
+}
+
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 async function assignees(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
+  // Members can only assign inside their own cone; owner/admin see everyone.
+  const accessibleIds = await getAccessibleUserIds(request.user);
+
   const members = await db.user.findMany({
-    where: { organization_id: request.user.org_id, is_active: true },
+    where: {
+      organization_id: request.user.org_id,
+      is_active: true,
+      ...(accessibleIds && { id: { in: accessibleIds } }),
+    },
     select: { id: true, name: true },
     orderBy: { name: 'asc' },
   });
@@ -93,6 +123,7 @@ async function list(
 ): Promise<void> {
   const {
     assigned_to,
+    scope,
     status,
     priority,
     contact_id,
@@ -106,11 +137,16 @@ async function list(
     order,
   } = request.query as ListQuery;
 
+  // Role/hierarchy visibility: owner/admin → whole org; everyone else → self +
+  // reports at the requested depth ('direct' = one level down, the default).
+  const visibleIds = await getVisibleUserIds(request.user, scope ?? 'direct');
+  const assignedFilter = resolveAssignedFilter(visibleIds, assigned_to);
+
   const where: Prisma.TaskWhereInput = {
     organization_id: request.user.org_id,
     ...(status ? { status } : { status: { not: TaskStatus.cancelled } }),
     ...(priority && { priority }),
-    ...(assigned_to && { assigned_to }),
+    ...(assignedFilter && { assigned_to: assignedFilter }),
     ...(contact_id && { contact_id }),
     ...(deal_id && { deal_id }),
     ...(q && { title: { contains: q, mode: 'insensitive' } }),
@@ -144,10 +180,15 @@ async function create(
 ): Promise<void> {
   const body = request.body as CreateBody;
 
+  // You may only assign to yourself or someone inside your cone (subtree).
+  const accessibleIds = await getAccessibleUserIds(request.user);
+
   const [ownsAssignee, ownsContact, ownsDeal] = await Promise.all([
     body.assigned_to === request.user.sub
       ? Promise.resolve(true)
-      : userBelongsToOrg(body.assigned_to, request.user.org_id),
+      : canSeeUser(accessibleIds, body.assigned_to)
+        ? userBelongsToOrg(body.assigned_to, request.user.org_id)
+        : Promise.resolve(false),
     body.contact_id
       ? contactBelongsToOrg(body.contact_id, request.user.org_id)
       : Promise.resolve(true),
@@ -158,7 +199,7 @@ async function create(
 
   if (!ownsAssignee) {
     reply.status(403).send({
-      error: { code: 'FORBIDDEN', message: 'Assigned user does not belong to your organization' },
+      error: { code: 'FORBIDDEN', message: 'Assigned user is outside your team' },
     });
     return;
   }
@@ -210,8 +251,16 @@ async function getById(
 ): Promise<void> {
   const { id } = request.params as IdParams;
 
+  // Gate access to the requester's cone; out-of-cone tasks read as "not found".
+  const accessibleIds = await getAccessibleUserIds(request.user);
+  const assignedFilter = resolveAssignedFilter(accessibleIds, undefined);
+
   const task = await db.task.findFirst({
-    where: { id, organization_id: request.user.org_id },
+    where: {
+      id,
+      organization_id: request.user.org_id,
+      ...(assignedFilter && { assigned_to: assignedFilter }),
+    },
     include: {
       assignee: { select: { id: true, name: true } },
       contact: { select: { id: true, first_name: true, last_name: true } },
@@ -234,8 +283,15 @@ async function update(
   const body = request.body as UpdateBody;
   const orgId = request.user.org_id;
 
+  const accessibleIds = await getAccessibleUserIds(request.user);
+  const assignedFilter = resolveAssignedFilter(accessibleIds, undefined);
+
   const task = await db.task.findFirst({
-    where: { id, organization_id: orgId },
+    where: {
+      id,
+      organization_id: orgId,
+      ...(assignedFilter && { assigned_to: assignedFilter }),
+    },
   });
 
   if (!task) {
@@ -250,7 +306,9 @@ async function update(
 
   const [ownsAssignee, ownsContact, ownsDeal] = await Promise.all([
     body.assigned_to !== undefined && body.assigned_to !== request.user.sub
-      ? userBelongsToOrg(body.assigned_to, request.user.org_id)
+      ? canSeeUser(accessibleIds, body.assigned_to)
+        ? userBelongsToOrg(body.assigned_to, request.user.org_id)
+        : Promise.resolve(false)
       : Promise.resolve(true),
     body.contact_id !== undefined
       ? contactBelongsToOrg(body.contact_id, orgId)
@@ -262,7 +320,7 @@ async function update(
 
   if (!ownsAssignee) {
     reply.status(403).send({
-      error: { code: 'FORBIDDEN', message: 'Assigned user does not belong to your organization' },
+      error: { code: 'FORBIDDEN', message: 'Assigned user is outside your team' },
     });
     return;
   }
@@ -322,8 +380,15 @@ async function complete(
   const { id } = request.params as IdParams;
   const orgId = request.user.org_id;
 
+  const accessibleIds = await getAccessibleUserIds(request.user);
+  const assignedFilter = resolveAssignedFilter(accessibleIds, undefined);
+
   const task = await db.task.findFirst({
-    where: { id, organization_id: orgId },
+    where: {
+      id,
+      organization_id: orgId,
+      ...(assignedFilter && { assigned_to: assignedFilter }),
+    },
   });
 
   if (!task) {
@@ -386,8 +451,15 @@ async function startProgress(
   const { id } = request.params as IdParams;
   const orgId = request.user.org_id;
 
+  const accessibleIds = await getAccessibleUserIds(request.user);
+  const assignedFilter = resolveAssignedFilter(accessibleIds, undefined);
+
   const task = await db.task.findFirst({
-    where: { id, organization_id: orgId },
+    where: {
+      id,
+      organization_id: orgId,
+      ...(assignedFilter && { assigned_to: assignedFilter }),
+    },
   });
 
   if (!task) {
@@ -429,8 +501,15 @@ async function cancel(
   const { id } = request.params as IdParams;
   const orgId = request.user.org_id;
 
+  const accessibleIds = await getAccessibleUserIds(request.user);
+  const assignedFilter = resolveAssignedFilter(accessibleIds, undefined);
+
   const task = await db.task.findFirst({
-    where: { id, organization_id: orgId },
+    where: {
+      id,
+      organization_id: orgId,
+      ...(assignedFilter && { assigned_to: assignedFilter }),
+    },
   });
 
   if (!task) {
@@ -464,6 +543,10 @@ async function dueToday(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
+  const { scope } = request.query as { scope?: VisibilityScope };
+  const visibleIds = await getVisibleUserIds(request.user, scope ?? 'direct');
+  const assignedFilter = resolveAssignedFilter(visibleIds, undefined);
+
   const now = new Date();
   const startOfDay = new Date(now);
   startOfDay.setUTCHours(0, 0, 0, 0);
@@ -473,6 +556,7 @@ async function dueToday(
   const tasks = await db.task.findMany({
     where: {
       organization_id: request.user.org_id,
+      ...(assignedFilter && { assigned_to: assignedFilter }),
       status: { notIn: [TaskStatus.cancelled, TaskStatus.done] },
       due_date: { gte: startOfDay, lt: endOfDay },
     },
@@ -485,9 +569,14 @@ async function overdue(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
+  const { scope } = request.query as { scope?: VisibilityScope };
+  const visibleIds = await getVisibleUserIds(request.user, scope ?? 'direct');
+  const assignedFilter = resolveAssignedFilter(visibleIds, undefined);
+
   const tasks = await db.task.findMany({
     where: {
       organization_id: request.user.org_id,
+      ...(assignedFilter && { assigned_to: assignedFilter }),
       status: { notIn: [TaskStatus.done, TaskStatus.cancelled] },
       due_date: { lt: new Date() },
     },

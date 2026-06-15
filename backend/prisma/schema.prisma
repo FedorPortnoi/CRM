@@ -140,6 +140,7 @@ model User {
   preferences            Json?
   last_seen_at           DateTime?
   invited_by             String?   @db.Uuid
+  manager_id             String?   @db.Uuid
   created_at             DateTime  @default(now())
   updated_at             DateTime  @updatedAt
   push_token             String?
@@ -155,6 +156,8 @@ model User {
   organization     Org       @relation("UserOrg", fields: [organization_id], references: [id])
   inviter          User?     @relation("UserInviter", fields: [invited_by], references: [id])
   invitees         User[]    @relation("UserInviter")
+  manager          User?     @relation("UserManager", fields: [manager_id], references: [id])
+  reports          User[]    @relation("UserManager")
   ownedOrgs        Org[]     @relation("OrgOwner")
   assignedContacts Contact[] @relation("ContactAssignedTo")
   createdContacts  Contact[] @relation("ContactCreatedBy")
@@ -179,6 +182,7 @@ model User {
 
   // Employees log in by username, which only needs to be unique inside their org.
   @@unique([organization_id, username])
+  @@index([manager_id])
 }
 
 model Org {

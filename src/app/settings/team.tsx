@@ -17,6 +17,7 @@ interface OrgMember {
   username: string | null;
   name: string;
   role: Role;
+  manager_id: string | null;
 }
 
 interface CompanyCode {
@@ -140,6 +141,22 @@ export default function TeamScreen(): JSX.Element {
     onError: (e: Error) => Alert.alert('Error', e.message),
   });
 
+  const managerMutation = useMutation({
+    mutationFn: async ({ id, manager_id }: { id: string; manager_id: string | null }) => {
+      const res = await fetch(`${API_URL}/auth/users/${id}/manager`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_id }),
+      });
+      if (!res.ok) {
+        const json = (await res.json()) as { error?: { message: string } };
+        throw new Error(json.error?.message ?? 'Не удалось назначить руководителя');
+      }
+    },
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['org-users'] }),
+    onError: (e: Error) => Alert.alert('Ошибка', e.message),
+  });
+
   const canManage = currentUser?.role === 'owner' || currentUser?.role === 'admin';
   const isOwner = currentUser?.role === 'owner';
 
@@ -157,8 +174,20 @@ export default function TeamScreen(): JSX.Element {
     })).concat([{ text: 'Отмена', onPress: () => undefined }]));
   }, [roleMutation]);
 
+  const promptManagerChange = useCallback((member: OrgMember, allMembers: OrgMember[]) => {
+    const eligibleManagers = allMembers.filter((m) => m.id !== member.id);
+    const options = eligibleManagers.map((m) => ({
+      text: m.name,
+      onPress: () => managerMutation.mutate({ id: member.id, manager_id: m.id }),
+    }));
+    options.push({ text: 'Без руководителя', onPress: () => managerMutation.mutate({ id: member.id, manager_id: null }) });
+    options.push({ text: 'Отмена', onPress: () => undefined });
+    Alert.alert('Руководитель', `Выберите руководителя для ${member.name}`, options);
+  }, [managerMutation]);
+
   const renderItem = useCallback(({ item }: ListRenderItemInfo<OrgMember>) => {
     const isSelf = item.id === currentUser?.id;
+    const managerName = item.manager_id ? (members.find((m) => m.id === item.manager_id)?.name ?? null) : null;
     return (
       <View style={styles.row}>
         <View style={[styles.avatar, { backgroundColor: ROLE_COLORS[item.role] }]}>
@@ -167,6 +196,9 @@ export default function TeamScreen(): JSX.Element {
         <View style={styles.rowInfo}>
           <Text style={styles.rowName}>{item.name}{isSelf ? ' (вы)' : ''}</Text>
           <Text style={styles.rowEmail}>{item.email ?? item.username ?? ''}</Text>
+          {managerName !== null ? (
+            <Text style={styles.rowManager}>↑ {managerName}</Text>
+          ) : null}
         </View>
         <View style={[styles.badge, { backgroundColor: ROLE_COLORS[item.role] + '22' }]}>
           <Text style={[styles.badgeText, { color: ROLE_COLORS[item.role] }]}>{ROLE_LABELS[item.role]}</Text>
@@ -175,17 +207,20 @@ export default function TeamScreen(): JSX.Element {
           <View style={styles.actions}>
             {isOwner && (
               <TouchableOpacity style={styles.actionBtn} onPress={() => promptRoleChange(item)}>
-                <Text style={styles.actionBtnText}>Role</Text>
+                <Text style={styles.actionBtnText}>Роль</Text>
               </TouchableOpacity>
             )}
+            <TouchableOpacity style={styles.actionBtn} onPress={() => promptManagerChange(item, members)}>
+              <Text style={styles.actionBtnText}>Рук-ль</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.actionBtn, styles.deactivateBtn]} onPress={() => confirmDeactivate(item)}>
-              <Text style={[styles.actionBtnText, { color: '#ef4444' }]}>Remove</Text>
+              <Text style={[styles.actionBtnText, { color: '#ef4444' }]}>Убрать</Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
     );
-  }, [canManage, isOwner, currentUser?.id, confirmDeactivate, promptRoleChange]);
+  }, [canManage, isOwner, currentUser?.id, members, confirmDeactivate, promptRoleChange, promptManagerChange]);
 
   return (
     <View style={styles.container}>
@@ -342,6 +377,7 @@ const styles = StyleSheet.create({
   rowInfo: { flex: 1 },
   rowName: { fontSize: 15, fontWeight: '600', color: '#383432' },
   rowEmail: { fontSize: 12, color: '#B07868', marginTop: 2 },
+  rowManager: { fontSize: 11, color: '#C45A10', marginTop: 2 },
   badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { fontSize: 12, fontWeight: '600' },
   actions: { flexDirection: 'row', gap: 6 },

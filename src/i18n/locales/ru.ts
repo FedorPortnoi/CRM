@@ -159,6 +159,13 @@ const ru = {
     callNotes: 'Заметки к звонку',
     pasteCardText: 'Вставьте текст визитки',
     searchImportPhone: 'Поиск контактов',
+    totalCount: 'Всего контактов: {{count}}',
+    tabAll: 'Все',
+    tabCustomers: 'Клиенты',
+    tabPartners: 'Партнёры',
+    tabLeads: 'Лиды',
+    activityPrefix: 'Активность:',
+    noContactFilter: 'Нет связи 30+ дней',
   },
   attachments: {
     title: 'Вложения',

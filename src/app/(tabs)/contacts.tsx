@@ -1,25 +1,33 @@
-﻿import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   FlatList,
   TextInput,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   ActivityIndicator,
   ListRenderItemInfo,
   Alert,
   Modal,
   RefreshControl,
+  StatusBar,
 } from 'react-native';
 import { router } from 'expo-router';
-import { Check, Search } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Menu, Search, Plus, SlidersHorizontal, Check, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { formatDistanceToNow } from 'date-fns';
+import { ru, enUS } from 'date-fns/locale';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
+import ContactCard, { ContactCardData, ContactCardType } from '../../components/ContactCard';
+
+type ContactTypeValue = 'lead' | 'customer' | 'partner' | 'other';
 
 type Contact = {
   id: string;
@@ -29,6 +37,8 @@ type Contact = {
   phone: string | null;
   email: string | null;
   status: string;
+  type?: ContactTypeValue | null;
+  avatar_url?: string | null;
   last_contacted_at?: string | null;
 };
 
@@ -53,7 +63,21 @@ type ContactsResponse = {
   };
 };
 
+type SegmentKey = 'all' | 'customer' | 'partner' | 'lead';
+
 const PER_PAGE = 20;
+
+const COLORS = {
+  cream: '#F7F1EC',
+  lightCream: '#E8DDD6',
+  burntOrange: '#C45A10',
+  charcoal: '#333333',
+  white: '#FFFFFF',
+  black: '#161412',
+  textMuted: '#6F625D',
+  cardBorder: '#EEE5DF',
+  darkBrown: '#8B3A00',
+} as const;
 
 const AVATAR_COLORS = ['#C45A10', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
 
@@ -69,12 +93,20 @@ function avatarColor(name: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
+function normalizeType(type?: ContactTypeValue | null): ContactCardType {
+  if (type === 'customer' || type === 'partner' || type === 'lead') return type;
+  return 'other';
+}
+
 export default function ContactsScreen(): JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { token } = useUserStore();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [segment, setSegment] = useState<SegmentKey>('all');
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [isAssignModalVisible, setIsAssignModalVisible] = useState(false);
@@ -85,9 +117,10 @@ export default function ContactsScreen(): JSX.Element {
   const [assignError, setAssignError] = useState<string | null>(null);
   const [showNoContact30d, setShowNoContact30d] = useState(false);
   const filter = showNoContact30d ? 'no-contact-30d' : 'all';
+  const typeParam = segment === 'all' ? undefined : segment;
 
   const contactsQuery = useQuery<ContactsResponse, Error>({
-    queryKey: ['contacts', page, search, filter, token],
+    queryKey: ['contacts', page, search, filter, typeParam, token],
     queryFn: async (): Promise<ContactsResponse> => {
       if (!token) {
         throw new Error(t('errors.unauthorized'));
@@ -105,6 +138,10 @@ export default function ContactsScreen(): JSX.Element {
 
         if (query) {
           params.set('q', query);
+        }
+
+        if (typeParam) {
+          params.set('type', typeParam);
         }
 
         const res = await fetch(
@@ -143,6 +180,43 @@ export default function ContactsScreen(): JSX.Element {
       return fetchPage(page);
     },
     retry: (failureCount) => Boolean(token) && failureCount < 3,
+  });
+
+  // Lightweight per-segment totals (page 1, single row) so the tab counts
+  // reflect the real backend totals regardless of the loaded page / filter.
+  const countsQuery = useQuery<Record<SegmentKey, number>, Error>({
+    queryKey: ['contacts-counts', search, token],
+    enabled: Boolean(token),
+    queryFn: async (): Promise<Record<SegmentKey, number>> => {
+      if (!token) {
+        throw new Error(t('errors.unauthorized'));
+      }
+
+      const query = search.trim();
+
+      const fetchTotal = async (type?: ContactTypeValue): Promise<number> => {
+        const params = new URLSearchParams({ page: '1', per_page: '1' });
+        if (query) params.set('q', query);
+        if (type) params.set('type', type);
+
+        const res = await fetch(
+          `${API_URL}/contacts?${params.toString()}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+        const json = (await res.json()) as ContactsResponse;
+        return json.meta.total;
+      };
+
+      const [all, customer, partner, lead] = await Promise.all([
+        fetchTotal(),
+        fetchTotal('customer'),
+        fetchTotal('partner'),
+        fetchTotal('lead'),
+      ]);
+
+      return { all, customer, partner, lead };
+    },
   });
 
   const archiveMutation = useMutation<void, Error, string[]>({
@@ -187,6 +261,7 @@ export default function ContactsScreen(): JSX.Element {
         },
       );
       void queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      void queryClient.invalidateQueries({ queryKey: ['contacts-counts'] });
       setSelectedContactIds([]);
       setArchiveError(null);
       setAssignError(null);
@@ -244,11 +319,13 @@ export default function ContactsScreen(): JSX.Element {
             index + 1,
             search,
             filter,
+            typeParam,
             token,
           ]),
         ).filter((value): value is ContactsResponse => value !== undefined);
 
   const contacts = contactPages.flatMap((contactPage) => contactPage.data);
+  const totalCount = contactsQuery.data?.meta.total ?? 0;
   const hasMore =
     filter !== 'no-contact-30d' &&
     contactsQuery.data !== undefined &&
@@ -259,6 +336,9 @@ export default function ContactsScreen(): JSX.Element {
   const isRefreshing = contactsQuery.isRefetching && page === 1;
   const error = contactsQuery.isError ? contactsQuery.error.message : null;
 
+  const counts = countsQuery.data;
+  const headerTotal = counts?.all ?? totalCount;
+
   const selectedContactIdSet = useMemo(
     () => new Set(selectedContactIds),
     [selectedContactIds],
@@ -268,6 +348,8 @@ export default function ContactsScreen(): JSX.Element {
   const isAssigning = assignMutation.isPending;
   const isBulkActionRunning = isArchiving || isAssigning;
 
+  const dateLocale = i18n.language === 'en' ? enUS : ru;
+
   const loadMore = useCallback((): void => {
     if (contactsQuery.isFetching || !hasMore) return;
     setPage((currentPage) => currentPage + 1);
@@ -276,18 +358,52 @@ export default function ContactsScreen(): JSX.Element {
   const handleRetry = useCallback((): void => {
     setPage(1);
     void queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    void queryClient.invalidateQueries({ queryKey: ['contacts-counts'] });
   }, [queryClient]);
 
   const handleRefresh = useCallback((): void => {
     setPage(1);
     setSelectedContactIds([]);
     void queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    void queryClient.invalidateQueries({ queryKey: ['contacts-counts'] });
   }, [queryClient]);
 
   const handleSearchChange = useCallback((text: string): void => {
     setSearch(text);
     setPage(1);
     setSelectedContactIds([]);
+  }, []);
+
+  const handleToggleSearch = useCallback((): void => {
+    setSearchOpen((open) => {
+      const next = !open;
+      if (!next && search.length > 0) {
+        setSearch('');
+        setPage(1);
+      }
+      return next;
+    });
+  }, [search.length]);
+
+  const handleSelectSegment = useCallback((next: SegmentKey): void => {
+    setSegment(next);
+    setPage(1);
+    setSelectedContactIds([]);
+  }, []);
+
+  const handleAddPress = useCallback((): void => {
+    Alert.alert(t('contacts.add'), undefined, [
+      { text: t('contacts.new'), onPress: () => { router.push('/contact/new'); } },
+      { text: t('contacts.scanCard'), onPress: () => { router.push('/contact/scan-card'); } },
+      { text: '📲 Импорт из приложений', onPress: () => { router.push('/import-hub' as never); } },
+      { text: t('contacts.importPhone'), onPress: () => { router.push('/contact/import-phone'); } },
+      { text: t('contacts.importCsv'), onPress: () => { router.push('/contact/import-csv'); } },
+      { text: t('common.cancel'), style: 'cancel' },
+    ]);
+  }, [t]);
+
+  const handleMenuPress = useCallback((): void => {
+    router.replace('/' as never);
   }, []);
 
   const handleToggleNoContactFilter = useCallback((): void => {
@@ -461,15 +577,34 @@ export default function ContactsScreen(): JSX.Element {
     ? contacts.filter((c) => !c.last_contacted_at || new Date(c.last_contacted_at) < thirtyDaysAgo)
     : contacts;
 
+  const activityCaption = t('contacts.activityPrefix');
+
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<Contact>): JSX.Element => {
       const name = [item.first_name, item.last_name].filter(Boolean).join(' ');
-      const isSelected = selectedContactIdSet.has(item.id);
-      const initials = getInitials(item.first_name, item.last_name);
-      const bgColor = avatarColor(item.first_name);
+      const cardType = normalizeType(item.type);
+      const data: ContactCardData = {
+        id: item.id,
+        name,
+        company: item.company,
+        phone: item.phone,
+        type: cardType,
+        typeLabel: t(`contacts.${cardType}`),
+        avatarUrl: item.avatar_url,
+        initials: getInitials(item.first_name, item.last_name),
+        avatarColor: avatarColor(item.first_name),
+        activityLabel: item.last_contacted_at
+          ? formatDistanceToNow(new Date(item.last_contacted_at), { addSuffix: true, locale: dateLocale })
+          : null,
+      };
+
       return (
-        <TouchableOpacity
-          style={styles.row}
+        <ContactCard
+          contact={data}
+          selectionMode={isSelectionMode}
+          selected={selectedContactIdSet.has(item.id)}
+          disabled={isBulkActionRunning}
+          activityCaption={activityCaption}
           onPress={() => {
             if (isSelectionMode) {
               handleToggleSelection(item.id);
@@ -478,56 +613,19 @@ export default function ContactsScreen(): JSX.Element {
             router.push({ pathname: '/contact/[id]', params: { id: item.id } });
           }}
           onLongPress={() => handleLongPressContact(item.id)}
-          disabled={isBulkActionRunning}
-          accessibilityRole="button"
-          accessibilityState={{
-            selected: isSelected,
-            disabled: isBulkActionRunning,
-          }}
-        >
-          {isSelectionMode ? (
-            <View
-              style={[
-                styles.checkbox,
-                isSelected ? styles.checkboxSelected : styles.checkboxEmpty,
-              ]}
-            >
-              {isSelected ? <Check size={16} color="#FFFFFF" strokeWidth={3} /> : null}
-            </View>
-          ) : (
-            <View style={[styles.avatar, { backgroundColor: bgColor }]}>
-              <Text style={styles.avatarText}>{initials}</Text>
-            </View>
-          )}
-          <View style={styles.rowMain}>
-            <Text style={styles.rowName} numberOfLines={1}>
-              {name}
-            </Text>
-            {item.company ? (
-              <Text style={styles.rowSub} numberOfLines={1}>
-                {item.company}
-              </Text>
-            ) : null}
-            {item.last_contacted_at ? (
-              <Text style={styles.lastContactText}>
-                Last contact: {formatDistanceToNow(new Date(item.last_contacted_at), { addSuffix: true })}
-              </Text>
-            ) : null}
-          </View>
-          {item.phone ? (
-            <Text style={styles.rowPhone} numberOfLines={1}>
-              {item.phone}
-            </Text>
-          ) : null}
-        </TouchableOpacity>
+          onMenuPress={() => handleLongPressContact(item.id)}
+        />
       );
     },
     [
+      activityCaption,
+      dateLocale,
       handleLongPressContact,
       handleToggleSelection,
       isBulkActionRunning,
       isSelectionMode,
       selectedContactIdSet,
+      t,
     ],
   );
 
@@ -571,130 +669,230 @@ export default function ContactsScreen(): JSX.Element {
     [isAssigning, selectedUserId],
   );
 
-  if (isLoading) {
-    return (
-      <View style={styles.skeletonContainer}>
-        {Array.from({ length: 8 }).map((_, i) => (
-          <View key={i} style={styles.skeletonRow} />
-        ))}
-      </View>
-    );
-  }
+  const segments: { key: SegmentKey; label: string; count: number | undefined }[] = [
+    { key: 'all', label: t('contacts.tabAll'), count: counts?.all },
+    { key: 'customer', label: t('contacts.tabCustomers'), count: counts?.customer },
+    { key: 'partner', label: t('contacts.tabPartners'), count: counts?.partner },
+    { key: 'lead', label: t('contacts.tabLeads'), count: counts?.lead },
+  ];
 
-  if (error) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
-          <Text style={styles.retryText}>{t('common.retry')}</Text>
-        </TouchableOpacity>
+  const renderHeader = (): JSX.Element => (
+    <LinearGradient
+      colors={[COLORS.charcoal, '#222222']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[styles.header, { paddingTop: insets.top + 10 }]}
+    >
+      <View style={styles.headerContent}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('common.menu')}
+          hitSlop={10}
+          onPress={handleMenuPress}
+          style={({ pressed }) => [styles.headerIconButton, pressed && styles.pressed]}
+        >
+          <Menu size={26} color={COLORS.white} strokeWidth={2.2} />
+        </Pressable>
+
+        <View style={styles.titleBlock}>
+          <Text style={styles.title} numberOfLines={1}>{t('contacts.title')}</Text>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {t('contacts.totalCount', { count: headerTotal })}
+          </Text>
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('contacts.search')}
+          hitSlop={10}
+          onPress={handleToggleSearch}
+          style={({ pressed }) => [styles.headerIconButton, pressed && styles.pressed]}
+        >
+          {searchOpen ? (
+            <X size={25} color={COLORS.white} strokeWidth={2.2} />
+          ) : (
+            <Search size={24} color={COLORS.white} strokeWidth={2.2} />
+          )}
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('contacts.add')}
+          onPress={handleAddPress}
+          style={({ pressed }) => [styles.addButtonWrap, pressed && styles.pressed]}
+        >
+          <LinearGradient
+            colors={[COLORS.burntOrange, '#FA6A1E']}
+            start={{ x: 0.15, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.addButton}
+          >
+            <Plus size={26} color={COLORS.white} strokeWidth={2.6} />
+          </LinearGradient>
+        </Pressable>
       </View>
-    );
-  }
+
+      {searchOpen ? (
+        <View style={styles.searchWrapper}>
+          <Search size={18} color="#CFADA3" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={t('contacts.searchPlaceholder')}
+            placeholderTextColor="#CFADA3"
+            value={search}
+            onChangeText={handleSearchChange}
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoFocus
+            clearButtonMode="while-editing"
+          />
+        </View>
+      ) : null}
+    </LinearGradient>
+  );
+
+  const renderTabs = (): JSX.Element => (
+    <View style={styles.tabsRow}>
+      <View style={styles.tabsCard}>
+        {segments.map((seg) => {
+          const isActive = segment === seg.key;
+          return (
+            <Pressable
+              key={seg.key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+              onPress={() => handleSelectSegment(seg.key)}
+              style={({ pressed }) => [
+                styles.tab,
+                isActive && styles.activeTab,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text numberOfLines={1} style={[styles.tabLabel, isActive && styles.activeTabLabel]}>
+                {seg.label}
+              </Text>
+              <Text style={[styles.tabCount, isActive && styles.activeTabCount]}>
+                {seg.count ?? '—'}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('common.filter')}
+        accessibilityState={{ selected: showNoContact30d }}
+        onPress={handleToggleNoContactFilter}
+        style={({ pressed }) => [
+          styles.filterButton,
+          showNoContact30d && styles.filterButtonActive,
+          pressed && styles.pressed,
+        ]}
+      >
+        <SlidersHorizontal
+          size={22}
+          color={showNoContact30d ? COLORS.burntOrange : COLORS.textMuted}
+        />
+      </Pressable>
+    </View>
+  );
+
+  const listContent = (
+    <FlatList
+      data={filtered}
+      keyExtractor={(item) => item.id}
+      renderItem={renderItem}
+      ListHeaderComponent={renderTabs}
+      ItemSeparatorComponent={ItemSeparator}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          colors={[COLORS.burntOrange]}
+          tintColor={COLORS.burntOrange}
+        />
+      }
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.3}
+      showsVerticalScrollIndicator={false}
+      ListEmptyComponent={
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>
+            {search.trim() ? t('contacts.noSearchResults') : t('contacts.noContacts')}
+          </Text>
+          {!search.trim() && !showNoContact30d ? (
+            <View style={styles.emptyActions}>
+              <TouchableOpacity
+                style={styles.emptyPrimaryButton}
+                onPress={() => router.push('/contact/new')}
+                accessibilityRole="button"
+              >
+                <Text style={styles.emptyPrimaryText}>{t('contacts.add')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.emptySecondaryButton}
+                onPress={() => router.push('/contact/import-csv')}
+                accessibilityRole="button"
+              >
+                <Text style={styles.emptySecondaryText}>{t('contacts.importCsv')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.emptySecondaryButton}
+                onPress={() => router.push('/contact/scan-card')}
+                accessibilityRole="button"
+              >
+                <Text style={styles.emptySecondaryText}>{t('contacts.scanCard')}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+      }
+      ListFooterComponent={
+        isFetchingMore ? (
+          <View style={styles.footer}>
+            <ActivityIndicator size="small" color={COLORS.burntOrange} />
+          </View>
+        ) : null
+      }
+      contentContainerStyle={[
+        styles.listContent,
+        { paddingBottom: insets.bottom + (isSelectionMode ? 96 : 28) },
+        filtered.length === 0 ? styles.listContentEmpty : null,
+      ]}
+    />
+  );
 
   return (
     <View style={styles.container}>
-      <View style={styles.circle1} pointerEvents="none" />
-      <View style={styles.circle2} pointerEvents="none" />
-      <View style={styles.circle3} pointerEvents="none" />
-      <View style={styles.searchWrapper}>
-        <Search size={16} color="#CFADA3" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder={t('contacts.searchPlaceholder')}
-          placeholderTextColor="#CFADA3"
-          value={search}
-          onChangeText={handleSearchChange}
-          autoCapitalize="none"
-          autoCorrect={false}
-          clearButtonMode="while-editing"
-        />
-      </View>
-      {!isSelectionMode ? (
-        <TouchableOpacity
-          style={styles.importRow}
-          onPress={() => router.push('/contacts/import' as never)}
-          accessibilityRole="button"
-        >
-          <Text style={styles.importRowText}>{t('contacts.importCsv')}</Text>
-        </TouchableOpacity>
-      ) : null}
-      {!isSelectionMode ? (
-        <View style={styles.filterBar}>
-          <TouchableOpacity
-            style={[styles.filterChip, showNoContact30d ? styles.filterChipActive : null]}
-            onPress={handleToggleNoContactFilter}
-            accessibilityRole="button"
-            accessibilityState={{ selected: showNoContact30d }}
-          >
-            <Text style={[styles.filterChipText, showNoContact30d ? styles.filterChipTextActive : null]}>
-              No contact 30d+
-            </Text>
+      <StatusBar barStyle="light-content" />
+      {renderHeader()}
+
+      {isLoading ? (
+        <View style={styles.body}>
+          {renderTabs()}
+          <View style={styles.skeletonList}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <View key={i} style={styles.skeletonCard} />
+            ))}
+          </View>
+        </View>
+      ) : error ? (
+        <View style={styles.stateContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+            <Text style={styles.retryText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
-      ) : null}
-      {archiveError ? (
-        <Text style={styles.archiveErrorText}>{archiveError}</Text>
-      ) : null}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            colors={['#C45A10']}
-            tintColor="#C45A10"
-          />
-        }
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.3}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              {search.trim() ? t('contacts.noSearchResults') : t('contacts.noContacts')}
-            </Text>
-            {!search.trim() && !showNoContact30d ? (
-              <View style={styles.emptyActions}>
-                <TouchableOpacity
-                  style={styles.emptyPrimaryButton}
-                  onPress={() => router.push('/contact/new')}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.emptyPrimaryText}>{t('contacts.add')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.emptySecondaryButton}
-                  onPress={() => router.push('/contacts/import' as never)}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.emptySecondaryText}>{t('contacts.importCsv')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.emptySecondaryButton}
-                  onPress={() => router.push('/contact/scan-card' as never)}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.emptySecondaryText}>{t('contacts.scanCard')}</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-          </View>
-        }
-        ListFooterComponent={
-          isFetchingMore ? (
-            <View style={styles.footer}>
-              <ActivityIndicator size="small" color="#C45A10" />
-            </View>
-          ) : null
-        }
-        contentContainerStyle={
-          filtered.length === 0 ? styles.emptyContent : undefined
-        }
-      />
+      ) : (
+        <View style={styles.body}>
+          {archiveError ? <Text style={styles.archiveErrorText}>{archiveError}</Text> : null}
+          {listContent}
+        </View>
+      )}
+
       {isSelectionMode ? (
-        <View style={styles.actionBar}>
+        <View style={[styles.actionBar, { paddingBottom: insets.bottom + 12 }]}>
           <TouchableOpacity
             style={styles.cancelSelectionButton}
             onPress={handleCancelSelection}
@@ -738,6 +936,7 @@ export default function ContactsScreen(): JSX.Element {
           </TouchableOpacity>
         </View>
       ) : null}
+
       <Modal
         animationType="slide"
         transparent
@@ -760,7 +959,7 @@ export default function ContactsScreen(): JSX.Element {
             <View style={styles.userListContainer}>
               {isLoadingUsers ? (
                 <View style={styles.modalStateContainer}>
-                  <ActivityIndicator size="small" color="#C45A10" />
+                  <ActivityIndicator size="small" color={COLORS.burntOrange} />
                   <Text style={styles.modalStateText}>{t('contacts.loadingUsers')}</Text>
                 </View>
               ) : usersError ? (
@@ -830,65 +1029,188 @@ export default function ContactsScreen(): JSX.Element {
   );
 }
 
+function ItemSeparator(): JSX.Element {
+  return <View style={styles.separator} />;
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.cream,
   },
-  circle1: {
-    position: 'absolute',
-    width: 350,
-    height: 350,
-    borderRadius: 175,
-    backgroundColor: 'rgba(6,95,70,0.04)',
-    top: -80,
-    right: -100,
+  header: {
+    paddingBottom: 22,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: COLORS.charcoal,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 12,
   },
-  circle2: {
-    position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: 'rgba(6,95,70,0.03)',
-    bottom: 100,
-    left: -80,
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  circle3: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(6,95,70,0.03)',
-    top: '40%',
-    right: -60,
+  headerIconButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  skeletonContainer: {
+  titleBlock: {
     flex: 1,
-    backgroundColor: '#ffffff',
-    padding: 12,
+    marginLeft: 10,
+  },
+  title: {
+    color: COLORS.white,
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+  },
+  subtitle: {
+    marginTop: 3,
+    color: 'rgba(255, 255, 255, 0.72)',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  addButtonWrap: {
+    marginLeft: 12,
+    borderRadius: 24,
+    shadowColor: COLORS.darkBrown,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    elevation: 9,
+  },
+  addButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    marginTop: 16,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    minHeight: 46,
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#383432',
+    paddingVertical: 10,
+  },
+  body: {
+    flex: 1,
+  },
+  tabsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  tabsCard: {
+    flex: 1,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    backgroundColor: COLORS.white,
+    shadowColor: COLORS.charcoal,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
+    elevation: 2,
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 2,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: COLORS.burntOrange,
+  },
+  tabLabel: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  activeTabLabel: {
+    color: COLORS.burntOrange,
+  },
+  tabCount: {
+    marginTop: 4,
+    color: COLORS.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activeTabCount: {
+    color: COLORS.burntOrange,
+  },
+  filterButton: {
+    width: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    backgroundColor: COLORS.white,
+    shadowColor: COLORS.charcoal,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
+    elevation: 2,
+  },
+  filterButtonActive: {
+    borderColor: COLORS.burntOrange,
+    backgroundColor: '#FEF0E8',
+  },
+  listContent: {
+    paddingHorizontal: 16,
     paddingTop: 16,
   },
-  skeletonRow: {
-    height: 64,
-    backgroundColor: '#FAF6F3',
-    borderRadius: 12,
-    marginBottom: 8,
+  listContentEmpty: {
+    flexGrow: 1,
   },
-  errorContainer: {
+  separator: {
+    height: 12,
+  },
+  skeletonList: {
+    paddingHorizontal: 16,
+  },
+  skeletonCard: {
+    height: 104,
+    backgroundColor: '#FBF6F2',
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    marginBottom: 12,
+  },
+  stateContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#ffffff',
   },
   errorText: {
     color: '#ef4444',
-    fontSize: 14,
+    fontSize: 15,
     textAlign: 'center',
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: '#C45A10',
+    backgroundColor: COLORS.burntOrange,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
@@ -897,182 +1219,53 @@ const styles = StyleSheet.create({
   },
   retryText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  searchWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 12,
-    marginTop: 12,
-    marginBottom: 8,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E8DDD6',
-    minHeight: 44,
-    gap: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#383432',
-    paddingVertical: 10,
-  },
-  importRow: {
-    marginHorizontal: 12,
-    marginBottom: 4,
-    alignItems: 'flex-end',
-  },
-  importRowText: {
-    fontSize: 13,
-    color: '#C45A10',
-    fontWeight: '500',
-    paddingVertical: 4,
-  },
-  filterBar: {
-    flexDirection: 'row',
-    marginHorizontal: 12,
-    marginBottom: 8,
-  },
-  filterChip: {
-    borderWidth: 1,
-    borderColor: '#E8DDD6',
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: '#FFFFFF',
-  },
-  filterChipActive: {
-    borderColor: '#C45A10',
-    backgroundColor: '#FEF0E8',
-  },
-  filterChipText: {
-    color: '#B07868',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  filterChipTextActive: {
-    color: '#C45A10',
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    flexShrink: 0,
-  },
-  avatarText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  row: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 12,
-    marginBottom: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-    marginRight: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxEmpty: {
-    borderWidth: 1.5,
-    borderColor: '#CFADA3',
-    backgroundColor: '#FFFFFF',
-  },
-  checkboxSelected: {
-    borderWidth: 1.5,
-    borderColor: '#C45A10',
-    backgroundColor: '#C45A10',
-  },
-  rowMain: {
-    flex: 1,
-    minWidth: 0,
-    marginRight: 8,
-  },
-  rowName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#383432',
-  },
-  rowSub: {
-    fontSize: 12,
-    color: '#B07868',
-    marginTop: 2,
-  },
-  lastContactText: {
-    fontSize: 11,
-    color: '#CFADA3',
-    marginTop: 2,
-  },
-  rowPhone: {
-    fontSize: 13,
-    color: '#B07868',
-    maxWidth: '38%',
   },
   emptyContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 60,
+    paddingTop: 40,
+    paddingHorizontal: 16,
   },
   emptyText: {
-    fontSize: 14,
-    color: '#CFADA3',
+    fontSize: 15,
+    color: '#9A8C84',
     textAlign: 'center',
   },
   emptyActions: {
     width: '100%',
-    marginTop: 18,
+    marginTop: 20,
     gap: 10,
   },
   emptyPrimaryButton: {
-    backgroundColor: '#C45A10',
-    borderRadius: 12,
-    minHeight: 44,
+    backgroundColor: COLORS.burntOrange,
+    borderRadius: 14,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 18,
   },
   emptyPrimaryText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
   },
   emptySecondaryButton: {
     borderWidth: 1,
-    borderColor: '#E8DDD6',
-    borderRadius: 12,
-    minHeight: 44,
+    borderColor: COLORS.cardBorder,
+    borderRadius: 14,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.white,
   },
   emptySecondaryText: {
-    color: '#C45A10',
-    fontSize: 14,
+    color: COLORS.burntOrange,
+    fontSize: 15,
     fontWeight: '600',
-  },
-  emptyContent: {
-    flexGrow: 1,
   },
   footer: {
     paddingVertical: 16,
@@ -1081,19 +1274,18 @@ const styles = StyleSheet.create({
   archiveErrorText: {
     color: '#ef4444',
     fontSize: 13,
-    marginHorizontal: 12,
-    marginBottom: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
   },
   actionBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: 12,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#FAF6F3',
+    borderTopColor: COLORS.cardBorder,
   },
   cancelSelectionButton: {
     minHeight: 44,
@@ -1102,7 +1294,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: COLORS.cardBorder,
   },
   cancelSelectionText: {
     color: '#383432',
@@ -1114,7 +1306,7 @@ const styles = StyleSheet.create({
     minWidth: 96,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: '#C45A10',
+    backgroundColor: COLORS.burntOrange,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -1155,8 +1347,8 @@ const styles = StyleSheet.create({
   assignModal: {
     maxHeight: '78%',
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     paddingHorizontal: 16,
     paddingTop: 18,
     paddingBottom: 14,
@@ -1205,7 +1397,7 @@ const styles = StyleSheet.create({
     minHeight: 40,
     paddingHorizontal: 18,
     borderRadius: 12,
-    backgroundColor: '#C45A10',
+    backgroundColor: COLORS.burntOrange,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1218,7 +1410,7 @@ const styles = StyleSheet.create({
     minHeight: 64,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: COLORS.cardBorder,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 8,
@@ -1227,7 +1419,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   userRowSelected: {
-    borderColor: '#C45A10',
+    borderColor: COLORS.burntOrange,
     backgroundColor: '#FEF0E8',
   },
   userRowText: {
@@ -1259,8 +1451,8 @@ const styles = StyleSheet.create({
   },
   userSelectionIndicatorSelected: {
     borderWidth: 1.5,
-    borderColor: '#C45A10',
-    backgroundColor: '#C45A10',
+    borderColor: COLORS.burntOrange,
+    backgroundColor: COLORS.burntOrange,
   },
   modalActions: {
     flexDirection: 'row',
@@ -1274,7 +1466,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: COLORS.cardBorder,
   },
   modalCancelText: {
     color: '#383432',
@@ -1285,7 +1477,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: '#C45A10',
+    backgroundColor: COLORS.burntOrange,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
@@ -1299,5 +1491,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  pressed: {
+    opacity: 0.72,
   },
 });

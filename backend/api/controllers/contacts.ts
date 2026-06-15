@@ -6,6 +6,11 @@ import { getContactIdsLastContactedBefore, getLastContactedMap } from '../../ser
 import { encryptField, decryptField } from '../../services/encryption';
 import { logActivity } from './activities';
 import { dispatchNotification, contactCtx } from '../../services/notificationEngine';
+import {
+  getVisibleUserIds,
+  ownerVisibilityWhere,
+  type VisibilityScope,
+} from '../../services/visibility';
 
 type ContactBody = {
   first_name: string;
@@ -454,6 +459,7 @@ export const ContactsController = {
       status,
       type,
       assigned_to,
+      scope,
       tag,
       phone,
       source,
@@ -467,6 +473,7 @@ export const ContactsController = {
       status?: 'active' | 'inactive' | 'archived';
       type?: 'lead' | 'customer' | 'partner' | 'other';
       assigned_to?: string;
+      scope?: VisibilityScope;
       tag?: string;
       phone?: string;
       source?: string;
@@ -477,14 +484,13 @@ export const ContactsController = {
       order: 'asc' | 'desc';
     };
 
-    const where: Prisma.ContactWhereInput = {
-      organization_id: request.user.org_id,
-      status: status ?? { not: ContactStatus.archived },
-      ...(type && { type }),
-      ...(assigned_to && { assigned_to }),
-      ...(tag && { tags: { array_contains: tag } }),
-      ...(source && { source }),
-      ...(q && {
+    const visibleIds = await getVisibleUserIds(request.user, scope ?? 'direct');
+
+    // Build AND conditions: both the q-search OR and the visibility OR must
+    // live here to avoid having two top-level OR keys (last one wins in JS).
+    const andClauses: Prisma.ContactWhereInput[] = [];
+    if (q) {
+      andClauses.push({
         OR: [
           { first_name: { contains: q, mode: 'insensitive' } },
           { last_name: { contains: q, mode: 'insensitive' } },
@@ -492,7 +498,21 @@ export const ContactsController = {
           { phone: { contains: q, mode: 'insensitive' } },
           { company: { contains: q, mode: 'insensitive' } },
         ],
-      }),
+      });
+    }
+    const visibilityClause = ownerVisibilityWhere(visibleIds);
+    if (visibilityClause) {
+      andClauses.push(visibilityClause);
+    }
+
+    const where: Prisma.ContactWhereInput = {
+      organization_id: request.user.org_id,
+      status: status ?? { not: ContactStatus.archived },
+      ...(type && { type }),
+      ...(assigned_to && { assigned_to }),
+      ...(tag && { tags: { array_contains: tag } }),
+      ...(source && { source }),
+      ...(andClauses.length > 0 && { AND: andClauses }),
     };
 
     const lastContactedBefore = last_contacted_before ? new Date(last_contacted_before) : null;

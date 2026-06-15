@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback } from 'react';
+﻿import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useUserStore } from '../../store/userStore';
+import { useTaskScopeStore } from '../../store/taskScopeStore';
 import { API_URL } from '../../utils/api';
 
 type TaskStatus = 'pending' | 'in_progress' | 'done' | 'cancelled';
@@ -61,12 +62,36 @@ function badgeColor(status: TaskStatus): string {
 export default function TasksScreen(): JSX.Element {
   const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
+  const role = useUserStore((s) => s.user?.role);
   const [activeTab, setActiveTab] = useState<Tab>('today');
 
+  const scope = useTaskScopeStore((s) => s.scope);
+  const setScope = useTaskScopeStore((s) => s.setScope);
+  const hydrateScope = useTaskScopeStore((s) => s.hydrate);
+  useEffect(() => {
+    void hydrateScope();
+  }, [hydrateScope]);
+
+  // Depth toggle is for managers only. Owner/admin already see the whole org
+  // (the server ignores scope for them), and a leaf member has no reports — so
+  // we show it only when the scope-aware assignee list contains people besides
+  // the user themselves.
+  const { data: assignees = [] } = useQuery({
+    queryKey: ['task-assignees', token],
+    queryFn: async (): Promise<Array<{ id: string }>> => {
+      const res = await fetch(`${API_URL}/tasks/assignees`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return [];
+      const json = (await res.json()) as { data: Array<{ id: string }> };
+      return json.data;
+    },
+    enabled: !!token,
+  });
+  const isManager = role !== 'owner' && role !== 'admin' && assignees.length > 1;
+
   const { data: todayTasks = [], isLoading: todayLoading, error: todayError, refetch: refetchToday } = useQuery({
-    queryKey: ['tasks-today', token],
+    queryKey: ['tasks-today', token, scope],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/tasks/today`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/tasks/today?scope=${scope}`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error(`Tasks/today failed: ${res.status}`);
       const json = (await res.json()) as { data: Task[] };
       return sortByDueAsc(json.data);
@@ -75,9 +100,9 @@ export default function TasksScreen(): JSX.Element {
   });
 
   const { data: allTasks = [], isLoading: allLoading, error: allError, refetch: refetchAll } = useQuery({
-    queryKey: ['tasks-all', token],
+    queryKey: ['tasks-all', token, scope],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/tasks?per_page=100`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/tasks?per_page=100&scope=${scope}`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error(`Tasks failed: ${res.status}`);
       const json = (await res.json()) as { data: Task[] };
       return sortByDueAsc(json.data.filter((t) => t.status !== 'cancelled'));
@@ -167,6 +192,28 @@ export default function TasksScreen(): JSX.Element {
       <View style={styles.circle1} pointerEvents="none" />
       <View style={styles.circle2} pointerEvents="none" />
       <View style={styles.circle3} pointerEvents="none" />
+      {isManager ? (
+        <View style={styles.scopeBar}>
+          <TouchableOpacity
+            style={[styles.scopePill, scope === 'direct' && styles.scopePillActive]}
+            onPress={() => void setScope('direct')}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.scopeText, scope === 'direct' && styles.scopeTextActive]}>
+              Мои сотрудники
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.scopePill, scope === 'subtree' && styles.scopePillActive]}
+            onPress={() => void setScope('subtree')}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.scopeText, scope === 'subtree' && styles.scopeTextActive]}>
+              Вся команда
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'today' && styles.tabActive]}
@@ -311,6 +358,34 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: '#C45A10',
     fontWeight: '600',
+  },
+  scopeBar: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 2,
+  },
+  scopePill: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#EADFD9',
+    backgroundColor: '#FAF6F3',
+    alignItems: 'center',
+  },
+  scopePillActive: {
+    backgroundColor: '#C45A10',
+    borderColor: '#C45A10',
+  },
+  scopeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#B07868',
+  },
+  scopeTextActive: {
+    color: '#FFFFFF',
   },
   listContent: {
     paddingTop: 8,

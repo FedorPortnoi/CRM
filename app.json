@@ -2,7 +2,7 @@
   "expo": {
     "name": "4KUB",
     "slug": "crm",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "owner": "flada",
     "scheme": "crm",
     "orientation": "portrait",
@@ -19,7 +19,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.fedorportnoi.crm",
-      "buildNumber": "12",
+      "buildNumber": "14",
       "infoPlist": {
         "CFBundleDisplayName": "4КУБ",
         "NSLocationWhenInUseUsageDescription": "CRM uses your location for field visit tracking.",

@@ -33,6 +33,7 @@ const UpdateTaskSchema = CreateTaskSchema.partial();
 
 const TaskFilterSchema = z.object({
   assigned_to: z.string().uuid().optional(),
+  scope: z.enum(['direct', 'subtree']).optional(),
   status: z.enum(['pending', 'in_progress', 'done', 'cancelled']).optional(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   contact_id: z.string().uuid().optional(),
@@ -44,6 +45,10 @@ const TaskFilterSchema = z.object({
   per_page: z.coerce.number().min(1).max(100).default(50),
   sort: z.enum(['due_date', 'created_at', 'priority', 'title']).default('due_date'),
   order: z.enum(['asc', 'desc']).default('asc'),
+});
+
+const ScopeQuerySchema = z.object({
+  scope: z.enum(['direct', 'subtree']).optional(),
 });
 
 const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
@@ -65,8 +70,8 @@ export default async function tasksRoutes(fastify: FastifyInstance) {
 
   // Static convenience routes — registered before /:id so Fastify resolves them correctly
   f.get('/assignees', { preHandler: [authenticate] }, TasksController.assignees);
-  f.get('/today', { preHandler: [authenticate] }, TasksController.dueToday);
-  f.get('/overdue', { preHandler: [authenticate] }, TasksController.overdue);
+  f.get('/today', { preHandler: [authenticate], schema: { querystring: ScopeQuerySchema } }, TasksController.dueToday);
+  f.get('/overdue', { preHandler: [authenticate], schema: { querystring: ScopeQuerySchema } }, TasksController.overdue);
 
   f.get('/:id', { preHandler: [authenticate] }, TasksController.getById);
 

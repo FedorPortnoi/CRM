@@ -46,6 +46,7 @@ const DealFilterSchema = z.object({
   pipeline_id: z.string().uuid().optional(),
   stage_id: z.string().uuid().optional(),
   assigned_to: z.string().uuid().optional(),
+  scope: z.enum(['direct', 'subtree']).optional(),
   status: z.enum(['open', 'won', 'lost', 'archived']).optional(),
   contact_id: z.string().uuid().optional(),
   q: z.string().optional(),

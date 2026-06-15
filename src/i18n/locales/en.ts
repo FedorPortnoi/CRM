@@ -159,6 +159,13 @@ const en = {
     callNotes: 'Call notes',
     pasteCardText: 'Paste card text here',
     searchImportPhone: 'Search contacts',
+    totalCount: 'Total contacts: {{count}}',
+    tabAll: 'All',
+    tabCustomers: 'Customers',
+    tabPartners: 'Partners',
+    tabLeads: 'Leads',
+    activityPrefix: 'Activity:',
+    noContactFilter: 'No contact 30+ days',
   },
   attachments: {
     title: 'Attachments',

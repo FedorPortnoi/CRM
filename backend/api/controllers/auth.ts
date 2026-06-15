@@ -30,6 +30,7 @@ type AuthUserListItem = {
   username: string | null;
   name: string;
   role: string;
+  manager_id: string | null;
 };
 
 type AuthUsersResponse = {
@@ -58,7 +59,7 @@ function onboardingCompleted(state: Prisma.JsonValue | null): boolean {
   return record.completed === true || typeof record.completed_at === 'string';
 }
 
-function publicUser(user: { id: string; email: string | null; username?: string | null; name: string; role: string; organization_id: string; onboarding_state?: Prisma.JsonValue | null; must_change_password?: boolean; must_change_email?: boolean }) {
+function publicUser(user: { id: string; email: string | null; username?: string | null; name: string; role: string; organization_id: string; onboarding_state?: Prisma.JsonValue | null; must_change_password?: boolean; must_change_email?: boolean; manager_id?: string | null }) {
   return {
     id: user.id,
     email: user.email,
@@ -66,6 +67,7 @@ function publicUser(user: { id: string; email: string | null; username?: string 
     name: user.name,
     role: user.role,
     org_id: user.organization_id,
+    manager_id: user.manager_id ?? null,
     onboarding_completed: onboardingCompleted(user.onboarding_state ?? null),
     must_change_password: user.must_change_password ?? false,
     must_change_email: user.must_change_email ?? false,
@@ -467,6 +469,7 @@ export const AuthController = {
         username: true,
         name: true,
         role: true,
+        manager_id: true,
       },
       orderBy: { name: 'asc' },
     });
@@ -711,6 +714,64 @@ export const AuthController = {
 
     const updated = await db.user.update({ where: { id }, data: { role }, select: { id: true, role: true } });
     return reply.send({ data: updated, meta: {} });
+  },
+
+  setUserManager: async (request: FastifyRequest, reply: FastifyReply) => {
+    const callerRole = request.user.role as AuthRole;
+    if (callerRole !== 'owner' && callerRole !== 'admin') {
+      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Only owners and admins can assign managers' } });
+    }
+
+    const { id } = request.params as { id: string };
+    const { manager_id } = request.body as { manager_id: string | null };
+
+    // Target user must exist and belong to caller's org.
+    const target = await db.user.findFirst({
+      where: { id, organization_id: request.user.org_id },
+      select: { id: true },
+    });
+    if (!target) {
+      return reply.status(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
+    }
+
+    if (manager_id !== null) {
+      // Self-management check.
+      if (manager_id === id) {
+        return reply.status(400).send({ error: { code: 'CANNOT_MANAGE_SELF', message: 'A user cannot be their own manager' } });
+      }
+
+      // Prospective manager must exist in the same org.
+      const managerUser = await db.user.findFirst({
+        where: { id: manager_id, organization_id: request.user.org_id },
+        select: { id: true, manager_id: true },
+      });
+      if (!managerUser) {
+        return reply.status(404).send({ error: { code: 'MANAGER_NOT_FOUND', message: 'Manager user not found in this organisation' } });
+      }
+
+      // Cycle detection: walk up from manager_id; if we reach `id`, it's a cycle.
+      let cursor: string | null = manager_id;
+      const visited = new Set<string>();
+      while (cursor !== null) {
+        if (cursor === id) {
+          return reply.status(400).send({ error: { code: 'MANAGER_CYCLE', message: 'Assigning this manager would create a reporting cycle' } });
+        }
+        if (visited.has(cursor)) break; // broken chain in DB, stop gracefully
+        visited.add(cursor);
+        const row: { manager_id: string | null } | null = await db.user.findFirst({
+          where: { id: cursor, organization_id: request.user.org_id },
+          select: { manager_id: true },
+        });
+        cursor = row?.manager_id ?? null;
+      }
+    }
+
+    const updated = await db.user.update({
+      where: { id },
+      data: { manager_id },
+    });
+
+    return reply.send({ data: publicUser(updated), meta: {} });
   },
 
   verifyOtp: async (request: FastifyRequest, reply: FastifyReply) => {

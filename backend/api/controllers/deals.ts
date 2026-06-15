@@ -4,6 +4,11 @@ import { db } from '../../services/db';
 import { evaluateWorkflows } from '../../services/workflows';
 import { logActivity } from './activities';
 import { dispatchNotification, dealCtx } from '../../services/notificationEngine';
+import {
+  getVisibleUserIds,
+  ownerVisibilityWhere,
+  type VisibilityScope,
+} from '../../services/visibility';
 
 // ─── Local request types ──────────────────────────────────────────────────────
 
@@ -11,6 +16,7 @@ type ListQuery = {
   pipeline_id?: string;
   stage_id?: string;
   assigned_to?: string;
+  scope?: VisibilityScope;
   status?: DealStatus;
   contact_id?: string;
   q?: string;
@@ -121,8 +127,10 @@ async function list(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { pipeline_id, stage_id, assigned_to, status, contact_id, q, page, per_page, sort, order } =
+  const { pipeline_id, stage_id, assigned_to, scope, status, contact_id, q, page, per_page, sort, order } =
     request.query as ListQuery;
+
+  const visibleIds = await getVisibleUserIds(request.user, scope ?? 'direct');
 
   const where: Prisma.DealWhereInput = {
     organization_id: request.user.org_id,
@@ -132,6 +140,7 @@ async function list(
     ...(status && { status }),
     ...(contact_id && { contact_id }),
     ...(q && { title: { contains: q, mode: 'insensitive' } }),
+    ...ownerVisibilityWhere(visibleIds),
   };
 
   const [deals, total] = await Promise.all([

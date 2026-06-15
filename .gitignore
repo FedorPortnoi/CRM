@@ -68,3 +68,8 @@ playwright-report/
 
 expo-env.d.ts
 # @end expo-cli
+
+# Secrets and local build artifacts — never commit
+/certs/
+/android/
+/releases/
