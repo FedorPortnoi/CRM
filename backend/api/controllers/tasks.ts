@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { TaskPriority, TaskStatus, Prisma, WorkflowTrigger } from '@prisma/client';
+import Anthropic from '@anthropic-ai/sdk';
 import { db } from '../../services/db';
 import { evaluateWorkflows } from '../../services/workflows';
 import { logActivity } from './activities';
@@ -585,6 +586,63 @@ async function overdue(
   reply.send({ data: tasks, meta: {} });
 }
 
+async function suggestContact(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const { title } = request.body as { title: string };
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+
+  if (!apiKey) {
+    reply.send({ data: { contact: null } });
+    return;
+  }
+
+  const contacts = await db.contact.findMany({
+    where: {
+      organization_id: request.user.org_id,
+      status: { not: 'archived' },
+    },
+    select: { id: true, first_name: true, last_name: true },
+    take: 300,
+    orderBy: { first_name: 'asc' },
+  });
+
+  if (contacts.length === 0) {
+    reply.send({ data: { contact: null } });
+    return;
+  }
+
+  const contactList = contacts
+    .map((c) => `${c.id}: ${c.first_name}${c.last_name ? ' ' + c.last_name : ''}`)
+    .join('\n');
+
+  try {
+    const anthropic = new Anthropic({ apiKey });
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 50,
+      messages: [{
+        role: 'user',
+        content: `Task: "${title}"\nContacts:\n${contactList}\n\nWhich contact ID is clearly referenced in the task title? Reply with ONLY the UUID, or "none". No other text.`,
+      }],
+    });
+
+    const text = (message.content[0] as { type: 'text'; text: string }).text.trim();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (!uuidRegex.test(text)) {
+      reply.send({ data: { contact: null } });
+      return;
+    }
+
+    const match = contacts.find((c) => c.id === text);
+    reply.send({ data: { contact: match ?? null } });
+  } catch {
+    reply.send({ data: { contact: null } });
+  }
+}
+
 // ─── Export ───────────────────────────────────────────────────────────────────
 
 export const TasksController = {
@@ -598,4 +656,5 @@ export const TasksController = {
   cancel,
   dueToday,
   overdue,
+  suggestContact,
 };

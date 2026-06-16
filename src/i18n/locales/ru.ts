@@ -317,6 +317,11 @@ const ru = {
     noNotes: 'Нет заметок',
     scopeDirect: 'Мои сотрудники',
     scopeSubtree: 'Вся команда',
+    suggestContactTitle: 'Привязать контакт?',
+    suggestContactBody: 'Похоже, задача касается: {{name}}',
+    suggestContactLink: 'Привязать',
+    suggestContactSkip: 'Без контакта',
+    addTask: 'Задача',
   },
   calendar: {
     title: 'Календарь',

@@ -353,7 +353,24 @@ export default function ContactDetailScreen(): JSX.Element {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('contacts.tasks')}</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{t('contacts.tasks')}</Text>
+            {contact ? (
+              <TouchableOpacity
+                onPress={() => router.push({
+                  pathname: '/task/new',
+                  params: {
+                    contact_id: id,
+                    contact_name: `${contact.first_name}${contact.last_name ? ' ' + contact.last_name : ''}`,
+                  },
+                })}
+                accessibilityRole="button"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.sectionAddBtn}>+ {t('tasks.addTask')}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
           {isLoading ? (
             <>
               {[0, 1].map((i) => (
@@ -421,7 +438,8 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 32 },
   card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   section: { marginTop: 20 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#B07868', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#B07868', textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionAddBtn: { fontSize: 13, fontWeight: '600', color: '#C45A10' },
   avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#C4704F', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   avatarText: { color: '#FFFFFF', fontSize: 22, fontWeight: '700' },
   contactName: { fontSize: 20, fontWeight: '700', color: '#383432', marginBottom: 4 },

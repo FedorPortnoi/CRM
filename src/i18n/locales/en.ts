@@ -317,6 +317,11 @@ const en = {
     noNotes: 'No notes',
     scopeDirect: 'My team',
     scopeSubtree: 'Whole team',
+    suggestContactTitle: 'Link a contact?',
+    suggestContactBody: 'This task seems to be about: {{name}}',
+    suggestContactLink: 'Link',
+    suggestContactSkip: 'No contact',
+    addTask: 'Task',
   },
   calendar: {
     title: 'Calendar',

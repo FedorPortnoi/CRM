@@ -72,6 +72,10 @@ export default async function tasksRoutes(fastify: FastifyInstance) {
   f.get('/assignees', { preHandler: [authenticate] }, TasksController.assignees);
   f.get('/today', { preHandler: [authenticate], schema: { querystring: ScopeQuerySchema } }, TasksController.dueToday);
   f.get('/overdue', { preHandler: [authenticate], schema: { querystring: ScopeQuerySchema } }, TasksController.overdue);
+  f.post('/suggest-contact', {
+    preHandler: [authenticate],
+    schema: { body: z.object({ title: z.string().min(1).max(500) }) },
+  }, TasksController.suggestContact);
 
   f.get('/:id', { preHandler: [authenticate] }, TasksController.getById);
 

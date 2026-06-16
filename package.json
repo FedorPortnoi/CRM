@@ -27,6 +27,7 @@
     "format": "prettier --write 'src/**/*.{ts,tsx}' 'backend/**/*.ts'"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.2",
     "@aws-sdk/client-s3": "^3.1057.0",
     "@aws-sdk/s3-presigned-post": "^3.1057.0",
     "@aws-sdk/s3-request-presigner": "^3.1057.0",
