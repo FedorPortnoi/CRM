@@ -9,7 +9,8 @@ import { useNotificationStore } from '../store/notificationStore';
 import MoreSheet from './MoreSheet';
 
 const ACCENT = '#C45A10';
-const MUTED = '#9C8677';
+const DARK = '#2B2724';
+const MUTED = '#8C7B72';
 
 const MORE_PATHS = new Set(['/tasks', '/chat', '/notifications', '/calendar', '/settings']);
 
@@ -82,12 +83,12 @@ export default function BottomTabBar(): JSX.Element {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DARK,
     borderTopWidth: 1,
-    borderTopColor: '#E8DDD6',
+    borderTopColor: '#3D3330',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
   },

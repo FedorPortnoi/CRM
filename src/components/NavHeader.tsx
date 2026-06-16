@@ -50,7 +50,7 @@ export default function NavHeader({ title, headerRight }: NavHeaderProps): JSX.E
             accessibilityLabel={t('common.back')}
             hitSlop={8}
           >
-            <ArrowLeft size={26} color={DARK} strokeWidth={2.4} />
+            <ArrowLeft size={26} color="#EDE5DF" strokeWidth={2.4} />
           </TouchableOpacity>
         )}
         <Text style={styles.title} numberOfLines={1}>{title ?? ''}</Text>
@@ -66,9 +66,9 @@ export default function NavHeader({ title, headerRight }: NavHeaderProps): JSX.E
 
 const styles = StyleSheet.create({
   headerWrap: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DARK,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8DDD6',
+    borderBottomColor: '#3D3330',
   },
   headerRow: {
     height: 52,
@@ -77,6 +77,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   leftBtn: { padding: 8 },
-  title: { fontSize: 18, fontWeight: '700', color: DARK, marginLeft: 4, flex: 1 },
+  title: { fontSize: 18, fontWeight: '700', color: '#EDE5DF', marginLeft: 4, flex: 1 },
   right: { flexDirection: 'row', alignItems: 'center' },
 });
