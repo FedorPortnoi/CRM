@@ -356,6 +356,8 @@ const ru = {
     dealsWithoutTasks: 'Сделок без задач',
     dealsWithoutTasksSub: 'Нет следующего шага',
     todaysSchedule: 'Расписание на сегодня',
+    staleContacts: 'Зависшие клиенты',
+    daysWithoutActivity: '{{count}} дн. без активности',
     upcomingEvents: 'Ближайшие встречи',
     workflows: 'Автоматизация',
     pendingCaptures: 'Неопознанная активность',

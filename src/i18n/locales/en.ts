@@ -356,6 +356,8 @@ const en = {
     dealsWithoutTasks: 'Deals without tasks',
     dealsWithoutTasksSub: 'No next step scheduled',
     todaysSchedule: "Today's schedule",
+    staleContacts: 'Dormant contacts',
+    daysWithoutActivity: '{{count}}d without activity',
     upcomingEvents: 'Upcoming events',
     workflows: 'Workflows',
     pendingCaptures: 'Unmatched Activity',

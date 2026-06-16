@@ -31,6 +31,8 @@ type DashboardData = {
   overdue_tasks_count: number;
   deals_without_tasks_count: number;
   todays_events: TodayEvent[];
+  stale_contacts: StaleContact[];
+  stale_contacts_count: number;
   recent_activity: Array<{ type: string; id: string; summary: string; created_at: string }>;
   pipeline_health_score: number;
 };
@@ -42,13 +44,12 @@ type TodayTask = {
   status: 'pending' | 'in_progress' | 'done' | 'cancelled';
 };
 
-type RecentContact = {
+type StaleContact = {
   id: string;
   first_name: string;
   last_name: string | null;
   company: string | null;
-  email: string | null;
-  phone: string | null;
+  updated_at: string;
 };
 
 type ClosingDeal = {
@@ -88,8 +89,12 @@ function formatDueDate(date: string | null): string {
   return formatMarketDate(date, { month: 'short', day: 'numeric' });
 }
 
-function contactName(contact: RecentContact): string {
+function contactName(contact: StaleContact): string {
   return [contact.first_name, contact.last_name].filter(Boolean).join(' ');
+}
+
+function daysSince(dateStr: string): number {
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
 }
 
 function getInitials(name: string): string {
@@ -119,7 +124,6 @@ export default function DashboardScreen(): JSX.Element {
   const user = useUserStore((s) => s.user);
   const [summary, setSummary] = useState<SectionState<DashboardData>>(initialSection<DashboardData>);
   const [tasks, setTasks] = useState<SectionState<TodayTask[]>>(initialSection<TodayTask[]>);
-  const [contacts, setContacts] = useState<SectionState<RecentContact[]>>(initialSection<RecentContact[]>);
   const [closingDeals, setClosingDeals] = useState<SectionState<ClosingDeal[]>>(initialSection<ClosingDeal[]>);
   const [captureCount, setCaptureCount] = useState<number>(0);
   const [workflowCount, setWorkflowCount] = useState<SectionState<number>>(initialSection<number>);
@@ -166,29 +170,6 @@ export default function DashboardScreen(): JSX.Element {
           data: prev.data,
           isLoading: false,
           error: errorMessage(e, t('errors.failedToLoadTasks')),
-        }));
-      }
-    },
-    [token, t],
-  );
-
-  const fetchContacts = useCallback(
-    async (showSkeleton: boolean): Promise<void> => {
-      if (!token) return;
-      if (showSkeleton) setContacts((prev) => ({ ...prev, isLoading: true }));
-      try {
-        setContacts((prev) => ({ ...prev, error: null }));
-        const res = await fetch(`${API_URL}/contacts?per_page=5&sort=created_at&order=desc`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`Contacts failed with status ${res.status}`);
-        const json = (await res.json()) as { data: RecentContact[] };
-        setContacts({ data: json.data, isLoading: false, error: null });
-      } catch (e: unknown) {
-        setContacts((prev) => ({
-          data: prev.data,
-          isLoading: false,
-          error: errorMessage(e, t('errors.failedToLoadContacts')),
         }));
       }
     },
@@ -271,13 +252,12 @@ export default function DashboardScreen(): JSX.Element {
       await Promise.all([
         fetchSummary(showSkeleton),
         fetchTasks(showSkeleton),
-        fetchContacts(showSkeleton),
         fetchClosingDeals(showSkeleton),
         fetchCaptureCount(),
         fetchWorkflowCount(showSkeleton),
       ]);
     },
-    [fetchSummary, fetchTasks, fetchContacts, fetchClosingDeals, fetchCaptureCount, fetchWorkflowCount],
+    [fetchSummary, fetchTasks, fetchClosingDeals, fetchCaptureCount, fetchWorkflowCount],
   );
 
   useEffect(() => {
@@ -542,43 +522,40 @@ export default function DashboardScreen(): JSX.Element {
         )}
       </View>
 
-      {/* Recent contacts */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionHeader}>{t('dashboard.recentContacts')}</Text>
-          <TouchableOpacity onPress={() => { router.push('/(tabs)/contacts'); }} accessibilityRole="button">
-            <Text style={styles.viewAllText}>{t('dashboard.viewAll')}</Text>
-          </TouchableOpacity>
-        </View>
-        {contacts.isLoading ? (
-          <>
-            <View style={styles.rowSkeleton} />
-            <View style={styles.rowSkeleton} />
-          </>
-        ) : contacts.error ? (
-          <SectionError message={contacts.error} onRetry={() => { void fetchContacts(true); }} retryLabel={t('common.retry')} />
-        ) : contacts.data && contacts.data.length > 0 ? (
-          contacts.data.map((contact) => (
-            <TouchableOpacity
-              key={contact.id}
-              style={styles.listCard}
-              onPress={() => { router.push({ pathname: '/contact/[id]', params: { id: contact.id } }); }}
-              accessibilityRole="button"
-            >
-              <View style={styles.contactAvatar}>
-                <Text style={styles.contactAvatarText}>{getInitials(contactName(contact))}</Text>
-              </View>
-              <View style={styles.listCardContent}>
-                <Text style={styles.listCardTitle} numberOfLines={1}>{contactName(contact)}</Text>
-                <Text style={styles.listCardSub} numberOfLines={1}>{contact.company ?? contact.email ?? ''}</Text>
-              </View>
-              <ChevronRight size={16} color="#CFADA3" />
+      {/* Зависшие клиенты */}
+      {summary.data && (summary.data.stale_contacts?.length ?? 0) > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeader}>{t('dashboard.staleContacts')}</Text>
+            <TouchableOpacity onPress={() => { router.push('/(tabs)/contacts'); }} accessibilityRole="button">
+              <Text style={styles.viewAllText}>{t('dashboard.viewAll')}</Text>
             </TouchableOpacity>
-          ))
-        ) : (
-          <Text style={styles.emptyText}>{t('contacts.noContacts')}</Text>
-        )}
-      </View>
+          </View>
+          {(summary.data.stale_contacts ?? []).map((contact) => {
+            const days = daysSince(contact.updated_at);
+            const urgentColor = days >= 30 ? '#dc2626' : '#d97706';
+            return (
+              <TouchableOpacity
+                key={contact.id}
+                style={styles.listCard}
+                onPress={() => { router.push({ pathname: '/contact/[id]', params: { id: contact.id } }); }}
+                accessibilityRole="button"
+              >
+                <View style={styles.contactAvatar}>
+                  <Text style={styles.contactAvatarText}>{getInitials(contactName(contact))}</Text>
+                </View>
+                <View style={styles.listCardContent}>
+                  <Text style={styles.listCardTitle} numberOfLines={1}>{contactName(contact)}</Text>
+                  <Text style={styles.listCardSub} numberOfLines={1}>{contact.company ?? ''}</Text>
+                </View>
+                <Text style={[styles.staleDaysLabel, { color: urgentColor }]}>
+                  {t('dashboard.daysWithoutActivity', { count: days })}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
 
       {/* Workflows + captures */}
       {(workflowCount.data !== null || captureCount > 0) && (
@@ -934,6 +911,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  staleDaysLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    flexShrink: 0,
   },
   alertBanner: {
     flexDirection: 'row',

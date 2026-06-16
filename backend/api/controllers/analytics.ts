@@ -523,7 +523,14 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
   todayUTC.setUTCHours(0, 0, 0, 0);
   const tomorrowUTC = new Date(todayUTC.getTime() + 86_400_000);
 
-  const [dealStatusAgg, tasksDueCount, overdueTasksCount, dealsWithoutTasksCount, todaysEvents, recentMsgs, recentTasks, recentEvents, stalledCount] = await Promise.all([
+  const staleCutoff = new Date(Date.now() - 14 * 86_400_000);
+  const staleContactsWhere = {
+    organization_id: orgId,
+    updated_at: { lt: staleCutoff },
+    ...(visibleIds && { assigned_to: { in: visibleIds } }),
+  };
+
+  const [dealStatusAgg, tasksDueCount, overdueTasksCount, dealsWithoutTasksCount, todaysEvents, staleContactsList, staleContactsCount, recentMsgs, recentTasks, recentEvents, stalledCount] = await Promise.all([
     db.deal.groupBy({
       by: ['status'],
       where: {
@@ -578,6 +585,13 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
         contact: { select: { first_name: true, last_name: true } },
       },
     }),
+    db.contact.findMany({
+      where: staleContactsWhere,
+      orderBy: { updated_at: 'asc' },
+      take: 5,
+      select: { id: true, first_name: true, last_name: true, company: true, updated_at: true },
+    }),
+    db.contact.count({ where: staleContactsWhere }),
     db.message.findMany({
       where: {
         organization_id: orgId,
@@ -642,6 +656,8 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
       overdue_tasks_count: overdueTasksCount,
       deals_without_tasks_count: dealsWithoutTasksCount,
       todays_events: todaysEvents,
+      stale_contacts: staleContactsList,
+      stale_contacts_count: staleContactsCount,
       recent_activity: activity,
       pipeline_health_score,
     },
