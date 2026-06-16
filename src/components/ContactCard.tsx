@@ -1,12 +1,14 @@
 import React from 'react';
 import {
   Image,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
-import { MoreVertical, ChevronRight, Check } from 'lucide-react-native';
+import { MoreVertical, ChevronRight, Check, Phone } from 'lucide-react-native';
 
 export type ContactCardType = 'customer' | 'partner' | 'lead' | 'other';
 
@@ -21,6 +23,8 @@ export type ContactCardData = {
   initials: string;
   avatarColor: string;
   activityLabel?: string | null;
+  activityDaysAgo?: number | null;   // raw day count for color coding
+  activeDealsCount?: number | null;  // count of open deals
 };
 
 type ContactCardProps = {
@@ -58,6 +62,13 @@ const TYPE_COLORS: Record<ContactCardType, { main: string; soft: string }> = {
   other: { main: COLORS.neutral, soft: COLORS.neutralSoft },
 };
 
+function getActivityColor(daysAgo: number | null | undefined): string {
+  if (daysAgo == null) return COLORS.textMuted;
+  if (daysAgo <= 7) return '#16a34a';
+  if (daysAgo <= 30) return '#d97706';
+  return '#dc2626';
+}
+
 function ContactCardComponent({
   contact,
   onPress,
@@ -69,6 +80,7 @@ function ContactCardComponent({
   activityCaption,
 }: ContactCardProps): JSX.Element {
   const typeColors = TYPE_COLORS[contact.type];
+  const activityColor = getActivityColor(contact.activityDaysAgo);
 
   return (
     <Pressable
@@ -115,6 +127,12 @@ function ContactCardComponent({
             {contact.typeLabel}
           </Text>
         </View>
+
+        {(contact.activeDealsCount ?? 0) > 0 && (
+          <View style={styles.dealCountPill}>
+            <Text style={styles.dealCountText}>{contact.activeDealsCount} сделок</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.dealInfo}>
@@ -126,11 +144,45 @@ function ContactCardComponent({
         {contact.activityLabel ? (
           <>
             <Text style={styles.activityCaption}>{activityCaption}</Text>
-            <Text numberOfLines={1} style={styles.activityValue}>
+            <Text numberOfLines={1} style={[styles.activityValue, { color: activityColor }]}>
               {contact.activityLabel}
             </Text>
           </>
         ) : null}
+
+        {contact.phone != null && !selectionMode && (
+          <View style={styles.messengerRow}>
+            <TouchableOpacity
+              style={styles.messengerPhoneBtn}
+              hitSlop={6}
+              onPress={() => Linking.openURL('tel:' + contact.phone)}
+            >
+              <Phone size={14} color="#383432" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.messengerWaBtn}
+              hitSlop={6}
+              onPress={() =>
+                Linking.openURL('https://wa.me/' + (contact.phone as string).replace(/\D/g, ''))
+              }
+            >
+              <Text style={styles.messengerWaText}>WA</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.messengerTgBtn}
+              hitSlop={6}
+              onPress={() =>
+                Linking.openURL(
+                  'tg://resolve?phone=' + (contact.phone as string).replace(/\D/g, ''),
+                )
+              }
+            >
+              <Text style={styles.messengerTgText}>TG</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <View style={styles.actions}>
@@ -257,6 +309,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
+  dealCountPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(196,90,16,0.08)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: 6,
+  },
+  dealCountText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#C45A10',
+  },
   dealInfo: {
     flex: 0.86,
     minWidth: 0,
@@ -277,9 +342,50 @@ const styles = StyleSheet.create({
   },
   activityValue: {
     marginTop: 3,
-    color: COLORS.textMuted,
     fontSize: 11,
     fontWeight: '500',
+  },
+  messengerRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 8,
+  },
+  messengerPhoneBtn: {
+    minWidth: 32,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#D0C4BC',
+  },
+  messengerWaBtn: {
+    minWidth: 32,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(37,211,102,0.12)',
+    paddingHorizontal: 6,
+  },
+  messengerWaText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#25d366',
+  },
+  messengerTgBtn: {
+    minWidth: 32,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,136,204,0.12)',
+    paddingHorizontal: 6,
+  },
+  messengerTgText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0088cc',
   },
   actions: {
     width: 34,
