@@ -200,7 +200,7 @@ export default function EditDealScreen(): JSX.Element {
         setNextAction(loaded.next_action);
         setNextActionDue(loaded.next_action_due);
       } catch (err) {
-        setApiError(err instanceof Error ? err.message : 'Failed to load deal');
+        setApiError(err instanceof Error ? err.message : t('deals.failedToLoad'));
       } finally {
         setIsLoading(false);
       }
@@ -311,7 +311,7 @@ export default function EditDealScreen(): JSX.Element {
         setApiError(errData.error.message);
       }
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Network error');
+      setApiError(err instanceof Error ? err.message : t('errors.networkError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -374,7 +374,7 @@ export default function EditDealScreen(): JSX.Element {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <Stack.Screen options={{ title: 'Edit Deal' }} />
+      <Stack.Screen options={{ title: t('deals.edit') }} />
       {apiError !== null && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{apiError}</Text>
@@ -412,7 +412,7 @@ export default function EditDealScreen(): JSX.Element {
             placeholder="0.00"
             placeholderTextColor="#B07868"
           />
-          {showValueError && <Text style={styles.fieldError}>Value must be positive</Text>}
+          {showValueError && <Text style={styles.fieldError}>{t('deals.valuePositiveRequired')}</Text>}
 
           <Text style={styles.label}>{t('deals.pipeline')} *</Text>
           <TouchableOpacity style={styles.pickerButton} onPress={() => setShowPipelineModal(true)}>
@@ -491,7 +491,7 @@ export default function EditDealScreen(): JSX.Element {
                   setContactResults([]);
                 }}
               >
-                <Text style={styles.contactChipRemove}>Change</Text>
+                <Text style={styles.contactChipRemove}>{t('deals.changeContact')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -516,21 +516,21 @@ export default function EditDealScreen(): JSX.Element {
             </>
           )}
 
-          <Text style={styles.label}>Next Action</Text>
+          <Text style={styles.label}>{t('deals.nextAction')}</Text>
           <TextInput
             style={styles.input}
             value={nextAction}
             onChangeText={setNextAction}
-            placeholder="e.g. Send proposal"
+            placeholder={t('deals.nextActionPlaceholder')}
             placeholderTextColor="#B07868"
           />
 
-          <Text style={styles.label}>Due Date</Text>
+          <Text style={styles.label}>{t('tasks.dueDateOptional')}</Text>
           <TextInput
             style={styles.input}
             value={nextActionDue}
             onChangeText={setNextActionDue}
-            placeholder="YYYY-MM-DD"
+            placeholder={t('deals.nextActionDuePlaceholder')}
             placeholderTextColor="#B07868"
             autoCapitalize="none"
           />

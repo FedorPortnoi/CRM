@@ -121,7 +121,7 @@ export default function DealDetailScreen(): JSX.Element {
         .then((res) => {
           if (!res.ok) {
             return res.json().then((body: ErrorApiResponse) => {
-              throw new Error(body.error?.message ?? 'Failed to load deal');
+              throw new Error(body.error?.message ?? t('deals.failedToLoad'));
             });
           }
           return res.json() as Promise<DealApiResponse>;
@@ -132,7 +132,7 @@ export default function DealDetailScreen(): JSX.Element {
           setIsRefreshing(false);
         })
         .catch((err: Error) => {
-          setError(err.message ?? 'An error occurred');
+          setError(err.message ?? t('deals.failedToLoad'));
           setIsLoading(false);
           setIsRefreshing(false);
         });
@@ -180,11 +180,11 @@ export default function DealDetailScreen(): JSX.Element {
       const res = result.response;
       if (!res.ok) {
         const body = (await res.json()) as ErrorApiResponse;
-        throw new Error(body.error?.message ?? 'Failed to mark deal as won');
+        throw new Error(body.error?.message ?? t('deals.failedToMarkWon'));
       }
       router.back();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'An error occurred';
+      const message = err instanceof Error ? err.message : t('deals.failedToMarkWon');
       setActionError(message);
     } finally {
       setIsActionLoading(false);
@@ -209,11 +209,11 @@ export default function DealDetailScreen(): JSX.Element {
       const res = result.response;
       if (!res.ok) {
         const resBody = (await res.json()) as ErrorApiResponse;
-        throw new Error(resBody.error?.message ?? 'Failed to mark deal as lost');
+        throw new Error(resBody.error?.message ?? t('deals.failedToMarkLost'));
       }
       router.back();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'An error occurred';
+      const message = err instanceof Error ? err.message : t('deals.failedToMarkLost');
       setActionError(message);
     } finally {
       setIsActionLoading(false);
@@ -227,12 +227,12 @@ export default function DealDetailScreen(): JSX.Element {
   const handleLost = (): void => {
     if (typeof Alert.prompt === 'function') {
       Alert.prompt(
-        'Mark Lost',
-        'Enter reason (optional):',
+        t('deals.markLost'),
+        t('deals.markLostPromptMessage'),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Mark Lost',
+            text: t('deals.markLost'),
             onPress: (text?: string): void => {
               doMarkLost(text ?? '').catch(() => undefined);
             },
@@ -245,12 +245,12 @@ export default function DealDetailScreen(): JSX.Element {
     }
   };
 
-  const screenTitle = isLoading || error !== null ? 'Deal' : (deal?.title ?? 'Deal');
+  const screenTitle = isLoading || error !== null ? t('deals.deal') : (deal?.title ?? t('deals.deal'));
 
   if (isLoading) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={{ paddingTop: 16 }}>
-        <Stack.Screen options={{ title: 'Deal', headerBackTitle: 'Deals' }} />
+        <Stack.Screen options={{ title: t('deals.deal') }} />
         <View style={styles.skeletonCard}>
           <SkeletonBox width={'60%'} height={22} marginBottom={12} />
           <SkeletonBox width={'40%'} height={18} marginBottom={12} />
@@ -272,10 +272,10 @@ export default function DealDetailScreen(): JSX.Element {
   if (error !== null || deal === null) {
     return (
       <View style={styles.errorContainer}>
-        <Stack.Screen options={{ title: 'Deal', headerBackTitle: 'Deals' }} />
-        <Text style={styles.errorText}>{error ?? 'Deal not found'}</Text>
+        <Stack.Screen options={{ title: t('deals.deal') }} />
+        <Text style={styles.errorText}>{error ?? t('deals.notFound')}</Text>
         <TouchableOpacity onPress={() => fetchDeal(false)}>
-          <Text style={styles.retryText}>Retry</Text>
+          <Text style={styles.retryText}>{t('common.retry')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -290,14 +290,13 @@ export default function DealDetailScreen(): JSX.Element {
       <Stack.Screen
         options={{
           title: screenTitle,
-          headerBackTitle: 'Deals',
           headerRight: () => (
             <TouchableOpacity
               style={styles.headerEditButton}
               onPress={() => router.push({ pathname: '/deal/edit/[id]', params: { id } })}
               activeOpacity={0.7}
             >
-              <Text style={styles.headerEditText}>Edit</Text>
+              <Text style={styles.headerEditText}>{t('common.edit')}</Text>
             </TouchableOpacity>
           ),
         }}
@@ -314,7 +313,9 @@ export default function DealDetailScreen(): JSX.Element {
             </View>
           )}
           <View style={[styles.badge, { backgroundColor: getStatusColor(deal.status) }]}>
-            <Text style={styles.badgeText}>{deal.status}</Text>
+            <Text style={styles.badgeText}>
+              {{ open: t('deals.statusOpen'), won: t('deals.statusWon'), lost: t('deals.statusLost'), archived: t('deals.statusArchived') }[deal.status] ?? deal.status}
+            </Text>
           </View>
         </View>
         {deal.pipeline !== null && (
@@ -324,7 +325,7 @@ export default function DealDetailScreen(): JSX.Element {
 
       {deal.next_action && (
         <View style={styles.card}>
-          <Text style={styles.nextActionLabel}>Next Action</Text>
+          <Text style={styles.nextActionLabel}>{t('deals.nextAction')}</Text>
           <Text style={styles.nextActionText}>{deal.next_action}</Text>
           {deal.next_action_due && (
             <Text style={styles.nextActionDue}>{formatMarketDate(deal.next_action_due)}</Text>
@@ -334,7 +335,7 @@ export default function DealDetailScreen(): JSX.Element {
 
       {/* Contact card */}
       <View style={styles.card}>
-        <Text style={styles.sectionLabel}>CONTACT</Text>
+        <Text style={styles.sectionLabel}>{t('deals.contact')}</Text>
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={() =>
@@ -350,21 +351,21 @@ export default function DealDetailScreen(): JSX.Element {
 
       {/* Details card */}
       <View style={styles.card}>
-        <Text style={styles.sectionLabel}>DETAILS</Text>
+        <Text style={styles.sectionLabel}>{t('deals.details')}</Text>
         {deal.source !== null && (
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Source</Text>
+            <Text style={styles.detailLabel}>{t('deals.source')}</Text>
             <Text style={styles.detailValue}>{deal.source}</Text>
           </View>
         )}
         {deal.lost_reason !== null && (
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Lost reason</Text>
+            <Text style={styles.detailLabel}>{t('deals.lostReason')}</Text>
             <Text style={styles.detailValue}>{deal.lost_reason}</Text>
           </View>
         )}
         {deal.source === null && deal.lost_reason === null && (
-          <Text style={styles.mutedText}>No additional details</Text>
+          <Text style={styles.mutedText}>{t('deals.noDetails')}</Text>
         )}
       </View>
 
@@ -386,7 +387,7 @@ export default function DealDetailScreen(): JSX.Element {
             {isActionLoading ? (
               <ActivityIndicator color={'#fff'} />
             ) : (
-              <Text style={styles.buttonText}>Mark Won</Text>
+              <Text style={styles.buttonText}>{t('deals.markWon')}</Text>
             )}
           </TouchableOpacity>
           <TouchableOpacity
@@ -401,7 +402,7 @@ export default function DealDetailScreen(): JSX.Element {
             {isActionLoading ? (
               <ActivityIndicator color={'#fff'} />
             ) : (
-              <Text style={styles.buttonText}>Mark Lost</Text>
+              <Text style={styles.buttonText}>{t('deals.markLost')}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -509,6 +510,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#B07868',
     letterSpacing: 0.5,
+    textTransform: 'uppercase',
     marginBottom: 8,
   },
   linkText: {
