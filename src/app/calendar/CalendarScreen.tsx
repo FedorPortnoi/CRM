@@ -11,7 +11,6 @@ import {
   View,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
-import { Plus } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
@@ -303,16 +302,6 @@ export default function CalendarAgendaScreen(): JSX.Element {
         options={{
           title: t('calendar.title'),
           headerShown: true,
-          headerRight: (): JSX.Element => (
-            <TouchableOpacity
-              onPress={() => router.push('/calendar/new')}
-              style={styles.headerButton}
-              accessibilityRole="button"
-              accessibilityLabel={t('calendar.newEvent')}
-            >
-              <Plus size={24} color="#C45A10" />
-            </TouchableOpacity>
-          ),
         }}
       />
       <ScrollView
