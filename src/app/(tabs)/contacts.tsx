@@ -66,7 +66,7 @@ type ContactsResponse = {
 
 type SegmentKey = 'all' | 'customer' | 'partner' | 'lead';
 
-type SortKey = 'created_at' | 'last_contacted_at' | 'first_name';
+type SortKey = 'created_at' | 'updated_at' | 'first_name';
 
 type ListItem = { _type: 'contact'; data: Contact } | { _type: 'header'; letter: string };
 
@@ -592,7 +592,7 @@ export default function ContactsScreen(): JSX.Element {
     : contacts;
 
   const listItems = useMemo((): ListItem[] => {
-    if (search.trim() || showNoContact30d) {
+    if (search.trim() || showNoContact30d || sortKey !== 'first_name') {
       return filtered.map(c => ({ _type: 'contact' as const, data: c }));
     }
     const result: ListItem[] = [];
@@ -606,7 +606,7 @@ export default function ContactsScreen(): JSX.Element {
       result.push({ _type: 'contact', data: c });
     }
     return result;
-  }, [filtered, search, showNoContact30d]);
+  }, [filtered, search, showNoContact30d, sortKey]);
 
   const activityCaption = t('contacts.activityPrefix');
 
@@ -725,7 +725,7 @@ export default function ContactsScreen(): JSX.Element {
   const sortOptions: { key: SortKey; label: string }[] = [
     { key: 'first_name', label: 'По имени' },
     { key: 'created_at', label: 'По дате' },
-    { key: 'last_contacted_at', label: 'По активности' },
+    { key: 'updated_at', label: 'По активности' },
   ];
 
   const renderHeader = (): JSX.Element => (

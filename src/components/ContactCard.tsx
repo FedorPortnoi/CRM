@@ -62,6 +62,16 @@ const TYPE_COLORS: Record<ContactCardType, { main: string; soft: string }> = {
   other: { main: COLORS.neutral, soft: COLORS.neutralSoft },
 };
 
+function getRuDealsLabel(count: number): string {
+  const n = Math.abs(count);
+  const lastTwo = n % 100;
+  const lastOne = n % 10;
+  if (lastTwo >= 11 && lastTwo <= 19) return `${count} сделок`;
+  if (lastOne === 1) return `${count} сделка`;
+  if (lastOne >= 2 && lastOne <= 4) return `${count} сделки`;
+  return `${count} сделок`;
+}
+
 function getActivityColor(daysAgo: number | null | undefined): string {
   if (daysAgo == null) return COLORS.textMuted;
   if (daysAgo <= 7) return '#16a34a';
@@ -130,7 +140,7 @@ function ContactCardComponent({
 
         {(contact.activeDealsCount ?? 0) > 0 && (
           <View style={styles.dealCountPill}>
-            <Text style={styles.dealCountText}>{contact.activeDealsCount} сделок</Text>
+            <Text style={styles.dealCountText}>{getRuDealsLabel(contact.activeDealsCount as number)}</Text>
           </View>
         )}
       </View>
@@ -175,7 +185,7 @@ function ContactCardComponent({
               hitSlop={6}
               onPress={() =>
                 Linking.openURL(
-                  'tg://resolve?phone=' + (contact.phone as string).replace(/\D/g, ''),
+                  'https://t.me/+' + (contact.phone as string).replace(/\D/g, ''),
                 )
               }
             >
