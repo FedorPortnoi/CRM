@@ -463,7 +463,7 @@ export default function DashboardScreen(): JSX.Element {
       </View>
 
       {/* Today's schedule */}
-      {summary.data && summary.data.todays_events.length > 0 && (
+      {summary.data && (summary.data.todays_events?.length ?? 0) > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionHeader}>{t('dashboard.todaysSchedule')}</Text>
@@ -472,7 +472,7 @@ export default function DashboardScreen(): JSX.Element {
             </TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.closingScroll}>
-            {summary.data.todays_events.map((event) => {
+            {(summary.data.todays_events ?? []).map((event) => {
               const contactName = event.contact
                 ? [event.contact.first_name, event.contact.last_name].filter(Boolean).join(' ')
                 : null;
