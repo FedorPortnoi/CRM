@@ -40,6 +40,7 @@ type Contact = {
   type?: ContactTypeValue | null;
   avatar_url?: string | null;
   last_contacted_at?: string | null;
+  active_deals_count?: number | null;
 };
 
 type OrgUser = {
@@ -64,6 +65,10 @@ type ContactsResponse = {
 };
 
 type SegmentKey = 'all' | 'customer' | 'partner' | 'lead';
+
+type SortKey = 'created_at' | 'last_contacted_at' | 'first_name';
+
+type ListItem = { _type: 'contact'; data: Contact } | { _type: 'header'; letter: string };
 
 const PER_PAGE = 20;
 
@@ -116,11 +121,12 @@ export default function ContactsScreen(): JSX.Element {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [showNoContact30d, setShowNoContact30d] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>('created_at');
   const filter = showNoContact30d ? 'no-contact-30d' : 'all';
   const typeParam = segment === 'all' ? undefined : segment;
 
   const contactsQuery = useQuery<ContactsResponse, Error>({
-    queryKey: ['contacts', page, search, filter, typeParam, token],
+    queryKey: ['contacts', page, search, filter, typeParam, sortKey, token],
     queryFn: async (): Promise<ContactsResponse> => {
       if (!token) {
         throw new Error(t('errors.unauthorized'));
@@ -129,11 +135,12 @@ export default function ContactsScreen(): JSX.Element {
       const query = search.trim();
 
       const fetchPage = async (currentPage: number): Promise<ContactsResponse> => {
+        const sortOrder = sortKey === 'first_name' ? 'asc' : 'desc';
         const params = new URLSearchParams({
           page: String(currentPage),
           per_page: String(PER_PAGE),
-          sort: 'created_at',
-          order: 'desc',
+          sort: sortKey,
+          order: sortOrder,
         });
 
         if (query) {
@@ -320,6 +327,7 @@ export default function ContactsScreen(): JSX.Element {
             search,
             filter,
             typeParam,
+            sortKey,
             token,
           ]),
         ).filter((value): value is ContactsResponse => value !== undefined);
@@ -390,6 +398,12 @@ export default function ContactsScreen(): JSX.Element {
     setPage(1);
     setSelectedContactIds([]);
   }, []);
+
+  const handleSelectSort = useCallback((next: SortKey): void => {
+    setSortKey(next);
+    setPage(1);
+    void queryClient.invalidateQueries({ queryKey: ['contacts'] });
+  }, [queryClient]);
 
   const handleAddPress = useCallback((): void => {
     Alert.alert(t('contacts.add'), undefined, [
@@ -577,13 +591,33 @@ export default function ContactsScreen(): JSX.Element {
     ? contacts.filter((c) => !c.last_contacted_at || new Date(c.last_contacted_at) < thirtyDaysAgo)
     : contacts;
 
+  const listItems = useMemo((): ListItem[] => {
+    if (search.trim() || showNoContact30d) {
+      return filtered.map(c => ({ _type: 'contact' as const, data: c }));
+    }
+    const result: ListItem[] = [];
+    let lastLetter = '';
+    for (const c of filtered) {
+      const letter = (c.first_name.charAt(0) || '#').toUpperCase();
+      if (letter !== lastLetter) {
+        result.push({ _type: 'header', letter });
+        lastLetter = letter;
+      }
+      result.push({ _type: 'contact', data: c });
+    }
+    return result;
+  }, [filtered, search, showNoContact30d]);
+
   const activityCaption = t('contacts.activityPrefix');
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<Contact>): JSX.Element => {
       const name = [item.first_name, item.last_name].filter(Boolean).join(' ');
       const cardType = normalizeType(item.type);
-      const data: ContactCardData = {
+      const activityDaysAgo = item.last_contacted_at
+        ? Math.floor((Date.now() - new Date(item.last_contacted_at).getTime()) / 86_400_000)
+        : null;
+      const data: ContactCardData & { activityDaysAgo?: number | null; activeDealsCount?: number | null } = {
         id: item.id,
         name,
         company: item.company,
@@ -596,6 +630,8 @@ export default function ContactsScreen(): JSX.Element {
         activityLabel: item.last_contacted_at
           ? formatDistanceToNow(new Date(item.last_contacted_at), { addSuffix: true, locale: dateLocale })
           : null,
+        activityDaysAgo,
+        activeDealsCount: item.active_deals_count ?? null,
       };
 
       return (
@@ -627,6 +663,16 @@ export default function ContactsScreen(): JSX.Element {
       selectedContactIdSet,
       t,
     ],
+  );
+
+  const renderListItem = useCallback(
+    ({ item }: ListRenderItemInfo<ListItem>): JSX.Element => {
+      if (item._type === 'header') {
+        return <Text style={styles.sectionHeader}>{item.letter}</Text>;
+      }
+      return renderItem({ item: item.data } as ListRenderItemInfo<Contact>);
+    },
+    [renderItem],
   );
 
   const renderOrgUserItem = useCallback(
@@ -674,6 +720,12 @@ export default function ContactsScreen(): JSX.Element {
     { key: 'customer', label: t('contacts.tabCustomers'), count: counts?.customer },
     { key: 'partner', label: t('contacts.tabPartners'), count: counts?.partner },
     { key: 'lead', label: t('contacts.tabLeads'), count: counts?.lead },
+  ];
+
+  const sortOptions: { key: SortKey; label: string }[] = [
+    { key: 'first_name', label: 'По имени' },
+    { key: 'created_at', label: 'По дате' },
+    { key: 'last_contacted_at', label: 'По активности' },
   ];
 
   const renderHeader = (): JSX.Element => (
@@ -752,57 +804,87 @@ export default function ContactsScreen(): JSX.Element {
   );
 
   const renderTabs = (): JSX.Element => (
-    <View style={styles.tabsRow}>
-      <View style={styles.tabsCard}>
-        {segments.map((seg) => {
-          const isActive = segment === seg.key;
+    <View>
+      <View style={styles.tabsRow}>
+        <View style={styles.tabsCard}>
+          {segments.map((seg) => {
+            const isActive = segment === seg.key;
+            return (
+              <Pressable
+                key={seg.key}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isActive }}
+                onPress={() => handleSelectSegment(seg.key)}
+                style={({ pressed }) => [
+                  styles.tab,
+                  isActive && styles.activeTab,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text numberOfLines={1} style={[styles.tabLabel, isActive && styles.activeTabLabel]}>
+                  {seg.label}
+                </Text>
+                <Text style={[styles.tabCount, isActive && styles.activeTabCount]}>
+                  {seg.count ?? '—'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('common.filter')}
+          accessibilityState={{ selected: showNoContact30d }}
+          onPress={handleToggleNoContactFilter}
+          style={({ pressed }) => [
+            styles.filterButton,
+            showNoContact30d && styles.filterButtonActive,
+            pressed && styles.pressed,
+          ]}
+        >
+          <SlidersHorizontal
+            size={22}
+            color={showNoContact30d ? COLORS.burntOrange : COLORS.textMuted}
+          />
+        </Pressable>
+      </View>
+
+      <View style={styles.sortRow}>
+        {sortOptions.map((opt) => {
+          const isActive = sortKey === opt.key;
           return (
-            <Pressable
-              key={seg.key}
-              accessibilityRole="tab"
+            <TouchableOpacity
+              key={opt.key}
+              onPress={() => handleSelectSort(opt.key)}
+              style={[styles.sortPill, isActive && styles.sortPillActive]}
+              accessibilityRole="button"
               accessibilityState={{ selected: isActive }}
-              onPress={() => handleSelectSegment(seg.key)}
-              style={({ pressed }) => [
-                styles.tab,
-                isActive && styles.activeTab,
-                pressed && styles.pressed,
-              ]}
             >
-              <Text numberOfLines={1} style={[styles.tabLabel, isActive && styles.activeTabLabel]}>
-                {seg.label}
+              <Text style={[styles.sortPillText, isActive && styles.sortPillTextActive]}>
+                {opt.label}
               </Text>
-              <Text style={[styles.tabCount, isActive && styles.activeTabCount]}>
-                {seg.count ?? '—'}
-              </Text>
-            </Pressable>
+            </TouchableOpacity>
           );
         })}
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('common.filter')}
-        accessibilityState={{ selected: showNoContact30d }}
-        onPress={handleToggleNoContactFilter}
-        style={({ pressed }) => [
-          styles.filterButton,
-          showNoContact30d && styles.filterButtonActive,
-          pressed && styles.pressed,
-        ]}
-      >
-        <SlidersHorizontal
-          size={22}
-          color={showNoContact30d ? COLORS.burntOrange : COLORS.textMuted}
-        />
-      </Pressable>
+      {showNoContact30d ? (
+        <View style={styles.filterChip}>
+          <Text style={styles.filterChipText}>Нет контакта 30+ дней</Text>
+          <TouchableOpacity onPress={handleToggleNoContactFilter} hitSlop={8}>
+            <X size={14} color="#C45A10" />
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </View>
   );
 
   const listContent = (
-    <FlatList
-      data={filtered}
-      keyExtractor={(item) => item.id}
-      renderItem={renderItem}
+    <FlatList<ListItem>
+      data={listItems}
+      keyExtractor={(item) => item._type === 'header' ? 'hdr-' + item.letter : item.data.id}
+      renderItem={renderListItem}
       ListHeaderComponent={renderTabs}
       ItemSeparatorComponent={ItemSeparator}
       refreshControl={
@@ -817,36 +899,44 @@ export default function ContactsScreen(): JSX.Element {
       onEndReachedThreshold={0.3}
       showsVerticalScrollIndicator={false}
       ListEmptyComponent={
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>
-            {search.trim() ? t('contacts.noSearchResults') : t('contacts.noContacts')}
-          </Text>
-          {!search.trim() && !showNoContact30d ? (
-            <View style={styles.emptyActions}>
-              <TouchableOpacity
-                style={styles.emptyPrimaryButton}
-                onPress={() => router.push('/contact/new')}
-                accessibilityRole="button"
-              >
-                <Text style={styles.emptyPrimaryText}>{t('contacts.add')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.emptySecondaryButton}
-                onPress={() => router.push('/contact/import-csv')}
-                accessibilityRole="button"
-              >
-                <Text style={styles.emptySecondaryText}>{t('contacts.importCsv')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.emptySecondaryButton}
-                onPress={() => router.push('/contact/scan-card')}
-                accessibilityRole="button"
-              >
-                <Text style={styles.emptySecondaryText}>{t('contacts.scanCard')}</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-        </View>
+        showNoContact30d && !search.trim() ? (
+          <View style={styles.filterEmptyState}>
+            <Text style={styles.filterEmptyIcon}>✓</Text>
+            <Text style={styles.filterEmptyTitle}>Все клиенты на связи!</Text>
+            <Text style={styles.filterEmptySubtitle}>Никто не остался без внимания 30+ дней</Text>
+          </View>
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>
+              {search.trim() ? t('contacts.noSearchResults') : t('contacts.noContacts')}
+            </Text>
+            {!search.trim() && !showNoContact30d ? (
+              <View style={styles.emptyActions}>
+                <TouchableOpacity
+                  style={styles.emptyPrimaryButton}
+                  onPress={() => router.push('/contact/new')}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.emptyPrimaryText}>{t('contacts.add')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.emptySecondaryButton}
+                  onPress={() => router.push('/contact/import-csv')}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.emptySecondaryText}>{t('contacts.importCsv')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.emptySecondaryButton}
+                  onPress={() => router.push('/contact/scan-card')}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.emptySecondaryText}>{t('contacts.scanCard')}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
+        )
       }
       ListFooterComponent={
         isFetchingMore ? (
@@ -1176,6 +1266,60 @@ const styles = StyleSheet.create({
     borderColor: COLORS.burntOrange,
     backgroundColor: '#FEF0E8',
   },
+  sortRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  sortPill: {
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#EEE5DF',
+    backgroundColor: COLORS.white,
+  },
+  sortPillActive: {
+    backgroundColor: '#C45A10',
+    borderColor: '#C45A10',
+  },
+  sortPillText: {
+    fontSize: 13,
+    color: '#6F625D',
+    fontWeight: '500',
+  },
+  sortPillTextActive: {
+    color: COLORS.white,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: '#FEF0E8',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#FBBF87',
+  },
+  filterChipText: {
+    fontSize: 13,
+    color: '#C45A10',
+    fontWeight: '500',
+  },
+  sectionHeader: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#B07868',
+    paddingHorizontal: 4,
+    paddingTop: 12,
+    paddingBottom: 4,
+    letterSpacing: 0.5,
+  },
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
@@ -1266,6 +1410,27 @@ const styles = StyleSheet.create({
     color: COLORS.burntOrange,
     fontSize: 15,
     fontWeight: '600',
+  },
+  filterEmptyState: {
+    alignItems: 'center',
+    paddingTop: 40,
+    paddingHorizontal: 24,
+  },
+  filterEmptyIcon: {
+    fontSize: 40,
+    marginBottom: 12,
+  },
+  filterEmptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#383432',
+    textAlign: 'center',
+  },
+  filterEmptySubtitle: {
+    fontSize: 14,
+    color: '#9A8C84',
+    textAlign: 'center',
+    marginTop: 8,
   },
   footer: {
     paddingVertical: 16,
