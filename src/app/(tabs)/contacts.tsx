@@ -411,7 +411,6 @@ export default function ContactsScreen(): JSX.Element {
       { text: t('contacts.scanCard'), onPress: () => { router.push('/contact/scan-card'); } },
       { text: '📲 Импорт из приложений', onPress: () => { router.push('/import-hub' as never); } },
       { text: t('contacts.importPhone'), onPress: () => { router.push('/contact/import-phone'); } },
-      { text: t('contacts.importCsv'), onPress: () => { router.push('/contact/import-csv'); } },
       { text: t('common.cancel'), style: 'cancel' },
     ]);
   }, [t]);
@@ -918,13 +917,6 @@ export default function ContactsScreen(): JSX.Element {
                   accessibilityRole="button"
                 >
                   <Text style={styles.emptyPrimaryText}>{t('contacts.add')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.emptySecondaryButton}
-                  onPress={() => router.push('/contact/import-csv')}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.emptySecondaryText}>{t('contacts.importCsv')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.emptySecondaryButton}
