@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { TrendingUp, CheckSquare, Activity, Zap, UserPlus, PlusCircle, ListChecks, ChevronRight } from 'lucide-react-native';
+import { TrendingUp, CheckSquare, AlertCircle, Zap, UserPlus, PlusCircle, ListChecks, ChevronRight } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { notifyPendingCaptureCount } from '../../utils/notifications';
@@ -21,6 +21,7 @@ const CAPTURE_COUNT_POLL_INTERVAL_MS = 60000;
 type DashboardData = {
   open_deals: { count: number; total_value: number };
   tasks_due_today: number;
+  overdue_tasks_count: number;
   recent_activity: Array<{ type: string; id: string; summary: string; created_at: string }>;
   pipeline_health_score: number;
 };
@@ -347,12 +348,14 @@ export default function DashboardScreen(): JSX.Element {
               <Text style={styles.metricSub}>{t('tabs.tasks')}</Text>
             </View>
             <View style={styles.metricCard}>
-              <View style={[styles.metricIconBox, { backgroundColor: 'rgba(6,95,70,0.08)' }]}>
-                <Activity size={18} color={TEAL} />
+              <View style={[styles.metricIconBox, { backgroundColor: summary.data.overdue_tasks_count > 0 ? 'rgba(220,38,38,0.1)' : 'rgba(6,95,70,0.08)' }]}>
+                <AlertCircle size={18} color={summary.data.overdue_tasks_count > 0 ? '#dc2626' : TEAL} />
               </View>
-              <Text style={styles.metricNumber}>{formatPipelineHealth(summary.data.pipeline_health_score)}</Text>
-              <Text style={styles.metricLabel}>{t('dashboard.pipelineHealth')}</Text>
-              <Text style={styles.metricSub}>{t('dashboard.score')}</Text>
+              <Text style={[styles.metricNumber, summary.data.overdue_tasks_count > 0 && { color: '#dc2626' }]}>
+                {summary.data.overdue_tasks_count}
+              </Text>
+              <Text style={styles.metricLabel}>{t('dashboard.overdueTasks')}</Text>
+              <Text style={styles.metricSub}>{t('tabs.tasks')}</Text>
             </View>
           </>
         ) : null}
