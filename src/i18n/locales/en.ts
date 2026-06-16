@@ -361,6 +361,7 @@ const en = {
     upcomingEvents: 'Upcoming events',
     workflows: 'Workflows',
     pendingCaptures: 'Unmatched Activity',
+    pendingCapturesBannerSub: '{{count}} awaiting review',
     pendingCapturesNotificationTitle: 'New unmatched activity',
     pendingCapturesNotificationBody: 'Pending captures to review: {{count}}',
     greeting: 'Hi, {{name}}',

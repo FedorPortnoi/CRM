@@ -361,6 +361,7 @@ const ru = {
     upcomingEvents: 'Ближайшие встречи',
     workflows: 'Автоматизация',
     pendingCaptures: 'Неопознанная активность',
+    pendingCapturesBannerSub: '{{count}} ожидают разбора',
     pendingCapturesNotificationTitle: 'Новая неопознанная активность',
     pendingCapturesNotificationBody: 'Ожидают проверки: {{count}}',
     greeting: 'Привет, {{name}}',

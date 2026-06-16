@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { TrendingUp, CheckSquare, AlertCircle, AlertTriangle, Calendar, Zap, UserPlus, PlusCircle, ListChecks, ChevronRight } from 'lucide-react-native';
+import { TrendingUp, CheckSquare, AlertCircle, AlertTriangle, MessageCircle, Calendar, Zap, UserPlus, PlusCircle, ListChecks, ChevronRight } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { notifyPendingCaptureCount } from '../../utils/notifications';
@@ -350,6 +350,25 @@ export default function DashboardScreen(): JSX.Element {
         ) : null}
       </View>
 
+      {/* Pending captures banner */}
+      {captureCount > 0 && (
+        <TouchableOpacity
+          style={styles.captureBanner}
+          onPress={() => { router.push('/captures' as never); }}
+          accessibilityRole="button"
+        >
+          <View style={styles.captureBannerIcon}>
+            <MessageCircle size={18} color="#ea580c" />
+          </View>
+          <View style={styles.alertBannerContent}>
+            <Text style={styles.captureBannerCount}>{captureCount}</Text>
+            <Text style={styles.captureBannerLabel}>{t('dashboard.pendingCaptures')}</Text>
+            <Text style={styles.captureBannerSub}>{t('dashboard.pendingCapturesBannerSub', { count: captureCount })}</Text>
+          </View>
+          <ChevronRight size={16} color="#ea580c" />
+        </TouchableOpacity>
+      )}
+
       {/* Deals without tasks banner */}
       {summary.data && summary.data.deals_without_tasks_count > 0 && (
         <TouchableOpacity
@@ -557,32 +576,19 @@ export default function DashboardScreen(): JSX.Element {
         </View>
       )}
 
-      {/* Workflows + captures */}
-      {(workflowCount.data !== null || captureCount > 0) && (
+      {/* Workflows */}
+      {workflowCount.data !== null && (
         <View style={styles.section}>
-          <View style={styles.quickActionsRow}>
-            <TouchableOpacity
-              style={[styles.outlineButton, { flex: 1 }]}
-              onPress={() => { router.push('/workflows' as never); }}
-              accessibilityRole="button"
-            >
-              <Zap size={16} color={TEAL} />
-              <Text style={styles.outlineButtonText}>
-                {`${workflowCount.data ?? 0} ${t('dashboard.workflows')}`}
-              </Text>
-            </TouchableOpacity>
-            {captureCount > 0 && (
-              <TouchableOpacity
-                style={[styles.outlineButton, { flex: 1, borderColor: '#f59e0b' }]}
-                onPress={() => { router.push('/captures' as never); }}
-                accessibilityRole="button"
-              >
-                <Text style={[styles.outlineButtonText, { color: '#f59e0b' }]}>
-                  {`${captureCount} ${t('dashboard.pendingCaptures')}`}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          <TouchableOpacity
+            style={styles.outlineButton}
+            onPress={() => { router.push('/workflows' as never); }}
+            accessibilityRole="button"
+          >
+            <Zap size={16} color={TEAL} />
+            <Text style={styles.outlineButtonText}>
+              {`${workflowCount.data ?? 0} ${t('dashboard.workflows')}`}
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
     </ScrollView>
@@ -916,6 +922,44 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     flexShrink: 0,
+  },
+  captureBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 16,
+    backgroundColor: '#fff7ed',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#fed7aa',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 12,
+  },
+  captureBannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(234,88,12,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  captureBannerCount: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ea580c',
+    lineHeight: 24,
+  },
+  captureBannerLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7c2d12',
+    marginTop: 1,
+  },
+  captureBannerSub: {
+    fontSize: 11,
+    color: '#9a3412',
+    marginTop: 1,
   },
   alertBanner: {
     flexDirection: 'row',
