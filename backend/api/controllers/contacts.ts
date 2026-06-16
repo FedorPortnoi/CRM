@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { CalendarEventStatus, ContactStatus, Prisma, TaskStatus, WorkflowTrigger } from '@prisma/client';
+import { CalendarEventStatus, ContactStatus, DealStatus, Prisma, TaskStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
 import { evaluateWorkflows } from '../../services/workflows';
 import { getContactIdsLastContactedBefore, getLastContactedMap } from '../../services/lastContacted';
@@ -546,6 +546,9 @@ export const ContactsController = {
         skip: (page - 1) * per_page,
         take: per_page,
         orderBy: { [sort]: order },
+        include: {
+          _count: { select: { deals: { where: { status: DealStatus.open } } } },
+        },
       }),
       db.contact.count({ where }),
     ]);
@@ -554,10 +557,14 @@ export const ContactsController = {
     const lastContactedMap = contactIds.length > 0
       ? await getLastContactedMap(request.user.org_id, contactIds)
       : new Map<string, Date>();
-    const contactsWithActivity = contacts.map(c => decryptContact({
-      ...c,
-      last_contacted_at: lastContactedMap.get(c.id) ?? null,
-    }));
+    const contactsWithActivity = contacts.map(c => {
+      const { _count, ...rest } = c;
+      return decryptContact({
+        ...rest,
+        last_contacted_at: lastContactedMap.get(c.id) ?? null,
+        active_deals_count: _count.deals,
+      });
+    });
 
     return reply.send({ data: contactsWithActivity, meta: { total, page, per_page } });
   },
