@@ -523,7 +523,7 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
   todayUTC.setUTCHours(0, 0, 0, 0);
   const tomorrowUTC = new Date(todayUTC.getTime() + 86_400_000);
 
-  const [dealStatusAgg, tasksDueCount, overdueTasksCount, recentMsgs, recentTasks, recentEvents, stalledCount] = await Promise.all([
+  const [dealStatusAgg, tasksDueCount, overdueTasksCount, dealsWithoutTasksCount, recentMsgs, recentTasks, recentEvents, stalledCount] = await Promise.all([
     db.deal.groupBy({
       by: ['status'],
       where: {
@@ -548,6 +548,18 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
         status: { notIn: [TaskStatus.cancelled, TaskStatus.done] },
         due_date: { lt: todayUTC },
         ...(visibleIds && { assigned_to: { in: visibleIds } }),
+      },
+    }),
+    db.deal.count({
+      where: {
+        organization_id: orgId,
+        status: DealStatus.open,
+        ...(visibleIds && { assigned_to: { in: visibleIds } }),
+        tasks: {
+          none: {
+            status: { notIn: [TaskStatus.cancelled, TaskStatus.done] },
+          },
+        },
       },
     }),
     db.message.findMany({
@@ -612,6 +624,7 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
       },
       tasks_due_today: tasksDueCount,
       overdue_tasks_count: overdueTasksCount,
+      deals_without_tasks_count: dealsWithoutTasksCount,
       recent_activity: activity,
       pipeline_health_score,
     },

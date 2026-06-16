@@ -353,6 +353,8 @@ const en = {
     revenue: 'Revenue',
     pipeline: 'Pipeline',
     overdueTasks: 'Overdue tasks',
+    dealsWithoutTasks: 'Deals without tasks',
+    dealsWithoutTasksSub: 'No next step scheduled',
     upcomingEvents: 'Upcoming events',
     workflows: 'Workflows',
     pendingCaptures: 'Unmatched Activity',

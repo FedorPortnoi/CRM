@@ -353,6 +353,8 @@ const ru = {
     revenue: 'Выручка',
     pipeline: 'Воронка',
     overdueTasks: 'Просроченные задачи',
+    dealsWithoutTasks: 'Сделок без задач',
+    dealsWithoutTasksSub: 'Нет следующего шага',
     upcomingEvents: 'Ближайшие встречи',
     workflows: 'Автоматизация',
     pendingCaptures: 'Неопознанная активность',

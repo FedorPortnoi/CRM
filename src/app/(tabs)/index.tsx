@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { TrendingUp, CheckSquare, AlertCircle, Zap, UserPlus, PlusCircle, ListChecks, ChevronRight } from 'lucide-react-native';
+import { TrendingUp, CheckSquare, AlertCircle, AlertTriangle, Zap, UserPlus, PlusCircle, ListChecks, ChevronRight } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { notifyPendingCaptureCount } from '../../utils/notifications';
@@ -22,6 +22,7 @@ type DashboardData = {
   open_deals: { count: number; total_value: number };
   tasks_due_today: number;
   overdue_tasks_count: number;
+  deals_without_tasks_count: number;
   recent_activity: Array<{ type: string; id: string; summary: string; created_at: string }>;
   pipeline_health_score: number;
 };
@@ -360,6 +361,25 @@ export default function DashboardScreen(): JSX.Element {
           </>
         ) : null}
       </View>
+
+      {/* Deals without tasks banner */}
+      {summary.data && summary.data.deals_without_tasks_count > 0 && (
+        <TouchableOpacity
+          style={styles.alertBanner}
+          onPress={() => { router.push('/(tabs)/kanban'); }}
+          accessibilityRole="button"
+        >
+          <View style={styles.alertBannerIcon}>
+            <AlertTriangle size={18} color="#d97706" />
+          </View>
+          <View style={styles.alertBannerContent}>
+            <Text style={styles.alertBannerCount}>{summary.data.deals_without_tasks_count}</Text>
+            <Text style={styles.alertBannerLabel}>{t('dashboard.dealsWithoutTasks')}</Text>
+            <Text style={styles.alertBannerSub}>{t('dashboard.dealsWithoutTasksSub')}</Text>
+          </View>
+          <ChevronRight size={16} color="#d97706" />
+        </TouchableOpacity>
+      )}
 
       {/* Quick actions */}
       <View style={styles.section}>
@@ -870,5 +890,46 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  alertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 16,
+    backgroundColor: '#fffbeb',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#fcd34d',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 12,
+  },
+  alertBannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(217,119,6,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  alertBannerContent: {
+    flex: 1,
+  },
+  alertBannerCount: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#d97706',
+    lineHeight: 24,
+  },
+  alertBannerLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#92400e',
+    marginTop: 1,
+  },
+  alertBannerSub: {
+    fontSize: 11,
+    color: '#b45309',
+    marginTop: 1,
   },
 });
