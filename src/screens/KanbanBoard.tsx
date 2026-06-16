@@ -263,6 +263,16 @@ const KanbanBoard: React.FC = () => {
     );
   }
 
+  if (stagesWithDeals.length === 0) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
+        <Text style={{ fontSize: 15, color: '#CFADA3', textAlign: 'center', lineHeight: 22 }}>
+          {t('deals.noPipeline')}
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView
       horizontal

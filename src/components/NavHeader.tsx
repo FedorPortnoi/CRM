@@ -64,7 +64,7 @@ export default function NavHeader({ title, headerRight }: NavHeaderProps): JSX.E
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            onPress={() => router.replace('/' as never)}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/' as never)}
             style={styles.menuBtn}
             accessibilityRole="button"
             accessibilityLabel={t('common.back')}

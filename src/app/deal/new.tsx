@@ -370,21 +370,21 @@ export default function NewDealScreen(): JSX.Element {
         </>
       )}
 
-      <Text style={styles.label}>Next Action</Text>
+      <Text style={styles.label}>{t('deals.nextAction')}</Text>
       <TextInput
         style={styles.input}
         value={nextAction}
         onChangeText={setNextAction}
-        placeholder="e.g. Send proposal"
+        placeholder={t('deals.nextActionPlaceholder')}
         placeholderTextColor="#B07868"
       />
 
-      <Text style={styles.label}>Due Date</Text>
+      <Text style={styles.label}>{t('tasks.dueDateOptional')}</Text>
       <TextInput
         style={styles.input}
         value={nextActionDue}
         onChangeText={setNextActionDue}
-        placeholder="YYYY-MM-DD"
+        placeholder={t('deals.nextActionDuePlaceholder')}
         placeholderTextColor="#B07868"
         autoCapitalize="none"
       />
