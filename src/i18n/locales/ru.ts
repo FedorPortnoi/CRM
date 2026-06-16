@@ -375,6 +375,7 @@ const ru = {
     monthlyPlanOf: 'из {{target}}',
     monthlyPlanAchieved: 'Выполнен!',
     monthlyPlanNotSet: 'План не задан',
+    daysUnit: 'дн.',
   },
   captures: {
     title: 'Неопознанная активность',

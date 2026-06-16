@@ -375,6 +375,7 @@ const en = {
     monthlyPlanOf: 'of {{target}}',
     monthlyPlanAchieved: 'Achieved!',
     monthlyPlanNotSet: 'Plan not set',
+    daysUnit: 'd',
   },
   captures: {
     title: 'Unmatched Activity',

@@ -552,7 +552,7 @@ export default function DashboardScreen(): JSX.Element {
                   accessibilityRole="button"
                 >
                   <View style={[styles.closingBadge, { backgroundColor: badgeColor }]}>
-                    <Text style={styles.closingBadgeText}>{daysRemaining}d</Text>
+                    <Text style={styles.closingBadgeText}>{daysRemaining}{t('dashboard.daysUnit')}</Text>
                   </View>
                   <Text style={styles.closingTitle} numberOfLines={2}>{deal.title}</Text>
                   <Text style={styles.closingContact} numberOfLines={1}>{contact}</Text>
@@ -604,7 +604,7 @@ export default function DashboardScreen(): JSX.Element {
       )}
 
       {/* Workflows */}
-      {workflowCount.data !== null && (
+      {workflowCount.data !== null && workflowCount.data > 0 && (
         <View style={styles.section}>
           <TouchableOpacity
             style={styles.outlineButton}
