@@ -6,6 +6,7 @@ import { useChatStore } from '../../store/chatStore';
 import { useNotificationStore } from '../../store/notificationStore';
 import { useEffect } from 'react';
 import NavHeader from '../../components/NavHeader';
+import BottomTabBar from '../../components/BottomTabBar';
 
 const TEAL = '#C45A10';
 
@@ -23,7 +24,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
-      tabBar={() => null}
+      tabBar={() => <BottomTabBar />}
       screenOptions={{
         headerShown: true,
         header: ({ options, route }) => (
@@ -37,8 +38,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: t('tabs.dashboard'),
-          tabBarLabel: t('tabs.dashboard'),
+          title: t('tabs.today'),
+          tabBarLabel: t('tabs.today'),
           tabBarIcon: ({ color, size }: { color: string | import('react-native').ColorValue; size: number }): JSX.Element => (
             <LayoutDashboard color={color} size={size} />
           ),

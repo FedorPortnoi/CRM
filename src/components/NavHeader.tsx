@@ -32,7 +32,7 @@ export default function NavHeader({ title, headerRight }: NavHeaderProps): JSX.E
   const notifUnread = useNotificationStore((s) => s.unreadCount);
 
   const items = [
-    { key: 'index', label: t('tabs.dashboard'), path: '/', Icon: LayoutDashboard, badge: 0 },
+    { key: 'index', label: t('tabs.today'), path: '/', Icon: LayoutDashboard, badge: 0 },
     { key: 'contacts', label: t('tabs.contacts'), path: '/contacts', Icon: Users, badge: 0 },
     { key: 'kanban', label: t('tabs.pipeline'), path: '/kanban', Icon: Kanban, badge: 0 },
     { key: 'tasks', label: t('tabs.tasks'), path: '/tasks', Icon: CheckSquare, badge: 0 },

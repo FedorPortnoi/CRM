@@ -69,6 +69,7 @@ const en = {
     tasks: 'Tasks',
     calendar: 'Calendar',
     dashboard: 'Dashboard',
+    today: 'Today',
     messages: 'Messages',
     deals: 'Deals',
     settings: 'Settings',

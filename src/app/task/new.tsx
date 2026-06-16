@@ -148,13 +148,12 @@ export default function NewTaskScreen(): JSX.Element | null {
     setTitle(text);
     setShowTitleError(false);
 
-    // Detect @mention: @ preceded by start-of-string or whitespace, at the end of text
-    const match = text.match(/(?:^|[\s])@(\S*)$/);
+    // Detect the last word being typed (2+ chars) and search contacts against it
+    const match = text.match(/(?:^|[\s])(\S{2,})$/);
     if (match) {
       const query = match[1];
-      const atIndex = text.lastIndexOf('@' + query);
       setMentionQuery(query);
-      setMentionStartIndex(atIndex);
+      setMentionStartIndex(text.length - query.length);
     } else {
       setMentionQuery(null);
       setMentionResults([]);
@@ -164,7 +163,7 @@ export default function NewTaskScreen(): JSX.Element | null {
   const handleMentionSelect = (contact: ContactPreview): void => {
     const name = contactDisplayName(contact);
     const before = title.substring(0, mentionStartIndex);
-    const after = title.substring(mentionStartIndex + 1 + (mentionQuery?.length ?? 0));
+    const after = title.substring(mentionStartIndex + (mentionQuery?.length ?? 0));
     setTitle(before + name + after);
     setSelectedContactId(contact.id);
     setSelectedContactName(name);

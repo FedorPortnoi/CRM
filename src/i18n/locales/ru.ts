@@ -69,6 +69,7 @@ const ru = {
     tasks: 'Задачи',
     calendar: 'Календарь',
     dashboard: 'Главная',
+    today: 'Сегодня',
     messages: 'Сообщения',
     deals: 'Сделки',
     settings: 'Настройки',
