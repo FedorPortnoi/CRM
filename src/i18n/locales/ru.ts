@@ -70,6 +70,7 @@ const ru = {
     calendar: 'Календарь',
     dashboard: 'Главная',
     today: 'Сегодня',
+    more: 'Ещё',
     messages: 'Сообщения',
     deals: 'Сделки',
     settings: 'Настройки',

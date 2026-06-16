@@ -3,17 +3,25 @@ import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { CalendarCheck, Users, Kanban, Plus } from 'lucide-react-native';
-import CreateSheet from './CreateSheet';
+import { CalendarCheck, Users, Kanban, MoreHorizontal } from 'lucide-react-native';
+import { useChatStore } from '../store/chatStore';
+import { useNotificationStore } from '../store/notificationStore';
+import MoreSheet from './MoreSheet';
 
 const ACCENT = '#C45A10';
 const MUTED = '#9C8677';
+
+const MORE_PATHS = new Set(['/tasks', '/chat', '/notifications', '/calendar', '/settings']);
 
 export default function BottomTabBar(): JSX.Element {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const chatUnread = useChatStore((s) => s.channels.reduce((sum, c) => sum + c.unread, 0));
+  const notifUnread = useNotificationStore((s) => s.unreadCount);
+  const moreBadge = chatUnread + notifUnread;
 
   const tabs = [
     { path: '/', label: t('tabs.today'), Icon: CalendarCheck },
@@ -21,19 +29,11 @@ export default function BottomTabBar(): JSX.Element {
     { path: '/kanban', label: t('tabs.pipeline'), Icon: Kanban },
   ] as const;
 
+  const isMoreActive = MORE_PATHS.has(pathname);
+
   return (
     <>
       <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => setSheetOpen(true)}
-          activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityLabel={t('common.create')}
-        >
-          <Plus size={24} color="#FFFFFF" strokeWidth={2.5} />
-        </TouchableOpacity>
-
         <View style={styles.bar}>
           {tabs.map(({ path, label, Icon }) => {
             const active = pathname === path;
@@ -50,10 +50,32 @@ export default function BottomTabBar(): JSX.Element {
               </TouchableOpacity>
             );
           })}
+
+          <TouchableOpacity
+            style={styles.tab}
+            onPress={() => setMoreOpen(true)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+          >
+            <View>
+              <MoreHorizontal size={24} color={isMoreActive ? ACCENT : MUTED} strokeWidth={2.2} />
+              {moreBadge > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{moreBadge > 99 ? '99+' : moreBadge}</Text>
+                </View>
+              )}
+            </View>
+            <Text style={[styles.label, isMoreActive && styles.labelActive]}>{t('tabs.more')}</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      <CreateSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} />
+      <MoreSheet
+        visible={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        chatUnread={chatUnread}
+        notifUnread={notifUnread}
+      />
     </>
   );
 }
@@ -68,23 +90,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 8,
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    top: -22,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: ACCENT,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 12,
-    zIndex: 10,
   },
   bar: {
     flexDirection: 'row',
@@ -105,4 +110,17 @@ const styles = StyleSheet.create({
     color: ACCENT,
     fontWeight: '700',
   },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#E5484D',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
 });

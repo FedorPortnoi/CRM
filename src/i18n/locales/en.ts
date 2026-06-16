@@ -70,6 +70,7 @@ const en = {
     calendar: 'Calendar',
     dashboard: 'Dashboard',
     today: 'Today',
+    more: 'More',
     messages: 'Messages',
     deals: 'Deals',
     settings: 'Settings',
