@@ -200,7 +200,7 @@ export default function TasksScreen(): JSX.Element {
             accessibilityRole="button"
           >
             <Text style={[styles.scopeText, scope === 'direct' && styles.scopeTextActive]}>
-              Мои сотрудники
+              {t('tasks.scopeDirect')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -209,7 +209,7 @@ export default function TasksScreen(): JSX.Element {
             accessibilityRole="button"
           >
             <Text style={[styles.scopeText, scope === 'subtree' && styles.scopeTextActive]}>
-              Вся команда
+              {t('tasks.scopeSubtree')}
             </Text>
           </TouchableOpacity>
         </View>

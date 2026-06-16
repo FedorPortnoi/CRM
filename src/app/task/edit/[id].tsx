@@ -198,7 +198,7 @@ export default function EditTaskScreen(): JSX.Element {
 
   const loadTask = useCallback(async (): Promise<void> => {
     if (!token) {
-      setApiError('Not authenticated');
+      setApiError(t('errors.unauthorized'));
       setIsLoading(false);
       return;
     }
@@ -232,11 +232,11 @@ export default function EditTaskScreen(): JSX.Element {
       setContactQuery('');
       setContactResults([]);
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Failed to load task');
+      setApiError(err instanceof Error ? err.message : t('tasks.failedToLoad'));
     } finally {
       setIsLoading(false);
     }
-  }, [id, token]);
+  }, [id, t, token]);
 
   useEffect(() => {
     void loadTask();
@@ -357,7 +357,7 @@ export default function EditTaskScreen(): JSX.Element {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: 'Edit Task' }} />
+      <Stack.Screen options={{ title: t('tasks.edit') }} />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {apiError !== null ? (
           <View style={styles.errorBanner}>
@@ -369,7 +369,7 @@ export default function EditTaskScreen(): JSX.Element {
                   void loadTask();
                 }}
               >
-                <Text style={styles.bannerRetryText}>Retry</Text>
+                <Text style={styles.bannerRetryText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -561,7 +561,7 @@ export default function EditTaskScreen(): JSX.Element {
                       setContactResults([]);
                     }}
                   >
-                    <Text style={styles.contactChipRemove}>Change</Text>
+                    <Text style={styles.contactChipRemove}>{t('deals.changeContact')}</Text>
                   </TouchableOpacity>
                 </View>
               ) : (

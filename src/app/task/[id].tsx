@@ -168,13 +168,13 @@ export default function TaskDetailScreen(): JSX.Element {
           setFetchError(null);
         }
       } catch {
-        setFetchError('Failed to load task');
+        setFetchError(t('tasks.failedToLoad'));
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
       }
     },
-    [id, token],
+    [id, t, token],
   );
 
   const fetchAuditLog = useCallback(async (): Promise<void> => {
@@ -232,7 +232,7 @@ export default function TaskDetailScreen(): JSX.Element {
         router.back();
       }
     } catch {
-      setActionError('Action failed. Please try again.');
+      setActionError(t('tasks.actionFailed'));
     } finally {
       setIsActionLoading(false);
     }
@@ -267,7 +267,7 @@ export default function TaskDetailScreen(): JSX.Element {
         router.back();
       }
     } catch {
-      setActionError('Action failed. Please try again.');
+      setActionError(t('tasks.actionFailed'));
     } finally {
       setIsActionLoading(false);
     }
@@ -276,7 +276,7 @@ export default function TaskDetailScreen(): JSX.Element {
   if (isLoading) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Task' }} />
+        <Stack.Screen options={{ title: t('tasks.task') }} />
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
           <View style={styles.card}>
             <SkeletonBox width={240} height={20} marginBottom={12} />
@@ -307,11 +307,11 @@ export default function TaskDetailScreen(): JSX.Element {
   if (fetchError) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Task' }} />
+        <Stack.Screen options={{ title: t('tasks.task') }} />
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{fetchError}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => fetchTask(false)}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -329,7 +329,7 @@ export default function TaskDetailScreen(): JSX.Element {
   const dueDateOverdue = isOverdue(task.due_date, task.status);
   const showCompleteButton = task.status !== 'cancelled';
   const showCancelButton = task.status !== 'done' && task.status !== 'cancelled';
-  const completeLabel = task.status === 'done' ? 'Mark Incomplete' : 'Mark Complete';
+  const completeLabel = task.status === 'done' ? t('tasks.markIncomplete') : t('tasks.markComplete');
   const hasActions = showCompleteButton || showCancelButton;
 
   return (
@@ -337,14 +337,13 @@ export default function TaskDetailScreen(): JSX.Element {
       <Stack.Screen
         options={{
           title: task.title,
-          headerBackTitle: 'Tasks',
           headerRight: () => (
             <TouchableOpacity
               style={styles.headerEditButton}
               onPress={() => router.push({ pathname: '/task/edit/[id]', params: { id } })}
               activeOpacity={0.7}
             >
-              <Text style={styles.headerEditText}>Edit</Text>
+              <Text style={styles.headerEditText}>{t('common.edit')}</Text>
             </TouchableOpacity>
           ),
         }}
@@ -407,8 +406,8 @@ export default function TaskDetailScreen(): JSX.Element {
         </View>
 
         <View style={[styles.card, { marginTop: 16 }]}>
-          <Text style={styles.sectionLabel}>Notes</Text>
-          <Text style={task.description ? styles.notesText : styles.emptyText}>{task.description ?? 'No notes'}</Text>
+          <Text style={styles.sectionLabel}>{t('tasks.notes')}</Text>
+          <Text style={task.description ? styles.notesText : styles.emptyText}>{task.description ?? t('tasks.noNotes')}</Text>
         </View>
 
         {hasActions ? (
@@ -440,7 +439,7 @@ export default function TaskDetailScreen(): JSX.Element {
                 disabled={isActionLoading}
                 activeOpacity={0.7}
               >
-                <Text style={styles.buttonText}>Cancel Task</Text>
+                <Text style={styles.buttonText}>{t('tasks.cancelTask')}</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -502,7 +501,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '600',
-    textTransform: 'capitalize',
   },
   cancelledBanner: {
     marginTop: 12,
