@@ -617,7 +617,7 @@ export default function ContactsScreen(): JSX.Element {
       const activityDaysAgo = item.last_contacted_at
         ? Math.floor((Date.now() - new Date(item.last_contacted_at).getTime()) / 86_400_000)
         : null;
-      const data: ContactCardData & { activityDaysAgo?: number | null; activeDealsCount?: number | null } = {
+      const data: ContactCardData = {
         id: item.id,
         name,
         company: item.company,
