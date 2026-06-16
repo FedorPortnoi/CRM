@@ -9,20 +9,28 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { TrendingUp, CheckSquare, AlertCircle, AlertTriangle, Zap, UserPlus, PlusCircle, ListChecks, ChevronRight } from 'lucide-react-native';
+import { TrendingUp, CheckSquare, AlertCircle, AlertTriangle, Calendar, Zap, UserPlus, PlusCircle, ListChecks, ChevronRight } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { notifyPendingCaptureCount } from '../../utils/notifications';
-import { formatMarketDate, formatMarketNumber, formatMoney } from '../../market/profile';
+import { formatMarketDate, formatMarketNumber, formatMoney, formatMarketTime } from '../../market/profile';
 
 const TEAL = '#C45A10';
 const CAPTURE_COUNT_POLL_INTERVAL_MS = 60000;
+
+type TodayEvent = {
+  id: string;
+  title: string;
+  start_time: string;
+  contact: { first_name: string; last_name: string | null } | null;
+};
 
 type DashboardData = {
   open_deals: { count: number; total_value: number };
   tasks_due_today: number;
   overdue_tasks_count: number;
   deals_without_tasks_count: number;
+  todays_events: TodayEvent[];
   recent_activity: Array<{ type: string; id: string; summary: string; created_at: string }>;
   pipeline_health_score: number;
 };
@@ -453,6 +461,42 @@ export default function DashboardScreen(): JSX.Element {
           <Text style={styles.emptyText}>{t('tasks.noToday')}</Text>
         )}
       </View>
+
+      {/* Today's schedule */}
+      {summary.data && summary.data.todays_events.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeader}>{t('dashboard.todaysSchedule')}</Text>
+            <TouchableOpacity onPress={() => { router.push('/(tabs)/calendar'); }} accessibilityRole="button">
+              <Text style={styles.viewAllText}>{t('dashboard.viewAll')}</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.closingScroll}>
+            {summary.data.todays_events.map((event) => {
+              const contactName = event.contact
+                ? [event.contact.first_name, event.contact.last_name].filter(Boolean).join(' ')
+                : null;
+              return (
+                <TouchableOpacity
+                  key={event.id}
+                  style={styles.eventCard}
+                  onPress={() => { router.push({ pathname: '/calendar/[id]', params: { id: event.id } }); }}
+                  accessibilityRole="button"
+                >
+                  <View style={styles.eventTimeBadge}>
+                    <Calendar size={12} color={TEAL} />
+                    <Text style={styles.eventTime}>{formatMarketTime(event.start_time)}</Text>
+                  </View>
+                  <Text style={styles.eventTitle} numberOfLines={2}>{event.title}</Text>
+                  {contactName ? (
+                    <Text style={styles.eventContact} numberOfLines={1}>{contactName}</Text>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Closing this week */}
       <View style={styles.section}>
@@ -931,5 +975,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#b45309',
     marginTop: 1,
+  },
+  eventCard: {
+    width: 152,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#EDE8E5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  eventTimeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 8,
+  },
+  eventTime: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: TEAL,
+  },
+  eventTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#383432',
+    lineHeight: 19,
+  },
+  eventContact: {
+    fontSize: 12,
+    color: '#B07868',
+    marginTop: 6,
   },
 });

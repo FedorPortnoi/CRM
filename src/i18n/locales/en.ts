@@ -355,6 +355,7 @@ const en = {
     overdueTasks: 'Overdue tasks',
     dealsWithoutTasks: 'Deals without tasks',
     dealsWithoutTasksSub: 'No next step scheduled',
+    todaysSchedule: "Today's schedule",
     upcomingEvents: 'Upcoming events',
     workflows: 'Workflows',
     pendingCaptures: 'Unmatched Activity',

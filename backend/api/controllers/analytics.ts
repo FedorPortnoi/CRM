@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { DealStatus, Prisma, TaskStatus } from '@prisma/client';
+import { CalendarEventStatus, DealStatus, Prisma, TaskStatus } from '@prisma/client';
 import { db } from '../../services/db';
 import { getAccessibleUserIds } from '../../services/visibility';
 
@@ -523,7 +523,7 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
   todayUTC.setUTCHours(0, 0, 0, 0);
   const tomorrowUTC = new Date(todayUTC.getTime() + 86_400_000);
 
-  const [dealStatusAgg, tasksDueCount, overdueTasksCount, dealsWithoutTasksCount, recentMsgs, recentTasks, recentEvents, stalledCount] = await Promise.all([
+  const [dealStatusAgg, tasksDueCount, overdueTasksCount, dealsWithoutTasksCount, todaysEvents, recentMsgs, recentTasks, recentEvents, stalledCount] = await Promise.all([
     db.deal.groupBy({
       by: ['status'],
       where: {
@@ -560,6 +560,22 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
             status: { notIn: [TaskStatus.cancelled, TaskStatus.done] },
           },
         },
+      },
+    }),
+    db.calendarEvent.findMany({
+      where: {
+        organization_id: orgId,
+        start_time: { gte: todayUTC, lt: tomorrowUTC },
+        status: { not: CalendarEventStatus.cancelled },
+        ...(visibleIds && { created_by: { in: visibleIds } }),
+      },
+      orderBy: { start_time: 'asc' },
+      take: 5,
+      select: {
+        id: true,
+        title: true,
+        start_time: true,
+        contact: { select: { first_name: true, last_name: true } },
       },
     }),
     db.message.findMany({
@@ -625,6 +641,7 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
       tasks_due_today: tasksDueCount,
       overdue_tasks_count: overdueTasksCount,
       deals_without_tasks_count: dealsWithoutTasksCount,
+      todays_events: todaysEvents,
       recent_activity: activity,
       pipeline_health_score,
     },
