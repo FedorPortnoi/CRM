@@ -35,6 +35,8 @@ type DashboardData = {
   stale_contacts_count: number;
   recent_activity: Array<{ type: string; id: string; summary: string; created_at: string }>;
   pipeline_health_score: number;
+  monthly_revenue_target: number | null;
+  monthly_revenue_actual: number;
 };
 
 type TodayTask = {
@@ -349,6 +351,31 @@ export default function DashboardScreen(): JSX.Element {
           </>
         ) : null}
       </View>
+
+      {/* Monthly plan progress */}
+      {summary.data && summary.data.monthly_revenue_target !== null && summary.data.monthly_revenue_target > 0 && (() => {
+        const target = summary.data.monthly_revenue_target;
+        const actual = summary.data.monthly_revenue_actual;
+        const progress = Math.min(actual / target, 1);
+        const progressColor = progress >= 1 ? '#16a34a' : progress >= 0.8 ? '#C45A10' : progress >= 0.5 ? '#d97706' : '#dc2626';
+        const pct = Math.round(progress * 100);
+        return (
+          <View style={styles.monthlyPlanCard}>
+            <View style={styles.monthlyPlanRow}>
+              <Text style={styles.monthlyPlanTitle}>{t('dashboard.monthlyPlan')}</Text>
+              <Text style={[styles.monthlyPlanPct, { color: progressColor }]}>
+                {progress >= 1 ? t('dashboard.monthlyPlanAchieved') : `${pct}%`}
+              </Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${pct}%`, backgroundColor: progressColor }]} />
+            </View>
+            <Text style={styles.monthlyPlanSub}>
+              {formatCurrency(actual)} {t('dashboard.monthlyPlanOf', { target: formatCurrency(target) })}
+            </Text>
+          </View>
+        );
+      })()}
 
       {/* Pending captures banner */}
       {captureCount > 0 && (
@@ -922,6 +949,53 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     flexShrink: 0,
+  },
+  monthlyPlanCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8DDD6',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  monthlyPlanRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  monthlyPlanTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#B07868',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  monthlyPlanPct: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  progressTrack: {
+    height: 8,
+    backgroundColor: '#F0EAE6',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: 8,
+    borderRadius: 4,
+  },
+  monthlyPlanSub: {
+    fontSize: 12,
+    color: '#B07868',
   },
   captureBanner: {
     flexDirection: 'row',

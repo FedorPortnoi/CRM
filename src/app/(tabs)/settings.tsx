@@ -5,6 +5,7 @@ import {
   ScrollView,
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   Switch,
@@ -42,6 +43,9 @@ export default function SettingsScreen(): JSX.Element {
   const [exporting, setExporting] = useState<ExportKind | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportResult, setExportResult] = useState<ExportResult | null>(null);
+  const [monthlyTarget, setMonthlyTarget] = useState<string>('');
+  const [isSavingTarget, setIsSavingTarget] = useState(false);
+  const [targetSaved, setTargetSaved] = useState(false);
 
   useEffect(() => {
     void getStoredLanguage().then((lang) => {
@@ -94,6 +98,35 @@ export default function SettingsScreen(): JSX.Element {
       isMounted = false;
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!token || (user?.role !== 'owner' && user?.role !== 'admin')) return;
+    void fetch(`${API_URL}/org`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then((json: { data: { settings: { monthly_revenue_target?: number } | null } } | null) => {
+        const target = json?.data?.settings?.monthly_revenue_target;
+        if (typeof target === 'number') setMonthlyTarget(String(target));
+      })
+      .catch(() => undefined);
+  }, [token, user?.role]);
+
+  const handleSaveTarget = async (): Promise<void> => {
+    if (!token) return;
+    const parsed = parseFloat(monthlyTarget.replace(/\s/g, '').replace(',', '.'));
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    setIsSavingTarget(true);
+    setTargetSaved(false);
+    try {
+      await fetch(`${API_URL}/org/settings`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monthly_revenue_target: parsed }),
+      });
+      setTargetSaved(true);
+    } finally {
+      setIsSavingTarget(false);
+    }
+  };
 
   const handleLogout = async (): Promise<void> => {
     await logout();
@@ -213,6 +246,41 @@ export default function SettingsScreen(): JSX.Element {
               <Text style={styles.chevron}>{'>'}</Text>
             </View>
           </TouchableOpacity>
+        </>
+      )}
+
+      {(user?.role === 'owner' || user?.role === 'admin') && (
+        <>
+          <Text style={styles.sectionHeader}>{t('settings.salesPlan')}</Text>
+          <View style={styles.card}>
+            <View style={styles.targetRow}>
+              <Text style={styles.rowLabel}>{t('settings.monthlyTarget')}</Text>
+              {targetSaved && <Text style={styles.targetSavedText}>{t('settings.monthlyTargetSaved')}</Text>}
+            </View>
+            <View style={styles.targetInputRow}>
+              <TextInput
+                style={styles.targetInput}
+                value={monthlyTarget}
+                onChangeText={(v) => { setMonthlyTarget(v); setTargetSaved(false); }}
+                keyboardType="numeric"
+                placeholder={t('settings.monthlyTargetPlaceholder')}
+                placeholderTextColor="#CFADA3"
+                returnKeyType="done"
+              />
+              <TouchableOpacity
+                style={[styles.targetSaveButton, isSavingTarget && styles.buttonDisabled]}
+                onPress={() => { void handleSaveTarget(); }}
+                disabled={isSavingTarget}
+                accessibilityRole="button"
+              >
+                {isSavingTarget ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.targetSaveText}>{t('settings.save')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
         </>
       )}
 
@@ -577,5 +645,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  targetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 8,
+  },
+  targetSavedText: {
+    fontSize: 12,
+    color: '#16a34a',
+    fontWeight: '600',
+  },
+  targetInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+  },
+  targetInput: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: '#E8DDD6',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#383432',
+    backgroundColor: '#FAFAF9',
+  },
+  targetSaveButton: {
+    backgroundColor: '#C45A10',
+    borderRadius: 10,
+    minHeight: 44,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  targetSaveText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

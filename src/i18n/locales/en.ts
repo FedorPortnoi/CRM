@@ -371,6 +371,10 @@ const en = {
     viewAll: 'View all',
     closingThisWeek: 'Closing this week',
     noDealsClosingThisWeek: 'No deals closing this week',
+    monthlyPlan: 'Monthly plan',
+    monthlyPlanOf: 'of {{target}}',
+    monthlyPlanAchieved: 'Achieved!',
+    monthlyPlanNotSet: 'Plan not set',
   },
   captures: {
     title: 'Unmatched Activity',
@@ -418,6 +422,10 @@ const en = {
     notificationsComingSoon: 'Coming soon',
     logout: 'Log out',
     sync: 'Sync',
+    salesPlan: 'Sales planning',
+    monthlyTarget: 'Monthly target (₽)',
+    monthlyTargetPlaceholder: 'e.g. 1000000',
+    monthlyTargetSaved: 'Saved',
   },
   common: {
     save: 'Save',

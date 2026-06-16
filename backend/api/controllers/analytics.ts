@@ -514,7 +514,7 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
 
   const org = await db.org.findUniqueOrThrow({
     where: { id: orgId },
-    select: { stalled_threshold_days: true, decay_factor: true },
+    select: { stalled_threshold_days: true, decay_factor: true, settings: true },
   });
 
   const stalledThreshold = new Date(Date.now() - org.stalled_threshold_days * 86_400_000);
@@ -523,6 +523,10 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
   todayUTC.setUTCHours(0, 0, 0, 0);
   const tomorrowUTC = new Date(todayUTC.getTime() + 86_400_000);
 
+  const monthStart = new Date();
+  monthStart.setUTCDate(1);
+  monthStart.setUTCHours(0, 0, 0, 0);
+
   const staleCutoff = new Date(Date.now() - 14 * 86_400_000);
   const staleContactsWhere = {
     organization_id: orgId,
@@ -530,7 +534,7 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
     ...(visibleIds && { assigned_to: { in: visibleIds } }),
   };
 
-  const [dealStatusAgg, tasksDueCount, overdueTasksCount, dealsWithoutTasksCount, todaysEvents, staleContactsList, staleContactsCount, recentMsgs, recentTasks, recentEvents, stalledCount] = await Promise.all([
+  const [dealStatusAgg, tasksDueCount, overdueTasksCount, dealsWithoutTasksCount, todaysEvents, staleContactsList, staleContactsCount, recentMsgs, recentTasks, recentEvents, stalledCount, monthlyRevenueAgg] = await Promise.all([
     db.deal.groupBy({
       by: ['status'],
       where: {
@@ -627,6 +631,15 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
         ...(visibleIds && { assigned_to: { in: visibleIds } }),
       },
     }),
+    db.deal.aggregate({
+      where: {
+        organization_id: orgId,
+        status: DealStatus.won,
+        actual_close: { gte: monthStart },
+        ...(visibleIds && { assigned_to: { in: visibleIds } }),
+      },
+      _sum: { value: true },
+    }),
   ]);
 
   const openAgg = dealStatusAgg.find((row) => row.status === DealStatus.open);
@@ -646,6 +659,13 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
   const rawScore = denominator === 0 ? 0 : wonCount / denominator;
   const pipeline_health_score = Math.round(rawScore * 10_000) / 100;
 
+  const orgSettings = (org.settings as Record<string, unknown> | null) ?? {};
+  const monthly_revenue_target =
+    typeof orgSettings.monthly_revenue_target === 'number' ? orgSettings.monthly_revenue_target : null;
+  const monthly_revenue_actual = monthlyRevenueAgg._sum.value
+    ? Math.round(parseFloat(monthlyRevenueAgg._sum.value.toString()) * 100) / 100
+    : 0;
+
   return reply.send({
     data: {
       open_deals: {
@@ -660,6 +680,8 @@ async function dashboard(request: FastifyRequest, reply: FastifyReply): Promise<
       stale_contacts_count: staleContactsCount,
       recent_activity: activity,
       pipeline_health_score,
+      monthly_revenue_target,
+      monthly_revenue_actual,
     },
     meta: {},
   });

@@ -371,6 +371,10 @@ const ru = {
     viewAll: 'Смотреть все',
     closingThisWeek: 'Закрываются на этой неделе',
     noDealsClosingThisWeek: 'На этой неделе сделок к закрытию нет',
+    monthlyPlan: 'План на месяц',
+    monthlyPlanOf: 'из {{target}}',
+    monthlyPlanAchieved: 'Выполнен!',
+    monthlyPlanNotSet: 'План не задан',
   },
   captures: {
     title: 'Неопознанная активность',
@@ -418,6 +422,10 @@ const ru = {
     notificationsComingSoon: 'Ожидайте',
     logout: 'Выйти',
     sync: 'Синхронизация',
+    salesPlan: 'Планирование продаж',
+    monthlyTarget: 'Месячный план (₽)',
+    monthlyTargetPlaceholder: 'Например: 1000000',
+    monthlyTargetSaved: 'Сохранено',
   },
   common: {
     save: 'Сохранить',
