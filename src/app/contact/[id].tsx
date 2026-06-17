@@ -215,7 +215,7 @@ export default function ContactDetailScreen(): JSX.Element {
                   <Text style={styles.contactName}>{contactName}</Text>
                   {contact.company ? <Text style={styles.secondaryText}>{contact.company}</Text> : null}
                   <View style={[styles.statusBadge, { backgroundColor: statusBadgeColor(contact.status) }]}>
-                    <Text style={styles.badgeText}>{contact.status}</Text>
+                    <Text style={styles.badgeText}>{contact.status === 'active' ? t('contacts.statusActive') : contact.status === 'inactive' ? t('contacts.statusInactive') : contact.status}</Text>
                   </View>
                 </View>
               </View>
@@ -400,7 +400,7 @@ export default function ContactDetailScreen(): JSX.Element {
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <View style={[styles.taskBadge, { backgroundColor: taskBadgeColor(task.status) }]}>
-                    <Text style={styles.badgeText}>{task.status.replace('_', ' ')}</Text>
+                    <Text style={styles.badgeText}>{task.status === 'pending' ? t('tasks.pending') : task.status === 'in_progress' ? t('tasks.inProgress') : task.status === 'done' ? t('tasks.completed') : t('tasks.cancelled')}</Text>
                   </View>
                   {task.due_date ? (
                     <Text style={[styles.taskDueDate, isOverdue(task.due_date, task.status) ? styles.overdueText : null]}>
@@ -420,9 +420,9 @@ export default function ContactDetailScreen(): JSX.Element {
           ) : auditLog.map((entry) => (
             <View key={entry.id} style={styles.auditRow}>
               <View style={[styles.auditBadge, { backgroundColor: entry.action === 'created' ? '#FEF0E8' : entry.action === 'updated' ? '#dbeafe' : '#FAF6F3' }]}>
-                <Text style={[styles.auditBadgeText, { color: entry.action === 'created' ? '#C45A10' : entry.action === 'updated' ? '#1d4ed8' : '#383432' }]}>{entry.action}</Text>
+                <Text style={[styles.auditBadgeText, { color: entry.action === 'created' ? '#C45A10' : entry.action === 'updated' ? '#1d4ed8' : '#383432' }]}>{entry.action === 'created' ? t('contacts.actionCreated') : entry.action === 'updated' ? t('contacts.actionUpdated') : entry.action}</Text>
               </View>
-              <Text style={styles.auditDate}>{new Date(entry.created_at).toLocaleDateString()}</Text>
+              <Text style={styles.auditDate}>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</Text>
             </View>
           ))}
         </View>

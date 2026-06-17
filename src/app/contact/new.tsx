@@ -1,6 +1,6 @@
 ﻿import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
@@ -144,6 +144,7 @@ export default function NewContactScreen(): JSX.Element {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ title: t('contacts.new') }} />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
