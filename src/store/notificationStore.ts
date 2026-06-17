@@ -69,7 +69,10 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       notifications: s.notifications.map((n) => n.id === id ? { ...n, is_read: true } : n),
       unreadCount: Math.max(0, s.unreadCount - (s.notifications.find((n) => n.id === id)?.is_read ? 0 : 1)),
     }));
-    await fetch(`${apiBase()}/notifications/${id}/read`, { method: 'PATCH', headers: authHeaders() });
+    await fetch(`${apiBase()}/notifications/${id}/read`, {
+      method: 'PATCH',
+      headers: { Authorization: authHeaders().Authorization },
+    });
   },
 
   markAllRead: async () => {
@@ -77,7 +80,10 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       notifications: s.notifications.map((n) => ({ ...n, is_read: true })),
       unreadCount: 0,
     }));
-    await fetch(`${apiBase()}/notifications/read-all`, { method: 'PATCH', headers: authHeaders() });
+    await fetch(`${apiBase()}/notifications/read-all`, {
+      method: 'PATCH',
+      headers: { Authorization: authHeaders().Authorization },
+    });
   },
 
   fetchUnreadCount: async () => {
