@@ -144,7 +144,9 @@ function buildPatch(current: TaskForm, original: TaskForm): TaskPatch {
 
   if (current.is_recurring !== original.is_recurring || current.recurrence_rule !== original.recurrence_rule) {
     patch.is_recurring = current.is_recurring;
-    patch.recurrence_rule = current.is_recurring ? current.recurrence_rule : '';
+    if (current.is_recurring && current.recurrence_rule !== '') {
+      patch.recurrence_rule = current.recurrence_rule;
+    }
   }
 
   if (current.assigned_to !== original.assigned_to && current.assigned_to !== '') {

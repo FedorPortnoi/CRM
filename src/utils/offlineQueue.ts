@@ -3,7 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useSyncStore } from '../store/syncStore';
 
 const STORAGE_KEY = 'crm-offline-queue';
-const BODY_KEY_PREFIX = 'crm-offline-queue-body:';
+const BODY_KEY_PREFIX = 'crm-offline-queue-body-';
 
 export type QueuedMutation = {
   id: string;

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Modal, StyleSheet } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Calendar } from 'react-native-calendars';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -179,7 +179,7 @@ export default function NewTaskScreen(): JSX.Element | null {
       title: title.trim(),
       assigned_to: assigneeId || user.id,
       is_recurring: recurrenceRule !== null,
-      recurrence_rule: recurrenceRule ?? '',
+      ...(recurrenceRule !== null ? { recurrence_rule: recurrenceRule } : {}),
       ...(dueDate !== '' ? { due_date: new Date(dueDate + 'T00:00:00').toISOString() } : {}),
       ...(reminderDate !== '' ? { reminder_at: new Date(reminderDate + 'T09:00:00').toISOString() } : {}),
       ...(finalContactId !== '' ? { contact_id: finalContactId } : {}),
@@ -253,7 +253,9 @@ export default function NewTaskScreen(): JSX.Element | null {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <>
+      <Stack.Screen options={{ title: t('tasks.new') }} />
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       {/* AI contact suggestion modal */}
       <Modal visible={showSuggestionModal} transparent animationType="fade">
         <View style={styles.suggestionOverlay}>
@@ -502,6 +504,7 @@ export default function NewTaskScreen(): JSX.Element | null {
         {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitText}>{t('tasks.createTask')}</Text>}
       </TouchableOpacity>
     </ScrollView>
+    </>
   );
 }
 

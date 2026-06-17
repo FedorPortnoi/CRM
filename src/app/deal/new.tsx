@@ -11,7 +11,8 @@ import {
   StyleSheet,
   ListRenderItemInfo,
 } from 'react-native';
-import { router } from 'expo-router';
+import { Stack, router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { usePipelinesStore } from '../../store/pipelinesStore';
@@ -49,6 +50,7 @@ interface ErrorApiResponse {
 
 export default function NewDealScreen(): JSX.Element {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const token = useUserStore((s) => s.token);
   const { pipelines, isLoading, fetchPipelines } = usePipelinesStore() as {
     pipelines: Pipeline[];
@@ -230,7 +232,9 @@ export default function NewDealScreen(): JSX.Element {
   const stagePickerDisabled = selectedPipelineId === '' || filteredStages.length === 0;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <>
+      <Stack.Screen options={{ title: t('deals.new') }} />
+      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       {apiError !== null && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{apiError}</Text>
@@ -279,7 +283,7 @@ export default function NewDealScreen(): JSX.Element {
         transparent={false}
         onRequestClose={() => setShowPipelineModal(false)}
       >
-        <View style={styles.modalContainer}>
+        <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{t('deals.selectPipeline')}</Text>
             <TouchableOpacity onPress={() => setShowPipelineModal(false)}>
@@ -318,7 +322,7 @@ export default function NewDealScreen(): JSX.Element {
         transparent={false}
         onRequestClose={() => setShowStageModal(false)}
       >
-        <View style={styles.modalContainer}>
+        <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{t('deals.selectStage')}</Text>
             <TouchableOpacity onPress={() => setShowStageModal(false)}>
@@ -401,6 +405,7 @@ export default function NewDealScreen(): JSX.Element {
         )}
       </TouchableOpacity>
     </ScrollView>
+    </>
   );
 }
 

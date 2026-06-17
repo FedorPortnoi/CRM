@@ -77,7 +77,7 @@
     },
     "extra": {
       "apiUrls": {
-        "development": "http://10.80.1.215:3000/api/v1"
+        "development": "http://111.88.149.122:3000/api/v1"
       },
       "eas": {
         "projectId": "63759f24-3860-43b6-ac4f-cec8180d63c3"

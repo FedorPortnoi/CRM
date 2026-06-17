@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
 import { Stack, router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
@@ -48,6 +49,7 @@ function contactDisplayName(c: ContactResult): string {
 
 export default function CapturesScreen(): JSX.Element {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const token = useUserStore((s) => s.token);
 
   const [captures, setCaptures] = useState<PendingCapture[]>([]);
@@ -307,7 +309,7 @@ export default function CapturesScreen(): JSX.Element {
         animationType="slide"
         onRequestClose={closeMatchModal}
       >
-        <View style={styles.modalContainer}>
+        <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{t('captures.matchTitle')}</Text>
             <TouchableOpacity

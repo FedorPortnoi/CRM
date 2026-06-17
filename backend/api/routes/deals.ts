@@ -8,7 +8,7 @@ const CurrencySchema = z.string().trim().length(3).transform(normalizeCurrencyCo
 
 const CreateDealSchema = z.object({
   title: z.string().min(1).max(200),
-  contact_id: z.string().uuid(),
+  contact_id: z.string().uuid().optional(),
   pipeline_id: z.string().uuid(),
   stage_id: z.string().uuid(),
   value: z.number().nonnegative().optional(),

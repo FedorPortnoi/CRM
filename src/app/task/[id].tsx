@@ -516,7 +516,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  detailLabel: { fontSize: 13, color: '#CFADA3', width: 72 },
+  detailLabel: { fontSize: 13, color: '#CFADA3', width: 100 },
   detailValue: { fontSize: 13, color: '#383432', flex: 1, textAlign: 'right' },
   recurrenceValue: { fontSize: 13, color: '#C45A10', flex: 1, textAlign: 'right', fontWeight: '600' },
   linkText: {

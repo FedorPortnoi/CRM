@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { usePipelinesStore } from '../../../store/pipelinesStore';
 import { useUserStore } from '../../../store/userStore';
@@ -45,8 +46,8 @@ interface Deal {
   value: number | string | null;
   pipeline_id: string | null;
   stage_id: string | null;
-  contact_id: string;
-  contact: ContactPreview;
+  contact_id: string | null;
+  contact: ContactPreview | null;
   pipeline: { id: string; name: string } | null;
   stage: { id: string; name: string; position: number } | null;
   next_action: string | null;
@@ -103,7 +104,7 @@ function formFromDeal(deal: Deal): DealForm {
     value: numericValue,
     pipeline_id: deal.pipeline_id ?? deal.pipeline?.id ?? '',
     stage_id: deal.stage_id ?? deal.stage?.id ?? '',
-    contact_id: deal.contact_id ?? deal.contact.id,
+    contact_id: deal.contact_id ?? deal.contact?.id ?? '',
     next_action: deal.next_action ?? '',
     next_action_due: dateInputValue(deal.next_action_due),
   };
@@ -141,6 +142,7 @@ function buildPatch(current: DealForm, original: DealForm): DealPatch {
 
 export default function EditDealScreen(): JSX.Element {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
   const pipelines = usePipelinesStore((s) => s.pipelines) as Pipeline[];
@@ -429,7 +431,7 @@ export default function EditDealScreen(): JSX.Element {
             transparent={false}
             onRequestClose={() => setShowPipelineModal(false)}
           >
-            <View style={styles.modalContainer}>
+            <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{t('deals.selectPipeline')}</Text>
                 <TouchableOpacity onPress={() => setShowPipelineModal(false)}>
@@ -464,7 +466,7 @@ export default function EditDealScreen(): JSX.Element {
             transparent={false}
             onRequestClose={() => setShowStageModal(false)}
           >
-            <View style={styles.modalContainer}>
+            <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{t('deals.selectStage')}</Text>
                 <TouchableOpacity onPress={() => setShowStageModal(false)}>

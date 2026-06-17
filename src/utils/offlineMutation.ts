@@ -1,4 +1,3 @@
-import NetInfo from '@react-native-community/netinfo';
 import * as offlineQueue from './offlineQueue';
 
 type MutationOptions = {
@@ -13,8 +12,6 @@ type MutationResult =
   | { queued: false; response: Response };
 
 export async function sendOrQueueMutation(options: MutationOptions): Promise<MutationResult> {
-  const netState = await NetInfo.fetch();
-  const isOnline = netState.isConnected === true && netState.isInternetReachable !== false;
   const serializedBody = options.body === undefined ? '' : JSON.stringify(options.body);
 
   const queueMutation = async (): Promise<MutationResult> => {
@@ -25,10 +22,6 @@ export async function sendOrQueueMutation(options: MutationOptions): Promise<Mut
     });
     return { queued: true };
   };
-
-  if (!isOnline) {
-    return queueMutation();
-  }
 
   try {
     const response = await fetch(options.url, {

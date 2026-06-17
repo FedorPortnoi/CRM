@@ -46,7 +46,7 @@ export default function BottomTabBar(): JSX.Element {
                 activeOpacity={0.7}
                 accessibilityRole="button"
               >
-                <Icon size={24} color={active ? ACCENT : MUTED} strokeWidth={2.2} />
+                <Icon size={24} color={active ? ACCENT : MUTED} strokeWidth={2.6} />
                 <Text style={[styles.label, active && styles.labelActive]}>{label}</Text>
               </TouchableOpacity>
             );
@@ -59,7 +59,7 @@ export default function BottomTabBar(): JSX.Element {
             accessibilityRole="button"
           >
             <View>
-              <MoreHorizontal size={24} color={isMoreActive ? ACCENT : MUTED} strokeWidth={2.2} />
+              <MoreHorizontal size={24} color={isMoreActive ? ACCENT : MUTED} strokeWidth={2.6} />
               {moreBadge > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{moreBadge > 99 ? '99+' : moreBadge}</Text>
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 11,
     color: MUTED,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   labelActive: {
     color: ACCENT,

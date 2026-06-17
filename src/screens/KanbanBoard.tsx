@@ -27,8 +27,8 @@ type Deal = {
   pipeline_id: string | null;
   stage_id: string | null;
   expected_close: string | null;
-  contact_id: string;
-  contact: { id: string; first_name: string; last_name: string };
+  contact_id: string | null;
+  contact: { id: string; first_name: string; last_name: string } | null;
   pipeline: { id: string; name: string } | null;
   stage: { id: string; name: string; position: number } | null;
   assigned_to: string | null;
@@ -186,9 +186,11 @@ function DealCard({
             ? formatMoney(deal.value, deal.currency, { empty: '--' })
             : '--'}
         </Text>
-        <Text style={styles.dealContact}>
-          {deal.contact.first_name + ' ' + deal.contact.last_name}
-        </Text>
+        {deal.contact != null && (
+          <Text style={styles.dealContact}>
+            {deal.contact.first_name + (deal.contact.last_name ? ' ' + deal.contact.last_name : '')}
+          </Text>
+        )}
       </TouchableOpacity>
     </Animated.View>
   );

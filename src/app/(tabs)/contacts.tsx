@@ -17,7 +17,7 @@ import {
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Menu, Search, Plus, SlidersHorizontal, Check, X } from 'lucide-react-native';
+import { Search, Plus, SlidersHorizontal, Check, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { formatDistanceToNow } from 'date-fns';
 import { ru, enUS } from 'date-fns/locale';
@@ -415,10 +415,6 @@ export default function ContactsScreen(): JSX.Element {
     ]);
   }, [t]);
 
-  const handleMenuPress = useCallback((): void => {
-    router.replace('/' as never);
-  }, []);
-
   const handleToggleNoContactFilter = useCallback((): void => {
     setShowNoContact30d((current) => !current);
     setPage(1);
@@ -735,16 +731,6 @@ export default function ContactsScreen(): JSX.Element {
       style={[styles.header, { paddingTop: insets.top + 10 }]}
     >
       <View style={styles.headerContent}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('common.menu')}
-          hitSlop={10}
-          onPress={handleMenuPress}
-          style={({ pressed }) => [styles.headerIconButton, pressed && styles.pressed]}
-        >
-          <Menu size={26} color={COLORS.white} strokeWidth={2.2} />
-        </Pressable>
-
         <View style={styles.titleBlock}>
           <Text style={styles.title} numberOfLines={1}>{t('contacts.title')}</Text>
           <Text style={styles.subtitle} numberOfLines={1}>
@@ -1143,7 +1129,6 @@ const styles = StyleSheet.create({
   },
   titleBlock: {
     flex: 1,
-    marginLeft: 10,
   },
   title: {
     color: COLORS.white,

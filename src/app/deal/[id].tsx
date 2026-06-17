@@ -28,7 +28,7 @@ interface Deal {
   status: 'open' | 'won' | 'lost' | 'archived';
   source: string | null;
   lost_reason: string | null;
-  contact: { id: string; first_name: string; last_name: string | null };
+  contact: { id: string; first_name: string; last_name: string | null } | null;
   pipeline: { id: string; name: string } | null;
   stage: { id: string; name: string; position: number } | null;
   next_action: string | null;
@@ -334,20 +334,22 @@ export default function DealDetailScreen(): JSX.Element {
       )}
 
       {/* Contact card */}
-      <View style={styles.card}>
-        <Text style={styles.sectionLabel}>{t('deals.contact')}</Text>
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() =>
-            router.push({ pathname: '/contact/[id]', params: { id: deal.contact.id } })
-          }
-        >
-          <Text style={styles.linkText}>
-            {deal.contact.first_name +
-              (deal.contact.last_name !== null ? ' ' + deal.contact.last_name : '')}
-          </Text>
-        </TouchableOpacity>
-      </View>
+      {deal.contact != null && (
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel}>{t('deals.contact')}</Text>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() =>
+              router.push({ pathname: '/contact/[id]', params: { id: deal.contact!.id } })
+            }
+          >
+            <Text style={styles.linkText}>
+              {deal.contact.first_name +
+                (deal.contact.last_name !== null ? ' ' + deal.contact.last_name : '')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Details card */}
       <View style={styles.card}>
