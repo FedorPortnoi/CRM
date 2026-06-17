@@ -9,9 +9,9 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUserStore } from '../../store/userStore';
 import { useTaskScopeStore } from '../../store/taskScopeStore';
 import { API_URL } from '../../utils/api';
@@ -63,7 +63,15 @@ export default function TasksScreen(): JSX.Element {
   const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
   const role = useUserStore((s) => s.user?.role);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>('today');
+
+  useFocusEffect(
+    useCallback(() => {
+      void queryClient.invalidateQueries({ queryKey: ['tasks-today'] });
+      void queryClient.invalidateQueries({ queryKey: ['tasks-all'] });
+    }, [queryClient]),
+  );
 
   const scope = useTaskScopeStore((s) => s.scope);
   const setScope = useTaskScopeStore((s) => s.setScope);
