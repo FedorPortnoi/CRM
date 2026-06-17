@@ -5,15 +5,16 @@ import { useSyncStore } from '../store/syncStore';
 
 let previouslyOnline: boolean | null = null;
 
+// Reset to synced on module load (clears any stale offline state from previous session)
+useSyncStore.getState().setSynced();
+
 NetInfo.addEventListener((state: NetInfoState) => {
-  const isOnline: boolean = state.isConnected === true && state.isInternetReachable !== false;
-  const { setOffline, setSyncing, setSynced } = useSyncStore.getState();
+  const isOnline: boolean = state.isConnected !== false;
+  const { setSyncing, setSynced } = useSyncStore.getState();
 
   if (previouslyOnline === false && isOnline === true) {
     setSyncing();
     void offlineQueue.flush().then(setSynced, setSynced);
-  } else if (!isOnline) {
-    setOffline();
   }
 
   previouslyOnline = isOnline;
@@ -29,7 +30,7 @@ export function useNetworkStatus(): NetworkStatus {
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
-      const nextIsOnline = state.isConnected === true && state.isInternetReachable !== false;
+      const nextIsOnline = state.isConnected !== false;
       setIsOnline(nextIsOnline);
     });
 

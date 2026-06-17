@@ -1,23 +1,30 @@
-﻿import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useSyncStore, SyncStatus } from '../store/syncStore';
 
 type Config = {
   bg: string;
-  text: string;
   autoHide: boolean;
 };
 
-const CONFIG: Record<SyncStatus, Config> = {
-  offline: { bg: '#ef4444', text: 'No internet connection', autoHide: false },
-  syncing: { bg: '#F9AB00', text: 'Syncing...', autoHide: false },
-  synced: { bg: '#C4704F', text: 'All synced', autoHide: true },
+const STYLE_CONFIG: Record<SyncStatus, Config> = {
+  offline: { bg: '#ef4444', autoHide: false },
+  syncing: { bg: '#F9AB00', autoHide: false },
+  synced: { bg: '#C4704F', autoHide: true },
 };
 
 export default function SyncStatusBar(): JSX.Element | null {
+  const { t } = useTranslation();
   const status = useSyncStore((s) => s.status);
   const opacity = useRef(new Animated.Value(0)).current;
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const TEXT: Record<SyncStatus, string> = {
+    offline: t('sync.offline'),
+    syncing: t('sync.syncing'),
+    synced: t('sync.synced'),
+  };
 
   useEffect(() => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -36,11 +43,11 @@ export default function SyncStatusBar(): JSX.Element | null {
     };
   }, [status, opacity]);
 
-  const config = CONFIG[status];
+  const config = STYLE_CONFIG[status];
 
   return (
     <Animated.View style={[styles.bar, { backgroundColor: config.bg, opacity }]}>
-      <Text style={styles.text}>{config.text}</Text>
+      <Text style={styles.text}>{TEXT[status]}</Text>
     </Animated.View>
   );
 }

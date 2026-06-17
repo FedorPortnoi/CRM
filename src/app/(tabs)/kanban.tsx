@@ -17,7 +17,7 @@ type Deal = {
   status: 'open' | 'won' | 'lost' | 'archived';
   pipeline_id: string | null;
   stage_id: string | null;
-  contact: { id: string; first_name: string; last_name: string };
+  contact: { id: string; first_name: string; last_name: string } | null;
   stage: { id: string; name: string; position: number } | null;
 };
 
@@ -128,7 +128,9 @@ function DealListView(): JSX.Element {
           );
         }
         const { deal } = item;
-        const contactName = deal.contact.first_name + ' ' + deal.contact.last_name;
+        const contactName = deal.contact
+          ? deal.contact.first_name + (deal.contact.last_name ? ' ' + deal.contact.last_name : '')
+          : '';
         return (
           <TouchableOpacity
             style={listStyles.dealRow}

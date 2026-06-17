@@ -1,4 +1,5 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+﻿import React, { useCallback, useMemo, useRef } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
@@ -209,9 +210,11 @@ const KanbanBoard: React.FC = () => {
   const pipelinesError = usePipelinesStore((s) => s.error);
   const fetchPipelines = usePipelinesStore((s) => s.fetchPipelines);
 
-  useEffect(() => {
-    void Promise.all([fetchDeals(), fetchPipelines()]);
-  }, [fetchDeals, fetchPipelines]);
+  useFocusEffect(
+    useCallback(() => {
+      void Promise.all([fetchDeals(), fetchPipelines()]);
+    }, [fetchDeals, fetchPipelines]),
+  );
 
   const defaultPipeline = pipelines.find((p) => p.is_default) ?? pipelines[0];
 

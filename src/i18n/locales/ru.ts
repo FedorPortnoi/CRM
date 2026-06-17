@@ -467,6 +467,11 @@ const ru = {
     monthlyTargetPlaceholder: 'Например: 1000000',
     monthlyTargetSaved: 'Сохранено',
   },
+  sync: {
+    offline: 'Нет соединения',
+    syncing: 'Синхронизация...',
+    synced: 'Все синхронизировано',
+  },
   common: {
     save: 'Сохранить',
     cancel: 'Отмена',

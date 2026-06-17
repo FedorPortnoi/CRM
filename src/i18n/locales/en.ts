@@ -467,6 +467,11 @@ const en = {
     monthlyTargetPlaceholder: 'e.g. 1000000',
     monthlyTargetSaved: 'Saved',
   },
+  sync: {
+    offline: 'No internet connection',
+    syncing: 'Syncing...',
+    synced: 'All synced',
+  },
   common: {
     save: 'Save',
     cancel: 'Cancel',
