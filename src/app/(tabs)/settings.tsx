@@ -46,6 +46,7 @@ export default function SettingsScreen(): JSX.Element {
   const [monthlyTarget, setMonthlyTarget] = useState<string>('');
   const [isSavingTarget, setIsSavingTarget] = useState(false);
   const [targetSaved, setTargetSaved] = useState(false);
+  const [orgName, setOrgName] = useState<string>('');
 
   useEffect(() => {
     void getStoredLanguage().then((lang) => {
@@ -100,15 +101,16 @@ export default function SettingsScreen(): JSX.Element {
   }, [token]);
 
   useEffect(() => {
-    if (!token || (user?.role !== 'owner' && user?.role !== 'admin')) return;
+    if (!token) return;
     void fetch(`${API_URL}/org`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : null)
-      .then((json: { data: { settings: { monthly_revenue_target?: number } | null } } | null) => {
+      .then((json: { data: { name?: string; settings: { monthly_revenue_target?: number } | null } } | null) => {
+        if (json?.data?.name) setOrgName(json.data.name);
         const target = json?.data?.settings?.monthly_revenue_target;
         if (typeof target === 'number') setMonthlyTarget(String(target));
       })
       .catch(() => undefined);
-  }, [token, user?.role]);
+  }, [token]);
 
   const handleSaveTarget = async (): Promise<void> => {
     if (!token) return;
@@ -233,7 +235,7 @@ export default function SettingsScreen(): JSX.Element {
       <View style={styles.card}>
         <View style={styles.row}>
           <Text style={styles.rowLabel}>{t('auth.organization')}</Text>
-          <Text style={styles.rowValue}>{user?.org_id ?? ''}</Text>
+          <Text style={styles.rowValue}>{orgName || (user?.org_id?.slice(0, 8) ?? '')}</Text>
         </View>
       </View>
 

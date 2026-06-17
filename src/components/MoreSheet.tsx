@@ -40,28 +40,29 @@ export default function MoreSheet({ visible, onClose, chatUnread, notifUnread }:
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        <View style={styles.handle} />
-        {items.map(({ label, Icon, path, badge }) => (
-          <TouchableOpacity
-            key={path}
-            style={styles.option}
-            onPress={() => navigate(path)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.optionIcon}>
-              <Icon size={20} color={ACCENT} strokeWidth={2.2} />
-            </View>
-            <Text style={styles.optionLabel}>{label}</Text>
-            {badge > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{badge > 99 ? '99+' : badge}</Text>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <View style={styles.handle} />
+          {items.map(({ label, Icon, path, badge }) => (
+            <TouchableOpacity
+              key={path}
+              style={styles.option}
+              onPress={() => navigate(path)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.optionIcon}>
+                <Icon size={20} color={ACCENT} strokeWidth={2.2} />
               </View>
-            )}
-          </TouchableOpacity>
-        ))}
-      </View>
+              <Text style={styles.optionLabel}>{label}</Text>
+              {badge > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{badge > 99 ? '99+' : badge}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </Pressable>
     </Modal>
   );
 }
