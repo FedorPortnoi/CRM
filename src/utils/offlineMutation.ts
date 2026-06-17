@@ -24,12 +24,15 @@ export async function sendOrQueueMutation(options: MutationOptions): Promise<Mut
   };
 
   try {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${options.token}`,
+    };
+    if (serializedBody) {
+      headers['Content-Type'] = 'application/json';
+    }
     const response = await fetch(options.url, {
       method: options.method,
-      headers: {
-        Authorization: `Bearer ${options.token}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: serializedBody || undefined,
     });
 
