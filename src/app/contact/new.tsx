@@ -1,6 +1,5 @@
 ﻿import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
-import NetInfo from '@react-native-community/netinfo';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
@@ -106,15 +105,6 @@ export default function NewContactScreen(): JSX.Element {
     if (notes.trim() !== '') body.notes = notes.trim();
 
     try {
-      const netState = await NetInfo.fetch();
-      const isOnline = netState.isConnected === true && netState.isInternetReachable !== false;
-
-      if (!isOnline) {
-        await queueContactCreation(body, captureId);
-        router.replace('/(tabs)/contacts');
-        return;
-      }
-
       let response: Response;
       try {
         response = await fetch(`${API_URL}/contacts`, {

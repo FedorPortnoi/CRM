@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
-import NetInfo from '@react-native-community/netinfo';
 import { API_URL } from '../utils/api';
 import * as offlineQueue from '../utils/offlineQueue';
 
@@ -171,19 +170,6 @@ export const useDealsStore = create<DealsState>()((set, get) => ({
       ),
     });
 
-    const netState = await NetInfo.fetch();
-    const isOnline: boolean =
-      netState.isConnected === true && netState.isInternetReachable !== false;
-
-    if (!isOnline) {
-      await offlineQueue.enqueue({
-        url: `${API_URL}/deals/${dealId}/stage`,
-        method: 'PATCH',
-        body: JSON.stringify({ stage_id: stageId }),
-      });
-      return;
-    }
-
     try {
       const token: string = await getToken();
       const response: Response = await fetch(`${API_URL}/deals/${dealId}/stage`, {
@@ -199,9 +185,12 @@ export const useDealsStore = create<DealsState>()((set, get) => ({
       set({
         deals: get().deals.map((d: Deal) => (d.id === dealId ? body.data : d)),
       });
-    } catch (e: unknown) {
-      const msg: string = e instanceof Error ? e.message : 'Unknown error';
-      set({ deals: snapshot, error: msg });
+    } catch {
+      await offlineQueue.enqueue({
+        url: `${API_URL}/deals/${dealId}/stage`,
+        method: 'PATCH',
+        body: JSON.stringify({ stage_id: stageId }),
+      });
     }
   },
 }));
