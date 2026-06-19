@@ -1,11 +1,8 @@
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { OnboardingController } from '../controllers/onboarding';
-
-const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  await request.jwtVerify();
-};
+import { authenticate } from '../preHandlers';
 
 const UpdateStateSchema = z.object({
   completed_steps: z.array(z.string()).optional(),

@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { TaskPriority, TaskStatus, Prisma, WorkflowTrigger } from '@prisma/client';
 import Anthropic from '@anthropic-ai/sdk';
 import { db } from '../../services/db';
+import { paginate } from '../../services/db-paginate';
 import { evaluateWorkflows } from '../../services/workflows';
 import { logActivity } from './activities';
 import { dispatchNotification, taskCtx } from '../../services/notificationEngine';
@@ -162,15 +163,15 @@ async function list(
   const skip = (page - 1) * per_page;
   const take = per_page;
 
-  const [tasks, total] = await Promise.all([
-    db.task.findMany({
+  const { data: tasks, total } = await paginate(
+    () => db.task.count({ where }),
+    () => db.task.findMany({
       where,
       skip,
       take,
       orderBy: [{ [sort]: order }],
     }),
-    db.task.count({ where }),
-  ]);
+  );
 
   reply.send({ data: tasks, meta: { total, page, per_page } });
 }

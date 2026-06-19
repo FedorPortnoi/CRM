@@ -389,7 +389,6 @@ const en = {
     monthlyTargetSaved: 'Saved',
   },
   sync: {
-    offline: 'No internet connection',
     syncing: 'Syncing...',
     synced: 'All synced',
   },

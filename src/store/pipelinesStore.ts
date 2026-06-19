@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
-import { API_URL } from '../utils/api';
+import { API_URL, authHeaders } from '../utils/api';
 
 type PipelineStage = {
   id: string;
@@ -38,11 +37,6 @@ type ApiListResponse = {
   data: Pipeline[];
 };
 
-async function getToken(): Promise<string> {
-  const token: string | null = await SecureStore.getItemAsync('crm_auth_token');
-  return token ?? '';
-}
-
 export const usePipelinesStore = create<PipelinesState>()((set) => ({
   pipelines: [],
   isLoading: false,
@@ -52,12 +46,9 @@ export const usePipelinesStore = create<PipelinesState>()((set) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const token: string = await getToken();
       const response: Response = await fetch(`${API_URL}/deals/pipelines`, {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: await authHeaders(),
       });
 
       if (!response.ok) {

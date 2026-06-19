@@ -5,14 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { enqueue } from '../../utils/offlineQueue';
-
-interface CreateContactResponse {
-  data: { id: string };
-}
-
-interface ErrorResponse {
-  error: { code: string; message: string };
-}
+import { useCreateMutation } from '../../hooks/useCreateMutation';
 
 type RouteParamValue = string | string[] | undefined;
 
@@ -81,66 +74,46 @@ export default function NewContactScreen(): JSX.Element {
   const [phone, setPhone] = useState<string>(() => firstRouteParam(routePhone) ?? '');
   const [notes, setNotes] = useState<string>('');
   const [showFirstNameError, setShowFirstNameError] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [apiError, setApiError] = useState<string | null>(null);
 
-  const handleSubmit = async (): Promise<void> => {
-    if (firstName.trim() === '') {
-      setShowFirstNameError(true);
-      return;
-    }
-    setShowFirstNameError(false);
-    if (!token) {
-      setApiError(t('errors.unauthorized'));
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    const body: Record<string, string> = { first_name: firstName.trim() };
-    if (lastName.trim() !== '') body.last_name = lastName.trim();
-    if (company.trim() !== '') body.company = company.trim();
-    if (email.trim() !== '') body.email = email.trim();
-    if (phone.trim() !== '') body.phone = phone.trim();
-    if (notes.trim() !== '') body.notes = notes.trim();
-
-    try {
-      let response: Response;
-      try {
-        response = await fetch(`${API_URL}/contacts`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        });
-      } catch {
-        await queueContactCreation(body, captureId);
+  const { isSubmitting, apiError, submit } = useCreateMutation<Record<string, string>, { id: string }>({
+    endpoint: `${API_URL}/contacts`,
+    token: token ?? '',
+    validate: () => {
+      if (firstName.trim() === '') {
+        setShowFirstNameError(true);
+        return false;
+      }
+      setShowFirstNameError(false);
+      return true;
+    },
+    buildPayload: () => {
+      const body: Record<string, string> = { first_name: firstName.trim() };
+      if (lastName.trim() !== '') body.last_name = lastName.trim();
+      if (company.trim() !== '') body.company = company.trim();
+      if (email.trim() !== '') body.email = email.trim();
+      if (phone.trim() !== '') body.phone = phone.trim();
+      if (notes.trim() !== '') body.notes = notes.trim();
+      return body;
+    },
+    onSuccess: (data, queued) => {
+      if (queued) {
+        void queueContactCreation(
+          { first_name: firstName.trim() },
+          captureId,
+        );
         router.replace('/(tabs)/contacts');
         return;
       }
-
-      if (response.ok) {
-        const responseBody = (await response.json()) as CreateContactResponse;
-        const newContactId = responseBody.data.id;
-        if (captureId) {
-          const matched = await matchCaptureToContact(captureId, newContactId, token);
-          if (!matched) {
-            await queueCaptureMatch(captureId, newContactId);
-          }
-        }
-        router.replace({ pathname: '/contact/[id]', params: { id: newContactId } });
-      } else {
-        const parsedBody = (await response.json()) as ErrorResponse;
-        setApiError(parsedBody?.error?.message ?? t('contacts.failedToCreate'));
+      const newContactId = data.id;
+      if (captureId && token) {
+        void matchCaptureToContact(captureId, newContactId, token).then((matched) => {
+          if (!matched) void queueCaptureMatch(captureId, newContactId);
+        });
       }
-    } catch (err) {
-      setApiError(err instanceof Error ? err.message : t('errors.networkError'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      router.replace({ pathname: '/contact/[id]', params: { id: newContactId } });
+    },
+    fallbackErrorMessage: t('contacts.failedToCreate'),
+  });
 
   return (
     <View style={styles.container}>
@@ -219,7 +192,7 @@ export default function NewContactScreen(): JSX.Element {
 
         <TouchableOpacity
           style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-          onPress={() => { void handleSubmit(); }}
+          onPress={() => { void submit(); }}
           disabled={isSubmitting}
         >
           {isSubmitting ? (

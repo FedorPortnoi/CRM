@@ -1,7 +1,8 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { CapturesController } from '../controllers/captures';
+import { authenticate } from '../preHandlers';
 
 const ListCapturesSchema = z.object({
   status: z.enum(['pending', 'matched', 'dismissed', 'all']).optional(),
@@ -14,10 +15,6 @@ const MatchCaptureSchema = z.object({
 const CaptureIdParamsSchema = z.object({
   id: z.string().uuid(),
 });
-
-const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  await request.jwtVerify();
-};
 
 const CreateCaptureSchema = z.object({
   type: z.enum(['call', 'sms', 'email']),

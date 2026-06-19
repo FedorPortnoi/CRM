@@ -1,15 +1,18 @@
-import { FastifyReply, FastifyRequest } from 'fastify';
+import { FastifyRequest } from 'fastify';
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AuthController } from '../controllers/auth';
+import { authenticate } from '../preHandlers';
+
+const PasswordSchema = z.string().min(8).max(100)
+  .regex(/[a-z]/, 'Password must include a lowercase letter')
+  .regex(/[A-Z]/, 'Password must include an uppercase letter')
+  .regex(/[0-9]/, 'Password must include a number')
+  .regex(/[^A-Za-z0-9]/, 'Password must include a symbol');
 
 const RegisterSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(8).max(100)
-    .regex(/[a-z]/, 'Password must include a lowercase letter')
-    .regex(/[A-Z]/, 'Password must include an uppercase letter')
-    .regex(/[0-9]/, 'Password must include a number')
-    .regex(/[^A-Za-z0-9]/, 'Password must include a symbol'),
+  password: PasswordSchema,
   name: z.string().min(1).max(100),
   org_name: z.string().min(1).max(200),
   phone: z.string().min(10).max(20),
@@ -45,19 +48,11 @@ const InviteSchema = z.object({
 
 const SetCredentialsSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
-  new_password: z.string().min(8).max(100)
-    .regex(/[a-z]/, 'Password must include a lowercase letter')
-    .regex(/[A-Z]/, 'Password must include an uppercase letter')
-    .regex(/[0-9]/, 'Password must include a number')
-    .regex(/[^A-Za-z0-9]/, 'Password must include a symbol'),
+  new_password: PasswordSchema,
 });
 
 const ChangePasswordSchema = z.object({
-  new_password: z.string().min(8).max(100)
-    .regex(/[a-z]/, 'Password must include a lowercase letter')
-    .regex(/[A-Z]/, 'Password must include an uppercase letter')
-    .regex(/[0-9]/, 'Password must include a number')
-    .regex(/[^A-Za-z0-9]/, 'Password must include a symbol'),
+  new_password: PasswordSchema,
 });
 
 const SetManagerSchema = z.object({
@@ -91,10 +86,6 @@ function authRateLimit(max: number, timeWindow: string) {
     },
   };
 }
-
-const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  await request.jwtVerify();
-};
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post('/', {

@@ -1,7 +1,8 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { CalendarController } from '../controllers/calendar';
+import { authenticate } from '../preHandlers';
 
 function validateEventWindow(
   body: { start_time?: string; end_time?: string },
@@ -62,10 +63,6 @@ const AvailabilitySchema = z.object({
 const PostMeetingNotesSchema = z.object({
   notes: z.string().min(1).max(10000),
 });
-
-const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  await request.jwtVerify();
-};
 
 export default async function calendarRoutes(fastify: FastifyInstance) {
   const f = fastify.withTypeProvider<ZodTypeProvider>();

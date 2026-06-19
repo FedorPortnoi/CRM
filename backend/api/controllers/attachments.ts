@@ -1,6 +1,7 @@
 ﻿import { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../services/db';
+import { paginate } from '../../services/db-paginate';
 import { generateUploadUrl, deleteFile } from '../../services/storage';
 
 // --- Validation --------------------------------------------------------------
@@ -106,13 +107,13 @@ export async function listAttachments(
     ...(entity_id && { entity_id }),
   };
 
-  const [attachments, total] = await Promise.all([
-    db.attachment.findMany({
+  const { data: attachments, total } = await paginate(
+    () => db.attachment.count({ where }),
+    () => db.attachment.findMany({
       where,
       orderBy: { created_at: 'desc' },
     }),
-    db.attachment.count({ where }),
-  ]);
+  );
 
   reply.send({ data: attachments, meta: { total } });
 }

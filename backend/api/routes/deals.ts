@@ -1,8 +1,9 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { DealsController } from '../controllers/deals';
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from '../../config/market';
+import { authenticate } from '../preHandlers';
 
 const CurrencySchema = z.string().trim().length(3).transform(normalizeCurrencyCode);
 
@@ -59,10 +60,6 @@ const DealFilterSchema = z.object({
 const StaleDealScanSchema = z.object({
   threshold_days: z.coerce.number().int().min(0).max(365).optional(),
 });
-
-const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  await request.jwtVerify();
-};
 
 export default async function dealsRoutes(fastify: FastifyInstance) {
   const f = fastify.withTypeProvider<ZodTypeProvider>();

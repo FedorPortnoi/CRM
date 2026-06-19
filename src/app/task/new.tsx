@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -7,8 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { scheduleTaskDueReminder } from '../../utils/notifications';
-import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { formatMarketDate } from '../../market/profile';
+import { useCreateMutation } from '../../hooks/useCreateMutation';
 import { RECURRENCE_OPTIONS, labelKeyForRule } from '../../utils/recurrence';
 
 interface ContactPreview {
@@ -23,16 +23,8 @@ interface Assignee {
   name: string;
 }
 
-interface TaskApiResponse {
-  data: { id: string };
-}
-
 interface CalendarDay {
   dateString: string;
-}
-
-interface ErrorApiResponse {
-  error: { code: string; message: string };
 }
 
 interface SuggestedContact {
@@ -67,8 +59,6 @@ export default function NewTaskScreen(): JSX.Element | null {
   );
   const [contactQuery, setContactQuery] = useState<string>('');
   const [contactResults, setContactResults] = useState<ContactPreview[]>([]);
-  const [apiError, setApiError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
   const [showRepeatPicker, setShowRepeatPicker] = useState<boolean>(false);
   const [reminderDate, setReminderDate] = useState<string>('');
@@ -134,6 +124,63 @@ export default function NewTaskScreen(): JSX.Element | null {
       .catch(() => setAssignees([]));
   }, [token, user]);
 
+  // Holds an optional contact-id override set just before calling submit()
+  // (needed when the AI-suggestion modal resolves with a different contact).
+  const pendingContactIdRef = useRef<string | null>(null);
+
+  const { isSubmitting, apiError, submit } = useCreateMutation<
+    {
+      title: string;
+      assigned_to: string;
+      is_recurring: boolean;
+      recurrence_rule?: string;
+      due_date?: string;
+      reminder_at?: string;
+      contact_id?: string;
+    },
+    { id: string }
+  >({
+    endpoint: `${API_URL}/tasks`,
+    token: token ?? '',
+    validate: () => {
+      if (title.trim() === '') {
+        setShowTitleError(true);
+        return false;
+      }
+      setShowTitleError(false);
+      return true;
+    },
+    buildPayload: () => {
+      const finalContactId = pendingContactIdRef.current ?? selectedContactId;
+      return {
+        title: title.trim(),
+        assigned_to: assigneeId || (user?.id ?? ''),
+        is_recurring: recurrenceRule !== null,
+        ...(recurrenceRule !== null ? { recurrence_rule: recurrenceRule } : {}),
+        ...(dueDate !== '' ? { due_date: new Date(dueDate + 'T00:00:00').toISOString() } : {}),
+        ...(reminderDate !== '' ? { reminder_at: new Date(reminderDate + 'T09:00:00').toISOString() } : {}),
+        ...(finalContactId !== '' ? { contact_id: finalContactId } : {}),
+      };
+    },
+    onSuccess: async (data, queued) => {
+      pendingContactIdRef.current = null;
+      if (queued) {
+        router.replace('/(tabs)/tasks');
+        return;
+      }
+      const taskId = data.id;
+      if (dueDate !== '') {
+        try {
+          await scheduleTaskDueReminder(taskId, title.trim(), dueDate, reminderDate || null);
+        } catch {
+          // Task creation should still succeed if local reminders are unavailable.
+        }
+      }
+      router.replace({ pathname: '/task/[id]', params: { id: taskId } });
+    },
+    fallbackErrorMessage: t('tasks.failedToCreate'),
+  });
+
   if (!token || !user) return null;
 
   const formatDate = (dateStr: string): string => {
@@ -172,51 +219,10 @@ export default function NewTaskScreen(): JSX.Element | null {
     setContactResults([]);
   };
 
-  const doSubmit = async (overrideContactId?: string): Promise<void> => {
-    const finalContactId = overrideContactId ?? selectedContactId;
-    setIsSubmitting(true);
-    const body = {
-      title: title.trim(),
-      assigned_to: assigneeId || user.id,
-      is_recurring: recurrenceRule !== null,
-      ...(recurrenceRule !== null ? { recurrence_rule: recurrenceRule } : {}),
-      ...(dueDate !== '' ? { due_date: new Date(dueDate + 'T00:00:00').toISOString() } : {}),
-      ...(reminderDate !== '' ? { reminder_at: new Date(reminderDate + 'T09:00:00').toISOString() } : {}),
-      ...(finalContactId !== '' ? { contact_id: finalContactId } : {}),
-    };
-    try {
-      const result = await sendOrQueueMutation({
-        url: `${API_URL}/tasks`,
-        method: 'POST',
-        token,
-        body,
-      });
-
-      if (result.queued) {
-        router.replace('/(tabs)/tasks');
-        return;
-      }
-
-      const res = result.response;
-      const parsed = await res.json();
-      if (res.status === 201) {
-        const taskId = (parsed as TaskApiResponse).data.id;
-        if (dueDate !== '') {
-          try {
-            await scheduleTaskDueReminder(taskId, title.trim(), dueDate, reminderDate || null);
-          } catch {
-            // Task creation should still succeed if local reminders are unavailable.
-          }
-        }
-        router.replace({ pathname: '/task/[id]', params: { id: taskId } });
-      } else {
-        setApiError((parsed as ErrorApiResponse)?.error?.message ?? t('tasks.failedToCreate'));
-      }
-    } catch (err) {
-      setApiError(err instanceof Error ? err.message : t('errors.networkError'));
-    } finally {
-      setIsSubmitting(false);
-    }
+  // Thin wrapper: set optional contact-id override into the ref, then delegate to the hook.
+  const doSubmit = (overrideContactId?: string): void => {
+    pendingContactIdRef.current = overrideContactId ?? null;
+    void submit();
   };
 
   const handleSubmit = async (): Promise<void> => {
@@ -227,7 +233,6 @@ export default function NewTaskScreen(): JSX.Element | null {
 
     // If no contact linked, ask AI to suggest one
     if (!selectedContactId && title.trim().length > 3) {
-      setIsSubmitting(true);
       try {
         const res = await fetch(`${API_URL}/tasks/suggest-contact`, {
           method: 'POST',
@@ -238,7 +243,6 @@ export default function NewTaskScreen(): JSX.Element | null {
           const json = (await res.json()) as { data: { contact: SuggestedContact | null } };
           if (json.data.contact) {
             setSuggestionContact(json.data.contact);
-            setIsSubmitting(false);
             setShowSuggestionModal(true);
             return;
           }
@@ -246,10 +250,9 @@ export default function NewTaskScreen(): JSX.Element | null {
       } catch {
         // AI unavailable — proceed without suggestion
       }
-      setIsSubmitting(false);
     }
 
-    await doSubmit();
+    doSubmit();
   };
 
   return (

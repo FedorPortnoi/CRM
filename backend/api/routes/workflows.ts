@@ -1,7 +1,8 @@
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { WorkflowsController } from '../controllers/workflows';
+import { authenticate } from '../preHandlers';
 
 const WorkflowActionSchema = z.object({
   type: z.enum(['create_task', 'add_contact_note', 'update_deal_stage']),
@@ -40,10 +41,6 @@ const WorkflowFilterSchema = z.object({
   status: z.enum(['active', 'paused', 'archived']).optional(),
   trigger: z.enum(['contact_created', 'deal_stage_changed', 'task_completed', 'deal_won', 'deal_created', 'task_created', 'deal_stale']).optional(),
 });
-
-const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  await request.jwtVerify();
-};
 
 export default async function workflowsRoutes(fastify: FastifyInstance): Promise<void> {
   const f = fastify.withTypeProvider<ZodTypeProvider>();

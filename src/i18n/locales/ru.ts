@@ -389,7 +389,6 @@ const ru = {
     monthlyTargetSaved: 'Сохранено',
   },
   sync: {
-    offline: 'Нет соединения',
     syncing: 'Синхронизация...',
     synced: 'Все синхронизировано',
   },

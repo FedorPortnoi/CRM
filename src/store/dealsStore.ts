@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
-import { API_URL } from '../utils/api';
+import { API_URL, authHeaders } from '../utils/api';
 import * as offlineQueue from '../utils/offlineQueue';
 
 type DealStatus = 'open' | 'won' | 'lost' | 'archived';
@@ -55,11 +54,6 @@ type ApiErrorResponse = {
 };
 
 const DEALS_PER_PAGE = 100;
-
-async function getToken(): Promise<string> {
-  const token: string | null = await SecureStore.getItemAsync('crm_auth_token');
-  return token ?? '';
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -125,7 +119,6 @@ export const useDealsStore = create<DealsState>()((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const token: string = await getToken();
       const deals: Deal[] = [];
       let page = 1;
       let total: number | null = null;
@@ -138,9 +131,7 @@ export const useDealsStore = create<DealsState>()((set, get) => ({
         });
         const response: Response = await fetch(`${API_URL}/deals?${params.toString()}`, {
           method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: await authHeaders(),
         });
         const body: ApiListResponse = await readJsonResponse<ApiListResponse>(response);
 
@@ -169,13 +160,9 @@ export const useDealsStore = create<DealsState>()((set, get) => ({
     });
 
     try {
-      const token: string = await getToken();
       const response: Response = await fetch(`${API_URL}/deals/${dealId}/stage`, {
         method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: await authHeaders(),
         body: JSON.stringify({ stage_id: stageId }),
       });
       const body: ApiDealResponse = await readJsonResponse<ApiDealResponse>(response);

@@ -1,7 +1,8 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { ContactsController } from '../controllers/contacts';
+import { authenticate } from '../preHandlers';
 
 const CreateContactSchema = z.object({
   first_name: z.string().min(1).max(100),
@@ -67,10 +68,6 @@ const ContactFilterSchema = z.object({
   sort: z.enum(['created_at', 'updated_at', 'first_name', 'company']).default('created_at'),
   order: z.enum(['asc', 'desc']).default('desc'),
 });
-
-const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  await request.jwtVerify();
-};
 
 export default async function contactsRoutes(fastify: FastifyInstance) {
   for (const contentType of ['application/octet-stream', 'audio/l16', 'audio/wav', 'audio/x-wav']) {

@@ -1,11 +1,7 @@
-import { FastifyRequest, FastifyReply } from 'fastify';
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { NotificationsController } from '../controllers/notifications';
-
-const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  await request.jwtVerify();
-};
+import { authenticate } from '../preHandlers';
 
 const notificationsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(

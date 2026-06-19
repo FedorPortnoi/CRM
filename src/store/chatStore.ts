@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
-import { API_URL } from '../utils/api';
+import { API_URL, authHeaders } from '../utils/api';
 
 export type ChatMessage = {
   id: string;
@@ -69,12 +68,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   fetchChannels: async () => {
-    const token = await SecureStore.getItemAsync('crm_auth_token');
-    if (!token) return;
     set({ loadingChannels: true });
     try {
       const res = await fetch(`${API_URL}/chat/channels`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: await authHeaders(),
       });
       if (!res.ok) return;
       const json = (await res.json()) as { data: Channel[] };
@@ -92,13 +89,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   fetchMessages: async (channel: string, before?: string) => {
-    const token = await SecureStore.getItemAsync('crm_auth_token');
-    if (!token) return;
     const params = new URLSearchParams({ channel, limit: '50' });
     if (before) params.set('before', before);
     try {
       const res = await fetch(`${API_URL}/chat/messages?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: await authHeaders(),
       });
       if (!res.ok) return;
       const json = (await res.json()) as { data: ChatMessage[]; meta: { has_more: boolean } };
@@ -117,11 +112,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   sendMessage: async (channel: string, body: string) => {
-    const token = await SecureStore.getItemAsync('crm_auth_token');
-    if (!token) return;
     const res = await fetch(`${API_URL}/chat/messages`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: await authHeaders(),
       body: JSON.stringify({ channel, body }),
     });
     if (!res.ok) {
@@ -134,12 +127,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   markRead: async (channel: string) => {
-    const token = await SecureStore.getItemAsync('crm_auth_token');
-    if (!token) return;
     try {
       await fetch(`${API_URL}/chat/read`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ channel }),
       });
       // Clear unread count in local channel list

@@ -1,8 +1,9 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { RRule } from 'rrule';
 import { TasksController } from '../controllers/tasks';
+import { authenticate } from '../preHandlers';
 
 function isSafeRRule(val: string): boolean {
   try {
@@ -50,10 +51,6 @@ const TaskFilterSchema = z.object({
 const ScopeQuerySchema = z.object({
   scope: z.enum(['direct', 'subtree']).optional(),
 });
-
-const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  await request.jwtVerify();
-};
 
 export default async function tasksRoutes(fastify: FastifyInstance) {
   const f = fastify.withTypeProvider<ZodTypeProvider>();

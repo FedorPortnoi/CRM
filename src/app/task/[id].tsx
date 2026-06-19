@@ -9,6 +9,7 @@ import { cancelTaskDueReminder, scheduleTaskDueReminder } from '../../utils/noti
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { formatMarketDate } from '../../market/profile';
 import { labelKeyForRule } from '../../utils/recurrence';
+import { useAuditLog } from '../../hooks/useAuditLog';
 
 interface TaskAssignee {
   id: string;
@@ -18,12 +19,6 @@ interface TaskContact {
   id: string;
   first_name: string;
   last_name: string | null;
-}
-
-interface AuditEntry {
-  id: string;
-  action: string;
-  created_at: string;
 }
 
 function taskActionLabel(action: string): string {
@@ -144,7 +139,7 @@ export default function TaskDetailScreen(): JSX.Element {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isActionLoading, setIsActionLoading] = useState<boolean>(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const { data: auditLog = [] } = useAuditLog('task', id);
 
   const fetchTask = useCallback(
     async (refreshing: boolean): Promise<void> => {
@@ -177,26 +172,12 @@ export default function TaskDetailScreen(): JSX.Element {
     [id, t, token],
   );
 
-  const fetchAuditLog = useCallback(async (): Promise<void> => {
-    if (!token || !id) return;
-    try {
-      const res = await fetch(`${API_URL}/activities?entity_type=task&entity_id=${id}`, {
-        headers: { Authorization: 'Bearer ' + token },
-      });
-      if (!res.ok) return;
-      const body = (await res.json()) as { data: AuditEntry[] };
-      setAuditLog(body.data);
-    } catch { /* silent */ }
-  }, [id, token]);
-
   useEffect(() => {
     void fetchTask(false);
-    void fetchAuditLog();
-  }, [fetchTask, fetchAuditLog]);
+  }, [fetchTask]);
   const onRefresh = useCallback((): void => {
     void fetchTask(true);
-    void fetchAuditLog();
-  }, [fetchTask, fetchAuditLog]);
+  }, [fetchTask]);
 
   async function handleComplete(): Promise<void> {
     setIsActionLoading(true);

@@ -9,7 +9,6 @@ type Config = {
 };
 
 const STYLE_CONFIG: Record<SyncStatus, Config> = {
-  offline: { bg: '#ef4444', autoHide: false },
   syncing: { bg: '#F9AB00', autoHide: false },
   synced: { bg: '#C4704F', autoHide: true },
 };
@@ -21,7 +20,6 @@ export default function SyncStatusBar(): JSX.Element | null {
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const TEXT: Record<SyncStatus, string> = {
-    offline: t('sync.offline'),
     syncing: t('sync.syncing'),
     synced: t('sync.synced'),
   };

@@ -1,6 +1,7 @@
 ﻿import { FastifyRequest, FastifyReply } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { db } from '../../services/db';
+import { paginate } from '../../services/db-paginate';
 
 // --- Types -------------------------------------------------------------------
 
@@ -45,15 +46,15 @@ export async function listActivities(
     entity_id,
   };
 
-  const [logs, total] = await Promise.all([
-    db.activityLog.findMany({
+  const { data: logs, total } = await paginate(
+    () => db.activityLog.count({ where }),
+    () => db.activityLog.findMany({
       where,
       skip,
       take: perPageNum,
       orderBy: { created_at: 'desc' },
     }),
-    db.activityLog.count({ where }),
-  ]);
+  );
 
   reply.send({ data: logs, meta: { total, page: pageNum, per_page: perPageNum } });
 }

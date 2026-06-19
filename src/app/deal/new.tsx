@@ -17,7 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { usePipelinesStore } from '../../store/pipelinesStore';
 import { API_URL } from '../../utils/api';
-import { sendOrQueueMutation } from '../../utils/offlineMutation';
+import { useCreateMutation } from '../../hooks/useCreateMutation';
 
 interface PipelineStage {
   id: string;
@@ -38,14 +38,6 @@ interface ContactPreview {
   first_name: string;
   last_name: string | null;
   company: string | null;
-}
-
-interface DealApiResponse {
-  data: { id: string };
-}
-
-interface ErrorApiResponse {
-  error: { code: string; message: string };
 }
 
 export default function NewDealScreen(): JSX.Element {
@@ -72,8 +64,6 @@ export default function NewDealScreen(): JSX.Element {
   const [showStageModal, setShowStageModal] = useState<boolean>(false);
   const [showTitleError, setShowTitleError] = useState<boolean>(false);
   const [showPipelineStageError, setShowPipelineStageError] = useState<boolean>(false);
-  const [apiError, setApiError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
     if (pipelines.length === 0) {
@@ -107,24 +97,8 @@ export default function NewDealScreen(): JSX.Element {
       ?.stages.slice()
       .sort((a, b) => a.position - b.position) ?? [];
 
-  const handleSubmit = async (): Promise<void> => {
-    let hasError = false;
-    if (title.trim() === '') {
-      setShowTitleError(true);
-      hasError = true;
-    }
-    if (selectedPipelineId === '' || selectedStageId === '') {
-      setShowPipelineStageError(true);
-      hasError = true;
-    }
-    if (hasError) return;
-
-    setIsSubmitting(true);
-    setApiError(null);
-    setShowTitleError(false);
-    setShowPipelineStageError(false);
-
-    const body: {
+  const { isSubmitting, apiError, submit } = useCreateMutation<
+    {
       title: string;
       pipeline_id: string;
       stage_id: string;
@@ -132,7 +106,28 @@ export default function NewDealScreen(): JSX.Element {
       value?: number;
       next_action?: string;
       next_action_due?: string;
-    } = {
+    },
+    { id: string }
+  >({
+    endpoint: `${API_URL}/deals`,
+    token: token ?? '',
+    validate: () => {
+      let hasError = false;
+      if (title.trim() === '') {
+        setShowTitleError(true);
+        hasError = true;
+      } else {
+        setShowTitleError(false);
+      }
+      if (selectedPipelineId === '' || selectedStageId === '') {
+        setShowPipelineStageError(true);
+        hasError = true;
+      } else {
+        setShowPipelineStageError(false);
+      }
+      return !hasError;
+    },
+    buildPayload: () => ({
       title: title.trim(),
       pipeline_id: selectedPipelineId,
       stage_id: selectedStageId,
@@ -142,35 +137,16 @@ export default function NewDealScreen(): JSX.Element {
         : {}),
       ...(nextAction.trim() !== '' ? { next_action: nextAction.trim() } : {}),
       ...(nextActionDue.trim() !== '' ? { next_action_due: nextActionDue.trim() } : {}),
-    };
-
-    try {
-      const result = await sendOrQueueMutation({
-        url: `${API_URL}/deals`,
-        method: 'POST',
-        token: token ?? '',
-        body,
-      });
-
-      if (result.queued) {
+    }),
+    onSuccess: (data, queued) => {
+      if (queued) {
         router.replace('/(tabs)/kanban');
         return;
       }
-
-      const res = result.response;
-      if (res.status === 201) {
-        const data = (await res.json()) as DealApiResponse;
-        router.replace({ pathname: '/deal/[id]', params: { id: data.data.id } });
-      } else {
-        const errData = (await res.json()) as ErrorApiResponse;
-        setApiError(errData?.error?.message ?? t('deals.failedToCreate'));
-      }
-    } catch (err) {
-      setApiError(err instanceof Error ? err.message : t('errors.networkError'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      router.replace({ pathname: '/deal/[id]', params: { id: data.id } });
+    },
+    fallbackErrorMessage: t('deals.failedToCreate'),
+  });
 
   const renderPipelineItem = ({ item }: ListRenderItemInfo<Pipeline>) => (
     <TouchableOpacity
@@ -395,7 +371,7 @@ export default function NewDealScreen(): JSX.Element {
 
       <TouchableOpacity
         style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-        onPress={() => void handleSubmit()}
+        onPress={() => void submit()}
         disabled={isSubmitting}
       >
         {isSubmitting ? (

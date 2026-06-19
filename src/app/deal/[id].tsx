@@ -17,6 +17,7 @@ import { useUserStore } from '../../store/userStore';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { formatMarketDate, formatMoney } from '../../market/profile';
 import AttachmentsSection from '../../components/AttachmentsSection';
+import { useAuditLog } from '../../hooks/useAuditLog';
 
 const TEAL = '#C45A10';
 
@@ -40,12 +41,6 @@ interface SkeletonBoxProps {
   height: number;
   borderRadius?: number;
   marginBottom?: number;
-}
-
-interface AuditEntry {
-  id: string;
-  action: string;
-  created_at: string;
 }
 
 interface DealApiResponse {
@@ -102,7 +97,7 @@ export default function DealDetailScreen(): JSX.Element {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isActionLoading, setIsActionLoading] = useState<boolean>(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const { data: auditLog = [] } = useAuditLog('deal', id);
 
   const fetchDeal = useCallback(
     (silent: boolean): void => {
@@ -140,27 +135,13 @@ export default function DealDetailScreen(): JSX.Element {
     [id, token],
   );
 
-  const fetchAuditLog = useCallback(async (): Promise<void> => {
-    if (!token || !id) return;
-    try {
-      const res = await fetch(`${API_URL}/activities?entity_type=deal&entity_id=${id}`, {
-        headers: { Authorization: 'Bearer ' + token },
-      });
-      if (!res.ok) return;
-      const body = (await res.json()) as { data: AuditEntry[] };
-      setAuditLog(body.data);
-    } catch { /* silent */ }
-  }, [id, token]);
-
   useEffect(() => {
     fetchDeal(false);
-    void fetchAuditLog();
-  }, [fetchDeal, fetchAuditLog]);
+  }, [fetchDeal]);
 
   const onRefresh = (): void => {
     setIsRefreshing(true);
     fetchDeal(true);
-    void fetchAuditLog();
   };
 
   const doMarkWon = async (): Promise<void> => {

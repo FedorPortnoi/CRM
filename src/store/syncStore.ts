@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type SyncStatus = 'offline' | 'syncing' | 'synced';
+export type SyncStatus = 'syncing' | 'synced';
 
 export interface ConflictRecord {
   entity: string;

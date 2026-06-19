@@ -1,9 +1,6 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { ExportController } from '../controllers/export';
-
-const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  await request.jwtVerify();
-};
+import { authenticate } from '../preHandlers';
 
 export default async function exportRoutes(fastify: FastifyInstance) {
   fastify.get('/contacts/pdf', {

@@ -8,9 +8,10 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
 import { scheduleTaskDueReminder } from '../../../utils/notifications';
-import { sendOrQueueMutation } from '../../../utils/offlineMutation';
 import { formatMarketDate } from '../../../market/profile';
 import { RECURRENCE_OPTIONS, labelKeyForRule, normalizeRule } from '../../../utils/recurrence';
+import { useContactSearch } from '../../../hooks/useContactSearch';
+import { useCreateMutation } from '../../../hooks/useCreateMutation';
 
 interface TaskContact {
   id: string;
@@ -169,13 +170,16 @@ export default function EditTaskScreen(): JSX.Element {
   const [notes, setNotes] = useState<string>('');
   const [selectedContactId, setSelectedContactId] = useState<string>('');
   const [selectedContactName, setSelectedContactName] = useState<string>('');
-  const [contactQuery, setContactQuery] = useState<string>('');
-  const [contactResults, setContactResults] = useState<ContactPreview[]>([]);
+  const {
+    query: contactQuery,
+    setQuery: setContactQuery,
+    results: contactResults,
+    clearResults: clearContactSearch,
+  } = useContactSearch({ token });
   const [showCalendar, setShowCalendar] = useState<boolean>(false);
   const [showTitleError, setShowTitleError] = useState<boolean>(false);
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
   const [showRepeatPicker, setShowRepeatPicker] = useState<boolean>(false);
   const [reminderDate, setReminderDate] = useState<string>('');
@@ -200,13 +204,13 @@ export default function EditTaskScreen(): JSX.Element {
 
   const loadTask = useCallback(async (): Promise<void> => {
     if (!token) {
-      setApiError(t('errors.unauthorized'));
+      setLoadError(t('errors.unauthorized'));
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
-    setApiError(null);
+    setLoadError(null);
 
     try {
       const response = await fetch(`${API_URL}/tasks/${id}`, {
@@ -215,7 +219,7 @@ export default function EditTaskScreen(): JSX.Element {
 
       if (!response.ok) {
         const parsedBody = (await response.json()) as ErrorApiResponse;
-        setApiError(parsedBody.error.message);
+        setLoadError(parsedBody.error.message);
         return;
       }
 
@@ -231,10 +235,9 @@ export default function EditTaskScreen(): JSX.Element {
       setAssigneeId(parsedBody.data.assignee.id);
       setAssigneeName(parsedBody.data.assignee.name);
       setReminderDate(toDateInputValue(parsedBody.data.reminder_at ?? null));
-      setContactQuery('');
-      setContactResults([]);
+      clearContactSearch();
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : t('tasks.failedToLoad'));
+      setLoadError(err instanceof Error ? err.message : t('tasks.failedToLoad'));
     } finally {
       setIsLoading(false);
     }
@@ -255,92 +258,51 @@ export default function EditTaskScreen(): JSX.Element {
       .catch(() => setAssignees([]));
   }, [token]);
 
-  useEffect(() => {
-    const timer = setTimeout(async () => {
-      if (!token || contactQuery.trim().length < 2) {
-        setContactResults([]);
-        return;
+  const { isSubmitting, apiError, submit } = useCreateMutation<TaskPatch, Task>({
+    endpoint: `${API_URL}/tasks/${id}`,
+    method: 'PATCH',
+    token: token ?? '',
+    validate: () => {
+      if (title.trim() === '') {
+        setShowTitleError(true);
+        return false;
       }
-
-      try {
-        const response = await fetch(`${API_URL}/contacts?q=${encodeURIComponent(contactQuery.trim())}&per_page=8`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (!response.ok) {
-          setContactResults([]);
-          return;
+      setShowTitleError(false);
+      return true;
+    },
+    buildPayload: () => {
+      const patch = buildPatch(form, original!);
+      const originalReminderDate = toDateInputValue(null);
+      if (reminderDate !== originalReminderDate) {
+        patch.reminder_at = reminderDate !== '' ? new Date(reminderDate + 'T09:00:00').toISOString() : null;
+      }
+      return patch;
+    },
+    onSuccess: async (data, queued) => {
+      if (!queued && data.due_date) {
+        try {
+          await scheduleTaskDueReminder(id, data.title, data.due_date, reminderDate || null);
+        } catch {
+          // The task update succeeded; local reminder updates are best-effort.
         }
-
-        const parsedBody = (await response.json()) as {
-          data: ContactPreview[];
-        };
-        setContactResults(parsedBody.data);
-      } catch {
-        setContactResults([]);
       }
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [contactQuery, token]);
+      router.back();
+    },
+    fallbackErrorMessage: t('errors.networkError'),
+  });
 
   const handleSubmit = async (): Promise<void> => {
-    if (title.trim() === '') {
-      setShowTitleError(true);
-      return;
-    }
-
     if (!original || !token) return;
-
-    setShowTitleError(false);
-    setApiError(null);
-    setIsSubmitting(true);
-
     const patch = buildPatch(form, original);
-    const originalReminderDate = toDateInputValue(null); // reminder not in form, track separately
+    const originalReminderDate = toDateInputValue(null);
     if (reminderDate !== originalReminderDate) {
       patch.reminder_at = reminderDate !== '' ? new Date(reminderDate + 'T09:00:00').toISOString() : null;
     }
     if (Object.keys(patch).length === 0) {
-      setIsSubmitting(false);
       router.back();
       return;
     }
-
-    try {
-      const result = await sendOrQueueMutation({
-        url: `${API_URL}/tasks/${id}`,
-        method: 'PATCH',
-        token,
-        body: patch,
-      });
-
-      if (result.queued) {
-        router.back();
-        return;
-      }
-
-      const response = result.response;
-
-      if (response.ok) {
-        const parsedBody = (await response.json()) as { data: Task };
-        if (parsedBody.data.due_date) {
-          try {
-            await scheduleTaskDueReminder(id, parsedBody.data.title, parsedBody.data.due_date, reminderDate || null);
-          } catch {
-            // The task update succeeded; local reminder updates are best-effort.
-          }
-        }
-        router.back();
-      } else {
-        const parsedBody = (await response.json()) as ErrorApiResponse;
-        setApiError(parsedBody.error.message);
-      }
-    } catch (err) {
-      setApiError(err instanceof Error ? err.message : t('errors.networkError'));
-    } finally {
-      setIsSubmitting(false);
-    }
+    await submit();
   };
 
   const renderContactItem = ({ item }: ListRenderItemInfo<ContactPreview>): JSX.Element => (
@@ -349,8 +311,7 @@ export default function EditTaskScreen(): JSX.Element {
       onPress={() => {
         setSelectedContactId(item.id);
         setSelectedContactName(contactDisplayName(item));
-        setContactQuery('');
-        setContactResults([]);
+        clearContactSearch();
       }}
     >
       <Text style={styles.contactResultText}>{formatContactResult(item)}</Text>
@@ -361,10 +322,10 @@ export default function EditTaskScreen(): JSX.Element {
     <View style={styles.container}>
       <Stack.Screen options={{ title: t('tasks.edit') }} />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {apiError !== null ? (
+        {(loadError ?? apiError) !== null ? (
           <View style={styles.errorBanner}>
-            <Text style={styles.errorBannerText}>{apiError}</Text>
-            {!isSubmitting ? (
+            <Text style={styles.errorBannerText}>{loadError ?? apiError}</Text>
+            {!isSubmitting && loadError !== null ? (
               <TouchableOpacity
                 style={styles.bannerRetry}
                 onPress={() => {
@@ -559,8 +520,7 @@ export default function EditTaskScreen(): JSX.Element {
                     onPress={() => {
                       setSelectedContactId('');
                       setSelectedContactName('');
-                      setContactQuery('');
-                      setContactResults([]);
+                      clearContactSearch();
                     }}
                   >
                     <Text style={styles.contactChipRemove}>{t('deals.changeContact')}</Text>

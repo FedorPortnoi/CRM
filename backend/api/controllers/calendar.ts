@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { CalendarEventStatus, Prisma } from '@prisma/client';
+import { paginate } from '../../services/db-paginate';
 import crypto from 'node:crypto';
 import {
   ConfigurationError,
@@ -382,8 +383,9 @@ async function list(
   const skip = (page - 1) * per_page;
   const take = per_page;
 
-  const [events, total] = await Promise.all([
-    db.calendarEvent.findMany({
+  const { data: events, total } = await paginate(
+    () => db.calendarEvent.count({ where }),
+    () => db.calendarEvent.findMany({
       where,
       skip,
       take,
@@ -393,8 +395,7 @@ async function list(
         deal: { select: { id: true, title: true } },
       },
     }),
-    db.calendarEvent.count({ where }),
-  ]);
+  );
 
   reply.send({ data: events, meta: { total, page, per_page } });
 }

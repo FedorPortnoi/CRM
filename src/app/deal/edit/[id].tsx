@@ -17,7 +17,8 @@ import { useTranslation } from 'react-i18next';
 import { usePipelinesStore } from '../../../store/pipelinesStore';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
-import { sendOrQueueMutation } from '../../../utils/offlineMutation';
+import { useContactSearch } from '../../../hooks/useContactSearch';
+import { useCreateMutation } from '../../../hooks/useCreateMutation';
 
 interface PipelineStage {
   id: string;
@@ -158,16 +159,19 @@ export default function EditDealScreen(): JSX.Element {
   const [selectedContactName, setSelectedContactName] = useState<string>('');
   const [nextAction, setNextAction] = useState<string>('');
   const [nextActionDue, setNextActionDue] = useState<string>('');
-  const [contactQuery, setContactQuery] = useState<string>('');
-  const [contactResults, setContactResults] = useState<ContactPreview[]>([]);
+  const {
+    query: contactQuery,
+    setQuery: setContactQuery,
+    results: contactResults,
+    clearResults: clearContactSearch,
+  } = useContactSearch({ token });
   const [showPipelineModal, setShowPipelineModal] = useState<boolean>(false);
   const [showStageModal, setShowStageModal] = useState<boolean>(false);
   const [showTitleError, setShowTitleError] = useState<boolean>(false);
   const [showValueError, setShowValueError] = useState<boolean>(false);
   const [showPipelineStageError, setShowPipelineStageError] = useState<boolean>(false);
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
     if (pipelines.length === 0) {
@@ -179,7 +183,7 @@ export default function EditDealScreen(): JSX.Element {
     const loadDeal = async (): Promise<void> => {
       if (!token) return;
       setIsLoading(true);
-      setApiError(null);
+      setLoadError(null);
 
       try {
         const res = await fetch(`${API_URL}/deals/${id}`, {
@@ -187,7 +191,7 @@ export default function EditDealScreen(): JSX.Element {
         });
         if (!res.ok) {
           const errData = (await res.json()) as ErrorApiResponse;
-          setApiError(errData.error.message);
+          setLoadError(errData.error.message);
           return;
         }
         const data = (await res.json()) as DealApiResponse;
@@ -202,7 +206,7 @@ export default function EditDealScreen(): JSX.Element {
         setNextAction(loaded.next_action);
         setNextActionDue(loaded.next_action_due);
       } catch (err) {
-        setApiError(err instanceof Error ? err.message : t('deals.failedToLoad'));
+        setLoadError(err instanceof Error ? err.message : t('deals.failedToLoad'));
       } finally {
         setIsLoading(false);
       }
@@ -210,30 +214,6 @@ export default function EditDealScreen(): JSX.Element {
 
     void loadDeal();
   }, [id, token]);
-
-  useEffect(() => {
-    const timer = setTimeout(async () => {
-      if (contactQuery.trim().length >= 2) {
-        try {
-          const res = await fetch(
-            `${API_URL}/contacts?q=${encodeURIComponent(contactQuery.trim())}&per_page=8`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
-          if (!res.ok) {
-            setContactResults([]);
-            return;
-          }
-          const json = (await res.json()) as { data: ContactPreview[] };
-          setContactResults(json.data);
-        } catch {
-          setContactResults([]);
-        }
-      } else {
-        setContactResults([]);
-      }
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [contactQuery, token]);
 
   const filteredStages = useMemo(
     () =>
@@ -250,30 +230,51 @@ export default function EditDealScreen(): JSX.Element {
     filteredStages.find((s) => s.id === selectedStageId)?.name ?? t('deals.selectStagePlaceholder');
   const stagePickerDisabled = selectedPipelineId === '' || filteredStages.length === 0;
 
+  const { isSubmitting, apiError, submit } = useCreateMutation<DealPatch>({
+    endpoint: `${API_URL}/deals/${id}`,
+    method: 'PATCH',
+    token: token ?? '',
+    validate: () => {
+      let hasError = false;
+      const parsedValue = Number(valueStr.trim());
+      if (title.trim() === '') {
+        setShowTitleError(true);
+        hasError = true;
+      }
+      if (valueStr.trim() !== '' && (!Number.isFinite(parsedValue) || parsedValue <= 0)) {
+        setShowValueError(true);
+        hasError = true;
+      }
+      if (selectedPipelineId === '' || selectedStageId === '') {
+        setShowPipelineStageError(true);
+        hasError = true;
+      }
+      if (hasError) return false;
+      setShowTitleError(false);
+      setShowValueError(false);
+      setShowPipelineStageError(false);
+      return true;
+    },
+    buildPayload: () => {
+      const current: DealForm = {
+        title,
+        value: valueStr,
+        pipeline_id: selectedPipelineId,
+        stage_id: selectedStageId,
+        contact_id: selectedContactId,
+        next_action: nextAction,
+        next_action_due: nextActionDue,
+      };
+      return buildPatch(current, original!);
+    },
+    onSuccess: (_data, _queued) => {
+      router.back();
+    },
+    fallbackErrorMessage: t('errors.networkError'),
+  });
+
   const handleSubmit = async (): Promise<void> => {
-    let hasError = false;
-    const parsedValue = Number(valueStr.trim());
-
-    if (title.trim() === '') {
-      setShowTitleError(true);
-      hasError = true;
-    }
-    if (valueStr.trim() !== '' && (!Number.isFinite(parsedValue) || parsedValue <= 0)) {
-      setShowValueError(true);
-      hasError = true;
-    }
-    if (selectedPipelineId === '' || selectedStageId === '') {
-      setShowPipelineStageError(true);
-      hasError = true;
-    }
-    if (hasError || original === null || !token) return;
-
-    setShowTitleError(false);
-    setShowValueError(false);
-    setShowPipelineStageError(false);
-    setApiError(null);
-    setIsSubmitting(true);
-
+    if (!original || !token) return;
     const current: DealForm = {
       title,
       value: valueStr,
@@ -284,39 +285,11 @@ export default function EditDealScreen(): JSX.Element {
       next_action_due: nextActionDue,
     };
     const patch = buildPatch(current, original);
-
     if (Object.keys(patch).length === 0) {
-      setIsSubmitting(false);
       router.back();
       return;
     }
-
-    try {
-      const result = await sendOrQueueMutation({
-        url: `${API_URL}/deals/${id}`,
-        method: 'PATCH',
-        token,
-        body: patch,
-      });
-
-      if (result.queued) {
-        router.back();
-        return;
-      }
-
-      const res = result.response;
-
-      if (res.ok) {
-        router.back();
-      } else {
-        const errData = (await res.json()) as ErrorApiResponse;
-        setApiError(errData.error.message);
-      }
-    } catch (err) {
-      setApiError(err instanceof Error ? err.message : t('errors.networkError'));
-    } finally {
-      setIsSubmitting(false);
-    }
+    await submit();
   };
 
   const renderPipelineItem = ({ item }: ListRenderItemInfo<Pipeline>): JSX.Element => (
@@ -366,8 +339,7 @@ export default function EditDealScreen(): JSX.Element {
       onPress={() => {
         setSelectedContactId(item.id);
         setSelectedContactName(contactDisplayName(item));
-        setContactQuery('');
-        setContactResults([]);
+        clearContactSearch();
       }}
     >
       <Text style={styles.contactResultText}>{formatContactResult(item)}</Text>
@@ -377,9 +349,9 @@ export default function EditDealScreen(): JSX.Element {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Stack.Screen options={{ title: t('deals.edit') }} />
-      {apiError !== null && (
+      {(loadError ?? apiError) !== null && (
         <View style={styles.errorBanner}>
-          <Text style={styles.errorBannerText}>{apiError}</Text>
+          <Text style={styles.errorBannerText}>{loadError ?? apiError}</Text>
         </View>
       )}
 
@@ -489,8 +461,7 @@ export default function EditDealScreen(): JSX.Element {
                 onPress={() => {
                   setSelectedContactId('');
                   setSelectedContactName('');
-                  setContactQuery('');
-                  setContactResults([]);
+                  clearContactSearch();
                 }}
               >
                 <Text style={styles.contactChipRemove}>{t('deals.changeContact')}</Text>

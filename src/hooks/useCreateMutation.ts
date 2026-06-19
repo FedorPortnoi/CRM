@@ -3,10 +3,11 @@ import { sendOrQueueMutation } from '../utils/offlineMutation';
 
 interface CreateMutationOptions<TPayload, TData> {
   endpoint: string;
+  method?: 'POST' | 'PATCH' | 'PUT';
   token: string;
   validate: () => boolean;
   buildPayload: () => TPayload;
-  onSuccess: (data: TData, queued: boolean) => void;
+  onSuccess: (data: TData, queued: boolean) => void | Promise<void>;
   fallbackErrorMessage?: string;
 }
 
@@ -48,7 +49,7 @@ function extractErrorMessage(body: unknown, status: number): string {
 export function useCreateMutation<TPayload, TData = { id: string }>(
   options: CreateMutationOptions<TPayload, TData>,
 ): CreateMutationResult {
-  const { endpoint, token, validate, buildPayload, onSuccess, fallbackErrorMessage } = options;
+  const { endpoint, method = 'POST', token, validate, buildPayload, onSuccess, fallbackErrorMessage } = options;
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -64,13 +65,13 @@ export function useCreateMutation<TPayload, TData = { id: string }>(
 
       const result = await sendOrQueueMutation({
         url: endpoint,
-        method: 'POST',
+        method,
         token,
         body: payload,
       });
 
       if (result.queued) {
-        onSuccess({} as TData, true);
+        await onSuccess({} as TData, true);
         return;
       }
 
@@ -79,7 +80,7 @@ export function useCreateMutation<TPayload, TData = { id: string }>(
 
       if (res.ok) {
         const responseData = (body as { data: TData }).data;
-        onSuccess(responseData, false);
+        await onSuccess(responseData, false);
       } else {
         setApiError(
           extractErrorMessage(body, res.status) ?? fallbackErrorMessage ?? 'Request failed',

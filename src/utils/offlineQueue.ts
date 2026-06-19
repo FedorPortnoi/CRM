@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { useSyncStore } from '../store/syncStore';
+import { authHeaders } from './api';
 
 const STORAGE_KEY = 'crm-offline-queue';
 const BODY_KEY_PREFIX = 'crm-offline-queue-body-';
@@ -239,14 +240,11 @@ function mutationForFollowUp(
 
 async function sendQueuedMutation(
   mutation: QueuedMutation,
-  token: string,
+  headers: { 'Content-Type': string; Authorization: string },
 ): Promise<{ response: Response; body: unknown | null }> {
   const response = await fetch(mutation.url, {
     method: mutation.method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: mutation.body || undefined,
   });
 
@@ -272,16 +270,11 @@ export async function flush(): Promise<void> {
     const remaining: QueuedMutation[] = [...queue];
     const processedBodyKeys: string[] = [];
 
+    const headers = await authHeaders();
+
     for (const mutation of queue) {
-      const token: string | null = await SecureStore.getItemAsync('crm_auth_token');
-
-      if (!token) {
-        await writeQueue(remaining);
-        return;
-      }
-
       try {
-        const { response, body } = await sendQueuedMutation(mutation, token);
+        const { response, body } = await sendQueuedMutation(mutation, headers);
 
         if (response.status === 409) {
           const serverValue: unknown = body ?? (await readResponseJson(response));
@@ -301,7 +294,7 @@ export async function flush(): Promise<void> {
         const followUpMutation = mutationForFollowUp(mutation, body);
         if (followUpMutation) {
           try {
-            const { response: followUpResponse } = await sendQueuedMutation(followUpMutation, token);
+            const { response: followUpResponse } = await sendQueuedMutation(followUpMutation, headers);
 
             if (followUpResponse.status === 409) {
               addConflictFromMutation(followUpMutation, await readResponseJson(followUpResponse));

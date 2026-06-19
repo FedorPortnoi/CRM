@@ -12,7 +12,7 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
-import { sendOrQueueMutation } from '../../../utils/offlineMutation';
+import { useCreateMutation } from '../../../hooks/useCreateMutation';
 
 interface Contact {
   id: string;
@@ -79,8 +79,7 @@ export default function EditContactScreen(): JSX.Element {
   const [notes, setNotes] = useState<string>('');
   const [showFirstNameError, setShowFirstNameError] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const form = useMemo<ContactForm>(
     () => ({
@@ -97,7 +96,7 @@ export default function EditContactScreen(): JSX.Element {
   const loadContact = useCallback(async (): Promise<void> => {
     if (!token) return;
     setIsLoading(true);
-    setApiError(null);
+    setLoadError(null);
 
     try {
       const response = await fetch(`${API_URL}/contacts/${id}`, {
@@ -105,7 +104,7 @@ export default function EditContactScreen(): JSX.Element {
       });
       if (!response.ok) {
         const parsedBody = (await response.json()) as ErrorResponse;
-        setApiError(parsedBody.error.message);
+        setLoadError(parsedBody.error.message);
         return;
       }
 
@@ -119,7 +118,7 @@ export default function EditContactScreen(): JSX.Element {
       setPhone(loadedForm.phone);
       setNotes(loadedForm.notes);
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Failed to load contact');
+      setLoadError(err instanceof Error ? err.message : 'Failed to load contact');
     } finally {
       setIsLoading(false);
     }
@@ -129,50 +128,30 @@ export default function EditContactScreen(): JSX.Element {
     void loadContact();
   }, [loadContact]);
 
-  const handleSubmit = async (): Promise<void> => {
-    if (firstName.trim() === '') {
-      setShowFirstNameError(true);
-      return;
-    }
-    if (!original || !token) return;
+  const { isSubmitting, apiError, submit } = useCreateMutation<ContactPatch, Contact>({
+    endpoint: `${API_URL}/contacts/${id}`,
+    method: 'PATCH',
+    token: token ?? '',
+    validate: () => {
+      if (firstName.trim() === '') {
+        setShowFirstNameError(true);
+        return false;
+      }
+      setShowFirstNameError(false);
+      return true;
+    },
+    buildPayload: () => changedFields(form, original!),
+    onSuccess: () => { router.back(); },
+    fallbackErrorMessage: 'Network error',
+  });
 
-    setShowFirstNameError(false);
-    setApiError(null);
-    setIsSubmitting(true);
-
-    const patch = changedFields(form, original);
-    if (Object.keys(patch).length === 0) {
-      setIsSubmitting(false);
+  const handleSubmit = (): void => {
+    if (!original) return;
+    if (Object.keys(changedFields(form, original)).length === 0) {
       router.back();
       return;
     }
-
-    try {
-      const result = await sendOrQueueMutation({
-        url: `${API_URL}/contacts/${id}`,
-        method: 'PATCH',
-        token,
-        body: patch,
-      });
-
-      if (result.queued) {
-        router.back();
-        return;
-      }
-
-      const response = result.response;
-
-      if (response.ok) {
-        router.back();
-      } else {
-        const parsedBody = (await response.json()) as ErrorResponse;
-        setApiError(parsedBody.error.message);
-      }
-    } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Network error');
-    } finally {
-      setIsSubmitting(false);
-    }
+    void submit();
   };
 
   return (
@@ -183,10 +162,10 @@ export default function EditContactScreen(): JSX.Element {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {apiError !== null && (
+        {(loadError ?? apiError) !== null && (
           <View style={styles.errorBanner}>
-            <Text style={styles.errorBannerText}>{apiError}</Text>
-            {!isSubmitting && (
+            <Text style={styles.errorBannerText}>{loadError ?? apiError}</Text>
+            {loadError !== null && (
               <TouchableOpacity style={styles.bannerRetry} onPress={() => { void loadContact(); }}>
                 <Text style={styles.bannerRetryText}>Retry</Text>
               </TouchableOpacity>
@@ -263,7 +242,7 @@ export default function EditContactScreen(): JSX.Element {
 
             <TouchableOpacity
               style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-              onPress={() => { void handleSubmit(); }}
+              onPress={handleSubmit}
               disabled={isSubmitting}
             >
               {isSubmitting ? (

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -14,8 +14,9 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
-import { sendOrQueueMutation } from '../../../utils/offlineMutation';
 import { formatMarketDateTime } from '../../../market/profile';
+import { useContactSearch } from '../../../hooks/useContactSearch';
+import { useCreateMutation } from '../../../hooks/useCreateMutation';
 
 type CalendarContact = {
   id: string;
@@ -189,12 +190,15 @@ export default function EditCalendarEventScreen(): JSX.Element {
   const [notes, setNotes] = useState<string>('');
   const [selectedContactId, setSelectedContactId] = useState<string>('');
   const [selectedContactName, setSelectedContactName] = useState<string>('');
-  const [contactQuery, setContactQuery] = useState<string>('');
-  const [contactResults, setContactResults] = useState<ContactPreview[]>([]);
+  const {
+    query: contactQuery,
+    setQuery: setContactQuery,
+    results: contactResults,
+    clearResults: clearContactSearch,
+  } = useContactSearch({ token });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const form = useMemo<CalendarForm>(
     () => ({
@@ -219,13 +223,13 @@ export default function EditCalendarEventScreen(): JSX.Element {
 
   const loadEvent = useCallback(async (): Promise<void> => {
     if (!token) {
-      setApiError('Not authenticated');
+      setLoadError('Not authenticated');
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
-    setApiError(null);
+    setLoadError(null);
 
     try {
       const response = await fetch(`${API_URL}/calendar/${id}`, {
@@ -234,7 +238,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
 
       if (!response.ok) {
         const parsedBody = (await response.json()) as ErrorApiResponse;
-        setApiError(parsedBody.error?.message ?? 'Failed to load event');
+        setLoadError(parsedBody.error?.message ?? 'Failed to load event');
         return;
       }
 
@@ -251,49 +255,18 @@ export default function EditCalendarEventScreen(): JSX.Element {
       setSelectedContactName(
         parsedBody.data.contact !== null ? contactDisplayName(parsedBody.data.contact) : '',
       );
-      setContactQuery('');
-      setContactResults([]);
+      clearContactSearch();
       setFieldErrors({});
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Failed to load event');
+      setLoadError(err instanceof Error ? err.message : 'Failed to load event');
     } finally {
       setIsLoading(false);
     }
-  }, [id, token]);
+  }, [id, token, clearContactSearch]);
 
   useEffect(() => {
     void loadEvent();
   }, [loadEvent]);
-
-  useEffect(() => {
-    const timer = setTimeout(async () => {
-      const query = contactQuery.trim();
-
-      if (!token || query.length < 2) {
-        setContactResults([]);
-        return;
-      }
-
-      try {
-        const response = await fetch(
-          `${API_URL}/contacts?q=${encodeURIComponent(query)}&per_page=8`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-
-        if (!response.ok) {
-          setContactResults([]);
-          return;
-        }
-
-        const parsedBody = (await response.json()) as { data: ContactPreview[] };
-        setContactResults(parsedBody.data);
-      } catch {
-        setContactResults([]);
-      }
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [contactQuery, token]);
 
   function validate(): { start: Date; end: Date } | null {
     const nextErrors: FieldErrors = {};
@@ -319,47 +292,31 @@ export default function EditCalendarEventScreen(): JSX.Element {
     return start && end && Object.keys(nextErrors).length === 0 ? { start, end } : null;
   }
 
-  async function handleSubmit(): Promise<void> {
+  const validatedDatesRef = useRef<{ start: Date; end: Date } | null>(null);
+
+  const { isSubmitting, apiError, submit } = useCreateMutation<CalendarPatch, CalendarEvent>({
+    endpoint: `${API_URL}/calendar/${id}`,
+    method: 'PATCH',
+    token: token ?? '',
+    validate: () => {
+      const result = validate();
+      validatedDatesRef.current = result;
+      return result !== null;
+    },
+    buildPayload: () => buildPatch(form, original!, validatedDatesRef.current!),
+    onSuccess: () => { router.back(); },
+    fallbackErrorMessage: t('errors.networkError'),
+  });
+
+  function handleSubmit(): void {
+    if (!original) return;
     const validDates = validate();
-    if (!validDates || isSubmitting) return;
-    if (!original || !token) return;
-
-    setApiError(null);
-    setIsSubmitting(true);
-
-    const patch = buildPatch(form, original, validDates);
-    if (Object.keys(patch).length === 0) {
-      setIsSubmitting(false);
+    if (!validDates) return;
+    if (Object.keys(buildPatch(form, original, validDates)).length === 0) {
       router.back();
       return;
     }
-
-    try {
-      const result = await sendOrQueueMutation({
-        url: `${API_URL}/calendar/${id}`,
-        method: 'PATCH',
-        token,
-        body: patch,
-      });
-
-      if (result.queued) {
-        router.back();
-        return;
-      }
-
-      const response = result.response;
-
-      if (response.ok) {
-        router.back();
-      } else {
-        const parsedBody = (await response.json()) as ErrorApiResponse;
-        setApiError(parsedBody.error?.message ?? t('calendar.failedToUpdate'));
-      }
-    } catch (err) {
-      setApiError(err instanceof Error ? err.message : t('errors.networkError'));
-    } finally {
-      setIsSubmitting(false);
-    }
+    void submit();
   }
 
   const renderContactItem = ({ item }: ListRenderItemInfo<ContactPreview>): JSX.Element => (
@@ -368,8 +325,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
       onPress={() => {
         setSelectedContactId(item.id);
         setSelectedContactName(contactDisplayName(item));
-        setContactQuery('');
-        setContactResults([]);
+        clearContactSearch();
       }}
     >
       <Text style={styles.contactResultText}>{formatContactResult(item)}</Text>
@@ -384,9 +340,9 @@ export default function EditCalendarEventScreen(): JSX.Element {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {apiError !== null ? (
+        {(loadError ?? apiError) !== null ? (
           <View style={styles.errorBanner}>
-            <Text style={styles.errorBannerText}>{apiError}</Text>
+            <Text style={styles.errorBannerText}>{loadError ?? apiError}</Text>
           </View>
         ) : null}
 
@@ -508,8 +464,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     onPress={() => {
                       setSelectedContactId('');
                       setSelectedContactName('');
-                      setContactQuery('');
-                      setContactResults([]);
+                      clearContactSearch();
                     }}
                   >
                     <Text style={styles.contactChipRemove}>Change</Text>
@@ -541,9 +496,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
 
             <TouchableOpacity
               style={[styles.submitButton, isSubmitting ? styles.submitButtonDisabled : null]}
-              onPress={() => {
-                void handleSubmit();
-              }}
+              onPress={handleSubmit}
               disabled={isSubmitting}
               accessibilityRole="button"
             >

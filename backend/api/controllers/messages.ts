@@ -6,6 +6,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { db } from '../../services/db';
+import { assertContactBelongsToOrg } from '../../services/db-guards';
 import { broadcastToOrg } from '../../services/wsRooms';
 import { isEmailSendingEnabled, sendEmail as sendEmailViaResend } from '../../services/email';
 
@@ -51,15 +52,6 @@ type LogCallBody = {
   occurred_at?: string;
 };
 
-async function contactBelongsToOrg(contactId: string, orgId: string): Promise<boolean> {
-  const contact = await db.contact.findFirst({
-    where: { id: contactId, organization_id: orgId },
-    select: { id: true },
-  });
-
-  return contact !== null;
-}
-
 // --- Handlers ---
 
 async function getConversation(
@@ -68,11 +60,7 @@ async function getConversation(
 ): Promise<void> {
   const { contact_id } = request.params as ContactIdParams;
 
-  const ownsContact = await contactBelongsToOrg(contact_id, request.user.org_id);
-  if (!ownsContact) {
-    reply.status(404).send({ error: { code: 'CONTACT_NOT_FOUND', message: 'Contact not found' } });
-    return;
-  }
+  await assertContactBelongsToOrg(contact_id, request.user.org_id);
 
   const messages = await db.message.findMany({
     where: { contact_id, organization_id: request.user.org_id },
@@ -90,11 +78,7 @@ async function sendInApp(
   const { contact_id, body } = request.body as SendInAppBody;
   const organization_id = request.user.org_id;
 
-  const ownsContact = await contactBelongsToOrg(contact_id, organization_id);
-  if (!ownsContact) {
-    reply.status(404).send({ error: { code: 'CONTACT_NOT_FOUND', message: 'Contact not found' } });
-    return;
-  }
+  await assertContactBelongsToOrg(contact_id, organization_id);
 
   const message = await db.message.create({
     data: {
@@ -118,11 +102,7 @@ async function logCall(
   const { contact_id, direction, duration_seconds, notes, occurred_at } = request.body as LogCallBody;
   const organization_id = request.user.org_id;
 
-  const ownsContact = await contactBelongsToOrg(contact_id, organization_id);
-  if (!ownsContact) {
-    reply.status(404).send({ error: { code: 'CONTACT_NOT_FOUND', message: 'Contact not found' } });
-    return;
-  }
+  await assertContactBelongsToOrg(contact_id, organization_id);
 
   const durationPrefix = duration_seconds != null ? `[${duration_seconds}s] ` : ``;
   const callBody = (durationPrefix + (notes?.trim() ?? '')).trim() || 'Call logged';

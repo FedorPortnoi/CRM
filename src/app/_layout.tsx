@@ -8,7 +8,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { useUserStore } from '../store/userStore';
 import { registerDevicePushToken } from '../utils/notifications';
 import { queryClient, asyncStoragePersister } from '../utils/queryClient';
-import OfflineBanner from '../components/OfflineBanner';
+import SyncStatusBar from '../components/SyncStatusBar';
 import { ConflictToast } from '../components/ConflictToast';
 import { OnboardingWalkthrough } from '../components/OnboardingWalkthrough';
 import NavHeader from '../components/NavHeader';
@@ -136,7 +136,7 @@ export default function RootLayout() {
     <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: asyncStoragePersister }}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <StatusBar style="light" />
-        <OfflineBanner />
+        <SyncStatusBar />
         <Stack
           screenOptions={{
             headerShown: true,

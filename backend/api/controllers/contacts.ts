@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { CalendarEventStatus, ContactStatus, DealStatus, Prisma, TaskStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
+import { paginate } from '../../services/db-paginate';
 import { evaluateWorkflows } from '../../services/workflows';
 import { getContactIdsLastContactedBefore, getLastContactedMap } from '../../services/lastContacted';
 import { encryptField, decryptField } from '../../services/encryption';
@@ -523,8 +524,9 @@ export const ContactsController = {
       where.id = { in: matchedIds };
     }
 
-    const [contacts, total] = await Promise.all([
-      db.contact.findMany({
+    const { data: contacts, total } = await paginate(
+      () => db.contact.count({ where }),
+      () => db.contact.findMany({
         where,
         skip: (page - 1) * per_page,
         take: per_page,
@@ -533,8 +535,7 @@ export const ContactsController = {
           _count: { select: { deals: { where: { status: DealStatus.open } } } },
         },
       }),
-      db.contact.count({ where }),
-    ]);
+    );
 
     const contactIds = contacts.map(c => c.id);
     const lastContactedMap = contactIds.length > 0

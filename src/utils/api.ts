@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import * as SecureStore from 'expo-secure-store';
 
 export const DEFAULT_API_URL = 'http://127.0.0.1:3000/api/v1';
 
@@ -115,3 +116,8 @@ const API_URL: string = resolveApiUrl({
 });
 
 export { API_URL };
+
+export async function authHeaders(): Promise<{ 'Content-Type': string; Authorization: string }> {
+  const token = await SecureStore.getItemAsync('crm_auth_token');
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? ''}` };
+}

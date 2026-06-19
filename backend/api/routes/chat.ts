@@ -1,11 +1,7 @@
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ChatController } from '../controllers/chat';
-
-const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  await request.jwtVerify();
-};
+import { authenticate } from '../preHandlers';
 
 const SendMessageSchema = z.object({
   channel: z.string().min(1).max(200),

@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+﻿import { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -12,16 +12,8 @@ import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
-import { sendOrQueueMutation } from '../../utils/offlineMutation';
+import { useCreateMutation } from '../../hooks/useCreateMutation';
 import { formatMarketDateTime } from '../../market/profile';
-
-type CreateCalendarEventResponse = {
-  data: { id: string };
-};
-
-type ErrorResponse = {
-  error?: { message?: string };
-};
 
 type FieldErrors = {
   title?: string;
@@ -96,8 +88,6 @@ export default function NewCalendarEventScreen(): JSX.Element {
   const [location, setLocation] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [apiError, setApiError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const startDateTime = buildLocalDate(startDate.trim(), startTime.trim());
   const endDateTime = buildLocalDate(endDate.trim(), endTime.trim());
@@ -107,38 +97,11 @@ export default function NewCalendarEventScreen(): JSX.Element {
       ? `${formatPreview(startDateTime)} - ${formatPreview(endDateTime)}`
       : null;
 
-  function validate(): { start: Date; end: Date } | null {
-    const nextErrors: FieldErrors = {};
-    const trimmedTitle = title.trim();
-    const start = buildLocalDate(startDate.trim(), startTime.trim());
-    const end = buildLocalDate(endDate.trim(), endTime.trim());
+  // Stores the validated { start, end } dates between validate() and buildPayload() calls.
+  const validatedDatesRef = useRef<{ start: Date; end: Date } | null>(null);
 
-    if (trimmedTitle === '') {
-      nextErrors.title = t('calendar.titleRequired');
-    }
-
-    if (!start) {
-      nextErrors.start = 'Use YYYY-MM-DD and HH:mm';
-    }
-
-    if (!end) {
-      nextErrors.end = 'Use YYYY-MM-DD and HH:mm';
-    } else if (start && end <= start) {
-      nextErrors.end = 'End must be after start';
-    }
-
-    setFieldErrors(nextErrors);
-    return start && end && Object.keys(nextErrors).length === 0 ? { start, end } : null;
-  }
-
-  async function handleSubmit(): Promise<void> {
-    const validDates = validate();
-    if (!validDates || isSubmitting) return;
-
-    setIsSubmitting(true);
-    setApiError(null);
-
-    const body: {
+  const { isSubmitting, apiError, submit } = useCreateMutation<
+    {
       title: string;
       start_time: string;
       end_time: string;
@@ -146,47 +109,64 @@ export default function NewCalendarEventScreen(): JSX.Element {
       description?: string;
       reminder_minutes: number;
       send_invite: boolean;
-    } = {
-      title: title.trim(),
-      start_time: validDates.start.toISOString(),
-      end_time: validDates.end.toISOString(),
-      reminder_minutes: 30,
-      send_invite: false,
-      ...(location.trim() !== '' ? { location: location.trim() } : {}),
-      ...(notes.trim() !== '' ? { description: notes.trim() } : {}),
-    };
+    },
+    { id: string }
+  >({
+    endpoint: `${API_URL}/calendar`,
+    token: token ?? '',
+    validate: () => {
+      const nextErrors: FieldErrors = {};
+      const trimmedTitle = title.trim();
+      const start = buildLocalDate(startDate.trim(), startTime.trim());
+      const end = buildLocalDate(endDate.trim(), endTime.trim());
 
-    try {
-      const result = await sendOrQueueMutation({
-        url: `${API_URL}/calendar`,
-        method: 'POST',
-        token: token ?? '',
-        body,
-      });
+      if (trimmedTitle === '') {
+        nextErrors.title = t('calendar.titleRequired');
+      }
 
-      if (result.queued) {
+      if (!start) {
+        nextErrors.start = 'Use YYYY-MM-DD and HH:mm';
+      }
+
+      if (!end) {
+        nextErrors.end = 'Use YYYY-MM-DD and HH:mm';
+      } else if (start && end <= start) {
+        nextErrors.end = 'End must be after start';
+      }
+
+      setFieldErrors(nextErrors);
+
+      if (start && end && Object.keys(nextErrors).length === 0) {
+        validatedDatesRef.current = { start, end };
+        return true;
+      }
+      validatedDatesRef.current = null;
+      return false;
+    },
+    buildPayload: () => {
+      const dates = validatedDatesRef.current!;
+      return {
+        title: title.trim(),
+        start_time: dates.start.toISOString(),
+        end_time: dates.end.toISOString(),
+        reminder_minutes: 30,
+        send_invite: false,
+        ...(location.trim() !== '' ? { location: location.trim() } : {}),
+        ...(notes.trim() !== '' ? { description: notes.trim() } : {}),
+      };
+    },
+    onSuccess: (data, queued) => {
+      if (queued) {
         router.replace('/calendar');
         return;
       }
-
-      const res = result.response;
-
-      if (res.status === 201) {
-        const parsed = (await res.json()) as CreateCalendarEventResponse;
-        router.replace({
-          pathname: '/calendar/[id]',
-          params: { id: parsed.data.id },
-        });
-      } else {
-        const parsed = (await res.json()) as ErrorResponse;
-        setApiError(parsed.error?.message ?? t('calendar.failedToCreate'));
-      }
-    } catch (e: unknown) {
-      setApiError(e instanceof Error ? e.message : t('errors.networkError'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+      router.replace({
+        pathname: '/calendar/[id]',
+        params: { id: data.id },
+      });
+    },
+    fallbackErrorMessage: t('calendar.failedToCreate'),
+  });
 
   return (
     <>
@@ -317,7 +297,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
         <TouchableOpacity
           style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
           onPress={() => {
-            void handleSubmit();
+            void submit();
           }}
           disabled={isSubmitting}
           accessibilityRole="button"

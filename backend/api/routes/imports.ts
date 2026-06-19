@@ -1,11 +1,7 @@
-import { FastifyRequest, FastifyReply } from 'fastify';
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { ImportsController } from '../controllers/imports';
-
-const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  await request.jwtVerify();
-};
+import { authenticate } from '../preHandlers';
 
 const VCardContactSchema = z.object({
   first_name: z.string().min(1),

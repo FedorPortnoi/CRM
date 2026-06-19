@@ -1,7 +1,8 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { MessagesController } from '../controllers/messages';
+import { authenticate } from '../preHandlers';
 
 const SendInAppSchema = z.object({
   contact_id: z.string().uuid(),
@@ -15,10 +16,6 @@ const LogCallSchema = z.object({
   notes: z.string().max(5000).optional(),
   occurred_at: z.string().datetime().optional(),
 });
-
-const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-  await request.jwtVerify();
-};
 
 export default async function messagesRoutes(fastify: FastifyInstance) {
   const f = fastify.withTypeProvider<ZodTypeProvider>();

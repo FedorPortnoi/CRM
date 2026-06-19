@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { DealStatus, Prisma, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
+import { paginate } from '../../services/db-paginate';
 import { evaluateWorkflows } from '../../services/workflows';
 import { logActivity } from './activities';
 import { dispatchNotification, dealCtx } from '../../services/notificationEngine';
@@ -143,16 +144,16 @@ async function list(
     ...ownerVisibilityWhere(visibleIds),
   };
 
-  const [deals, total] = await Promise.all([
-    db.deal.findMany({
+  const { data: deals, total } = await paginate(
+    () => db.deal.count({ where }),
+    () => db.deal.findMany({
       where,
       skip: (page - 1) * per_page,
       take: per_page,
       orderBy: { [sort]: order },
       include: dealInclude,
     }),
-    db.deal.count({ where }),
-  ]);
+  );
 
   reply.send({ data: deals, meta: { total, page, per_page } });
 }

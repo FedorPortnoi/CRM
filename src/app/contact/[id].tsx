@@ -7,13 +7,7 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { formatMarketDate, formatMoney } from '../../market/profile';
 import AttachmentsSection from '../../components/AttachmentsSection';
-
-interface AuditEntry {
-  id: string;
-  user_id: string | null;
-  action: string;
-  created_at: string;
-}
+import { useAuditLog } from '../../hooks/useAuditLog';
 
 interface Attachment {
   id: string;
@@ -101,7 +95,7 @@ export default function ContactDetailScreen(): JSX.Element {
   const [activityError, setActivityError] = useState<string | null>(null);
   const [dealsError, setDealsError] = useState<string | null>(null);
   const [tasksError, setTasksError] = useState<string | null>(null);
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const { data: auditLog = [] } = useAuditLog('contact', id);
 
   const fetchContact = useCallback(async (): Promise<void> => {
     try {
@@ -142,22 +136,11 @@ export default function ContactDetailScreen(): JSX.Element {
     } catch { setTasksError('Failed to load tasks'); }
   }, [id, token]);
 
-  const fetchAuditLog = useCallback(async (): Promise<void> => {
-    if (!token || !id) return;
-    try {
-      const res = await fetch(`${API_URL}/activities?entity_type=contact&entity_id=${id}`, { headers: { Authorization: 'Bearer ' + token } });
-      if (!res.ok) return;
-      const body = (await res.json()) as { data: AuditEntry[] };
-      setAuditLog(body.data);
-    } catch { /* silent */ }
-  }, [id, token]);
-
-
   const fetchAll = useCallback(async (refreshing: boolean): Promise<void> => {
     if (refreshing) { setIsRefreshing(true); } else { setIsLoading(true); }
-    await Promise.all([fetchContact(), fetchActivity(), fetchDeals(), fetchTasks(), fetchAuditLog()]);
+    await Promise.all([fetchContact(), fetchActivity(), fetchDeals(), fetchTasks()]);
     setIsLoading(false); setIsRefreshing(false);
-  }, [fetchContact, fetchActivity, fetchDeals, fetchTasks, fetchAuditLog]);
+  }, [fetchContact, fetchActivity, fetchDeals, fetchTasks]);
 
   useEffect(() => { fetchAll(false); }, [fetchAll]);
   const onRefresh = useCallback((): void => { fetchAll(true); }, [fetchAll]);

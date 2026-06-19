@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { FastifyRequest } from 'fastify';
+import { Prisma } from '@prisma/client';
 import { db } from './db';
 import { sha256 } from './crypto';
 
@@ -114,21 +115,28 @@ export async function validateAuthSession(input: SessionValidationInput): Promis
   return true;
 }
 
+async function revokeWhere(where: Prisma.Sql, reason: string): Promise<number> {
+  const now = new Date();
+  return db.$executeRaw(Prisma.sql`
+    UPDATE "AuthSession"
+    SET revoked_at = ${now}, revoked_reason = ${reason}, updated_at = ${now}
+    WHERE ${where}
+      AND revoked_at IS NULL
+  `);
+}
+
 export async function revokeAuthSession(
   sessionId: string,
   userId: string,
   organizationId: string,
   reason: string,
 ): Promise<number> {
-  const now = new Date();
-  return db.$executeRaw`
-    UPDATE "AuthSession"
-    SET revoked_at = ${now}, revoked_reason = ${reason}, updated_at = ${now}
-    WHERE token_hash = ${sessionHash(sessionId)}
+  return revokeWhere(
+    Prisma.sql`token_hash = ${sessionHash(sessionId)}
       AND user_id = ${userId}::uuid
-      AND organization_id = ${organizationId}::uuid
-      AND revoked_at IS NULL
-  `;
+      AND organization_id = ${organizationId}::uuid`,
+    reason,
+  );
 }
 
 export async function revokeAllUserSessions(
@@ -136,14 +144,11 @@ export async function revokeAllUserSessions(
   organizationId: string,
   reason: string,
 ): Promise<number> {
-  const now = new Date();
-  return db.$executeRaw`
-    UPDATE "AuthSession"
-    SET revoked_at = ${now}, revoked_reason = ${reason}, updated_at = ${now}
-    WHERE user_id = ${userId}::uuid
-      AND organization_id = ${organizationId}::uuid
-      AND revoked_at IS NULL
-  `;
+  return revokeWhere(
+    Prisma.sql`user_id = ${userId}::uuid
+      AND organization_id = ${organizationId}::uuid`,
+    reason,
+  );
 }
 
 export async function listActiveUserSessions(userId: string, organizationId: string): Promise<ActiveSession[]> {

@@ -1,11 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
-import * as SecureStore from 'expo-secure-store';
 import { queryClient } from './queryClient';
 import * as offlineQueue from './offlineQueue';
 import { useSyncStore } from '../store/syncStore';
-import { API_URL } from './api';
+import { API_URL, authHeaders } from './api';
 
 export const BACKGROUND_SYNC_TASK_NAME = 'crm-background-sync';
 const LAST_SYNC_KEY = 'crm-last-sync-at';
@@ -21,16 +20,13 @@ type DeltaPayload = {
 };
 
 async function performSync(): Promise<void> {
-  const token = await SecureStore.getItemAsync('crm_auth_token');
-  if (!token) return;
-
   await offlineQueue.flush();
 
   const lastSyncAt = await AsyncStorage.getItem(LAST_SYNC_KEY);
   const sinceParam = lastSyncAt ? `?since=${encodeURIComponent(lastSyncAt)}` : '';
 
   const response = await fetch(`${API_URL}/sync/delta${sinceParam}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: await authHeaders(),
   });
 
   if (!response.ok) return;
