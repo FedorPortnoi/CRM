@@ -3,6 +3,7 @@ import { FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { db } from './db';
 import { sha256 } from './crypto';
+import { extractClientInfo } from './request-utils';
 
 type SessionRequestInput = {
   request: FastifyRequest;
@@ -25,10 +26,6 @@ type ActiveSession = {
   expires_at: Date | null;
   created_at: Date;
 };
-
-function firstHeader(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
 
 function sessionHash(sessionId: string): string {
   return sha256(sessionId);
@@ -60,6 +57,7 @@ function sessionExpiresAt(expiresIn = process.env.JWT_EXPIRES_IN ?? '7d'): Date 
 export async function createAuthSession(input: SessionRequestInput): Promise<string> {
   const sessionId = crypto.randomUUID();
   const now = new Date();
+  const { ip, userAgent } = extractClientInfo(input.request);
   await db.$executeRaw`
     INSERT INTO "AuthSession" (
       id,
@@ -77,8 +75,8 @@ export async function createAuthSession(input: SessionRequestInput): Promise<str
       ${input.organizationId}::uuid,
       ${input.userId}::uuid,
       ${sessionHash(sessionId)},
-      ${input.request.ip ?? null},
-      ${firstHeader(input.request.headers?.['user-agent']) ?? null},
+      ${ip},
+      ${userAgent},
       ${now},
       ${sessionExpiresAt(input.expiresIn) ?? null},
       ${now}

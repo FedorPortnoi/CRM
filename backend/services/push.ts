@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import { GoogleAuth } from 'google-auth-library';
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
+import { db } from './db';
 
 const expo = new Expo();
 
@@ -115,5 +116,26 @@ export async function sendPush(
     }
 
     return { ok: false, code: 'SEND_FAILED', message: msg };
+  }
+}
+
+export async function sendPushToUser(
+  userId: string,
+  _orgId: string,
+  payload: { title: string; body: string; data?: Record<string, unknown> },
+): Promise<void> {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { push_token: true },
+  });
+  if (!user?.push_token) return;
+
+  const data = payload.data
+    ? Object.fromEntries(Object.entries(payload.data).map(([k, v]) => [k, String(v)]))
+    : undefined;
+
+  const result = await sendPush(user.push_token, payload.title, payload.body, data);
+  if (!result.ok && result.code === 'DEVICE_NOT_REGISTERED') {
+    await db.user.update({ where: { id: userId }, data: { push_token: null } });
   }
 }

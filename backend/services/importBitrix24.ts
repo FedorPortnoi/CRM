@@ -1,4 +1,5 @@
 import { db } from './db';
+import { paginateBitrix } from './bitrix-paginator';
 
 export interface Bx24ImportResult {
   contacts_imported: number;
@@ -57,18 +58,18 @@ export async function importFromBitrix24(
 
   // ── Contacts ─────────────────────────────────────────────────────────────
   const contactSelect = ['ID', 'NAME', 'LAST_NAME', 'PHONE', 'EMAIL', 'COMPANY_TITLE', 'SOURCE', 'COMMENTS'];
-  let start = 0;
-  let hasMore = true;
 
-  while (hasMore) {
+  for await (const batch of paginateBitrix(async (start) => {
     const page = await bx24Get<Bx24Contact[]>(webhookUrl, 'crm.contact.list', {
       start,
       select: contactSelect,
     });
-
     result.total_contacts = page.total ?? result.total_contacts;
-
-    for (const c of page.result) {
+    // Safety cap: 1000 contacts per import
+    if (start >= 1000) return { result: [], next: undefined, total: page.total };
+    return page;
+  })) {
+    for (const c of batch) {
       try {
         const firstName = c.NAME?.trim() || 'Контакт';
         const phone = c.PHONE?.[0]?.VALUE?.trim() || undefined;
@@ -92,15 +93,6 @@ export async function importFromBitrix24(
         result.contacts_failed++;
       }
     }
-
-    if (page.next !== undefined) {
-      start = page.next;
-    } else {
-      hasMore = false;
-    }
-
-    // Safety cap: 1000 contacts per import
-    if (start >= 1000) hasMore = false;
   }
 
   // ── Deals (best-effort: import into default pipeline) ────────────────────
@@ -112,16 +104,15 @@ export async function importFromBitrix24(
 
     if (pipeline && pipeline.stages.length > 0) {
       const defaultStageId = pipeline.stages[0].id;
-      let dStart = 0;
-      let dHasMore = true;
-
-      while (dHasMore) {
-        const dPage = await bx24Get<Bx24Deal[]>(webhookUrl, 'crm.deal.list', {
-          start: dStart,
+      for await (const batch of paginateBitrix(async (start) => {
+        // Safety cap: 500 deals per import
+        if (start >= 500) return { result: [] as Bx24Deal[], next: undefined, total: 0 };
+        return bx24Get<Bx24Deal[]>(webhookUrl, 'crm.deal.list', {
+          start,
           select: ['ID', 'TITLE', 'OPPORTUNITY', 'CURRENCY_ID', 'CLOSEDATE'],
         });
-
-        for (const d of dPage.result) {
+      })) {
+        for (const d of batch) {
           try {
             // Deals need a contact_id — create a placeholder contact
             const placeholder = await db.contact.create({
@@ -154,14 +145,6 @@ export async function importFromBitrix24(
             result.deals_failed++;
           }
         }
-
-        if (dPage.next !== undefined) {
-          dStart = dPage.next;
-        } else {
-          dHasMore = false;
-        }
-
-        if (dStart >= 500) dHasMore = false;
       }
     }
   }

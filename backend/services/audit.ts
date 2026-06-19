@@ -1,6 +1,7 @@
 import { FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { db } from './db';
+import { extractClientInfo } from './request-utils';
 
 type AuditOutcome = 'success' | 'failure' | 'denied';
 
@@ -44,10 +45,6 @@ type AuditCountRow = {
   total: bigint;
 };
 
-function firstHeader(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
-
 function requestUser(request: FastifyRequest | undefined): { sub?: string; org_id?: string } | undefined {
   return request?.user as { sub?: string; org_id?: string } | undefined;
 }
@@ -56,6 +53,7 @@ export async function auditLog(input: AuditInput): Promise<void> {
   try {
     const user = requestUser(input.request);
     const metadata = input.metadata === undefined ? null : JSON.stringify(input.metadata);
+    const clientInfo = input.request ? extractClientInfo(input.request) : null;
     await db.$executeRaw`
       INSERT INTO "AuditEvent" (
         organization_id,
@@ -75,8 +73,8 @@ export async function auditLog(input: AuditInput): Promise<void> {
         ${input.outcome ?? 'success'},
         ${input.targetType ?? null},
         ${input.targetId ?? null},
-        ${input.request?.ip ?? null},
-        ${firstHeader(input.request?.headers?.['user-agent']) ?? null},
+        ${clientInfo?.ip ?? null},
+        ${clientInfo?.userAgent ?? null},
         CAST(${metadata} AS jsonb)
       )
     `;

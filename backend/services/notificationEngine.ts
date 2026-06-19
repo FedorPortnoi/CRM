@@ -1,5 +1,5 @@
 import { db } from './db';
-import { sendPush } from './push';
+import { sendPushToUser } from './push';
 
 // ─── Event types ──────────────────────────────────────────────────────────────
 
@@ -256,27 +256,6 @@ function entityIdFor(ctx: EventContext): string {
   return ctx.contact.id;
 }
 
-// ─── Push delivery ────────────────────────────────────────────────────────────
-
-async function deliverPush(
-  recipientId: string,
-  title: string,
-  body: string,
-  entityType: string,
-  entityId: string,
-): Promise<void> {
-  const user = await db.user.findUnique({
-    where: { id: recipientId },
-    select: { push_token: true },
-  });
-  if (!user?.push_token) return;
-
-  const result = await sendPush(user.push_token, title, body, { entityType, entityId });
-  if (!result.ok && result.code === 'DEVICE_NOT_REGISTERED') {
-    await db.user.update({ where: { id: recipientId }, data: { push_token: null } });
-  }
-}
-
 // ─── Main dispatcher ──────────────────────────────────────────────────────────
 
 export async function dispatchNotification(ctx: EventContext): Promise<void> {
@@ -311,7 +290,7 @@ export async function dispatchNotification(ctx: EventContext): Promise<void> {
       },
     });
 
-    void deliverPush(recipientId, msg.title, msg.body, entityType, entityId);
+    void sendPushToUser(recipientId, ctx.orgId, { title: msg.title, body: msg.body, data: { entityType, entityId } });
   }
 }
 

@@ -38,16 +38,20 @@ async function runReminders(): Promise<void> {
     select: { id: true, title: true, assigned_to: true },
   });
 
+  const assigneeIds = [...new Set(tasks.map(t => t.assigned_to).filter((id): id is string => Boolean(id)))];
+  const users = await db.user.findMany({
+    where: { id: { in: assigneeIds } },
+    select: { id: true, push_token: true },
+  });
+  const userMap = new Map(users.map(u => [u.id, u]));
+
   for (const task of tasks) {
     if (!task.assigned_to) continue;
-    const user = await db.user.findUnique({
-      where: { id: task.assigned_to },
-      select: { push_token: true },
-    });
+    const user = userMap.get(task.assigned_to);
     if (!user?.push_token) continue;
     const result = await sendPush(user.push_token, 'Напоминание', task.title, { taskId: task.id });
     if (!result.ok && result.code === 'DEVICE_NOT_REGISTERED') {
-      await db.user.update({ where: { id: task.assigned_to! }, data: { push_token: null } });
+      await db.user.update({ where: { id: task.assigned_to }, data: { push_token: null } });
     }
   }
 }

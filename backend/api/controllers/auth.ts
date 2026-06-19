@@ -718,20 +718,19 @@ export const AuthController = {
         return reply.status(404).send({ error: { code: 'MANAGER_NOT_FOUND', message: 'Manager user not found in this organisation' } });
       }
 
-      // Cycle detection: walk up from manager_id; if we reach `id`, it's a cycle.
-      let cursor: string | null = manager_id;
-      const visited = new Set<string>();
-      while (cursor !== null) {
-        if (cursor === id) {
-          return reply.status(400).send({ error: { code: 'MANAGER_CYCLE', message: 'Assigning this manager would create a reporting cycle' } });
-        }
-        if (visited.has(cursor)) break; // broken chain in DB, stop gracefully
-        visited.add(cursor);
-        const row: { manager_id: string | null } | null = await db.user.findFirst({
-          where: { id: cursor, organization_id: request.user.org_id },
-          select: { manager_id: true },
-        });
-        cursor = row?.manager_id ?? null;
+      // Cycle detection: one recursive CTE walks the entire manager chain in a single query.
+      // If `id` appears anywhere in the chain rooted at `manager_id`, it's a cycle.
+      const cycleRows = await db.$queryRaw<Array<{ id: string }>>`
+        WITH RECURSIVE chain AS (
+          SELECT id, manager_id FROM "User" WHERE id = ${manager_id}::uuid
+          UNION ALL
+          SELECT u.id, u.manager_id FROM "User" u INNER JOIN chain c ON u.id = c.manager_id
+        )
+        SELECT id FROM chain WHERE id = ${id}::uuid
+        LIMIT 1
+      `;
+      if (cycleRows.length > 0) {
+        return reply.status(400).send({ error: { code: 'MANAGER_CYCLE', message: 'Assigning this manager would create a reporting cycle' } });
       }
     }
 
