@@ -1,8 +1,25 @@
-import { Prisma, TaskStatus, WorkflowTrigger } from '@prisma/client';
-import { db } from '../../services/db';
-import { evaluateWorkflows } from '../../services/workflows';
+import { TaskStatus } from '@prisma/client';
 import { registerTool, McpUser } from '../server';
-import { requireMcpWrite, validateMcpWriteReferences } from '../validation';
+import { requireMcpWrite } from '../validation';
+import {
+  listTasksForUser,
+  getTaskForUser,
+  createTaskForUser,
+  updateTaskForUser,
+  completeTaskForUser,
+  getOverdueTasksForUser,
+} from '../../services/task-domain';
+import type { Requester } from '../../services/visibility';
+
+// McpUser.role is `string` from the JWT; the domain functions accept the
+// narrower Requester type.  Cast once here so we don't sprinkle it everywhere.
+function toRequester(user: McpUser): Requester {
+  return {
+    sub: user.sub,
+    org_id: user.org_id,
+    role: user.role as Requester['role'],
+  };
+}
 
 type TaskStatusValue = 'pending' | 'in_progress' | 'done' | 'cancelled';
 type TaskPriorityValue = 'low' | 'medium' | 'high' | 'urgent';
@@ -14,11 +31,6 @@ function isTaskStatus(v: unknown): v is TaskStatusValue {
 function isTaskPriority(v: unknown): v is TaskPriorityValue {
   return v === 'low' || v === 'medium' || v === 'high' || v === 'urgent';
 }
-
-const taskInclude = {
-  assignee: { select: { id: true, name: true } },
-  contact: { select: { id: true, first_name: true, last_name: true } },
-} as const;
 
 registerTool(
   'get_tasks',
@@ -50,34 +62,13 @@ registerTool(
     const page = typeof args.page === 'number' ? Math.max(1, Math.floor(args.page)) : 1;
     const per_page = typeof args.per_page === 'number' ? Math.min(100, Math.max(1, Math.floor(args.per_page))) : 20;
 
-    const where: Prisma.TaskWhereInput = {
-      organization_id: user.org_id,
-      ...(status ? { status } : { status: { not: TaskStatus.cancelled } }),
-      ...(priority && { priority }),
-      ...(assigned_to && { assigned_to }),
-      ...(contact_id && { contact_id }),
-      ...(deal_id && { deal_id }),
-      ...(q && { title: { contains: q, mode: 'insensitive' } }),
-      ...((due_before || due_after) && {
-        due_date: {
-          ...(due_before && { lt: new Date(due_before) }),
-          ...(due_after && { gte: new Date(due_after) }),
-        },
-      }),
-    };
+    const { data, total } = await listTasksForUser(
+      user.org_id,
+      toRequester(user),
+      { assigned_to, status: status as TaskStatusValue | undefined, priority: priority as TaskPriorityValue | undefined, contact_id, deal_id, due_before, due_after, q, page, per_page },
+    );
 
-    const [tasks, total] = await Promise.all([
-      db.task.findMany({
-        where,
-        skip: (page - 1) * per_page,
-        take: per_page,
-        orderBy: { due_date: 'asc' },
-        include: taskInclude,
-      }),
-      db.task.count({ where }),
-    ]);
-
-    return { data: tasks, meta: { total, page, per_page } };
+    return { data, meta: { total, page, per_page } };
   },
 );
 
@@ -94,10 +85,7 @@ registerTool(
   async (args: Record<string, unknown>, user: McpUser) => {
     const id = typeof args.id === 'string' ? args.id : '';
 
-    const task = await db.task.findFirst({
-      where: { id, organization_id: user.org_id },
-      include: taskInclude,
-    });
+    const task = await getTaskForUser(id, user.org_id, toRequester(user));
 
     if (!task) {
       return { error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } };
@@ -135,35 +123,21 @@ registerTool(
     const due_date = typeof args.due_date === 'string' ? args.due_date : undefined;
     const priority = isTaskPriority(args.priority) ? args.priority : undefined;
 
-    const referenceError = await validateMcpWriteReferences(user, { assigned_to, contact_id, deal_id });
-    if (referenceError) {
-      return referenceError;
+    const result = await createTaskForUser(user.org_id, toRequester(user), {
+      title,
+      assigned_to,
+      description,
+      contact_id,
+      deal_id,
+      due_date,
+      priority: priority as TaskPriorityValue | undefined,
+    });
+
+    if (!result.ok) {
+      return { error: { code: result.error.code, message: result.error.message } };
     }
 
-    const task = await db.task.create({
-      data: {
-        title,
-        assigned_to,
-        description,
-        contact_id,
-        deal_id,
-        due_date: due_date ? new Date(due_date) : undefined,
-        priority,
-        organization_id: user.org_id,
-        created_by: user.sub,
-      },
-      include: taskInclude,
-    });
-
-    void evaluateWorkflows({
-      organizationId: user.org_id,
-      trigger: WorkflowTrigger.task_created,
-      record: task as unknown as Record<string, unknown>,
-      userId: user.sub,
-      triggerRecordId: task.id,
-    });
-
-    return { data: task };
+    return { data: result.task };
   },
 );
 
@@ -188,63 +162,26 @@ registerTool(
     if (writeErr) return writeErr;
 
     const id = typeof args.id === 'string' ? args.id : '';
-    const status = isTaskStatus(args.status) ? args.status : undefined;
 
-    const task = await db.task.findFirst({
-      where: { id, organization_id: user.org_id },
-    });
+    // Build the patch from only the fields that were explicitly provided.
+    const patch: Record<string, unknown> = {};
+    if (typeof args.title === 'string') patch.title = args.title;
+    if (typeof args.description === 'string') patch.description = args.description;
+    if (typeof args.assigned_to === 'string') patch.assigned_to = args.assigned_to;
+    if (typeof args.due_date === 'string') patch.due_date = args.due_date;
+    if (isTaskPriority(args.priority)) patch.priority = args.priority;
+    // Note: update_task in the MCP can accept a status change directly (unlike
+    // the HTTP path which uses dedicated endpoints for complete/cancel/start).
+    // We honour it here but the domain service blocks updating cancelled tasks.
+    if (isTaskStatus(args.status)) patch.status = args.status;
 
-    if (!task) {
-      return { error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } };
+    const result = await updateTaskForUser(id, user.org_id, toRequester(user), patch as Parameters<typeof updateTaskForUser>[3]);
+
+    if (!result.ok) {
+      return { error: { code: result.error.code, message: result.error.message } };
     }
 
-    if (task.status === TaskStatus.cancelled) {
-      return { error: { code: 'TASK_CANCELLED', message: 'Cannot update a cancelled task' } };
-    }
-
-    const updateData: Prisma.TaskUncheckedUpdateInput = {};
-    if (typeof args.title === 'string') updateData.title = args.title;
-    if (typeof args.description === 'string') updateData.description = args.description;
-    if (typeof args.assigned_to === 'string') updateData.assigned_to = args.assigned_to;
-    if (typeof args.due_date === 'string') {
-      updateData.due_date = args.due_date ? new Date(args.due_date) : null;
-    }
-    if (isTaskPriority(args.priority)) updateData.priority = args.priority;
-    if (status !== undefined) {
-      updateData.status = status;
-      if (status === TaskStatus.done && task.status !== TaskStatus.done) {
-        updateData.completed_at = new Date();
-        updateData.completed_by = user.sub;
-      } else if (status !== TaskStatus.done && task.status === TaskStatus.done) {
-        updateData.completed_at = null;
-        updateData.completed_by = null;
-      }
-    }
-
-    const referenceError = await validateMcpWriteReferences(user, {
-      assigned_to: typeof args.assigned_to === 'string' ? args.assigned_to : undefined,
-    });
-    if (referenceError) {
-      return referenceError;
-    }
-
-    const updated = await db.task.update({
-      where: { id },
-      data: updateData,
-      include: taskInclude,
-    });
-
-    if (updated.status === TaskStatus.done && task.status !== TaskStatus.done) {
-      void evaluateWorkflows({
-        organizationId: user.org_id,
-        trigger: WorkflowTrigger.task_completed,
-        record: updated as unknown as Record<string, unknown>,
-        userId: user.sub,
-        triggerRecordId: updated.id,
-      });
-    }
-
-    return { data: updated };
+    return { data: result.task };
   },
 );
 
@@ -264,59 +201,29 @@ registerTool(
 
     const id = typeof args.id === 'string' ? args.id : '';
 
-    const task = await db.task.findFirst({
-      where: { id, organization_id: user.org_id },
-    });
+    const result = await completeTaskForUser(id, user.org_id, toRequester(user));
 
-    if (!task) {
-      return { error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } };
+    if (!result.ok) {
+      return { error: { code: result.error.code, message: result.error.message } };
     }
 
-    if (task.status === TaskStatus.cancelled) {
-      return { error: { code: 'TASK_CANCELLED', message: 'Cannot complete a cancelled task' } };
-    }
-
-    const updated = await db.task.update({
-      where: { id },
-      data:
-        task.status === TaskStatus.done
-          ? { status: TaskStatus.pending, completed_at: null, completed_by: null }
-          : { status: TaskStatus.done, completed_at: new Date(), completed_by: user.sub },
-      include: taskInclude,
-    });
-
-    if (updated.status === TaskStatus.done && task.status !== TaskStatus.done) {
-      void evaluateWorkflows({
-        organizationId: user.org_id,
-        trigger: WorkflowTrigger.task_completed,
-        record: updated as unknown as Record<string, unknown>,
-        userId: user.sub,
-        triggerRecordId: updated.id,
-      });
-    }
-
-    return { data: updated };
+    return { data: result.task };
   },
 );
 
 registerTool(
   'get_overdue_tasks',
-  'Get all overdue tasks for the org (due in the past, not yet done or cancelled)',
+  'Get all overdue tasks visible to the caller (due in the past, not yet done or cancelled)',
   {
     type: 'object',
     properties: {},
   },
   async (_args: Record<string, unknown>, user: McpUser) => {
-    const tasks = await db.task.findMany({
-      where: {
-        organization_id: user.org_id,
-        status: { notIn: [TaskStatus.done, TaskStatus.cancelled] },
-        due_date: { lt: new Date() },
-      },
-      include: taskInclude,
-      orderBy: { due_date: 'asc' },
-    });
+    const tasks = await getOverdueTasksForUser(user.org_id, toRequester(user));
 
     return { data: tasks, meta: {} };
   },
 );
+
+// Re-export the TaskStatus enum value for any code that imports from this module.
+export { TaskStatus };

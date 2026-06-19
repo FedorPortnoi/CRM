@@ -1,9 +1,18 @@
-import { Prisma, DealStatus, WorkflowTrigger } from '@prisma/client';
+import { DealStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
-import { requireMcpWrite, validateMcpWriteReferences } from '../validation';
+import { requireMcpWrite } from '../validation';
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from '../../config/market';
 import { evaluateWorkflows } from '../../services/workflows';
+import { logActivity } from '../../api/controllers/activities';
+import { dispatchNotification, dealCtx } from '../../services/notificationEngine';
+import {
+  listDealsForUser,
+  getDealForUser,
+  createDealForUser,
+  updateDealForUser,
+  DealDomainError,
+} from '../../services/deal-domain';
 
 type DealStatusValue = 'open' | 'won' | 'lost' | 'archived';
 
@@ -11,11 +20,7 @@ function isDealStatus(v: unknown): v is DealStatusValue {
   return v === 'open' || v === 'won' || v === 'lost' || v === 'archived';
 }
 
-const dealInclude = {
-  contact: { select: { id: true, first_name: true, last_name: true } },
-  pipeline: { select: { id: true, name: true } },
-  stage: { select: { id: true, name: true, position: true } },
-} as const;
+// ─── get_deals ────────────────────────────────────────────────────────────────
 
 registerTool(
   'get_deals',
@@ -43,30 +48,22 @@ registerTool(
     const page = typeof args.page === 'number' ? Math.max(1, Math.floor(args.page)) : 1;
     const per_page = typeof args.per_page === 'number' ? Math.min(100, Math.max(1, Math.floor(args.per_page))) : 20;
 
-    const where: Prisma.DealWhereInput = {
-      organization_id: user.org_id,
-      ...(pipeline_id && { pipeline_id }),
-      ...(stage_id && { stage_id }),
-      ...(assigned_to && { assigned_to }),
-      ...(status && { status }),
-      ...(contact_id && { contact_id }),
-      ...(q && { title: { contains: q, mode: 'insensitive' } }),
-    };
+    // McpUser.role is a plain string from the JWT; cast to the Requester shape
+    // that getVisibleUserIds expects.  The visibility service validates role
+    // values at runtime; unknown roles fall through to the member branch.
+    const requester = user as { sub: string; org_id: string; role: 'owner' | 'admin' | 'member' | 'viewer' };
 
-    const [deals, total] = await Promise.all([
-      db.deal.findMany({
-        where,
-        skip: (page - 1) * per_page,
-        take: per_page,
-        orderBy: { created_at: 'desc' },
-        include: dealInclude,
-      }),
-      db.deal.count({ where }),
-    ]);
+    const { data: deals, total } = await listDealsForUser(
+      user.org_id,
+      requester,
+      { pipeline_id, stage_id, assigned_to, status, contact_id, q, page, per_page },
+    );
 
     return { data: deals, meta: { total, page, per_page } };
   },
 );
+
+// ─── get_deal ─────────────────────────────────────────────────────────────────
 
 registerTool(
   'get_deal',
@@ -81,18 +78,19 @@ registerTool(
   async (args: Record<string, unknown>, user: McpUser) => {
     const id = typeof args.id === 'string' ? args.id : '';
 
-    const deal = await db.deal.findFirst({
-      where: { id, organization_id: user.org_id },
-      include: dealInclude,
-    });
-
-    if (!deal) {
-      return { error: { code: 'DEAL_NOT_FOUND', message: 'Deal not found' } };
+    try {
+      const deal = await getDealForUser(id, user.org_id);
+      return { data: deal };
+    } catch (err) {
+      if (err instanceof DealDomainError) {
+        return { error: { code: err.domainError.code, message: err.domainError.message } };
+      }
+      throw err;
     }
-
-    return { data: deal };
   },
 );
+
+// ─── create_deal ──────────────────────────────────────────────────────────────
 
 registerTool(
   'create_deal',
@@ -130,48 +128,30 @@ registerTool(
     const source = typeof args.source === 'string' ? args.source : undefined;
     const assigned_to = typeof args.assigned_to === 'string' ? args.assigned_to : undefined;
 
-    const [contact, pipeline, stage] = await Promise.all([
-      db.contact.findFirst({ where: { id: contact_id, organization_id: user.org_id }, select: { id: true } }),
-      db.pipeline.findFirst({ where: { id: pipeline_id, organization_id: user.org_id }, select: { id: true } }),
-      db.pipelineStage.findFirst({ where: { id: stage_id, pipeline_id }, select: { id: true } }),
-    ]);
-
-    if (!contact) {
-      return { error: { code: 'FORBIDDEN', message: 'Contact does not belong to your organization' } };
-    }
-    if (!pipeline) {
-      return { error: { code: 'PIPELINE_NOT_FOUND', message: 'Pipeline not found' } };
-    }
-    if (!stage) {
-      return { error: { code: 'STAGE_PIPELINE_MISMATCH', message: 'Stage does not belong to the specified pipeline' } };
-    }
-
-    const referenceError = await validateMcpWriteReferences(user, { assigned_to });
-    if (referenceError) {
-      return referenceError;
-    }
-
-    const deal = await db.deal.create({
-      data: {
+    try {
+      const deal = await createDealForUser(user.org_id, user.sub, {
         title,
         contact_id,
         pipeline_id,
         stage_id,
         currency,
         value,
-        expected_close: expected_close ? new Date(expected_close) : undefined,
+        expected_close,
         probability,
         source,
         assigned_to,
-        organization_id: user.org_id,
-        created_by: user.sub,
-      },
-      include: dealInclude,
-    });
-
-    return { data: deal };
+      });
+      return { data: deal };
+    } catch (err) {
+      if (err instanceof DealDomainError) {
+        return { error: { code: err.domainError.code, message: err.domainError.message } };
+      }
+      throw err;
+    }
   },
 );
+
+// ─── update_deal ──────────────────────────────────────────────────────────────
 
 registerTool(
   'update_deal',
@@ -196,75 +176,34 @@ registerTool(
     if (writeErr) return writeErr;
 
     const id = typeof args.id === 'string' ? args.id : '';
-    const stage_id = typeof args.stage_id === 'string' ? args.stage_id : undefined;
 
-    const deal = await db.deal.findFirst({
-      where: { id, organization_id: user.org_id },
-    });
+    // Build a patch that matches UpdateDealInput.  Null value/expected_close
+    // clears the field; undefined means "not provided / leave as-is".
+    const patch: Record<string, unknown> = {};
+    if (typeof args.title === 'string') patch.title = args.title;
+    if (typeof args.value === 'number') patch.value = args.value;
+    if (args.value === null) patch.value = null;
+    if (typeof args.currency === 'string') patch.currency = args.currency;
+    if (typeof args.expected_close === 'string') patch.expected_close = args.expected_close;
+    if (args.expected_close === null) patch.expected_close = null;
+    if (typeof args.probability === 'number') patch.probability = args.probability;
+    if (typeof args.source === 'string') patch.source = args.source;
+    if (typeof args.assigned_to === 'string') patch.assigned_to = args.assigned_to;
+    if (typeof args.stage_id === 'string') patch.stage_id = args.stage_id;
 
-    if (!deal) {
-      return { error: { code: 'DEAL_NOT_FOUND', message: 'Deal not found' } };
-    }
-
-    const updateData: Prisma.DealUncheckedUpdateInput = {};
-    if (typeof args.title === 'string') updateData.title = args.title;
-    if (typeof args.value === 'number') updateData.value = args.value;
-    if (args.value === null) updateData.value = null;
-    if (typeof args.currency === 'string') updateData.currency = args.currency;
-    if (typeof args.expected_close === 'string') {
-      updateData.expected_close = args.expected_close ? new Date(args.expected_close) : null;
-    }
-    if (typeof args.probability === 'number') updateData.probability = args.probability;
-    if (typeof args.source === 'string') updateData.source = args.source;
-    if (typeof args.assigned_to === 'string') updateData.assigned_to = args.assigned_to;
-
-    if (stage_id !== undefined && stage_id !== deal.stage_id) {
-      if (deal.status !== DealStatus.open) {
-        return { error: { code: 'DEAL_NOT_OPEN', message: 'Only open deals can be moved between stages' } };
+    try {
+      const updated = await updateDealForUser(id, user.org_id, user.sub, patch);
+      return { data: updated };
+    } catch (err) {
+      if (err instanceof DealDomainError) {
+        return { error: { code: err.domainError.code, message: err.domainError.message } };
       }
-
-      if (!deal.pipeline_id) {
-        return { error: { code: 'STAGE_NOT_FOUND', message: "Stage not found in this deal's pipeline" } };
-      }
-
-      const stage = await db.pipelineStage.findFirst({
-        where: { id: stage_id, pipeline_id: deal.pipeline_id },
-      });
-
-      if (!stage) {
-        return { error: { code: 'STAGE_NOT_FOUND', message: "Stage not found in this deal's pipeline" } };
-      }
-
-      updateData.stage_id = stage_id;
-      updateData.stage_entered_at = new Date();
+      throw err;
     }
-
-    const referenceError = await validateMcpWriteReferences(user, {
-      assigned_to: typeof args.assigned_to === 'string' ? args.assigned_to : undefined,
-    });
-    if (referenceError) {
-      return referenceError;
-    }
-
-    const updated = await db.deal.update({
-      where: { id },
-      data: updateData,
-      include: dealInclude,
-    });
-
-    if (updated.stage_id !== deal.stage_id) {
-      void evaluateWorkflows({
-        organizationId: user.org_id,
-        trigger: WorkflowTrigger.deal_stage_changed,
-        record: updated as unknown as Record<string, unknown>,
-        userId: user.sub,
-        triggerRecordId: updated.id,
-      });
-    }
-
-    return { data: updated };
   },
 );
+
+// ─── move_deal_to_stage ───────────────────────────────────────────────────────
 
 registerTool(
   'move_deal_to_stage',
@@ -301,7 +240,7 @@ registerTool(
     }
 
     const stage = await db.pipelineStage.findFirst({
-      where: { id: stage_id, pipeline_id: deal.pipeline_id },
+      where: { id: stage_id, pipeline_id: deal.pipeline_id, pipeline: { organization_id: user.org_id } },
     });
 
     if (!stage) {
@@ -309,24 +248,41 @@ registerTool(
     }
 
     const updated = await db.deal.update({
-      where: { id },
+      where: { id, organization_id: user.org_id },
       data: { stage_id, stage_entered_at: new Date() },
-      include: dealInclude,
+      include: {
+        contact: { select: { id: true, first_name: true, last_name: true } },
+        pipeline: { select: { id: true, name: true } },
+        stage: { select: { id: true, name: true, position: true } },
+      },
     });
 
-    if (updated.stage_id !== deal.stage_id) {
-      void evaluateWorkflows({
-        organizationId: user.org_id,
-        trigger: WorkflowTrigger.deal_stage_changed,
-        record: updated as unknown as Record<string, unknown>,
-        userId: user.sub,
-        triggerRecordId: updated.id,
-      });
-    }
+    await evaluateWorkflows({
+      organizationId: user.org_id,
+      trigger: WorkflowTrigger.deal_stage_changed,
+      record: updated as unknown as Record<string, unknown>,
+      userId: user.sub,
+      triggerRecordId: updated.id,
+    });
+
+    void logActivity({
+      organizationId: user.org_id,
+      userId: user.sub,
+      entityType: 'deal',
+      entityId: updated.id,
+      action: 'stage_changed',
+      changes: { stage_id },
+    });
+
+    void dealCtx(updated.id, updated.stage?.name).then((ctx) => {
+      if (ctx) void dispatchNotification({ eventType: 'deal.stage_changed', orgId: user.org_id, deal: ctx });
+    });
 
     return { data: updated };
   },
 );
+
+// ─── get_pipelines ────────────────────────────────────────────────────────────
 
 registerTool(
   'get_pipelines',

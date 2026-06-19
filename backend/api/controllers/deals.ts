@@ -1,15 +1,19 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { DealStatus, Prisma, WorkflowTrigger } from '@prisma/client';
+import { DealStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
-import { paginate } from '../../services/db-paginate';
 import { evaluateWorkflows } from '../../services/workflows';
 import { logActivity } from './activities';
 import { dispatchNotification, dealCtx } from '../../services/notificationEngine';
+import { type VisibilityScope } from '../../services/visibility';
 import {
-  getVisibleUserIds,
-  ownerVisibilityWhere,
-  type VisibilityScope,
-} from '../../services/visibility';
+  listDealsForUser,
+  getDealForUser,
+  createDealForUser,
+  updateDealForUser,
+  DealDomainError,
+  dealInclude,
+  stageBelongsToPipeline,
+} from '../../services/deal-domain';
 
 // ─── Local request types ──────────────────────────────────────────────────────
 
@@ -72,51 +76,9 @@ type CreateStageBody = {
 
 type UpdateStageBody = Partial<CreateStageBody>;
 
-// ─── Deal include helper ─────────────────────────────────────────────────────
-
-const dealInclude = {
-  contact: { select: { id: true, first_name: true, last_name: true } },
-  pipeline: { select: { id: true, name: true } },
-  stage: { select: { id: true, name: true, position: true } },
-} as const;
+// dealInclude is imported from deal-domain.ts
 
 const MS_PER_DAY = 86_400_000;
-
-async function contactBelongsToOrg(contactId: string, orgId: string): Promise<boolean> {
-  const contact = await db.contact.findFirst({
-    where: { id: contactId, organization_id: orgId },
-    select: { id: true },
-  });
-
-  return contact !== null;
-}
-
-async function pipelineBelongsToOrg(pipelineId: string, orgId: string): Promise<boolean> {
-  const pipeline = await db.pipeline.findFirst({
-    where: { id: pipelineId, organization_id: orgId },
-    select: { id: true },
-  });
-
-  return pipeline !== null;
-}
-
-async function stageBelongsToPipeline(stageId: string, pipelineId: string, orgId: string): Promise<boolean> {
-  const stage = await db.pipelineStage.findFirst({
-    where: { id: stageId, pipeline_id: pipelineId, pipeline: { organization_id: orgId } },
-    select: { id: true },
-  });
-
-  return stage !== null;
-}
-
-async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
-  const user = await db.user.findFirst({
-    where: { id: userId, organization_id: orgId, is_active: true },
-    select: { id: true },
-  });
-
-  return user !== null;
-}
 
 function daysSince(date: Date, now: Date): number {
   return Math.max(0, Math.floor((now.getTime() - date.getTime()) / MS_PER_DAY));
@@ -131,28 +93,10 @@ async function list(
   const { pipeline_id, stage_id, assigned_to, scope, status, contact_id, q, page, per_page, sort, order } =
     request.query as ListQuery;
 
-  const visibleIds = await getVisibleUserIds(request.user, scope ?? 'direct');
-
-  const where: Prisma.DealWhereInput = {
-    organization_id: request.user.org_id,
-    ...(pipeline_id && { pipeline_id }),
-    ...(stage_id && { stage_id }),
-    ...(assigned_to && { assigned_to }),
-    ...(status && { status }),
-    ...(contact_id && { contact_id }),
-    ...(q && { title: { contains: q, mode: 'insensitive' } }),
-    ...ownerVisibilityWhere(visibleIds),
-  };
-
-  const { data: deals, total } = await paginate(
-    () => db.deal.count({ where }),
-    () => db.deal.findMany({
-      where,
-      skip: (page - 1) * per_page,
-      take: per_page,
-      orderBy: { [sort]: order },
-      include: dealInclude,
-    }),
+  const { data: deals, total } = await listDealsForUser(
+    request.user.org_id,
+    request.user,
+    { pipeline_id, stage_id, assigned_to, scope, status, contact_id, q, page, per_page, sort, order },
   );
 
   reply.send({ data: deals, meta: { total, page, per_page } });
@@ -207,79 +151,18 @@ async function create(
 ): Promise<void> {
   const body = request.body as CreateBody;
 
-  const [ownsContact, ownsPipeline, stageMatches, ownsAssignee] = await Promise.all([
-    contactBelongsToOrg(body.contact_id, request.user.org_id),
-    pipelineBelongsToOrg(body.pipeline_id, request.user.org_id),
-    stageBelongsToPipeline(body.stage_id, body.pipeline_id, request.user.org_id),
-    body.assigned_to !== undefined && body.assigned_to !== request.user.sub
-      ? userBelongsToOrg(body.assigned_to, request.user.org_id)
-      : Promise.resolve(true),
-  ]);
-
-  if (!ownsContact) {
-    reply.status(403).send({
-      error: { code: 'FORBIDDEN', message: 'Contact does not belong to your organization' },
-    });
-    return;
+  try {
+    const deal = await createDealForUser(request.user.org_id, request.user.sub, body);
+    reply.status(201).send({ data: deal, meta: {} });
+  } catch (err) {
+    if (err instanceof DealDomainError) {
+      reply.status(err.domainError.httpStatus).send({
+        error: { code: err.domainError.code, message: err.domainError.message },
+      });
+      return;
+    }
+    throw err;
   }
-
-  if (!ownsPipeline) {
-    reply.status(404).send({ error: { code: 'PIPELINE_NOT_FOUND', message: 'Pipeline not found' } });
-    return;
-  }
-
-  if (!stageMatches) {
-    reply.status(400).send({
-      error: { code: 'STAGE_PIPELINE_MISMATCH', message: 'Stage does not belong to the specified pipeline' },
-    });
-    return;
-  }
-
-  if (!ownsAssignee) {
-    reply.status(403).send({
-      error: { code: 'FORBIDDEN', message: 'Assigned user does not belong to your organization' },
-    });
-    return;
-  }
-
-  const deal = await db.deal.create({
-    data: {
-      title: body.title,
-      contact_id: body.contact_id,
-      pipeline_id: body.pipeline_id,
-      stage_id: body.stage_id,
-      value: body.value,
-      currency: body.currency,
-      expected_close: body.expected_close ? new Date(body.expected_close) : undefined,
-      probability: body.probability,
-      next_action: body.next_action,
-      next_action_due: body.next_action_due ? new Date(body.next_action_due) : undefined,
-      source: body.source,
-      assigned_to: body.assigned_to,
-      custom_fields: body.custom_fields as Prisma.InputJsonValue | undefined,
-      organization_id: request.user.org_id,
-      created_by: request.user.sub,
-    },
-    include: dealInclude,
-  });
-
-  await evaluateWorkflows({
-    organizationId: request.user.org_id,
-    trigger: WorkflowTrigger.deal_created,
-    record: deal as unknown as Record<string, unknown>,
-    userId: request.user.sub,
-    triggerRecordId: deal.id,
-  });
-
-  void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: deal.id, action: 'created' });
-
-  if (deal.assigned_to) {
-    void dealCtx(deal.id).then((ctx) => {
-      if (ctx) void dispatchNotification({ eventType: 'deal.assigned', orgId: request.user.org_id, deal: ctx });
-    });
-  }
-
-  reply.status(201).send({ data: deal, meta: {} });
 }
 
 async function getById(
@@ -288,17 +171,18 @@ async function getById(
 ): Promise<void> {
   const { id } = request.params as IdParams;
 
-  const deal = await db.deal.findFirst({
-    where: { id, organization_id: request.user.org_id },
-    include: dealInclude,
-  });
-
-  if (!deal) {
-    reply.status(404).send({ error: { code: 'DEAL_NOT_FOUND', message: 'Deal not found' } });
-    return;
+  try {
+    const deal = await getDealForUser(id, request.user.org_id);
+    reply.send({ data: deal, meta: {} });
+  } catch (err) {
+    if (err instanceof DealDomainError) {
+      reply.status(err.domainError.httpStatus).send({
+        error: { code: err.domainError.code, message: err.domainError.message },
+      });
+      return;
+    }
+    throw err;
   }
-
-  reply.send({ data: deal, meta: {} });
 }
 
 async function update(
@@ -308,96 +192,18 @@ async function update(
   const { id } = request.params as IdParams;
   const body = request.body as UpdateBody;
 
-  const deal = await db.deal.findFirst({
-    where: { id, organization_id: request.user.org_id },
-  });
-
-  if (!deal) {
-    reply.status(404).send({ error: { code: 'DEAL_NOT_FOUND', message: 'Deal not found' } });
-    return;
-  }
-
-  let stageMatchesPromise: Promise<boolean> = Promise.resolve(true);
-  if (body.stage_id !== undefined || body.pipeline_id !== undefined) {
-    const nextPipelineId = body.pipeline_id ?? deal.pipeline_id;
-    const nextStageId = body.stage_id ?? deal.stage_id;
-    if (!nextPipelineId || !nextStageId) {
-      reply.status(400).send({
-        error: { code: 'STAGE_PIPELINE_MISMATCH', message: 'Stage does not belong to this deal\'s pipeline' },
+  try {
+    const updated = await updateDealForUser(id, request.user.org_id, request.user.sub, body);
+    reply.send({ data: updated, meta: {} });
+  } catch (err) {
+    if (err instanceof DealDomainError) {
+      reply.status(err.domainError.httpStatus).send({
+        error: { code: err.domainError.code, message: err.domainError.message },
       });
       return;
     }
-    stageMatchesPromise = stageBelongsToPipeline(nextStageId, nextPipelineId, request.user.org_id);
+    throw err;
   }
-
-  const [ownsContact, ownsPipeline, ownsAssignee, stageMatches] = await Promise.all([
-    body.contact_id !== undefined
-      ? contactBelongsToOrg(body.contact_id, request.user.org_id)
-      : Promise.resolve(true),
-    body.pipeline_id !== undefined
-      ? pipelineBelongsToOrg(body.pipeline_id, request.user.org_id)
-      : Promise.resolve(true),
-    body.assigned_to !== undefined && body.assigned_to !== request.user.sub
-      ? userBelongsToOrg(body.assigned_to, request.user.org_id)
-      : Promise.resolve(true),
-    stageMatchesPromise,
-  ]);
-
-  if (!ownsContact) {
-    reply.status(403).send({
-      error: { code: 'FORBIDDEN', message: 'Contact does not belong to your organization' },
-    });
-    return;
-  }
-
-  if (!ownsPipeline) {
-    reply.status(404).send({ error: { code: 'PIPELINE_NOT_FOUND', message: 'Pipeline not found' } });
-    return;
-  }
-
-  if (!ownsAssignee) {
-    reply.status(403).send({
-      error: { code: 'FORBIDDEN', message: 'Assigned user does not belong to your organization' },
-    });
-    return;
-  }
-
-  if (!stageMatches) {
-    reply.status(400).send({
-      error: { code: 'STAGE_PIPELINE_MISMATCH', message: 'Stage does not belong to this deal\'s pipeline' },
-    });
-    return;
-  }
-
-  const updateData: Prisma.DealUncheckedUpdateInput = {};
-  if (body.title !== undefined) updateData.title = body.title;
-  if (body.contact_id !== undefined) updateData.contact_id = body.contact_id;
-  if (body.pipeline_id !== undefined) updateData.pipeline_id = body.pipeline_id;
-  if (body.stage_id !== undefined) updateData.stage_id = body.stage_id;
-  if (body.value !== undefined) updateData.value = body.value;
-  if (body.currency !== undefined) updateData.currency = body.currency;
-  if (body.expected_close !== undefined) {
-    updateData.expected_close = body.expected_close ? new Date(body.expected_close) : null;
-  }
-  if (body.probability !== undefined) updateData.probability = body.probability;
-  if (body.next_action !== undefined) updateData.next_action = body.next_action;
-  if (body.next_action_due !== undefined) {
-    updateData.next_action_due = body.next_action_due ? new Date(body.next_action_due) : null;
-  }
-  if (body.source !== undefined) updateData.source = body.source;
-  if (body.assigned_to !== undefined) updateData.assigned_to = body.assigned_to;
-  if (body.custom_fields !== undefined) {
-    updateData.custom_fields = body.custom_fields as Prisma.InputJsonValue;
-  }
-
-  const updated = await db.deal.update({
-    where: { id, organization_id: request.user.org_id },
-    data: updateData,
-    include: dealInclude,
-  });
-
-  void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: 'updated' });
-  reply.send({ data: updated, meta: {} });
 }
 
 async function archive(

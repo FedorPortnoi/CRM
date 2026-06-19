@@ -1,8 +1,17 @@
-import { Prisma, ContactStatus, WorkflowTrigger } from '@prisma/client';
+import { ContactStatus } from '@prisma/client';
 import { db } from '../../services/db';
-import { evaluateWorkflows } from '../../services/workflows';
 import { registerTool, McpUser } from '../server';
-import { requireMcpWrite, validateMcpWriteReferences } from '../validation';
+import { requireMcpWrite } from '../validation';
+import {
+  listContactsForUser,
+  getContactForUser,
+  createContactForUser,
+  updateContactForUser,
+  archiveContactForUser,
+  ContactNotFoundError,
+  ContactForbiddenError,
+  type ContactBody,
+} from '../../services/contact-domain';
 
 type ContactTypeValue = 'lead' | 'customer' | 'partner' | 'other';
 type ContactStatusValue = 'active' | 'inactive' | 'archived';
@@ -35,32 +44,7 @@ registerTool(
     const page = typeof args.page === 'number' ? Math.max(1, Math.floor(args.page)) : 1;
     const per_page = typeof args.per_page === 'number' ? Math.min(100, Math.max(1, Math.floor(args.per_page))) : 20;
 
-    const where: Prisma.ContactWhereInput = {
-      organization_id: user.org_id,
-      status: status ?? { not: ContactStatus.archived },
-      ...(type && { type }),
-      ...(q && {
-        OR: [
-          { first_name: { contains: q, mode: 'insensitive' } },
-          { last_name: { contains: q, mode: 'insensitive' } },
-          { email: { contains: q, mode: 'insensitive' } },
-          { phone: { contains: q, mode: 'insensitive' } },
-          { company: { contains: q, mode: 'insensitive' } },
-        ],
-      }),
-    };
-
-    const [contacts, total] = await Promise.all([
-      db.contact.findMany({
-        where,
-        skip: (page - 1) * per_page,
-        take: per_page,
-        orderBy: { created_at: 'desc' },
-      }),
-      db.contact.count({ where }),
-    ]);
-
-    return { data: contacts, meta: { total, page, per_page } };
+    return listContactsForUser(user.org_id, user, { q, status, type, page, per_page });
   },
 );
 
@@ -76,17 +60,15 @@ registerTool(
   },
   async (args: Record<string, unknown>, user: McpUser) => {
     const id = typeof args.id === 'string' ? args.id : '';
-
-    const contact = await db.contact.findFirst({
-      where: { id, organization_id: user.org_id },
-      include: { assignee: { select: { id: true, name: true } } },
-    });
-
-    if (!contact) {
-      return { error: { code: 'NOT_FOUND', message: 'Contact not found' } };
+    try {
+      const contact = await getContactForUser(id, user.org_id);
+      return { data: contact };
+    } catch (err) {
+      if (err instanceof ContactNotFoundError) {
+        return { error: { code: err.code, message: err.message } };
+      }
+      throw err;
     }
-
-    return { data: contact };
   },
 );
 
@@ -118,49 +100,30 @@ registerTool(
     if (!first_name) {
       return { error: { code: 'VALIDATION_ERROR', message: 'first_name is required' } };
     }
-    const last_name = typeof args.last_name === 'string' ? args.last_name : undefined;
-    const company = typeof args.company === 'string' ? args.company : undefined;
-    const email = typeof args.email === 'string' ? args.email : undefined;
-    const phone = typeof args.phone === 'string' ? args.phone : undefined;
-    const mobile = typeof args.mobile === 'string' ? args.mobile : undefined;
-    const tags = Array.isArray(args.tags) ? (args.tags as Prisma.InputJsonValue) : undefined;
-    const source = typeof args.source === 'string' ? args.source : undefined;
-    const notes = typeof args.notes === 'string' ? args.notes : undefined;
-    const assigned_to = typeof args.assigned_to === 'string' ? args.assigned_to : undefined;
-    const type = isContactType(args.type) ? args.type : undefined;
 
-    const referenceError = await validateMcpWriteReferences(user, { assigned_to });
-    if (referenceError) {
-      return referenceError;
+    const body: ContactBody = {
+      first_name,
+      last_name: typeof args.last_name === 'string' ? args.last_name : undefined,
+      company: typeof args.company === 'string' ? args.company : undefined,
+      email: typeof args.email === 'string' ? args.email : undefined,
+      phone: typeof args.phone === 'string' ? args.phone : undefined,
+      mobile: typeof args.mobile === 'string' ? args.mobile : undefined,
+      tags: Array.isArray(args.tags) ? (args.tags as string[]) : undefined,
+      source: typeof args.source === 'string' ? args.source : undefined,
+      notes: typeof args.notes === 'string' ? args.notes : undefined,
+      assigned_to: typeof args.assigned_to === 'string' ? args.assigned_to : undefined,
+      type: isContactType(args.type) ? args.type : undefined,
+    };
+
+    try {
+      const contact = await createContactForUser(user.org_id, user.sub, body);
+      return { data: contact };
+    } catch (err) {
+      if (err instanceof ContactForbiddenError) {
+        return { error: { code: err.code, message: err.message } };
+      }
+      throw err;
     }
-
-    const contact = await db.contact.create({
-      data: {
-        first_name,
-        last_name,
-        company,
-        email,
-        phone,
-        mobile,
-        tags,
-        source,
-        notes,
-        assigned_to,
-        type,
-        organization_id: user.org_id,
-        created_by: user.sub,
-      },
-    });
-
-    void evaluateWorkflows({
-      organizationId: user.org_id,
-      trigger: WorkflowTrigger.contact_created,
-      record: contact as unknown as Record<string, unknown>,
-      userId: user.sub,
-      triggerRecordId: contact.id,
-    });
-
-    return { data: contact };
   },
 );
 
@@ -191,37 +154,31 @@ registerTool(
 
     const id = typeof args.id === 'string' ? args.id : '';
 
-    const existing = await db.contact.findFirst({
-      where: { id, organization_id: user.org_id },
-    });
+    const patch: Partial<ContactBody> = {};
+    if (typeof args.first_name === 'string') patch.first_name = args.first_name;
+    if (typeof args.last_name === 'string') patch.last_name = args.last_name;
+    if (typeof args.company === 'string') patch.company = args.company;
+    if (typeof args.email === 'string') patch.email = args.email;
+    if (typeof args.phone === 'string') patch.phone = args.phone;
+    if (typeof args.mobile === 'string') patch.mobile = args.mobile;
+    if (Array.isArray(args.tags)) patch.tags = args.tags as string[];
+    if (typeof args.source === 'string') patch.source = args.source;
+    if (typeof args.notes === 'string') patch.notes = args.notes;
+    if (typeof args.assigned_to === 'string') patch.assigned_to = args.assigned_to;
+    if (isContactType(args.type)) patch.type = args.type;
 
-    if (!existing || existing.status === ContactStatus.archived) {
-      return { error: { code: 'NOT_FOUND', message: 'Contact not found' } };
+    try {
+      const contact = await updateContactForUser(id, user.org_id, user.sub, patch);
+      return { data: contact };
+    } catch (err) {
+      if (err instanceof ContactNotFoundError) {
+        return { error: { code: err.code, message: err.message } };
+      }
+      if (err instanceof ContactForbiddenError) {
+        return { error: { code: err.code, message: err.message } };
+      }
+      throw err;
     }
-
-    const updateData: Prisma.ContactUncheckedUpdateInput = {};
-    if (typeof args.first_name === 'string') updateData.first_name = args.first_name;
-    if (typeof args.last_name === 'string') updateData.last_name = args.last_name;
-    if (typeof args.company === 'string') updateData.company = args.company;
-    if (typeof args.email === 'string') updateData.email = args.email;
-    if (typeof args.phone === 'string') updateData.phone = args.phone;
-    if (typeof args.mobile === 'string') updateData.mobile = args.mobile;
-    if (Array.isArray(args.tags)) updateData.tags = args.tags as Prisma.InputJsonValue;
-    if (typeof args.source === 'string') updateData.source = args.source;
-    if (typeof args.notes === 'string') updateData.notes = args.notes;
-    if (typeof args.assigned_to === 'string') updateData.assigned_to = args.assigned_to;
-    if (isContactType(args.type)) updateData.type = args.type;
-
-    const referenceError = await validateMcpWriteReferences(user, {
-      assigned_to: typeof args.assigned_to === 'string' ? args.assigned_to : undefined,
-    });
-    if (referenceError) {
-      return referenceError;
-    }
-
-    const contact = await db.contact.update({ where: { id }, data: updateData });
-
-    return { data: contact };
   },
 );
 
@@ -241,20 +198,15 @@ registerTool(
 
     const id = typeof args.id === 'string' ? args.id : '';
 
-    const existing = await db.contact.findFirst({
-      where: { id, organization_id: user.org_id },
-    });
-
-    if (!existing) {
-      return { error: { code: 'NOT_FOUND', message: 'Contact not found' } };
+    try {
+      const contact = await archiveContactForUser(id, user.org_id, user.sub);
+      return { data: contact };
+    } catch (err) {
+      if (err instanceof ContactNotFoundError) {
+        return { error: { code: err.code, message: err.message } };
+      }
+      throw err;
     }
-
-    const contact = await db.contact.update({
-      where: { id },
-      data: { status: ContactStatus.archived },
-    });
-
-    return { data: contact };
   },
 );
 

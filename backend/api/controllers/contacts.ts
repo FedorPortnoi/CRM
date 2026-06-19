@@ -1,12 +1,9 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { ContactStatus, DealStatus, Prisma, TaskStatus, WorkflowTrigger } from '@prisma/client';
+import { ContactStatus, DealStatus, Prisma, TaskStatus } from '@prisma/client';
 import { db } from '../../services/db';
 import { paginate } from '../../services/db-paginate';
-import { evaluateWorkflows } from '../../services/workflows';
+import { decryptField } from '../../services/encryption';
 import { getContactIdsLastContactedBefore, getLastContactedMap } from '../../services/lastContacted';
-import { encryptField, decryptField } from '../../services/encryption';
-import { logActivity } from './activities';
-import { dispatchNotification, contactCtx } from '../../services/notificationEngine';
 import {
   getVisibleUserIds,
   ownerVisibilityWhere,
@@ -16,25 +13,19 @@ import { importCsvRows, type ContactImportRow } from '../../services/contact-imp
 import { userBelongsToOrg, bulkAssignContacts, bulkArchiveContacts } from '../../services/contact-bulk';
 import { getContactTimeline } from '../../services/contact-timeline';
 import { scanBusinessCard, ServiceNotConfiguredError, type BusinessCardBody } from '../../services/contact-recognition';
+import {
+  getContactForUser,
+  createContactForUser,
+  updateContactForUser,
+  archiveContactForUser,
+  ContactNotFoundError,
+  ContactForbiddenError,
+  type ContactBody,
+} from '../../services/contact-domain';
 
 // ---------------------------------------------------------------------------
 // Local types
 // ---------------------------------------------------------------------------
-
-type ContactBody = {
-  first_name: string;
-  last_name?: string;
-  company?: string;
-  email?: string;
-  phone?: string;
-  mobile?: string;
-  tags?: string[];
-  source?: string;
-  notes?: string;
-  assigned_to?: string;
-  type?: 'lead' | 'customer' | 'partner' | 'other';
-  custom_fields?: Prisma.InputJsonValue;
-};
 
 type BulkArchiveBody = {
   contact_ids: string[];
@@ -229,167 +220,58 @@ export const ContactsController = {
 
   create: async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as ContactBody;
-
-    if (body.assigned_to !== undefined && body.assigned_to !== request.user.sub) {
-      const ownsAssignee = await userBelongsToOrg(body.assigned_to, request.user.org_id);
-      if (!ownsAssignee) {
-        return reply.code(403).send({
-          error: { code: 'FORBIDDEN', message: 'Assigned user does not belong to your organization' },
-        });
+    try {
+      const contact = await createContactForUser(request.user.org_id, request.user.sub, body);
+      return reply.code(201).send({ data: contact, meta: {} });
+    } catch (err) {
+      if (err instanceof ContactForbiddenError) {
+        return reply.code(403).send({ error: { code: err.code, message: err.message } });
       }
+      throw err;
     }
-
-    const data: Prisma.ContactUncheckedCreateInput = {
-      first_name: body.first_name,
-      last_name: body.last_name,
-      company: body.company,
-      email: body.email ? encryptField(body.email) : undefined,
-      phone: body.phone ? encryptField(body.phone) : undefined,
-      mobile: body.mobile ? encryptField(body.mobile) : undefined,
-      tags: body.tags,
-      source: body.source,
-      notes: body.notes,
-      assigned_to: body.assigned_to,
-      type: body.type,
-      custom_fields: body.custom_fields,
-      organization_id: request.user.org_id,
-      created_by: request.user.sub,
-    };
-
-    const contact = await db.contact.create({ data });
-
-    await evaluateWorkflows({
-      organizationId: request.user.org_id,
-      trigger: WorkflowTrigger.contact_created,
-      record: contact as unknown as Record<string, unknown>,
-      userId: request.user.sub,
-      triggerRecordId: contact.id,
-    });
-
-    void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'contact', entityId: contact.id, action: 'created' });
-
-    if (contact.assigned_to && contact.assigned_to !== request.user.sub) {
-      void contactCtx(contact.id, request.user.sub).then((ctx) => {
-        if (ctx) void dispatchNotification({ eventType: 'contact.assigned', orgId: request.user.org_id, contact: ctx });
-      });
-    }
-
-    return reply.code(201).send({ data: decryptContact(contact), meta: {} });
   },
 
   getById: async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
-
-    const contact = await db.contact.findFirst({
-      where: { id, organization_id: request.user.org_id },
-      include: { assignee: { select: { id: true, name: true } } },
-    });
-
-    if (!contact) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    try {
+      const contact = await getContactForUser(id, request.user.org_id);
+      return reply.send({ data: contact });
+    } catch (err) {
+      if (err instanceof ContactNotFoundError) {
+        return reply.code(404).send({ error: { code: err.code, message: err.message } });
+      }
+      throw err;
     }
-
-    return reply.send({ data: decryptContact(contact) });
   },
 
   update: async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
-
-    const existing = await db.contact.findFirst({
-      where: { id, organization_id: request.user.org_id, status: { not: ContactStatus.archived } },
-    });
-
-    if (!existing) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
-    }
-
     const body = request.body as Partial<ContactBody>;
-
-    if (body.assigned_to !== undefined && body.assigned_to !== request.user.sub) {
-      const ownsAssignee = await userBelongsToOrg(body.assigned_to, request.user.org_id);
-      if (!ownsAssignee) {
-        return reply.code(403).send({
-          error: { code: 'FORBIDDEN', message: 'Assigned user does not belong to your organization' },
-        });
+    try {
+      const contact = await updateContactForUser(id, request.user.org_id, request.user.sub, body);
+      return reply.send({ data: contact });
+    } catch (err) {
+      if (err instanceof ContactNotFoundError) {
+        return reply.code(404).send({ error: { code: err.code, message: err.message } });
       }
-    }
-
-    const updateData: Prisma.ContactUncheckedUpdateInput = {};
-    if (body.first_name !== undefined) updateData.first_name = body.first_name;
-    if (body.last_name !== undefined) updateData.last_name = body.last_name;
-    if (body.company !== undefined) updateData.company = body.company;
-    if (body.email !== undefined) updateData.email = body.email ? encryptField(body.email) : body.email;
-    if (body.phone !== undefined) updateData.phone = body.phone ? encryptField(body.phone) : body.phone;
-    if (body.mobile !== undefined) updateData.mobile = body.mobile ? encryptField(body.mobile) : body.mobile;
-    if (body.tags !== undefined) updateData.tags = body.tags;
-    if (body.source !== undefined) updateData.source = body.source;
-    if (body.notes !== undefined) updateData.notes = body.notes;
-    if (body.assigned_to !== undefined) updateData.assigned_to = body.assigned_to;
-    if (body.type !== undefined) updateData.type = body.type;
-    if (body.custom_fields !== undefined) updateData.custom_fields = body.custom_fields;
-
-    const result = await db.contact.updateMany({
-      where: { id, organization_id: request.user.org_id, status: { not: ContactStatus.archived } },
-      data: updateData,
-    });
-
-    if (result.count !== 1) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
-    }
-
-    const contact = await db.contact.findFirst({
-      where: { id, organization_id: request.user.org_id },
-    });
-
-    if (!contact) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
-    }
-
-    const PII_FIELDS = new Set(['email', 'phone', 'mobile']);
-    const changes: Record<string, unknown> = {};
-    for (const key of Object.keys(updateData) as (keyof typeof updateData)[]) {
-      if (PII_FIELDS.has(key)) {
-        changes[key] = '[changed]';
-      } else {
-        changes[key] = { from: existing[key as keyof typeof existing], to: updateData[key] };
+      if (err instanceof ContactForbiddenError) {
+        return reply.code(403).send({ error: { code: err.code, message: err.message } });
       }
+      throw err;
     }
-    void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'contact', entityId: id, action: 'updated', changes });
-
-    return reply.send({ data: decryptContact(contact) });
   },
 
   archive: async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
-
-    const existing = await db.contact.findFirst({
-      where: { id, organization_id: request.user.org_id },
-    });
-
-    if (!existing) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    try {
+      const contact = await archiveContactForUser(id, request.user.org_id, request.user.sub);
+      return reply.send({ data: contact });
+    } catch (err) {
+      if (err instanceof ContactNotFoundError) {
+        return reply.code(404).send({ error: { code: err.code, message: err.message } });
+      }
+      throw err;
     }
-
-    const result = await db.contact.updateMany({
-      where: { id, organization_id: request.user.org_id },
-      data: { status: ContactStatus.archived },
-    });
-
-    if (result.count !== 1) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
-    }
-
-    const contact = await db.contact.findFirst({
-      where: { id, organization_id: request.user.org_id },
-    });
-
-    if (!contact) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
-    }
-
-    void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'contact', entityId: id, action: 'archived' });
-
-    return reply.send({ data: contact });
   },
 
   getActivity: async (request: FastifyRequest, reply: FastifyReply) => {
