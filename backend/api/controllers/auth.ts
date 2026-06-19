@@ -482,37 +482,6 @@ export const AuthController = {
     return reply.send(response);
   },
 
-  getOnboarding: async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = await db.user.findFirst({
-      where: { id: request.user.sub, organization_id: request.user.org_id },
-      select: { onboarding_state: true },
-    });
-
-    return reply.send({
-      data: user?.onboarding_state ?? { completed: false },
-      meta: {},
-    });
-  },
-
-  updateOnboarding: async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as { completed?: boolean; dismissed_steps?: string[] };
-    const state = {
-      completed: body.completed ?? false,
-      dismissed_steps: body.dismissed_steps ?? [],
-      completed_at: body.completed ? new Date().toISOString() : undefined,
-    };
-
-    const user = await db.user.update({
-      where: { id: request.user.sub, organization_id: request.user.org_id },
-      data: { onboarding_state: state },
-    });
-
-    return reply.send({
-      data: publicUser(user),
-      meta: {},
-    });
-  },
-
   inviteUser: async (request: FastifyRequest, reply: FastifyReply) => {
     const callerRole = request.user.role as AuthRole;
     if (callerRole !== 'owner' && callerRole !== 'admin') {

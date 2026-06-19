@@ -3,8 +3,6 @@ import { API_URL } from '../utils/api';
 
 interface BackendOnboardingState {
   completed_steps?: string[];
-  dismissed_tooltips?: string[];
-  example_data_loaded?: boolean;
   completed_at?: string | null;
   completed?: boolean;
 }

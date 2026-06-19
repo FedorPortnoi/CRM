@@ -27,7 +27,6 @@ type FocusedField = 'email' | 'password' | 'companyCode' | 'username' | null;
 const COLORS = {
   cream: '#E8DDD6',
   dustyRose: '#C9A99A',
-  terracotta: '#C4694A',
   mutedTerracotta: '#B07868',
   darkBrown: '#8B3A00',
   burntOrange: '#C45A10',
@@ -320,16 +319,6 @@ export default function LoginScreen() {
                 </Pressable>
               </View>
 
-              {/* Forgot password */}
-              {!isJoin && (
-                <Pressable
-                  accessibilityRole="button"
-                  hitSlop={10}
-                  style={({ pressed }) => [styles.forgotButton, pressed && styles.pressed]}
-                >
-                  <Text style={styles.forgotText}>{t('auth.forgotPassword')}</Text>
-                </Pressable>
-              )}
 
               {/* Error */}
               {error !== null && (
@@ -528,18 +517,6 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  // Forgot password
-  forgotButton: {
-    alignSelf: 'flex-end',
-    marginTop: 15,
-    paddingVertical: 4,
-  },
-  forgotText: {
-    color: COLORS.burntOrange,
-    fontSize: 15,
-    fontWeight: '700',
   },
 
   // Error

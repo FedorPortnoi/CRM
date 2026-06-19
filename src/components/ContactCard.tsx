@@ -39,7 +39,6 @@ type ContactCardProps = {
 };
 
 const COLORS = {
-  cream: '#F7F1EC',
   lightCream: '#E8DDD6',
   burntOrange: '#C45A10',
   charcoal: '#333333',

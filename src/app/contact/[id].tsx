@@ -1,5 +1,5 @@
-﻿import React, { useState, useCallback, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, Modal, TextInput, Linking, Alert, ActionSheetIOS, Platform } from 'react-native';
+﻿import { useState, useCallback, useEffect } from 'react';
+import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, Linking, Alert, ActionSheetIOS, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { MessageCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';

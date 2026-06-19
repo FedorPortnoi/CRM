@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { FastifyRequest } from 'fastify';
 import { db } from './db';
+import { sha256 } from './crypto';
 
 type SessionRequestInput = {
   request: FastifyRequest;
@@ -29,7 +30,7 @@ function firstHeader(value: string | string[] | undefined): string | undefined {
 }
 
 function sessionHash(sessionId: string): string {
-  return crypto.createHash('sha256').update(sessionId).digest('hex');
+  return sha256(sessionId);
 }
 
 function parseDurationMs(value: string): number | null {

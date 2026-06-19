@@ -35,11 +35,6 @@ type BulkAssignBody = BulkArchiveBody & {
   assigned_to: string;
 };
 
-type BulkTagBody = BulkArchiveBody & {
-  tags: string[];
-  mode?: 'append' | 'replace';
-};
-
 type ContactImportRow = {
   first_name: string;
   last_name?: string;
@@ -429,18 +424,6 @@ function extractKeywordValue(text: string, keywords: string[]): string | null {
   return text.match(pattern)?.[1]?.trim() ?? null;
 }
 
-function _extractVoiceFields(transcript: string): VoiceFields {
-  const phone = transcript.match(/(?:\+7|8)[\s().-]*\d{3}[\s().-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}/)?.[0]?.trim() ?? null;
-  const name = extractKeywordValue(transcript, ['имя', 'зовут', 'меня зовут']);
-  const company = extractKeywordValue(transcript, ['компания']);
-
-  return {
-    name: name ? toTitleCase(name) : null,
-    phone,
-    notes: company ? `Компания: ${company}. ${transcript}` : transcript || null,
-  };
-}
-
 function extractSpeechFields(transcript: string): VoiceFields {
   const phone = transcript.match(/(?:\+7|8)[\s().-]*\d{3}[\s().-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}/)?.[0]?.trim() ?? null;
   const name = extractKeywordValue(transcript, ['menya zovut', 'zovut', 'imya', 'menya', 'меня зовут', 'зовут', 'имя', 'меня']);
@@ -811,114 +794,6 @@ export const ContactsController = {
     return reply.send({ data: tasks });
   },
 
-  getMessages: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { id } = request.params as { id: string };
-
-    const contact = await db.contact.findFirst({
-      where: { id, organization_id: request.user.org_id },
-    });
-    if (!contact) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
-    }
-
-    const messages = await db.message.findMany({
-      where: { contact_id: id, organization_id: request.user.org_id },
-      orderBy: { created_at: 'desc' },
-    });
-
-    return reply.send({ data: messages });
-  },
-  merge: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { id } = request.params as { id: string };
-    const { source_id } = request.body as { source_id: string };
-    const org_id = request.user.org_id;
-
-    if (source_id === id) {
-      return reply.code(422).send({
-        error: { code: 'INVALID_MERGE', message: 'Source and target must be different contacts' },
-      });
-    }
-
-    const source = await db.contact.findFirst({
-      where: { id: source_id, organization_id: org_id },
-    });
-    if (!source) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Source contact not found' } });
-    }
-
-    const target = await db.contact.findFirst({
-      where: { id, organization_id: org_id },
-    });
-    if (!target) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
-    }
-
-    try {
-      await db.$transaction(async (tx) => {
-        await tx.deal.updateMany({
-          where: { contact_id: source.id, organization_id: org_id },
-          data: { contact_id: target.id },
-        });
-        await tx.task.updateMany({
-          where: { contact_id: source.id, organization_id: org_id },
-          data: { contact_id: target.id },
-        });
-        await tx.message.updateMany({
-          where: { contact_id: source.id, organization_id: org_id },
-          data: { contact_id: target.id },
-        });
-        await tx.calendarEvent.updateMany({
-          where: { contact_id: source.id, organization_id: org_id },
-          data: { contact_id: target.id },
-        });
-        const archived = await tx.contact.updateMany({
-          where: { id: source.id, organization_id: org_id },
-          data: { status: ContactStatus.archived },
-        });
-        if (archived.count !== 1) {
-          throw new ScopedMutationMissError('Source contact not found');
-        }
-      });
-    } catch (error) {
-      if (error instanceof ScopedMutationMissError) {
-        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: error.message } });
-      }
-      throw error;
-    }
-
-    const updated = await db.contact.findFirst({
-      where: { id: target.id, organization_id: org_id },
-      include: { assignee: { select: { id: true, name: true } } },
-    });
-
-    void logActivity({ organizationId: org_id, userId: request.user.sub, entityType: 'contact', entityId: target.id, action: 'merged', changes: { source_id } });
-
-    return reply.send({ data: decryptContact(updated ?? target) });
-  },
-  getCalendarEvents: async (_request: FastifyRequest, reply: FastifyReply) => {
-    const request = _request;
-    const { id } = request.params as { id: string };
-
-    const contact = await db.contact.findFirst({
-      where: { id, organization_id: request.user.org_id },
-      select: { id: true },
-    });
-
-    if (!contact) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
-    }
-
-    const events = await db.calendarEvent.findMany({
-      where: {
-        contact_id: id,
-        organization_id: request.user.org_id,
-        status: { not: CalendarEventStatus.cancelled },
-      },
-      orderBy: { start_time: 'asc' },
-    });
-
-    return reply.send({ data: events, meta: { total: events.length } });
-  },
   importCsv: async (request: FastifyRequest, reply: FastifyReply) => {
     const rows = request.body as ContactImportRow[];
 
@@ -932,27 +807,6 @@ export const ContactsController = {
       phone: optionalTrimmedString(row.phone) ? encryptField(optionalTrimmedString(row.phone)!) : undefined,
       mobile: optionalTrimmedString(row.mobile) ? encryptField(optionalTrimmedString(row.mobile)!) : undefined,
       source: optionalTrimmedString(row.source),
-      notes: optionalTrimmedString(row.notes),
-      type: row.type,
-    }));
-
-    const result = await db.$transaction(async (tx) => tx.contact.createMany({ data }));
-
-    return reply.code(201).send({ data: { imported_count: result.count }, meta: {} });
-  },
-  importFromPhone: async (request: FastifyRequest, reply: FastifyReply) => {
-    const rows = request.body as ContactImportRow[];
-
-    const data: Prisma.ContactCreateManyInput[] = rows.map(row => ({
-      organization_id: request.user.org_id,
-      created_by: request.user.sub,
-      first_name: row.first_name.trim(),
-      last_name: optionalTrimmedString(row.last_name),
-      company: optionalTrimmedString(row.company),
-      email: optionalTrimmedString(row.email) ? encryptField(optionalTrimmedString(row.email)!) : undefined,
-      phone: optionalTrimmedString(row.phone) ? encryptField(optionalTrimmedString(row.phone)!) : undefined,
-      mobile: optionalTrimmedString(row.mobile) ? encryptField(optionalTrimmedString(row.mobile)!) : undefined,
-      source: optionalTrimmedString(row.source) ?? 'phone_contacts',
       notes: optionalTrimmedString(row.notes),
       type: row.type,
     }));
@@ -1006,54 +860,6 @@ export const ContactsController = {
       meta: {},
     });
   },
-  bulkTag: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { contact_ids, tags, mode } = request.body as BulkTagBody;
-    const orgId = request.user.org_id;
-    const uniqueContactIds = Array.from(new Set(contact_ids));
-
-    const contacts = await db.contact.findMany({
-      where: {
-        id: { in: uniqueContactIds },
-        organization_id: orgId,
-        status: { not: ContactStatus.archived },
-      },
-      select: { id: true, tags: true },
-    });
-
-    if (contacts.length !== uniqueContactIds.length) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'One or more contacts not found' } });
-    }
-
-    try {
-      await db.$transaction(async (tx) => {
-        for (const contact of contacts) {
-          const existingTags = Array.isArray(contact.tags) ? contact.tags.filter((tag): tag is string => typeof tag === 'string') : [];
-          const nextTags = mode === 'replace' ? tags : Array.from(new Set([...existingTags, ...tags]));
-          const result = await tx.contact.updateMany({
-            where: {
-              id: contact.id,
-              organization_id: orgId,
-              status: { not: ContactStatus.archived },
-            },
-            data: { tags: nextTags },
-          });
-          if (result.count !== 1) {
-            throw new ScopedMutationMissError('One or more contacts not found');
-          }
-        }
-      });
-    } catch (error) {
-      if (error instanceof ScopedMutationMissError) {
-        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: error.message } });
-      }
-      throw error;
-    }
-
-    return reply.send({
-      data: { tagged_count: contacts.length, contact_ids: uniqueContactIds, tags, mode: mode ?? 'append' },
-      meta: {},
-    });
-  },
   bulkArchive: async (request: FastifyRequest, reply: FastifyReply) => {
     const { contact_ids } = request.body as BulkArchiveBody;
     const orgId = request.user.org_id;
@@ -1089,38 +895,6 @@ export const ContactsController = {
       data: { archived_count: result.count, contact_ids: uniqueContactIds },
       meta: {},
     });
-  },
-  transcribeVoice: async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      getYandexConfig('SpeechKit');
-
-      const audioBytes = audioBodyToBuffer(request.body);
-      if (!audioBytes || audioBytes.byteLength === 0) {
-        return reply.code(400).send({
-          error: { code: 'AUDIO_INPUT_REQUIRED', message: 'Provide raw audio bytes' },
-        });
-      }
-
-      const transcript = await transcribeWithYandexSpeechKit(audioBytes);
-      return reply.send({
-        data: {
-          transcript,
-          fields: extractSpeechFields(transcript),
-        },
-        meta: {},
-      });
-    } catch (error) {
-      if (error instanceof ServiceNotConfiguredError) {
-        return sendServiceNotConfigured(reply, error);
-      }
-
-      return reply.code(502).send({
-        error: {
-          code: 'SPEECH_API_ERROR',
-          message: error instanceof Error ? error.message : 'Voice transcription failed',
-        },
-      });
-    }
   },
   scanBusinessCard: async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as BusinessCardBody;

@@ -249,14 +249,6 @@ export function validateProductionConfig(env: NodeJS.ProcessEnv = process.env): 
     requirePassword: true,
   }, env);
 
-  if (readTrimmedEnv('REDIS_URL', env)) {
-    validateProductionUrl('REDIS_URL', { allowedProtocols: ['redis:', 'rediss:'] }, env);
-  }
-
-  if (readTrimmedEnv('EXPO_PUBLIC_API_URL', env)) {
-    getDeploymentSafeUrl('EXPO_PUBLIC_API_URL', { allowedProtocols: ['https:'] }, env);
-  }
-
   const yandexClientId = readTrimmedEnv('YANDEX_CLIENT_ID', env);
   const yandexClientSecret = readTrimmedEnv('YANDEX_CLIENT_SECRET', env);
   if (yandexClientId || yandexClientSecret) {

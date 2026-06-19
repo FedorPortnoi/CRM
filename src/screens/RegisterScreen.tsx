@@ -3,9 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
-  KeyboardAvoidingView,
   ScrollView,
-  Platform,
   StyleSheet,
   Linking,
 } from 'react-native';
@@ -18,10 +16,7 @@ export default function RegisterScreen() {
   const router = useRouter();
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <View style={styles.container}>
       <View style={styles.circle1} pointerEvents="none" />
       <View style={styles.circle2} pointerEvents="none" />
       <View style={styles.circle3} pointerEvents="none" />
@@ -67,7 +62,7 @@ export default function RegisterScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

@@ -13,7 +13,6 @@ export interface ConflictRecord {
 interface SyncState {
   status: SyncStatus;
   conflicts: ConflictRecord[];
-  setOffline: () => void;
   setSyncing: () => void;
   setSynced: () => void;
   addConflict: (c: ConflictRecord) => void;
@@ -23,7 +22,6 @@ interface SyncState {
 export const useSyncStore = create<SyncState>()((set) => ({
   status: 'synced',
   conflicts: [],
-  setOffline: () => set({ status: 'offline' }),
   setSyncing: () => set({ status: 'syncing' }),
   setSynced: () => set({ status: 'synced' }),
   addConflict: (c) => set((s) => ({ conflicts: [...s.conflicts, c] })),

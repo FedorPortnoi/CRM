@@ -44,21 +44,12 @@ const BusinessCardSchema = z.object({
   message: 'text or image_base64 is required',
 });
 
-const MergeContactSchema = z.object({
-  source_id: z.string().uuid(),
-});
-
 const BulkArchiveSchema = z.object({
   contact_ids: z.array(z.string().uuid()).min(1).max(100),
 });
 
 const BulkAssignSchema = BulkArchiveSchema.extend({
   assigned_to: z.string().uuid(),
-});
-
-const BulkTagSchema = BulkArchiveSchema.extend({
-  tags: z.array(z.string().trim().min(1).max(50)).min(1).max(20),
-  mode: z.enum(['append', 'replace']).default('append'),
 });
 
 const ContactFilterSchema = z.object({
@@ -114,43 +105,24 @@ export default async function contactsRoutes(fastify: FastifyInstance) {
   f.get('/:id/activity', { preHandler: [authenticate] }, ContactsController.getActivity);
   f.get('/:id/deals', { preHandler: [authenticate] }, ContactsController.getDeals);
   f.get('/:id/tasks', { preHandler: [authenticate] }, ContactsController.getTasks);
-  f.get('/:id/messages', { preHandler: [authenticate] }, ContactsController.getMessages);
-  f.get('/:id/events', { preHandler: [authenticate] }, ContactsController.getCalendarEvents);
 
   f.post('/import-csv', {
     preHandler: [authenticate],
     schema: { body: ImportContactsCsvSchema },
   }, ContactsController.importCsv);
-  f.post('/import', {
-    preHandler: [authenticate],
-    schema: { body: ImportContactsCsvSchema },
-  }, ContactsController.importCsv);
-  f.post('/import/phone', {
-    preHandler: [authenticate],
-    schema: { body: ImportContactsCsvSchema },
-  }, ContactsController.importFromPhone);
+
   f.post('/business-card/scan', {
     preHandler: [authenticate],
     schema: { body: BusinessCardSchema },
   }, ContactsController.scanBusinessCard);
-  f.post('/transcribe-voice', {
-    preHandler: [authenticate],
-  }, ContactsController.transcribeVoice);
+
   f.post('/bulk-assign', {
     preHandler: [authenticate],
     schema: { body: BulkAssignSchema },
   }, ContactsController.bulkAssign);
-  f.post('/bulk-tag', {
-    preHandler: [authenticate],
-    schema: { body: BulkTagSchema },
-  }, ContactsController.bulkTag);
+
   f.post('/bulk-archive', {
     preHandler: [authenticate],
     schema: { body: BulkArchiveSchema },
   }, ContactsController.bulkArchive);
-
-  f.post('/:id/merge', {
-    preHandler: [authenticate],
-    schema: { body: MergeContactSchema },
-  }, ContactsController.merge);
 }

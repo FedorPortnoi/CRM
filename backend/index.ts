@@ -193,15 +193,12 @@ async function start() {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
-  process.on('SIGTERM', async () => {
+  const shutdown = async () => {
     await server.close();
     process.exit(0);
-  });
-
-  process.on('SIGINT', async () => {
-    await server.close();
-    process.exit(0);
-  });
+  };
+  process.on('SIGTERM', () => void shutdown());
+  process.on('SIGINT', () => void shutdown());
 
   const port = parseInt(process.env.PORT ?? '3000', 10);
 

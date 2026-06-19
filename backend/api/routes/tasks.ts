@@ -71,7 +71,6 @@ export default async function tasksRoutes(fastify: FastifyInstance) {
   // Static convenience routes — registered before /:id so Fastify resolves them correctly
   f.get('/assignees', { preHandler: [authenticate] }, TasksController.assignees);
   f.get('/today', { preHandler: [authenticate], schema: { querystring: ScopeQuerySchema } }, TasksController.dueToday);
-  f.get('/overdue', { preHandler: [authenticate], schema: { querystring: ScopeQuerySchema } }, TasksController.overdue);
   f.post('/suggest-contact', {
     preHandler: [authenticate],
     schema: { body: z.object({ title: z.string().min(1).max(500) }) },
@@ -85,6 +84,5 @@ export default async function tasksRoutes(fastify: FastifyInstance) {
   }, TasksController.update);
 
   f.post('/:id/complete', { preHandler: [authenticate] }, TasksController.complete);
-  f.post('/:id/start', { preHandler: [authenticate] }, TasksController.startProgress);
   f.delete('/:id', { preHandler: [authenticate] }, TasksController.cancel);
 }

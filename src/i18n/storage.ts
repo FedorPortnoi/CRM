@@ -17,5 +17,3 @@ export const setStoredLanguage = async (lang: Language): Promise<void> => {
 export const hasSelectedLanguage = async (): Promise<boolean> => (
   (await AsyncStorage.getItem(SEL_KEY)) === 'true'
 );
-
-export type AppLanguage = Language;

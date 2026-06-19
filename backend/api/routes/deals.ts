@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { DealsController } from '../controllers/deals';
-import { DEFAULT_MARKET_PROFILE, normalizeCurrencyCode } from '../../config/market';
+import { DEFAULT_CURRENCY, normalizeCurrencyCode } from '../../config/market';
 
 const CurrencySchema = z.string().trim().length(3).transform(normalizeCurrencyCode);
 
@@ -12,7 +12,7 @@ const CreateDealSchema = z.object({
   pipeline_id: z.string().uuid(),
   stage_id: z.string().uuid(),
   value: z.number().nonnegative().optional(),
-  currency: CurrencySchema.default(DEFAULT_MARKET_PROFILE.currency),
+  currency: CurrencySchema.default(DEFAULT_CURRENCY),
   expected_close: z.string().date().optional(),
   probability: z.number().min(0).max(100).optional(),
   next_action: z.string().max(500).optional(),
@@ -60,20 +60,6 @@ const StaleDealScanSchema = z.object({
   threshold_days: z.coerce.number().int().min(0).max(365).optional(),
 });
 
-const CreatePipelineSchema = z.object({
-  name: z.string().min(1).max(100),
-  description: z.string().max(500).optional(),
-  is_default: z.boolean().optional(),
-});
-
-const CreateStageSchema = z.object({
-  name: z.string().min(1).max(100),
-  position: z.number().int().nonnegative(),
-  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-  is_won_stage: z.boolean().default(false),
-  is_lost_stage: z.boolean().default(false),
-});
-
 const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
   await request.jwtVerify();
 };
@@ -119,28 +105,6 @@ export default async function dealsRoutes(fastify: FastifyInstance) {
     schema: { body: LostReasonSchema },
   }, DealsController.markLost);
 
-  f.delete('/:id', { preHandler: [authenticate] }, DealsController.archive);
-
   // Pipeline management — static paths registered before /:id; Fastify radix tree resolves correctly
   f.get('/pipelines', { preHandler: [authenticate] }, DealsController.listPipelines);
-
-  f.post('/pipelines', {
-    preHandler: [authenticate],
-    schema: { body: CreatePipelineSchema },
-  }, DealsController.createPipeline);
-
-  f.get('/pipelines/:id', { preHandler: [authenticate] }, DealsController.getPipeline);
-  f.patch('/pipelines/:id', { preHandler: [authenticate] }, DealsController.updatePipeline);
-  f.delete('/pipelines/:id', { preHandler: [authenticate] }, DealsController.deletePipeline);
-
-  // Stage management
-  f.get('/pipelines/:id/stages', { preHandler: [authenticate] }, DealsController.listStages);
-
-  f.post('/pipelines/:id/stages', {
-    preHandler: [authenticate],
-    schema: { body: CreateStageSchema },
-  }, DealsController.createStage);
-
-  f.patch('/stages/:id', { preHandler: [authenticate] }, DealsController.updateStage);
-  f.delete('/stages/:id', { preHandler: [authenticate] }, DealsController.deleteStage);
 }

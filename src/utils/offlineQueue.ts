@@ -166,25 +166,6 @@ export async function enqueue(
   });
 }
 
-export async function dequeue(): Promise<QueuedMutation | null> {
-  return withQueueLock(async () => {
-    const queue: QueuedMutation[] = await readQueue();
-
-    if (queue.length === 0) {
-      return null;
-    }
-
-    const mutation: QueuedMutation | undefined = queue.shift();
-    await writeQueue(queue);
-
-    if (mutation?.bodyKey) {
-      await SecureStore.deleteItemAsync(mutation.bodyKey);
-    }
-
-    return mutation ?? null;
-  });
-}
-
 function entityFromUrl(url: string): string {
   const parts = url.replace(/\?.*$/, '').split('/').filter(Boolean);
   for (let i = parts.length - 1; i >= 0; i--) {
@@ -343,20 +324,5 @@ export async function flush(): Promise<void> {
     for (const bodyKey of processedBodyKeys) {
       await SecureStore.deleteItemAsync(bodyKey);
     }
-  });
-}
-
-export async function clear(): Promise<void> {
-  await withQueueLock(async () => {
-    const storedQueue = await readStoredQueue();
-
-    await AsyncStorage.removeItem(STORAGE_KEY);
-
-    await Promise.all(
-      storedQueue
-        .map((mutation) => mutation.bodyKey)
-        .filter((bodyKey): bodyKey is string => typeof bodyKey === 'string')
-        .map((bodyKey) => SecureStore.deleteItemAsync(bodyKey)),
-    );
   });
 }

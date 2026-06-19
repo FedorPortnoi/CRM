@@ -29,16 +29,13 @@ interface ChatState {
   messages: Record<string, ChatMessage[]>; // channel → newest-first
   hasMore: Record<string, boolean>;
   ws: WebSocket | null;
-  connected: boolean;
   loadingChannels: boolean;
 
   connect: (token: string) => void;
-  disconnect: () => void;
   fetchChannels: () => Promise<void>;
   fetchMessages: (channel: string, before?: string) => Promise<void>;
   sendMessage: (channel: string, body: string) => Promise<void>;
   markRead: (channel: string) => Promise<void>;
-  clearChannel: (channel: string) => void;
   _addIncoming: (msg: ChatMessage) => void;
 }
 
@@ -47,7 +44,6 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   messages: {},
   hasMore: {},
   ws: null,
-  connected: false,
   loadingChannels: false,
 
   connect: (token: string) => {
@@ -56,9 +52,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
     const socket = new WebSocket(`${wsUrl()}?token=${encodeURIComponent(token)}`);
 
-    socket.onopen = () => set({ connected: true });
-    socket.onclose = () => set({ ws: null, connected: false });
-    socket.onerror = () => set({ ws: null, connected: false });
+    socket.onopen = () => {};
+    socket.onclose = () => set({ ws: null });
+    socket.onerror = () => set({ ws: null });
 
     socket.onmessage = (event: MessageEvent) => {
       try {
@@ -70,11 +66,6 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     };
 
     set({ ws: socket });
-  },
-
-  disconnect: () => {
-    get().ws?.close();
-    set({ ws: null, connected: false });
   },
 
   fetchChannels: async () => {
@@ -158,13 +149,6 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         ),
       }));
     } catch { /* ignore */ }
-  },
-
-  clearChannel: (channel: string) => {
-    set((state) => {
-      const { [channel]: _, ...rest } = state.messages;
-      return { messages: rest };
-    });
   },
 
   _addIncoming: (msg: ChatMessage) => {

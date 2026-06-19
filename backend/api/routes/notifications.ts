@@ -14,15 +14,6 @@ const notificationsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     NotificationsController.registerToken,
   );
 
-  fastify.post(
-    '/send',
-    {
-      preHandler: [authenticate],
-      schema: { body: z.object({ user_id: z.string().uuid(), title: z.string().min(1).max(200), body: z.string().min(1).max(1000) }) },
-    },
-    NotificationsController.sendNotification,
-  );
-
   fastify.get(
     '/',
     {

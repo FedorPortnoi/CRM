@@ -22,8 +22,4 @@ export default async function onboardingRoutes(fastify: FastifyInstance): Promis
     preHandler: [authenticate],
     schema: { body: UpdateStateSchema },
   }, OnboardingController.updateState);
-
-  f.post('/example-data', { preHandler: [authenticate] }, OnboardingController.loadExampleData);
-
-  f.delete('/example-data', { preHandler: [authenticate] }, OnboardingController.clearExampleData);
 }

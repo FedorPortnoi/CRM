@@ -1,6 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../services/db';
-import { tgSendCode, tgVerifyAndPull, TgContact } from '../../services/importTelegram';
+import { tgSendCode, tgVerifyAndPull } from '../../services/importTelegram';
 import { importFromBitrix24 } from '../../services/importBitrix24';
 
 // ── Telegram ─────────────────────────────────────────────────────────────────

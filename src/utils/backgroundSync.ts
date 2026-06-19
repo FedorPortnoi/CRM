@@ -44,8 +44,6 @@ async function performSync(): Promise<void> {
     body.data.events.length > 0
   ) {
     await queryClient.invalidateQueries({ queryKey: ['contacts'] });
-    await queryClient.invalidateQueries({ queryKey: ['deals'] });
-    await queryClient.invalidateQueries({ queryKey: ['tasks'] });
     await queryClient.invalidateQueries({ queryKey: ['events'] });
   }
 
@@ -70,16 +68,5 @@ export async function registerBackgroundSync(): Promise<void> {
     });
   } catch {
     // Background fetch not available in Expo Go; silently skip.
-  }
-}
-
-export async function runSync(): Promise<void> {
-  const { setSyncing, setSynced } = useSyncStore.getState();
-  setSyncing();
-  try {
-    await performSync();
-    setSynced();
-  } catch {
-    setSynced();
   }
 }

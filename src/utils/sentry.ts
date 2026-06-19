@@ -37,11 +37,3 @@ export function initSentry(): void {
     },
   });
 }
-
-export function captureError(error: unknown, context?: Record<string, unknown>): void {
-  if (!DSN) return;
-  Sentry.withScope((scope) => {
-    if (context) scope.setExtras(stripPii(context) as Record<string, unknown>);
-    Sentry.captureException(error);
-  });
-}

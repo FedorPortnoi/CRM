@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { db } from './db';
+import { sha256 } from './crypto';
 
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -8,7 +9,7 @@ export function generateOtp(): string {
 }
 
 function hashCode(code: string): string {
-  return crypto.createHash('sha256').update(code).digest('hex');
+  return sha256(code);
 }
 
 export async function issueCode(userId: string, channel: 'sms' | 'email'): Promise<string> {

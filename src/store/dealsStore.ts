@@ -162,8 +162,6 @@ export const useDealsStore = create<DealsState>()((set, get) => ({
   },
 
   moveDeal: async (dealId: string, stageId: string): Promise<void> => {
-    const snapshot: Deal[] = get().deals;
-
     set({
       deals: get().deals.map((d: Deal) =>
         d.id === dealId ? { ...d, stage_id: stageId, stage_entered_at: new Date().toISOString() } : d,

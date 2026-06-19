@@ -66,5 +66,4 @@ export default async function workflowsRoutes(fastify: FastifyInstance): Promise
   }, WorkflowsController.update);
 
   f.delete('/:id', { preHandler: [authenticate] }, WorkflowsController.archive);
-  f.get('/:id/runs', { preHandler: [authenticate] }, WorkflowsController.runs);
 }

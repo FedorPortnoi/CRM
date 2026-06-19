@@ -1,7 +1,7 @@
 import { DealStatus, TaskStatus, Prisma } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
-import { DEFAULT_MARKET_PROFILE, normalizeCurrencyCode } from '../../config/market';
+import { DEFAULT_CURRENCY, normalizeCurrencyCode } from '../../config/market';
 
 type PeriodValue = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
 type GroupByValue = 'day' | 'week' | 'month' | 'quarter';
@@ -327,7 +327,7 @@ registerTool(
     properties: {
       period: { type: 'string', enum: ['today', 'week', 'month', 'quarter', 'year', 'custom'], default: 'month' },
       group_by: { type: 'string', enum: ['day', 'week', 'month', 'quarter'], default: 'month' },
-      currency: { type: 'string', default: DEFAULT_MARKET_PROFILE.currency },
+      currency: { type: 'string', default: DEFAULT_CURRENCY },
       start: { type: 'string', description: 'ISO 8601 start (required when period=custom)' },
       end: { type: 'string', description: 'ISO 8601 end (required when period=custom)' },
       pipeline_id: { type: 'string' },
@@ -339,7 +339,7 @@ registerTool(
     const group_by = isGroupBy(args.group_by) ? args.group_by : 'month';
     const currency = typeof args.currency === 'string'
       ? normalizeCurrencyCode(args.currency)
-      : DEFAULT_MARKET_PROFILE.currency;
+      : DEFAULT_CURRENCY;
     const start = typeof args.start === 'string' ? args.start : undefined;
     const end = typeof args.end === 'string' ? args.end : undefined;
     const pipeline_id = typeof args.pipeline_id === 'string' ? args.pipeline_id : undefined;

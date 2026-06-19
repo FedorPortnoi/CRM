@@ -8,7 +8,6 @@ const STORAGE_KEY = 'crm_task_scope';
 interface TaskScopeState {
   /** 'direct' = my reports (one level, default); 'subtree' = whole team. */
   scope: TaskScope;
-  hydrated: boolean;
   /** Load the manager's saved default from the device. */
   hydrate: () => Promise<void>;
   /** Change the view and persist it as the new default. */
@@ -22,14 +21,13 @@ interface TaskScopeState {
  */
 export const useTaskScopeStore = create<TaskScopeState>((set) => ({
   scope: 'direct',
-  hydrated: false,
 
   hydrate: async (): Promise<void> => {
     try {
       const saved = await SecureStore.getItemAsync(STORAGE_KEY);
-      set({ scope: saved === 'subtree' ? 'subtree' : 'direct', hydrated: true });
+      set({ scope: saved === 'subtree' ? 'subtree' : 'direct' });
     } catch {
-      set({ hydrated: true });
+      // best-effort loading; default 'direct' scope applies
     }
   },
 

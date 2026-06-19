@@ -3,16 +3,14 @@ import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 
 const UPLOAD_EXPIRES_IN = 300; // 5 minutes
 
-function getClient(): S3Client {
-  return new S3Client({
-    region: process.env.S3_REGION ?? 'ru-central1',
-    endpoint: process.env.S3_ENDPOINT ?? 'https://storage.yandexcloud.net',
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? '',
-    },
-  });
-}
+const client = new S3Client({
+  region: process.env.S3_REGION ?? 'ru-central1',
+  endpoint: process.env.S3_ENDPOINT ?? 'https://storage.yandexcloud.net',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? '',
+  },
+});
 
 function getBucket(): string {
   return process.env.S3_BUCKET ?? 'crm-uploads-users';
@@ -39,7 +37,6 @@ export async function generateUploadUrl(
   mimeType: string,
   maxSizeBytes: number,
 ): Promise<{ uploadUrl: string; fields: Record<string, string>; fileUrl: string; key: string }> {
-  const client = getClient();
   const key = buildKey(orgId, entityType, filename);
 
   const { url, fields } = await createPresignedPost(client, {
@@ -62,6 +59,5 @@ export async function generateUploadUrl(
 }
 
 export async function deleteFile(key: string): Promise<void> {
-  const client = getClient();
   await client.send(new DeleteObjectCommand({ Bucket: getBucket(), Key: key }));
 }

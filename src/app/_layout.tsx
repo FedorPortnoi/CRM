@@ -148,12 +148,9 @@ export default function RootLayout() {
           {/* Screens that manage their own full-screen UI — no global header */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
-          <Stack.Screen name="register" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ headerShown: false }} />
           <Stack.Screen name="language-select" options={{ headerShown: false }} />
           <Stack.Screen name="set-password" options={{ headerShown: false }} />
-          <Stack.Screen name="join-company" options={{ headerShown: false }} />
-          <Stack.Screen name="contacts/import" options={{ headerShown: false }} />
           <Stack.Screen name="workflows/index" options={{ headerShown: false }} />
         </Stack>
         <OnboardingWalkthrough />

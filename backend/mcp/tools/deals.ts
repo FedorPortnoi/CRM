@@ -2,7 +2,7 @@ import { Prisma, DealStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
 import { requireMcpWrite, validateMcpWriteReferences } from '../validation';
-import { DEFAULT_MARKET_PROFILE, normalizeCurrencyCode } from '../../config/market';
+import { DEFAULT_CURRENCY, normalizeCurrencyCode } from '../../config/market';
 import { evaluateWorkflows } from '../../services/workflows';
 
 type DealStatusValue = 'open' | 'won' | 'lost' | 'archived';
@@ -104,7 +104,7 @@ registerTool(
       contact_id: { type: 'string', description: 'Contact UUID' },
       pipeline_id: { type: 'string', description: 'Pipeline UUID' },
       stage_id: { type: 'string', description: 'Stage UUID (must belong to the pipeline)' },
-      currency: { type: 'string', description: `ISO currency code; defaults to ${DEFAULT_MARKET_PROFILE.currency}` },
+      currency: { type: 'string', description: `ISO currency code; defaults to ${DEFAULT_CURRENCY}` },
       value: { type: 'number', description: 'Deal value' },
       expected_close: { type: 'string', description: 'Expected close date (ISO 8601)' },
       probability: { type: 'number', description: 'Win probability 0-100' },
@@ -123,7 +123,7 @@ registerTool(
     const stage_id = typeof args.stage_id === 'string' ? args.stage_id : '';
     const currency = typeof args.currency === 'string'
       ? normalizeCurrencyCode(args.currency)
-      : DEFAULT_MARKET_PROFILE.currency;
+      : DEFAULT_CURRENCY;
     const value = typeof args.value === 'number' ? args.value : undefined;
     const expected_close = typeof args.expected_close === 'string' ? args.expected_close : undefined;
     const probability = typeof args.probability === 'number' ? args.probability : undefined;

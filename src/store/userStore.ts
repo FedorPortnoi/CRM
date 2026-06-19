@@ -14,30 +14,15 @@ type AuthUser = {
   must_change_email?: boolean;
 };
 
-type PendingVerification = {
-  userId: string;
-  email: string;
-  phone: string;
-};
-
 interface UserState {
   user: AuthUser | null;
   token: string | null;
   isLoading: boolean;
   error: string | null;
-  pendingVerification: PendingVerification | null;
   login: (email: string, password: string) => Promise<void>;
   join: (companyCode: string, username: string, password: string) => Promise<void>;
-  register: (
-    email: string,
-    password: string,
-    name: string,
-    orgName: string,
-    phone: string,
-  ) => Promise<void>;
   verifyOtp: (userId: string, code: string, channel: 'sms' | 'email') => Promise<void>;
   resendVerification: (userId: string, channel: 'sms' | 'email') => Promise<void>;
-  clearPendingVerification: () => void;
   changePassword: (newPassword: string) => Promise<void>;
   setCredentials: (email: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -70,7 +55,6 @@ export const useUserStore = create<UserState>()((set) => ({
   token: null,
   isLoading: false,
   error: null,
-  pendingVerification: null,
 
   login: async (email: string, password: string): Promise<void> => {
     set({ isLoading: true, error: null });
@@ -118,32 +102,6 @@ export const useUserStore = create<UserState>()((set) => ({
     }
   },
 
-  register: async (
-    email: string,
-    password: string,
-    name: string,
-    orgName: string,
-    phone: string,
-  ): Promise<void> => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await fetch(`${API_URL}/auth/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name, org_name: orgName, phone }),
-      });
-      const body: unknown = await response.json();
-      if (!response.ok) {
-        throw new Error(extractErrorMessage(body, response.status));
-      }
-      const { data } = body as { data: { user_id: string; email: string; needs_verification: boolean } };
-      set({ pendingVerification: { userId: data.user_id, email: data.email, phone }, isLoading: false });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      set({ error: msg, isLoading: false });
-    }
-  },
-
   verifyOtp: async (userId: string, code: string, channel: 'sms' | 'email'): Promise<void> => {
     set({ isLoading: true, error: null });
     try {
@@ -160,7 +118,7 @@ export const useUserStore = create<UserState>()((set) => ({
       const { user, token } = data;
       await SecureStore.setItemAsync('crm_auth_token', token);
       await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(user));
-      set({ user, token, pendingVerification: null, isLoading: false });
+      set({ user, token, isLoading: false });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       set({ error: msg, isLoading: false });
@@ -178,8 +136,6 @@ export const useUserStore = create<UserState>()((set) => ({
       // silent — UI shows generic "try again" message
     }
   },
-
-  clearPendingVerification: () => set({ pendingVerification: null }),
 
   changePassword: async (newPassword: string): Promise<void> => {
     const token = await SecureStore.getItemAsync('crm_auth_token');

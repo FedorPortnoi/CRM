@@ -137,11 +137,6 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     preHandler: [authenticate],
     schema: { body: SetCredentialsSchema },
   }, AuthController.setCredentials);
-  fastify.get('/onboarding', { preHandler: [authenticate] }, AuthController.getOnboarding);
-  fastify.patch('/onboarding', {
-    preHandler: [authenticate],
-    schema: { body: OnboardingSchema },
-  }, AuthController.updateOnboarding);
   fastify.post('/verify', {
     config: { rateLimit: authRateLimit(10, '15 minutes') },
     schema: { body: VerifyOtpSchema },

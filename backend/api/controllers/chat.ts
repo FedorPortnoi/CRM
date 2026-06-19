@@ -38,10 +38,6 @@ async function pushChatNotification(
   );
 }
 
-export function dmChannel(uid1: string, uid2: string): string {
-  return uid1 < uid2 ? `dm:${uid1}:${uid2}` : `dm:${uid2}:${uid1}`;
-}
-
 type ChannelRow = {
   channel: string;
   last_body: string | null;

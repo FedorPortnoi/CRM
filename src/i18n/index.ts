@@ -22,10 +22,4 @@ export async function initI18n(lang: Language = 'ru'): Promise<void> {
   await i18n.changeLanguage(lang);
 }
 
-export async function changeAppLanguage(lang: Language): Promise<void> {
-  const { setStoredLanguage } = await import('./storage');
-  await setStoredLanguage(lang);
-  await initI18n(lang);
-}
-
 export default i18n;

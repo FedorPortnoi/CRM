@@ -47,9 +47,4 @@ export default async function capturesRoutes(fastify: FastifyInstance) {
     preHandler: [authenticate],
     schema: { params: CaptureIdParamsSchema },
   }, CapturesController.dismiss);
-
-  f.post('/:id/create-contact', {
-    preHandler: [authenticate],
-    schema: { params: CaptureIdParamsSchema },
-  }, CapturesController.createContact);
 }
