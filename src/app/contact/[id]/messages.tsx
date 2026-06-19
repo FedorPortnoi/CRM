@@ -91,24 +91,24 @@ function formatTimestamp(value: string): string {
   });
 }
 
-function formatChannel(channel: MessageChannel): string {
-  if (channel === 'in_app') return 'In-app';
+function formatChannel(channel: MessageChannel, t: (key: string) => string): string {
+  if (channel === 'in_app') return t('contacts.channelInApp');
   return channel.toUpperCase();
 }
 
 function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 60) return `${seconds} с`;
   const minutes = Math.floor(seconds / 60);
   const remaining = seconds % 60;
-  if (remaining === 0) return `${minutes}m`;
-  return `${minutes}m ${remaining}s`;
+  if (remaining === 0) return `${minutes} мин`;
+  return `${minutes} мин ${remaining} с`;
 }
 
 function messageBodyParts(body: string): { bodyText: string; duration: string | null; isCall: boolean } {
   const match = body.match(/^\[(\d+)s\]\s*(.*)$/);
   if (match) {
     const durationSeconds = Number(match[1]);
-    const text = match[2]?.trim() || 'Call logged';
+    const text = match[2]?.trim() || 'Звонок записан';
     return {
       bodyText: text,
       duration: Number.isFinite(durationSeconds) ? formatDuration(durationSeconds) : null,
@@ -120,19 +120,19 @@ function messageBodyParts(body: string): { bodyText: string; duration: string | 
   return {
     bodyText: body,
     duration: null,
-    isCall: lowerBody.startsWith('call logged') || lowerBody.startsWith('call note'),
+    isCall: lowerBody.startsWith('call logged') || lowerBody.startsWith('call note') || lowerBody.startsWith('звонок'),
   };
 }
 
-function statusText(message: Message): string {
+function statusText(message: Message, t: (key: string) => string): string {
   if (message.direction === 'inbound') {
-    return message.read_at !== null || message.status === 'read' ? 'Read' : 'Unread';
+    return message.read_at !== null || message.status === 'read' ? t('contacts.statusRead') : t('contacts.statusUnread');
   }
-  if (message.status === 'failed') return 'Failed';
-  if (message.status === 'pending') return 'Pending';
-  if (message.status === 'delivered') return 'Delivered';
-  if (message.status === 'read') return 'Read';
-  return 'Sent';
+  if (message.status === 'failed') return t('contacts.statusFailed');
+  if (message.status === 'pending') return t('contacts.statusPending');
+  if (message.status === 'delivered') return t('contacts.statusDelivered');
+  if (message.status === 'read') return t('contacts.statusRead');
+  return t('contacts.statusSent');
 }
 
 function readErrorMessage(response: Response, fallback: string): Promise<string> {
@@ -169,9 +169,9 @@ export default function ContactMessagesScreen(): JSX.Element {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const contactTitle = useMemo<string>(() => {
-    if (contact === null) return 'Conversation';
-    return fullName(contact) || 'Conversation';
-  }, [contact]);
+    if (contact === null) return t('contacts.conversation');
+    return fullName(contact) || t('contacts.conversation');
+  }, [contact, t]);
 
   const markInboundRead = useCallback(
     async (loadedMessages: Message[]): Promise<void> => {
@@ -216,7 +216,7 @@ export default function ContactMessagesScreen(): JSX.Element {
   const loadConversation = useCallback(
     async (refreshing: boolean): Promise<void> => {
       if (!token) {
-        setFetchError('You need to sign in again.');
+        setFetchError(t('contacts.signInAgain'));
         setIsLoading(false);
         setIsRefreshing(false);
         return;
@@ -240,10 +240,10 @@ export default function ContactMessagesScreen(): JSX.Element {
         ]);
 
         if (!contactResponse.ok) {
-          throw new Error(await readErrorMessage(contactResponse, 'Failed to load contact'));
+          throw new Error(await readErrorMessage(contactResponse, 'Не удалось загрузить контакт'));
         }
         if (!messagesResponse.ok) {
-          throw new Error(await readErrorMessage(messagesResponse, 'Failed to load conversation'));
+          throw new Error(await readErrorMessage(messagesResponse, 'Не удалось загрузить переписку'));
         }
 
         const contactBody = (await contactResponse.json()) as ApiResponse<Contact>;
@@ -254,7 +254,7 @@ export default function ContactMessagesScreen(): JSX.Element {
         setMessages(sortedMessages);
         void markInboundRead(sortedMessages);
       } catch (error: unknown) {
-        setFetchError(submitErrorMessage(error, 'Failed to load conversation'));
+        setFetchError(submitErrorMessage(error, 'Не удалось загрузить переписку'));
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
@@ -287,7 +287,7 @@ export default function ContactMessagesScreen(): JSX.Element {
     if (!token) return;
     const trimmedBody = noteBody.trim();
     if (trimmedBody === '') {
-      setSubmitError('Enter a note before sending.');
+      setSubmitError(t('contacts.enterNoteFirst'));
       return;
     }
 
@@ -310,14 +310,14 @@ export default function ContactMessagesScreen(): JSX.Element {
       const response = result.response;
 
       if (!response.ok) {
-        throw new Error(await readErrorMessage(response, 'Failed to send note'));
+        throw new Error(await readErrorMessage(response, 'Не удалось отправить заметку'));
       }
 
       const body = (await response.json()) as ApiResponse<Message>;
       appendMessage(body.data);
       setNoteBody('');
     } catch (error: unknown) {
-      setSubmitError(submitErrorMessage(error, 'Failed to send note'));
+      setSubmitError(submitErrorMessage(error, 'Не удалось отправить заметку'));
     } finally {
       setIsSubmitting(false);
     }
@@ -332,7 +332,7 @@ export default function ContactMessagesScreen(): JSX.Element {
       parsedMinutes !== undefined &&
       (!Number.isFinite(parsedMinutes) || parsedMinutes < 0)
     ) {
-      setSubmitError('Enter a valid call duration.');
+      setSubmitError(t('contacts.enterValidDuration'));
       return;
     }
 
@@ -340,7 +340,7 @@ export default function ContactMessagesScreen(): JSX.Element {
     const payload: LogCallRequest = {
       contact_id: id,
       direction: callDirection,
-      notes: trimmedNotes === '' ? 'Call logged' : `Call logged - ${trimmedNotes}`,
+      notes: trimmedNotes === '' ? 'Звонок записан' : `Звонок записан - ${trimmedNotes}`,
       occurred_at: new Date().toISOString(),
     };
 
@@ -368,7 +368,7 @@ export default function ContactMessagesScreen(): JSX.Element {
       const response = result.response;
 
       if (!response.ok) {
-        throw new Error(await readErrorMessage(response, 'Failed to log call'));
+        throw new Error(await readErrorMessage(response, 'Не удалось записать звонок'));
       }
 
       const body = (await response.json()) as ApiResponse<Message>;
@@ -376,7 +376,7 @@ export default function ContactMessagesScreen(): JSX.Element {
       setCallNotes('');
       setDurationMinutes('');
     } catch (error: unknown) {
-      setSubmitError(submitErrorMessage(error, 'Failed to log call'));
+      setSubmitError(submitErrorMessage(error, 'Не удалось записать звонок'));
     } finally {
       setIsSubmitting(false);
     }
@@ -394,7 +394,7 @@ export default function ContactMessagesScreen(): JSX.Element {
           <View style={[styles.messageBubble, isOutbound ? styles.outboundBubble : styles.inboundBubble]}>
             <View style={styles.messageMetaRow}>
               <Text style={[styles.messageChannel, mutedTextStyle]}>
-                {bodyParts.isCall ? 'Call' : formatChannel(item.channel)}
+                {bodyParts.isCall ? t('contacts.channelCall') : formatChannel(item.channel, t)}
               </Text>
               <Text style={[styles.messageTime, mutedTextStyle]}>
                 {formatTimestamp(item.created_at)}
@@ -406,13 +406,13 @@ export default function ContactMessagesScreen(): JSX.Element {
             <Text style={[styles.messageText, bubbleTextStyle]}>{bodyParts.bodyText}</Text>
             <View style={styles.statusRow}>
               {item.status === 'read' ? <Check size={12} color={isOutbound ? '#D8E8FF' : '#B07868'} /> : null}
-              <Text style={[styles.statusText, mutedTextStyle]}>{statusText(item)}</Text>
+              <Text style={[styles.statusText, mutedTextStyle]}>{statusText(item, t)}</Text>
             </View>
           </View>
         </View>
       );
     },
-    [],
+    [t],
   );
 
   const noteDisabled = isSubmitting || noteBody.trim() === '';
@@ -423,7 +423,7 @@ export default function ContactMessagesScreen(): JSX.Element {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={88}
     >
-      <Stack.Screen options={{ title: contactTitle, headerBackTitle: 'Contact' }} />
+      <Stack.Screen options={{ title: contactTitle, headerBackTitle: t('contacts.title') }} />
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
@@ -433,7 +433,7 @@ export default function ContactMessagesScreen(): JSX.Element {
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{fetchError}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => { void loadConversation(false); }}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -462,8 +462,8 @@ export default function ContactMessagesScreen(): JSX.Element {
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <MessageCircle size={34} color="#CFADA3" />
-                <Text style={styles.emptyTitle}>No conversation yet</Text>
-                <Text style={styles.emptyText}>Start with a note or log the latest call.</Text>
+                <Text style={styles.emptyTitle}>{t('contacts.noConversationYet')}</Text>
+                <Text style={styles.emptyText}>{t('contacts.startConversation')}</Text>
               </View>
             }
           />
@@ -484,7 +484,7 @@ export default function ContactMessagesScreen(): JSX.Element {
               >
                 <MessageCircle size={16} color={mode === 'note' ? '#FFFFFF' : '#C4704F'} />
                 <Text style={[styles.modeButtonText, mode === 'note' ? styles.modeButtonTextActive : null]}>
-                  Note
+                  {t('contacts.noteMode')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -495,7 +495,7 @@ export default function ContactMessagesScreen(): JSX.Element {
               >
                 <PhoneCall size={16} color={mode === 'call' ? '#FFFFFF' : '#C4704F'} />
                 <Text style={[styles.modeButtonText, mode === 'call' ? styles.modeButtonTextActive : null]}>
-                  Call
+                  {t('contacts.callMode')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -545,7 +545,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                         callDirection === 'outbound' ? styles.directionButtonTextActive : null,
                       ]}
                     >
-                      Outbound
+                      {t('contacts.outbound')}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -563,7 +563,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                         callDirection === 'inbound' ? styles.directionButtonTextActive : null,
                       ]}
                     >
-                      Inbound
+                      {t('contacts.inbound')}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -572,7 +572,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                     style={[styles.callInput, styles.durationInput]}
                     value={durationMinutes}
                     onChangeText={setDurationMinutes}
-                    placeholder="Min"
+                    placeholder={t('contacts.durationMin')}
                     placeholderTextColor="#CFADA3"
                     keyboardType="decimal-pad"
                     editable={!isSubmitting}
@@ -601,7 +601,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                   ) : (
                     <>
                       <PhoneCall size={17} color="#FFFFFF" />
-                      <Text style={styles.logCallButtonText}>Log Call</Text>
+                      <Text style={styles.logCallButtonText}>{t('contacts.logCall')}</Text>
                     </>
                   )}
                 </TouchableOpacity>

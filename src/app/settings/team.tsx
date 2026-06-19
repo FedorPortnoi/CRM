@@ -57,7 +57,7 @@ export default function TeamScreen(): JSX.Element {
     queryKey: ['org-users', token],
     queryFn: async () => {
       const res = await fetch(`${API_URL}/auth/users`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error('Failed to load team');
+      if (!res.ok) throw new Error('Не удалось загрузить команду');
       const json = (await res.json()) as { data: OrgMember[] };
       return json.data;
     },
@@ -83,7 +83,7 @@ export default function TeamScreen(): JSX.Element {
       });
       if (!res.ok) {
         const json = (await res.json()) as { error?: { message: string } };
-        throw new Error(json.error?.message ?? 'Failed to rotate');
+        throw new Error(json.error?.message ?? 'Не удалось обновить код');
       }
     },
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['company-code'] }),
@@ -107,7 +107,7 @@ export default function TeamScreen(): JSX.Element {
       setCredentials({ name: data.name, username: data.username, tempPassword: data.temp_password, companyCode: data.company_code });
       setInviteFirstName(''); setInviteLastName(''); setInviteRole('member');
     },
-    onError: (e: Error) => Alert.alert('Error', e.message),
+    onError: (e: Error) => Alert.alert('Ошибка', e.message),
   });
 
   const deactivateMutation = useMutation({
@@ -118,11 +118,11 @@ export default function TeamScreen(): JSX.Element {
       });
       if (!res.ok) {
         const json = (await res.json()) as { error?: { message: string } };
-        throw new Error(json.error?.message ?? 'Failed to deactivate');
+        throw new Error(json.error?.message ?? 'Не удалось деактивировать');
       }
     },
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['org-users'] }),
-    onError: (e: Error) => Alert.alert('Error', e.message),
+    onError: (e: Error) => Alert.alert('Ошибка', e.message),
   });
 
   const roleMutation = useMutation({
@@ -134,11 +134,11 @@ export default function TeamScreen(): JSX.Element {
       });
       if (!res.ok) {
         const json = (await res.json()) as { error?: { message: string } };
-        throw new Error(json.error?.message ?? 'Failed to change role');
+        throw new Error(json.error?.message ?? 'Не удалось изменить роль');
       }
     },
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['org-users'] }),
-    onError: (e: Error) => Alert.alert('Error', e.message),
+    onError: (e: Error) => Alert.alert('Ошибка', e.message),
   });
 
   const managerMutation = useMutation({

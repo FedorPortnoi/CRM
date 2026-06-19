@@ -93,9 +93,7 @@ export default function ScanCardScreen(): JSX.Element {
 
       if (!permission.granted) {
         setCameraPermission('denied');
-        setError(
-          'Camera access is off. You can enable it in settings, choose an image, or paste the card text for manual review.',
-        );
+        setError(t('contacts.scanCameraAccessOff'));
         return;
       }
 
@@ -110,9 +108,7 @@ export default function ScanCardScreen(): JSX.Element {
       if (result.canceled || !result.assets[0]) return;
       setSelectedImage(result.assets[0]);
     } catch {
-      setError(
-        'Could not open the camera. Choose an image or paste the card text for manual review.',
-      );
+      setError(t('contacts.scanCouldNotOpenCamera'));
     } finally {
       setIsRequestingCamera(false);
     }
@@ -130,9 +126,7 @@ export default function ScanCardScreen(): JSX.Element {
       if (result.canceled || !result.assets[0]) return;
       setSelectedImage(result.assets[0]);
     } catch {
-      setError(
-        'Could not open the image library. Take a photo or paste the card text for manual review.',
-      );
+      setError(t('contacts.scanCouldNotOpenLibrary'));
     }
   };
 
@@ -169,9 +163,9 @@ export default function ScanCardScreen(): JSX.Element {
       ]
         .filter(Boolean)
         .join(' ');
-      Alert.alert('Contact created', name || 'Business card contact created', [
+      Alert.alert(t('contacts.scanContactCreated'), name || t('contacts.scanBusinessCardCreated'), [
         {
-          text: 'Open',
+          text: t('contacts.scanOpen'),
           onPress: () => {
             if (body.data.contact?.id) {
               router.replace({
@@ -185,10 +179,7 @@ export default function ScanCardScreen(): JSX.Element {
         },
       ]);
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Scan failed';
-      setError(
-        `${message}. Retake the photo, choose a clearer image, or paste the card text for manual review.`,
-      );
+      setError(t('contacts.scanFailed'));
     } finally {
       setIsScanning(false);
     }
@@ -197,8 +188,8 @@ export default function ScanCardScreen(): JSX.Element {
   const canScan = Boolean(imageBase64 || manualText.trim());
   const permissionText =
     cameraPermission === 'denied'
-      ? 'Camera permission denied. Use Settings, choose from library, or paste text.'
-      : 'Take a clear photo of the card, or use the fallback options below.';
+      ? t('contacts.scanPermissionDenied')
+      : t('contacts.scanPermissionHelp');
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -206,7 +197,7 @@ export default function ScanCardScreen(): JSX.Element {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.title}>Business card</Text>
+        <Text style={styles.title}>{t('contacts.scanTitle')}</Text>
         <Text style={styles.helperText}>{permissionText}</Text>
         <View style={styles.capturePanel}>
           {imageUri ? (
@@ -220,7 +211,7 @@ export default function ScanCardScreen(): JSX.Element {
                   }}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.secondaryButtonText}>Retake photo</Text>
+                  <Text style={styles.secondaryButtonText}>{t('contacts.scanRetakePhoto')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.secondaryButton}
@@ -229,7 +220,7 @@ export default function ScanCardScreen(): JSX.Element {
                   }}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.secondaryButtonText}>Change image</Text>
+                  <Text style={styles.secondaryButtonText}>{t('contacts.scanChangeImage')}</Text>
                 </TouchableOpacity>
               </View>
             </>
@@ -251,7 +242,7 @@ export default function ScanCardScreen(): JSX.Element {
                 ) : (
                   <Camera size={24} color="#FFFFFF" />
                 )}
-                <Text style={styles.cameraButtonText}>Take photo</Text>
+                <Text style={styles.cameraButtonText}>{t('contacts.scanTakePhoto')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.libraryButton}
@@ -260,9 +251,7 @@ export default function ScanCardScreen(): JSX.Element {
                 }}
                 accessibilityRole="button"
               >
-                <Text style={styles.libraryButtonText}>
-                  Choose from library
-                </Text>
+                <Text style={styles.libraryButtonText}>{t('contacts.scanChooseFromLibrary')}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -275,14 +264,14 @@ export default function ScanCardScreen(): JSX.Element {
             }}
             accessibilityRole="button"
           >
-            <Text style={styles.settingsButtonText}>Open camera settings</Text>
+            <Text style={styles.settingsButtonText}>{t('contacts.scanOpenSettings')}</Text>
           </TouchableOpacity>
         ) : null}
-        <Text style={styles.sectionLabel}>Manual review fallback</Text>
+        <Text style={styles.sectionLabel}>{t('contacts.scanManualFallback')}</Text>
         <TextInput
           value={manualText}
           onChangeText={setManualText}
-          placeholder={`${t('contacts.pasteCardText')} for manual review`}
+          placeholder={t('contacts.pasteCardText')}
           style={styles.input}
           multiline
           textAlignVertical="top"
@@ -298,7 +287,7 @@ export default function ScanCardScreen(): JSX.Element {
                 }}
                 accessibilityRole="button"
               >
-                <Text style={styles.errorActionText}>Retake</Text>
+                <Text style={styles.errorActionText}>{t('contacts.scanRetake')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.errorAction}
@@ -307,7 +296,7 @@ export default function ScanCardScreen(): JSX.Element {
                 }}
                 accessibilityRole="button"
               >
-                <Text style={styles.errorActionText}>Choose image</Text>
+                <Text style={styles.errorActionText}>{t('contacts.scanChooseImage')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -325,7 +314,7 @@ export default function ScanCardScreen(): JSX.Element {
           ) : (
             <ScanText size={20} color="#FFFFFF" />
           )}
-          <Text style={styles.buttonText}>Scan and create</Text>
+          <Text style={styles.buttonText}>{t('contacts.scanAndCreate')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

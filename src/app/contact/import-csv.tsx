@@ -110,7 +110,7 @@ export default function ImportCsvScreen(): JSX.Element {
       });
 
       if (result.queued) {
-        Alert.alert('Import queued', 'Contacts will import when the device is online.', [
+        Alert.alert('Импорт в очереди', 'Контакты будут импортированы при наличии соединения.', [
           { text: 'OK', onPress: () => router.replace('/(tabs)/contacts') },
         ]);
         return;
@@ -122,11 +122,11 @@ export default function ImportCsvScreen(): JSX.Element {
       }
 
       const body = await result.response.json() as { data: { imported_count: number } };
-      Alert.alert('Import complete', `${body.data.imported_count} contacts imported.`, [
+      Alert.alert('Импорт завершён', `Импортировано контактов: ${body.data.imported_count}.`, [
         { text: 'OK', onPress: () => router.replace('/(tabs)/contacts') },
       ]);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Import failed');
+      setError(e instanceof Error ? e.message : 'Ошибка импорта');
     } finally {
       setIsImporting(false);
     }
@@ -135,7 +135,7 @@ export default function ImportCsvScreen(): JSX.Element {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>CSV import</Text>
+        <Text style={styles.title}>CSV-импорт</Text>
         <TextInput
           value={csvText}
           onChangeText={setCsvText}
@@ -146,7 +146,7 @@ export default function ImportCsvScreen(): JSX.Element {
           textAlignVertical="top"
         />
         <View style={styles.preview}>
-          <Text style={styles.previewText}>{rows.length} valid rows</Text>
+          <Text style={styles.previewText}>{rows.length} корректных строк</Text>
         </View>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <TouchableOpacity
@@ -156,7 +156,7 @@ export default function ImportCsvScreen(): JSX.Element {
           accessibilityRole="button"
         >
           {isImporting ? <ActivityIndicator color="#FFFFFF" /> : <Upload size={20} color="#FFFFFF" />}
-          <Text style={styles.buttonText}>Import</Text>
+          <Text style={styles.buttonText}>Импортировать</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

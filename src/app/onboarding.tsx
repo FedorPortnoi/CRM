@@ -51,7 +51,7 @@ export default function OnboardingScreen(): JSX.Element {
       await completeOnboarding();
       router.replace('/(tabs)');
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not save onboarding');
+      setError(e instanceof Error ? e.message : 'Не удалось сохранить данные');
     } finally {
       setIsSaving(false);
     }

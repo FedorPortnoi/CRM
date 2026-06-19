@@ -35,15 +35,15 @@ export function ConflictToast(): JSX.Element | null {
 
   const label =
     conflicts.length === 1
-      ? '1 item updated by server during sync'
-      : `${conflicts.length} items updated by server during sync`;
+      ? '1 запись обновлена сервером при синхронизации'
+      : `${conflicts.length} записи обновлены сервером при синхронизации`;
 
   return (
     <Animated.View style={[styles.container, { opacity }]}>
       <View style={styles.row}>
         <Text style={styles.text}>{label}</Text>
         <TouchableOpacity onPress={clearConflicts} style={styles.dismiss}>
-          <Text style={styles.dismissText}>Dismiss</Text>
+          <Text style={styles.dismissText}>Закрыть</Text>
         </TouchableOpacity>
       </View>
     </Animated.View>

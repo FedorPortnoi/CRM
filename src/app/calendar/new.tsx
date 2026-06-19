@@ -125,13 +125,13 @@ export default function NewCalendarEventScreen(): JSX.Element {
       }
 
       if (!start) {
-        nextErrors.start = 'Use YYYY-MM-DD and HH:mm';
+        nextErrors.start = t('calendar.dateFormatHint');
       }
 
       if (!end) {
-        nextErrors.end = 'Use YYYY-MM-DD and HH:mm';
+        nextErrors.end = t('calendar.dateFormatHint');
       } else if (start && end <= start) {
-        nextErrors.end = 'End must be after start';
+        nextErrors.end = t('calendar.endAfterStart');
       }
 
       setFieldErrors(nextErrors);

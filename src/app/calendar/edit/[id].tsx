@@ -238,7 +238,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
 
       if (!response.ok) {
         const parsedBody = (await response.json()) as ErrorApiResponse;
-        setLoadError(parsedBody.error?.message ?? 'Failed to load event');
+        setLoadError(parsedBody.error?.message ?? 'Не удалось загрузить событие');
         return;
       }
 
@@ -258,7 +258,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
       clearContactSearch();
       setFieldErrors({});
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Failed to load event');
+      setLoadError(err instanceof Error ? err.message : 'Не удалось загрузить событие');
     } finally {
       setIsLoading(false);
     }
@@ -353,7 +353,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
         ) : original !== null ? (
           <>
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Title *</Text>
+              <Text style={styles.label}>{t('calendar.titleLabel')} *</Text>
               <TextInput
                 style={styles.input}
                 value={title}
@@ -370,7 +370,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
 
             <View style={styles.row}>
               <View style={styles.rowField}>
-                <Text style={styles.label}>Start Date *</Text>
+                <Text style={styles.label}>{t('calendar.startDate')} *</Text>
                 <TextInput
                   style={styles.input}
                   value={startDate}
@@ -384,7 +384,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                 />
               </View>
               <View style={styles.timeField}>
-                <Text style={styles.label}>Time *</Text>
+                <Text style={styles.label}>{t('calendar.time')} *</Text>
                 <TextInput
                   style={styles.input}
                   value={startTime}
@@ -402,7 +402,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
 
             <View style={styles.row}>
               <View style={styles.rowField}>
-                <Text style={styles.label}>End Date *</Text>
+                <Text style={styles.label}>{t('calendar.endDate')} *</Text>
                 <TextInput
                   style={styles.input}
                   value={endDate}
@@ -416,7 +416,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                 />
               </View>
               <View style={styles.timeField}>
-                <Text style={styles.label}>Time *</Text>
+                <Text style={styles.label}>{t('calendar.time')} *</Text>
                 <TextInput
                   style={styles.input}
                   value={endTime}
@@ -434,13 +434,13 @@ export default function EditCalendarEventScreen(): JSX.Element {
 
             {preview ? (
               <View style={styles.previewBox}>
-                <Text style={styles.previewLabel}>Scheduled</Text>
+                <Text style={styles.previewLabel}>{t('calendar.scheduled')}</Text>
                 <Text style={styles.previewText}>{preview}</Text>
               </View>
             ) : null}
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Notes</Text>
+              <Text style={styles.label}>{t('calendar.notesLabel')}</Text>
               <TextInput
                 style={styles.notesInput}
                 value={notes}
@@ -454,7 +454,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Contact</Text>
+              <Text style={styles.label}>{t('calendar.contactLabel')}</Text>
               {selectedContactId !== '' ? (
                 <View style={styles.contactChip}>
                   <Text style={styles.contactChipText} numberOfLines={1}>
@@ -467,7 +467,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                       clearContactSearch();
                     }}
                   >
-                    <Text style={styles.contactChipRemove}>Change</Text>
+                    <Text style={styles.contactChipRemove}>{t('calendar.changeContact')}</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -515,7 +515,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
             }}
             accessibilityRole="button"
           >
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         )}
       </ScrollView>

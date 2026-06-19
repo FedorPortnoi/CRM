@@ -44,7 +44,7 @@ interface Deal { id: string; title: string; value: number | null; currency: stri
 interface Task { id: string; title: string; status: 'pending' | 'in_progress' | 'done' | 'cancelled'; due_date: string | null; priority: 'low' | 'medium' | 'high' | 'urgent'; }
 
 function formatValue(value: number | null, currency: string | null): string {
-  return formatMoney(value, currency, { empty: 'No value' });
+  return formatMoney(value, currency, { empty: '—' });
 }
 
 function formatDate(dateStr: string): string {
@@ -106,34 +106,34 @@ export default function ContactDetailScreen(): JSX.Element {
       }
       const body = (await res.json()) as { data: Contact };
       setContact(body.data); setContactError(null);
-    } catch { setContactError('Failed to load contact'); }
+    } catch { setContactError('Ошибка загрузки контакта'); }
   }, [id, token]);
 
   const fetchActivity = useCallback(async (): Promise<void> => {
     try {
       const res = await fetch(API_URL + '/contacts/' + id + '/activity', { headers: { Authorization: 'Bearer ' + token } });
-      if (!res.ok) { setActivityError('Failed to load activity'); return; }
+      if (!res.ok) { setActivityError('Ошибка загрузки активности'); return; }
       const body = (await res.json()) as { data: ActivityData };
       setActivity(body.data); setActivityError(null);
-    } catch { setActivityError('Failed to load activity'); }
+    } catch { setActivityError('Ошибка загрузки активности'); }
   }, [id, token]);
 
   const fetchDeals = useCallback(async (): Promise<void> => {
     try {
       const res = await fetch(API_URL + '/contacts/' + id + '/deals', { headers: { Authorization: 'Bearer ' + token } });
-      if (!res.ok) { setDealsError('Failed to load deals'); return; }
+      if (!res.ok) { setDealsError('Ошибка загрузки сделок'); return; }
       const body = (await res.json()) as { data: Deal[] };
       setDeals(body.data); setDealsError(null);
-    } catch { setDealsError('Failed to load deals'); }
+    } catch { setDealsError('Ошибка загрузки сделок'); }
   }, [id, token]);
 
   const fetchTasks = useCallback(async (): Promise<void> => {
     try {
       const res = await fetch(API_URL + '/contacts/' + id + '/tasks', { headers: { Authorization: 'Bearer ' + token } });
-      if (!res.ok) { setTasksError('Failed to load tasks'); return; }
+      if (!res.ok) { setTasksError('Ошибка загрузки задач'); return; }
       const body = (await res.json()) as { data: Task[] };
       setTasks(body.data); setTasksError(null);
-    } catch { setTasksError('Failed to load tasks'); }
+    } catch { setTasksError('Ошибка загрузки задач'); }
   }, [id, token]);
 
   const fetchAll = useCallback(async (refreshing: boolean): Promise<void> => {
@@ -161,7 +161,7 @@ export default function ContactDetailScreen(): JSX.Element {
                 onPress={() => router.push({ pathname: '/contact/edit/[id]', params: { id } })}
                 activeOpacity={0.7}
               >
-                <Text style={styles.headerEditText}>Edit</Text>
+                <Text style={styles.headerEditText}>{t('common.edit')}</Text>
               </TouchableOpacity>
             ) : null
           ),
@@ -185,7 +185,7 @@ export default function ContactDetailScreen(): JSX.Element {
             <View>
               <Text style={styles.errorText}>{contactError}</Text>
               <TouchableOpacity style={styles.retryButton} onPress={fetchContact}>
-                <Text style={styles.retryText}>Retry</Text>
+                <Text style={styles.retryText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             </View>
           ) : contact ? (
@@ -206,19 +206,19 @@ export default function ContactDetailScreen(): JSX.Element {
                 <View style={styles.detailRows}>
                   {contact.phone ? (
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Phone</Text>
+                      <Text style={styles.detailLabel}>{t('contacts.phone')}</Text>
                       <Text style={styles.detailValue}>{contact.phone}</Text>
                     </View>
                   ) : null}
                   {contact.mobile ? (
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Mobile</Text>
+                      <Text style={styles.detailLabel}>{t('contacts.mobile')}</Text>
                       <Text style={styles.detailValue}>{contact.mobile}</Text>
                     </View>
                   ) : null}
                   {contact.email ? (
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Email</Text>
+                      <Text style={styles.detailLabel}>{t('contacts.email')}</Text>
                       <Text style={styles.detailValue}>{contact.email}</Text>
                     </View>
                   ) : null}
@@ -279,7 +279,7 @@ export default function ContactDetailScreen(): JSX.Element {
               <View>
                 <Text style={styles.errorText}>{activityError}</Text>
                 <TouchableOpacity style={styles.retryButton} onPress={fetchActivity}>
-                  <Text style={styles.retryText}>Retry</Text>
+                  <Text style={styles.retryText}>{t('common.retry')}</Text>
                 </TouchableOpacity>
               </View>
             ) : !activity || activity.items.length === 0 ? (
@@ -313,7 +313,7 @@ export default function ContactDetailScreen(): JSX.Element {
             <View style={styles.card}>
               <Text style={styles.errorText}>{dealsError}</Text>
               <TouchableOpacity style={styles.retryButton} onPress={fetchDeals}>
-                <Text style={styles.retryText}>Retry</Text>
+                <Text style={styles.retryText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             </View>
           ) : !deals || deals.length === 0 ? (
@@ -367,7 +367,7 @@ export default function ContactDetailScreen(): JSX.Element {
             <View style={styles.card}>
               <Text style={styles.errorText}>{tasksError}</Text>
               <TouchableOpacity style={styles.retryButton} onPress={fetchTasks}>
-                <Text style={styles.retryText}>Retry</Text>
+                <Text style={styles.retryText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             </View>
           ) : !tasks || tasks.length === 0 ? (

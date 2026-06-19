@@ -454,7 +454,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
                       <View
                         style={[styles.statusBadge, { backgroundColor: statusColor(event.status) }]}
                       >
-                        <Text style={styles.statusText}>{event.status.replace('_', ' ')}</Text>
+                        <Text style={styles.statusText}>{t(`calendar.${event.status}`)}</Text>
                       </View>
                     </View>
                     <Text style={styles.eventMeta}>{formatTimeRange(event)}</Text>

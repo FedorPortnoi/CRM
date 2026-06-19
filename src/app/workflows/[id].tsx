@@ -123,7 +123,7 @@ export default function WorkflowDetailScreen(): JSX.Element {
         },
       })
         .then((res) => {
-          if (!res.ok) throw new Error('Failed to load workflow: ' + String(res.status));
+          if (!res.ok) throw new Error('Не удалось загрузить автоматизацию: ' + String(res.status));
           return res.json() as Promise<WorkflowApiResponse>;
         })
         .then((json) => {
@@ -132,7 +132,7 @@ export default function WorkflowDetailScreen(): JSX.Element {
           setIsRefreshing(false);
         })
         .catch((err: unknown) => {
-          setError(err instanceof Error ? err.message : 'An error occurred');
+          setError(err instanceof Error ? err.message : 'Что-то пошло не так');
           setIsLoading(false);
           setIsRefreshing(false);
         });
@@ -164,12 +164,12 @@ export default function WorkflowDetailScreen(): JSX.Element {
       body: JSON.stringify({ status: newStatus }),
     })
       .then((res) => {
-        if (!res.ok) throw new Error('Failed to update workflow: ' + String(res.status));
+        if (!res.ok) throw new Error('Не удалось обновить автоматизацию: ' + String(res.status));
         setWorkflow((prev) => (prev ? { ...prev, status: newStatus } : prev));
         setIsActionLoading(false);
       })
       .catch((err: unknown) => {
-        setActionError(err instanceof Error ? err.message : 'An error occurred');
+        setActionError(err instanceof Error ? err.message : 'Что-то пошло не так');
         setIsActionLoading(false);
       });
   };
@@ -191,11 +191,11 @@ export default function WorkflowDetailScreen(): JSX.Element {
               headers: { Authorization: 'Bearer ' + token },
             })
               .then((res) => {
-                if (!res.ok) throw new Error('Failed to delete workflow: ' + String(res.status));
+                if (!res.ok) throw new Error('Не удалось удалить автоматизацию: ' + String(res.status));
                 router.replace('/workflows' as never);
               })
               .catch((err: unknown) => {
-                setActionError(err instanceof Error ? err.message : 'An error occurred');
+                setActionError(err instanceof Error ? err.message : 'Что-то пошло не так');
                 setIsActionLoading(false);
               });
           },
@@ -312,7 +312,7 @@ export default function WorkflowDetailScreen(): JSX.Element {
           ) : (
             workflow.runs.map((run) => (
               <View key={run.id} style={styles.runRow}>
-                <Text style={styles.runDate}>{new Date(run.created_at).toLocaleDateString()}</Text>
+                <Text style={styles.runDate}>{new Date(run.created_at).toLocaleDateString('ru-RU')}</Text>
                 <View
                   style={[
                     styles.runBadge,

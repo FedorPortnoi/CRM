@@ -43,7 +43,7 @@ function sortByDueAsc(tasks: Task[]): Task[] {
 
 function formatDue(due: string | null): string {
   if (!due) return '';
-  return new Date(due).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return new Date(due).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' });
 }
 
 function badgeColor(status: TaskStatus): string {

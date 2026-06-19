@@ -154,7 +154,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
         setEvent(body.data);
         setPostMeetingNotes(body.data.notes ?? '');
       } catch (e: unknown) {
-        setFetchError(e instanceof Error ? e.message : 'Failed to load event');
+        setFetchError(e instanceof Error ? e.message : 'Не удалось загрузить событие');
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
@@ -386,7 +386,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               void fetchEvent(false);
             }}
           >
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -397,7 +397,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
 
   const isCompleted = event.status === 'completed';
   const isCancelled = event.status === 'cancelled';
-  const completeLabel = isCompleted ? 'Mark Scheduled' : 'Mark Complete';
+  const completeLabel = isCompleted ? t('calendar.markScheduled') : t('calendar.markComplete');
   const isActionDisabled = activeAction !== null;
 
   return (
@@ -414,7 +414,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               activeOpacity={0.7}
               accessibilityRole="button"
             >
-              <Text style={styles.headerEditText}>Edit</Text>
+              <Text style={styles.headerEditText}>{t('common.edit')}</Text>
             </TouchableOpacity>
           ),
         }}
@@ -437,25 +437,25 @@ export default function CalendarEventDetailScreen(): JSX.Element {
             {formatDateTime(event.start_time)} - {formatTime(event.end_time)}
           </Text>
           <View style={[styles.statusBadge, { backgroundColor: statusColor(event.status) }]}>
-            <Text style={styles.statusText}>{event.status.replace('_', ' ')}</Text>
+            <Text style={styles.statusText}>{t(`calendar.${event.status}`)}</Text>
           </View>
         </View>
 
         {isCancelled ? (
           <View style={styles.cancelledBanner}>
-            <Text style={styles.cancelledText}>This event has been cancelled.</Text>
+            <Text style={styles.cancelledText}>{t('calendar.cancelledBanner')}</Text>
           </View>
         ) : null}
 
         <View style={styles.card}>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Location</Text>
+            <Text style={styles.detailLabel}>{t('calendar.locationLabel')}</Text>
             <Text style={event.location ? styles.detailValue : styles.emptyValue}>
-              {event.location ?? 'None'}
+              {event.location ?? t('calendar.none')}
             </Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Contact</Text>
+            <Text style={styles.detailLabel}>{t('calendar.contactLabel')}</Text>
             {event.contact ? (
               <TouchableOpacity
                 onPress={() =>
@@ -469,11 +469,11 @@ export default function CalendarEventDetailScreen(): JSX.Element {
                 <Text style={styles.linkText}>{contactName(event.contact)}</Text>
               </TouchableOpacity>
             ) : (
-              <Text style={styles.emptyValue}>None</Text>
+              <Text style={styles.emptyValue}>{t('calendar.none')}</Text>
             )}
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Deal</Text>
+            <Text style={styles.detailLabel}>{t('calendar.dealLabel')}</Text>
             {event.deal ? (
               <TouchableOpacity
                 onPress={() =>
@@ -487,21 +487,21 @@ export default function CalendarEventDetailScreen(): JSX.Element {
                 <Text style={styles.linkText}>{event.deal.title}</Text>
               </TouchableOpacity>
             ) : (
-              <Text style={styles.emptyValue}>None</Text>
+              <Text style={styles.emptyValue}>{t('calendar.none')}</Text>
             )}
           </View>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Agenda Notes</Text>
+          <Text style={styles.sectionLabel}>{t('calendar.agendaNotes')}</Text>
           <Text style={event.description ? styles.bodyText : styles.emptyValue}>
-            {event.description ?? 'No agenda notes'}
+            {event.description ?? t('calendar.noAgendaNotes')}
           </Text>
         </View>
 
         {isCompleted ? (
           <View style={styles.card}>
-            <Text style={styles.sectionLabel}>Post-meeting Notes</Text>
+            <Text style={styles.sectionLabel}>{t('calendar.postMeetingNotes')}</Text>
             <TextInput
               style={styles.notesInput}
               value={postMeetingNotes}
@@ -531,13 +531,13 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               {activeAction === 'notes' ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.buttonText}>{event.notes ? 'Update Notes' : 'Save Notes'}</Text>
+                <Text style={styles.buttonText}>{event.notes ? t('calendar.updateNotes') : t('calendar.saveNotes')}</Text>
               )}
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.infoBox}>
-            <Text style={styles.infoText}>Mark the event complete to add post-meeting notes.</Text>
+            <Text style={styles.infoText}>{t('calendar.completeToAddNotes')}</Text>
           </View>
         )}
 
@@ -580,7 +580,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
                 {activeAction === 'cancel' ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <Text style={styles.buttonText}>Cancel Event</Text>
+                  <Text style={styles.buttonText}>{t('calendar.cancelEvent')}</Text>
                 )}
               </TouchableOpacity>
             ) : null}

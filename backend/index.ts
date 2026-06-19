@@ -193,6 +193,13 @@ async function start() {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
+  server.get('/version', async () => {
+    return {
+      version: process.env.APP_VERSION ?? '1.0.2',
+      versionCode: parseInt(process.env.APP_VERSION_CODE ?? '5', 10),
+    };
+  });
+
   const shutdown = async () => {
     await server.close();
     process.exit(0);

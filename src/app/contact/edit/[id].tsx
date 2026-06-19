@@ -118,7 +118,7 @@ export default function EditContactScreen(): JSX.Element {
       setPhone(loadedForm.phone);
       setNotes(loadedForm.notes);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Failed to load contact');
+      setLoadError(err instanceof Error ? err.message : 'Не удалось загрузить контакт');
     } finally {
       setIsLoading(false);
     }
@@ -156,7 +156,7 @@ export default function EditContactScreen(): JSX.Element {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: 'Edit Contact' }} />
+      <Stack.Screen options={{ title: t('contacts.editTitle') }} />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
@@ -167,7 +167,7 @@ export default function EditContactScreen(): JSX.Element {
             <Text style={styles.errorBannerText}>{loadError ?? apiError}</Text>
             {loadError !== null && (
               <TouchableOpacity style={styles.bannerRetry} onPress={() => { void loadContact(); }}>
-                <Text style={styles.bannerRetryText}>Retry</Text>
+                <Text style={styles.bannerRetryText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             )}
           </View>
