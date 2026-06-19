@@ -13,7 +13,7 @@ import { API_URL } from '../../utils/api';
 // ─── Config contract ─────────────────────────────────────────────────────────
 
 export interface FileImportConfig<T> {
-  /** MIME types passed to DocumentPicker (e.g. ['text/vcard', '*/*']) */
+  // MIME types passed to DocumentPicker (e.g. ['text/vcard', '*\/*'])
   mimeTypes: string[];
   /** Accent color used for buttons, checkboxes, and the done state */
   accentColor: string;

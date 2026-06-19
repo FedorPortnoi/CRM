@@ -305,7 +305,7 @@ model Deal {
   id              String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organization_id String     @db.Uuid
   title           String
-  contact_id      String     @db.Uuid
+  contact_id      String?    @db.Uuid
   pipeline_id     String?    @db.Uuid
   stage_id        String?    @db.Uuid
   value           Decimal?
@@ -328,7 +328,7 @@ model Deal {
 
   // Relations
   organization Org      @relation(fields: [organization_id], references: [id])
-  contact      Contact  @relation(fields: [contact_id], references: [id])
+  contact      Contact? @relation(fields: [contact_id], references: [id])
   assignee       User?           @relation("DealAssignedTo", fields: [assigned_to], references: [id])
   creator        User?           @relation("DealCreatedBy", fields: [created_by], references: [id])
   pipeline       Pipeline?       @relation(fields: [pipeline_id], references: [id])

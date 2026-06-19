@@ -70,21 +70,21 @@ export default function SettingsScreen(): JSX.Element {
         setCanAskNotifications(permission.canAskAgain);
 
         if (!token) {
-          setNotificationMessage('Sign in to enable push notifications.');
+          setNotificationMessage(t('settings.notifSignIn'));
         } else if (!projectId) {
-          setNotificationMessage('Push notifications are not configured for this build.');
+          setNotificationMessage(t('settings.notifNotConfigured'));
         } else if (permission.granted) {
-          setNotificationMessage('Push notifications are enabled. Disable them in system settings.');
+          setNotificationMessage(t('settings.notifEnabled'));
         } else if (!permission.canAskAgain) {
-          setNotificationMessage('Notifications are blocked. Enable them in system settings.');
+          setNotificationMessage(t('settings.notifBlocked'));
         } else {
-          setNotificationMessage('Enable push reminders and CRM alerts.');
+          setNotificationMessage(t('settings.notifEnable'));
         }
       } catch {
         if (isMounted) {
           setNotificationsEnabled(false);
           setCanAskNotifications(false);
-          setNotificationMessage('Notification permissions are unavailable on this device.');
+          setNotificationMessage(t('settings.notifUnavailable'));
         }
       } finally {
         if (isMounted) {
@@ -199,7 +199,7 @@ export default function SettingsScreen(): JSX.Element {
 
   const languageLabel = currentLanguage === 'ru' ? 'RU' : 'EN';
   const savedExportLabel =
-    exportResult?.kind === 'contacts' ? 'Contacts PDF saved' : 'Deals PDF saved';
+    exportResult?.kind === 'contacts' ? t('settings.exportContactsSaved') : t('settings.exportDealsSaved');
   const notificationsDisabled =
     isCheckingNotifications ||
     isRegisteringNotifications ||
@@ -241,10 +241,10 @@ export default function SettingsScreen(): JSX.Element {
 
       {(user?.role === 'owner' || user?.role === 'admin') && (
         <>
-          <Text style={styles.sectionHeader}>Команда</Text>
+          <Text style={styles.sectionHeader}>{t('settings.team')}</Text>
           <TouchableOpacity style={styles.card} onPress={() => router.push('/settings/team' as never)} accessibilityRole="button">
             <View style={styles.row}>
-              <Text style={styles.rowLabel}>Структура команды</Text>
+              <Text style={styles.rowLabel}>{t('settings.teamStructure')}</Text>
               <Text style={styles.chevron}>{'>'}</Text>
             </View>
           </TouchableOpacity>
@@ -309,7 +309,7 @@ export default function SettingsScreen(): JSX.Element {
           <View style={styles.rowMain}>
             <Text style={styles.rowLabel}>{t('settings.notifications')}</Text>
             <Text style={styles.comingSoon}>
-              {isRegisteringNotifications ? 'Registering device...' : notificationMessage}
+              {isRegisteringNotifications ? t('settings.notifRegistering') : notificationMessage}
             </Text>
           </View>
           <Switch
@@ -326,16 +326,16 @@ export default function SettingsScreen(): JSX.Element {
             onPress={() => { void Linking.openSettings(); }}
             accessibilityRole="button"
           >
-            <Text style={styles.notificationSettingsText}>Open notification settings</Text>
+            <Text style={styles.notificationSettingsText}>{t('settings.notifOpenSettings')}</Text>
           </TouchableOpacity>
         ) : null}
       </View>
 
-      <Text style={styles.sectionHeader}>Data export</Text>
+      <Text style={styles.sectionHeader}>{t('settings.dataExport')}</Text>
       <View style={styles.card}>
         <View style={styles.exportIntro}>
-          <Text style={styles.rowLabel}>PDF exports</Text>
-          <Text style={styles.helperText}>Download current contacts or deals as a PDF report.</Text>
+          <Text style={styles.rowLabel}>{t('settings.pdfExports')}</Text>
+          <Text style={styles.helperText}>{t('settings.pdfExportDesc')}</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.exportActions}>
@@ -348,7 +348,7 @@ export default function SettingsScreen(): JSX.Element {
             {exporting === 'contacts' ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.exportButtonText}>Export contacts</Text>
+              <Text style={styles.exportButtonText}>{t('settings.exportContacts')}</Text>
             )}
           </TouchableOpacity>
           <TouchableOpacity
@@ -360,12 +360,14 @@ export default function SettingsScreen(): JSX.Element {
             {exporting === 'deals' ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.exportButtonText}>Export deals</Text>
+              <Text style={styles.exportButtonText}>{t('settings.exportDeals')}</Text>
             )}
           </TouchableOpacity>
         </View>
         {exporting ? (
-          <Text style={styles.progressText}>Preparing {exporting} PDF...</Text>
+          <Text style={styles.progressText}>
+            {exporting === 'contacts' ? t('settings.exportContactsPreparing') : t('settings.exportDealsPreparing')}
+          </Text>
         ) : null}
         {exportResult ? (
           <View style={styles.exportResult}>
@@ -378,7 +380,7 @@ export default function SettingsScreen(): JSX.Element {
               onPress={() => { void handleOpenExport(); }}
               accessibilityRole="button"
             >
-              <Text style={styles.openButtonText}>Open</Text>
+              <Text style={styles.openButtonText}>{t('settings.exportOpen')}</Text>
             </TouchableOpacity>
           </View>
         ) : null}

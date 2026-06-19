@@ -382,6 +382,7 @@ export default function EditTaskScreen(): JSX.Element {
                 </TouchableOpacity>
               </View>
               <Calendar
+                firstDay={1}
                 onDayPress={(day: CalendarDay) => {
                   setDueDate(day.dateString);
                   setShowCalendar(false);
@@ -414,6 +415,7 @@ export default function EditTaskScreen(): JSX.Element {
                   </TouchableOpacity>
                 </View>
                 <Calendar
+                  firstDay={1}
                   onDayPress={(day: CalendarDay) => {
                     setReminderDate(day.dateString);
                     setShowReminderCalendar(false);

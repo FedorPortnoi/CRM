@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { sendOrQueueMutation } from '../utils/offlineMutation';
+import { useUserStore } from '../store/userStore';
 
 interface CreateMutationOptions<TPayload, TData> {
   endpoint: string;
@@ -82,6 +83,10 @@ export function useCreateMutation<TPayload, TData = { id: string }>(
         const responseData = (body as { data: TData }).data;
         await onSuccess(responseData, false);
       } else {
+        if (res.status === 401) {
+          void useUserStore.getState().logout();
+          return;
+        }
         setApiError(
           extractErrorMessage(body, res.status) ?? fallbackErrorMessage ?? 'Request failed',
         );

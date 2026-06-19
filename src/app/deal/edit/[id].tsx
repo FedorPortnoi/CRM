@@ -202,7 +202,7 @@ export default function EditDealScreen(): JSX.Element {
         setSelectedPipelineId(loaded.pipeline_id);
         setSelectedStageId(loaded.stage_id);
         setSelectedContactId(loaded.contact_id);
-        setSelectedContactName(contactDisplayName(data.data.contact));
+        setSelectedContactName(data.data.contact ? contactDisplayName(data.data.contact) : '');
         setNextAction(loaded.next_action);
         setNextActionDue(loaded.next_action_due);
       } catch (err) {

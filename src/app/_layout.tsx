@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Alert, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Stack, useRouter } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -18,6 +18,8 @@ import { useOnboardingStore } from '../store/onboardingStore';
 import { initI18n } from '../i18n';
 import '../utils/network';
 import { initSentry } from '../utils/sentry';
+import Constants from 'expo-constants';
+import { API_URL } from '../utils/api';
 
 initSentry();
 
@@ -46,6 +48,20 @@ export default function RootLayout() {
       .then(() => restoreSession())
       .finally(() => setIsRestoring(false));
     void registerBackgroundSync();
+
+    const currentVersionCode = Constants.expoConfig?.android?.versionCode ?? 0;
+    fetch(`${API_URL.replace('/api/v1', '')}/version`)
+      .then((r) => r.json())
+      .then((body: { versionCode?: number }) => {
+        if (typeof body.versionCode === 'number' && body.versionCode > currentVersionCode) {
+          Alert.alert(
+            'Доступна новая версия',
+            `Выйдите и скачайте новую версию 4КУБ для получения обновлений.`,
+            [{ text: 'OK' }],
+          );
+        }
+      })
+      .catch(() => {});
   }, [restoreSession]);
 
   useEffect(() => {

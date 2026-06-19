@@ -348,6 +348,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           </TouchableOpacity>
         </View>
         <Calendar
+          firstDay={1}
           onDayPress={(day: CalendarDay) => {
             setDueDate(day.dateString);
             setShowCalendar(false);
@@ -378,6 +379,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           </TouchableOpacity>
         </View>
         <Calendar
+          firstDay={1}
           onDayPress={(day: CalendarDay) => {
             setReminderDate(day.dateString);
             setShowReminderCalendar(false);
