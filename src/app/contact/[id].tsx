@@ -96,54 +96,54 @@ export default function ContactDetailScreen(): JSX.Element {
   const [dealsError, setDealsError] = useState<string | null>(null);
   const [tasksError, setTasksError] = useState<string | null>(null);
   const { data: auditLog = [] } = useAuditLog('contact', id);
+  const headers = { Authorization: 'Bearer ' + token };
 
-  const fetchContact = useCallback(async (): Promise<void> => {
-    try {
-      const res = await fetch(API_URL + '/contacts/' + id, { headers: { Authorization: 'Bearer ' + token } });
-      if (!res.ok) {
-        const body = (await res.json()) as { error: { code: string; message: string } };
-        setContactError(body.error.message); return;
-      }
-      const body = (await res.json()) as { data: Contact };
-      setContact(body.data); setContactError(null);
-    } catch { setContactError('Ошибка загрузки контакта'); }
-  }, [id, token]);
-
-  const fetchActivity = useCallback(async (): Promise<void> => {
-    try {
-      const res = await fetch(API_URL + '/contacts/' + id + '/activity', { headers: { Authorization: 'Bearer ' + token } });
-      if (!res.ok) { setActivityError('Ошибка загрузки активности'); return; }
-      const body = (await res.json()) as { data: ActivityData };
-      setActivity(body.data); setActivityError(null);
-    } catch { setActivityError('Ошибка загрузки активности'); }
-  }, [id, token]);
-
-  const fetchDeals = useCallback(async (): Promise<void> => {
-    try {
-      const res = await fetch(API_URL + '/contacts/' + id + '/deals', { headers: { Authorization: 'Bearer ' + token } });
-      if (!res.ok) { setDealsError('Ошибка загрузки сделок'); return; }
-      const body = (await res.json()) as { data: Deal[] };
-      setDeals(body.data); setDealsError(null);
-    } catch { setDealsError('Ошибка загрузки сделок'); }
-  }, [id, token]);
-
-  const fetchTasks = useCallback(async (): Promise<void> => {
-    try {
-      const res = await fetch(API_URL + '/contacts/' + id + '/tasks', { headers: { Authorization: 'Bearer ' + token } });
-      if (!res.ok) { setTasksError('Ошибка загрузки задач'); return; }
-      const body = (await res.json()) as { data: Task[] };
-      setTasks(body.data); setTasksError(null);
-    } catch { setTasksError('Ошибка загрузки задач'); }
-  }, [id, token]);
-
-  const fetchAll = useCallback(async (refreshing: boolean): Promise<void> => {
+  const fetchAll = useCallback(async (refreshing: boolean, signal?: AbortSignal): Promise<void> => {
     if (refreshing) { setIsRefreshing(true); } else { setIsLoading(true); }
-    await Promise.all([fetchContact(), fetchActivity(), fetchDeals(), fetchTasks()]);
-    setIsLoading(false); setIsRefreshing(false);
-  }, [fetchContact, fetchActivity, fetchDeals, fetchTasks]);
+    await Promise.all([
+      fetch(API_URL + '/contacts/' + id, { headers, signal })
+        .then(async (res) => {
+          if (signal?.aborted) return;
+          if (!res.ok) { const b = (await res.json()) as { error: { message: string } }; setContactError(b.error.message); return; }
+          const b = (await res.json()) as { data: Contact };
+          setContact(b.data); setContactError(null);
+        })
+        .catch((e: unknown) => { if ((e as Error)?.name !== 'AbortError') setContactError('Ошибка загрузки контакта'); }),
+      fetch(API_URL + '/contacts/' + id + '/activity', { headers, signal })
+        .then(async (res) => {
+          if (signal?.aborted) return;
+          if (!res.ok) { setActivityError('Ошибка загрузки активности'); return; }
+          const b = (await res.json()) as { data: ActivityData };
+          setActivity(b.data); setActivityError(null);
+        })
+        .catch((e: unknown) => { if ((e as Error)?.name !== 'AbortError') setActivityError('Ошибка загрузки активности'); }),
+      fetch(API_URL + '/contacts/' + id + '/deals', { headers, signal })
+        .then(async (res) => {
+          if (signal?.aborted) return;
+          if (!res.ok) { setDealsError('Ошибка загрузки сделок'); return; }
+          const b = (await res.json()) as { data: Deal[] };
+          setDeals(b.data); setDealsError(null);
+        })
+        .catch((e: unknown) => { if ((e as Error)?.name !== 'AbortError') setDealsError('Ошибка загрузки сделок'); }),
+      fetch(API_URL + '/contacts/' + id + '/tasks', { headers, signal })
+        .then(async (res) => {
+          if (signal?.aborted) return;
+          if (!res.ok) { setTasksError('Ошибка загрузки задач'); return; }
+          const b = (await res.json()) as { data: Task[] };
+          setTasks(b.data); setTasksError(null);
+        })
+        .catch((e: unknown) => { if ((e as Error)?.name !== 'AbortError') setTasksError('Ошибка загрузки задач'); }),
+    ]);
+    if (!signal?.aborted) { setIsLoading(false); setIsRefreshing(false); }
+  }, [id, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { fetchAll(false); }, [fetchAll]);
-  const onRefresh = useCallback((): void => { fetchAll(true); }, [fetchAll]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchAll(false, controller.signal);
+    return () => controller.abort();
+  }, [fetchAll]);
+
+  const onRefresh = useCallback((): void => { void fetchAll(true); }, [fetchAll]);
   const contactName = contact
     ? contact.last_name ? contact.first_name + ' ' + contact.last_name : contact.first_name
     : '';
@@ -184,7 +184,7 @@ export default function ContactDetailScreen(): JSX.Element {
           ) : contactError ? (
             <View>
               <Text style={styles.errorText}>{contactError}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={fetchContact}>
+              <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
                 <Text style={styles.retryText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             </View>
@@ -278,7 +278,7 @@ export default function ContactDetailScreen(): JSX.Element {
             ) : activityError ? (
               <View>
                 <Text style={styles.errorText}>{activityError}</Text>
-                <TouchableOpacity style={styles.retryButton} onPress={fetchActivity}>
+                <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
                   <Text style={styles.retryText}>{t('common.retry')}</Text>
                 </TouchableOpacity>
               </View>
@@ -312,7 +312,7 @@ export default function ContactDetailScreen(): JSX.Element {
           ) : dealsError ? (
             <View style={styles.card}>
               <Text style={styles.errorText}>{dealsError}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={fetchDeals}>
+              <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
                 <Text style={styles.retryText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             </View>
@@ -366,7 +366,7 @@ export default function ContactDetailScreen(): JSX.Element {
           ) : tasksError ? (
             <View style={styles.card}>
               <Text style={styles.errorText}>{tasksError}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={fetchTasks}>
+              <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
                 <Text style={styles.retryText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             </View>

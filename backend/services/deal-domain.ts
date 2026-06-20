@@ -10,6 +10,7 @@
 
 import { Prisma, DealStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from './db';
+import { userBelongsToOrg } from './db-guards';
 import { paginate } from './db-paginate';
 import { evaluateWorkflows } from './workflows';
 import { logActivity } from '../api/controllers/activities';
@@ -94,14 +95,6 @@ export async function stageBelongsToPipeline(
 ): Promise<boolean> {
   const row = await db.pipelineStage.findFirst({
     where: { id: stageId, pipeline_id: pipelineId, pipeline: { organization_id: orgId } },
-    select: { id: true },
-  });
-  return row !== null;
-}
-
-export async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
-  const row = await db.user.findFirst({
-    where: { id: userId, organization_id: orgId, is_active: true },
     select: { id: true },
   });
   return row !== null;

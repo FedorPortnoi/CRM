@@ -10,6 +10,7 @@ import {
   WorkflowTrigger,
 } from '@prisma/client';
 import { db } from './db';
+import { userBelongsToOrg } from './db-guards';
 
 type WorkflowContext = {
   organizationId: string;
@@ -149,25 +150,16 @@ function dateFromOffset(days: number | undefined): Date | undefined {
   return due;
 }
 
-async function userBelongsToOrganization(userId: string, organizationId: string): Promise<boolean> {
-  const user = await db.user.findFirst({
-    where: { id: userId, organization_id: organizationId, is_active: true },
-    select: { id: true },
-  });
-
-  return user !== null;
-}
-
 async function resolveOrganizationUser(
   userId: string | null | undefined,
   organizationId: string,
 ): Promise<string | null> {
   if (!userId) return null;
-  return await userBelongsToOrganization(userId, organizationId) ? userId : null;
+  return await userBelongsToOrg(userId, organizationId) ? userId : null;
 }
 
 async function resolveTaskAssignee(action: WorkflowAction, context: WorkflowContext): Promise<string> {
-  if (action.assigned_to && await userBelongsToOrganization(action.assigned_to, context.organizationId)) {
+  if (action.assigned_to && await userBelongsToOrg(action.assigned_to, context.organizationId)) {
     return action.assigned_to;
   }
 

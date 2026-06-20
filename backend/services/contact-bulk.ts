@@ -1,5 +1,7 @@
 import { ContactStatus } from '@prisma/client';
 import { db } from './db';
+import { userBelongsToOrg } from './db-guards';
+export { userBelongsToOrg };
 
 export type BulkAssignParams = {
   orgId: string;
@@ -23,18 +25,6 @@ export type BulkArchiveResult = {
   archived_count: number;
   contact_ids: string[];
 };
-
-/**
- * Check whether a user is an active member of the given organisation.
- * Used by bulk and single-record handlers before accepting an `assigned_to` value.
- */
-export async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
-  const user = await db.user.findFirst({
-    where: { id: userId, organization_id: orgId, is_active: true },
-    select: { id: true },
-  });
-  return user !== null;
-}
 
 /**
  * Assign a list of contacts to a new owner.

@@ -8,6 +8,7 @@
 
 import { Prisma, TaskStatus, TaskPriority, WorkflowTrigger } from '@prisma/client';
 import { db } from './db';
+import { userBelongsToOrg } from './db-guards';
 import { paginate } from './db-paginate';
 import { evaluateWorkflows } from './workflows';
 import { logActivity } from '../api/controllers/activities';
@@ -63,14 +64,6 @@ export type DomainError =
   | { kind: 'unprocessable'; code: string; message: string };
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
-
-async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
-  const user = await db.user.findFirst({
-    where: { id: userId, organization_id: orgId, is_active: true },
-    select: { id: true },
-  });
-  return user !== null;
-}
 
 async function contactBelongsToOrg(contactId: string, orgId: string): Promise<boolean> {
   const contact = await db.contact.findFirst({

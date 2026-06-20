@@ -2,22 +2,9 @@ import { WorkflowTrigger } from '@prisma/client';
 import { db } from './db';
 import { encryptField, decryptField } from './encryption';
 import { evaluateWorkflows } from './workflows';
+import { type ContactImportRow } from './contact-import';
 
-// ---------------------------------------------------------------------------
-// Domain types
-// ---------------------------------------------------------------------------
-
-export type ContactImportRow = {
-  first_name: string;
-  last_name?: string;
-  company?: string;
-  email?: string;
-  phone?: string;
-  mobile?: string;
-  source?: string;
-  notes?: string;
-  type?: 'lead' | 'customer' | 'partner' | 'other';
-};
+export type { ContactImportRow };
 
 export type BusinessCardBody = {
   text?: string;

@@ -100,48 +100,38 @@ export default function DealDetailScreen(): JSX.Element {
   const { data: auditLog = [] } = useAuditLog('deal', id);
 
   const fetchDeal = useCallback(
-    (silent: boolean): void => {
-      if (!silent) {
-        setIsLoading(true);
-        setError(null);
-      }
-      const url = API_URL + '/deals/' + id;
-      fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: 'Bearer ' + token,
-          'Content-Type': 'application/json',
-        },
-      })
-        .then((res) => {
-          if (!res.ok) {
-            return res.json().then((body: ErrorApiResponse) => {
-              throw new Error(body.error?.message ?? t('deals.failedToLoad'));
-            });
-          }
-          return res.json() as Promise<DealApiResponse>;
-        })
-        .then((json) => {
-          setDeal(json.data);
-          setIsLoading(false);
-          setIsRefreshing(false);
-        })
-        .catch((err: Error) => {
-          setError(err.message ?? t('deals.failedToLoad'));
-          setIsLoading(false);
-          setIsRefreshing(false);
+    async (silent: boolean, signal?: AbortSignal): Promise<void> => {
+      if (!silent) { setIsLoading(true); setError(null); }
+      try {
+        const res = await fetch(API_URL + '/deals/' + id, {
+          headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          signal,
         });
+        if (signal?.aborted) return;
+        if (!res.ok) {
+          const body = (await res.json()) as ErrorApiResponse;
+          throw new Error(body.error?.message ?? t('deals.failedToLoad'));
+        }
+        const json = (await res.json()) as DealApiResponse;
+        if (!signal?.aborted) { setDeal(json.data); setIsLoading(false); setIsRefreshing(false); }
+      } catch (err: unknown) {
+        if ((err as Error)?.name === 'AbortError') return;
+        setError((err instanceof Error ? err.message : null) ?? t('deals.failedToLoad'));
+        setIsLoading(false); setIsRefreshing(false);
+      }
     },
-    [id, token],
+    [id, token], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   useEffect(() => {
-    fetchDeal(false);
+    const controller = new AbortController();
+    void fetchDeal(false, controller.signal);
+    return () => controller.abort();
   }, [fetchDeal]);
 
   const onRefresh = (): void => {
     setIsRefreshing(true);
-    fetchDeal(true);
+    void fetchDeal(true);
   };
 
   const doMarkWon = async (): Promise<void> => {

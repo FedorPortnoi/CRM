@@ -13,7 +13,6 @@ import {
   createTaskForUser,
   updateTaskForUser,
   completeTaskForUser,
-  getOverdueTasksForUser,
   type CreateTaskBody,
   type UpdateTaskPatch,
 } from '../../services/task-domain';
@@ -167,59 +166,6 @@ async function complete(
   reply.send({ data: result.task, meta: {} });
 }
 
-async function startProgress(
-  request: FastifyRequest,
-  reply: FastifyReply,
-): Promise<void> {
-  const { id } = request.params as IdParams;
-  const orgId = request.user.org_id;
-
-  const accessibleIds = await getAccessibleUserIds(request.user);
-
-  // resolveAssignedFilter logic inline — only used here, not worth extracting
-  const assignedFilter: { in: string[] } | undefined =
-    accessibleIds === null ? undefined : { in: accessibleIds };
-
-  const task = await db.task.findFirst({
-    where: {
-      id,
-      organization_id: orgId,
-      ...(assignedFilter !== undefined && { assigned_to: assignedFilter }),
-    },
-  });
-
-  if (!task) {
-    reply.status(404).send({ error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } });
-    return;
-  }
-
-  if (task.status !== TaskStatus.pending) {
-    reply.status(422).send({ error: { code: 'INVALID_STATUS_TRANSITION', message: 'Task must be pending to start' } });
-    return;
-  }
-
-  const result = await db.task.updateMany({
-    where: { id, organization_id: orgId, status: TaskStatus.pending },
-    data: { status: TaskStatus.in_progress },
-  });
-
-  if (result.count !== 1) {
-    reply.status(404).send({ error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } });
-    return;
-  }
-
-  const updatedTask = await db.task.findFirst({
-    where: { id, organization_id: orgId },
-  });
-
-  if (!updatedTask) {
-    reply.status(404).send({ error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } });
-    return;
-  }
-
-  reply.send({ data: updatedTask, meta: {} });
-}
-
 async function cancel(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -293,17 +239,6 @@ async function dueToday(
   reply.send({ data: tasks, meta: {} });
 }
 
-async function overdue(
-  request: FastifyRequest,
-  reply: FastifyReply,
-): Promise<void> {
-  const { scope } = request.query as { scope?: VisibilityScope };
-
-  const tasks = await getOverdueTasksForUser(request.user.org_id, request.user, scope);
-
-  reply.send({ data: tasks, meta: {} });
-}
-
 async function suggestContact(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -370,9 +305,7 @@ export const TasksController = {
   getById,
   update,
   complete,
-  startProgress,
   cancel,
   dueToday,
-  overdue,
   suggestContact,
 };
