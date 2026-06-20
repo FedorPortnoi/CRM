@@ -18,8 +18,6 @@ export async function listActivities(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  await request.jwtVerify();
-
   const { entity_type, entity_id, page = 1, per_page = 20 } = request.query as ListQuery;
 
   if (!entity_type || typeof entity_type !== 'string') {

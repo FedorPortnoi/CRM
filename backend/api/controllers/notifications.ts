@@ -134,19 +134,15 @@ async function list(request: FastifyRequest, reply: FastifyReply): Promise<void>
 async function markRead(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const { id } = request.params as IdParams;
 
-  const n = await db.notification.findFirst({
-    where: { id, recipient_id: request.user.sub },
+  const { count } = await db.notification.updateMany({
+    where: { id, recipient_id: request.user.sub, organization_id: request.user.org_id },
+    data: { is_read: true, read_at: new Date() },
   });
 
-  if (!n) {
+  if (count === 0) {
     reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Notification not found' } });
     return;
   }
-
-  await db.notification.update({
-    where: { id },
-    data: { is_read: true, read_at: new Date() },
-  });
 
   reply.send({ data: { ok: true }, meta: {} });
 }

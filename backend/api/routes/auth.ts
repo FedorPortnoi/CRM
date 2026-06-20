@@ -113,7 +113,10 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: { body: InviteSchema },
   }, AuthController.inviteUser);
   fastify.patch('/users/:id/deactivate', { preHandler: [authenticate] }, AuthController.deactivateUser);
-  fastify.patch('/users/:id/role', { preHandler: [authenticate] }, AuthController.changeUserRole);
+  fastify.patch('/users/:id/role', {
+    preHandler: [authenticate],
+    schema: { body: z.object({ role: z.enum(['admin', 'member', 'viewer']) }) },
+  }, AuthController.changeUserRole);
   fastify.patch('/users/:id/manager', {
     preHandler: [authenticate],
     schema: { body: SetManagerSchema },

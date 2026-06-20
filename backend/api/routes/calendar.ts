@@ -104,6 +104,8 @@ export default async function calendarRoutes(fastify: FastifyInstance) {
   f.delete('/sync/yandex', { preHandler: [authenticate] }, CalendarController.yandexDisconnect);
   f.get('/sync/status', { preHandler: [authenticate] }, CalendarController.syncStatus);
 
-  // Yandex CalDAV webhook (polling fallback endpoint)
-  f.post('/webhooks/yandex', CalendarController.yandexWebhook);
+  // Yandex CalDAV webhook (polling fallback endpoint) — strict rate limit to prevent DoS/budget exhaustion
+  f.post('/webhooks/yandex', {
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+  }, CalendarController.yandexWebhook);
 }

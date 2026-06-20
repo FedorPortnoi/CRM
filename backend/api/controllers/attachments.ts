@@ -52,8 +52,6 @@ export async function getUploadUrl(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  await request.jwtVerify();
-
   const parsed = UploadUrlSchema.safeParse(request.body);
   if (!parsed.success) {
     reply.status(400).send({
@@ -97,8 +95,6 @@ export async function listAttachments(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  await request.jwtVerify();
-
   const { entity_type, entity_id } = request.query as ListQuery;
 
   const where = {
@@ -122,8 +118,6 @@ export async function createAttachment(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  await request.jwtVerify();
-
   const parsed = CreateAttachmentSchema.safeParse(request.body);
   if (!parsed.success) {
     reply.status(400).send({
@@ -173,8 +167,6 @@ export async function deleteAttachment(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  await request.jwtVerify();
-
   const { id } = request.params as IdParams;
 
   const attachment = await db.attachment.findFirst({

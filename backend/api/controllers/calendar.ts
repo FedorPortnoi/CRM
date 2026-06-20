@@ -569,29 +569,35 @@ async function yandexWebhook(
 ): Promise<void> {
   const expectedSecret = readConfiguredWebhookSecret(reply);
   if (expectedSecret === null) {
+    // readConfiguredWebhookSecret already sent 503; just return.
+    return;
+  }
+
+  if (!expectedSecret) {
     await auditLog({
       action: 'webhook.yandex',
-      outcome: 'failure',
+      outcome: 'denied',
       request,
-      metadata: { reason: 'missing_server_secret' },
+      metadata: { reason: 'webhook_secret_not_configured' },
+    });
+    reply.status(401).send({
+      error: { code: 'YANDEX_WEBHOOK_UNAUTHORIZED', message: 'Yandex webhook secret is not configured on this server' },
     });
     return;
   }
 
-  if (expectedSecret) {
-    const providedSecret = extractYandexWebhookSecret(request);
-    if (!providedSecret || !timingSafeEqualString(providedSecret, expectedSecret)) {
-      await auditLog({
-        action: 'webhook.yandex',
-        outcome: 'denied',
-        request,
-        metadata: { reason: 'invalid_secret' },
-      });
-      reply.status(401).send({
-        error: { code: 'YANDEX_WEBHOOK_UNAUTHORIZED', message: 'Invalid Yandex webhook secret' },
-      });
-      return;
-    }
+  const providedSecret = extractYandexWebhookSecret(request);
+  if (!providedSecret || !timingSafeEqualString(providedSecret, expectedSecret)) {
+    await auditLog({
+      action: 'webhook.yandex',
+      outcome: 'denied',
+      request,
+      metadata: { reason: 'invalid_secret' },
+    });
+    reply.status(401).send({
+      error: { code: 'YANDEX_WEBHOOK_UNAUTHORIZED', message: 'Invalid Yandex webhook secret' },
+    });
+    return;
   }
 
   await auditLog({

@@ -109,6 +109,10 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
     return { action: 'onboarding.clear_example_data', reason: 'clearing org example data requires owner or admin' };
   }
 
+  if (method === 'PATCH' && path === '/api/v1/org/settings') {
+    return { action: 'org.update_settings', reason: 'updating org settings requires owner or admin' };
+  }
+
   return null;
 }
 
