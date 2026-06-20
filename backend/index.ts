@@ -90,6 +90,7 @@ async function start() {
   const server = Fastify({
     bodyLimit: readPositiveIntEnv('REQUEST_BODY_LIMIT_BYTES', 16 * 1024 * 1024),
     logger: useMcp ? { stream: process.stderr } : true,
+    trustProxy: true,
   });
 
   server.setValidatorCompiler(validatorCompiler);

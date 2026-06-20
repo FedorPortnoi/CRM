@@ -19,7 +19,7 @@ export default async function globalSetup() {
 
   try {
     const res = await api.post("/api/v1/auth/", {
-      data: { email, password, name: "Smoke Test", org_name: "Smoke Org" },
+      data: { email, password, name: "Smoke Test", org_name: "Smoke Org", phone: "+70000000000" },
     });
 
     if (!res.ok()) {
