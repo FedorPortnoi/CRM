@@ -53,7 +53,7 @@ type ApiErrorResponse = {
   message?: string;
 };
 
-const DEALS_PER_PAGE = 100;
+const DEALS_PER_PAGE = 300;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -119,33 +119,17 @@ export const useDealsStore = create<DealsState>()((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const deals: Deal[] = [];
-      let page = 1;
-      let total: number | null = null;
-
-      while (total === null || deals.length < total) {
-        const params = new URLSearchParams({
-          page: String(page),
-          per_page: String(DEALS_PER_PAGE),
-          status: 'open',
-        });
-        const response: Response = await fetch(`${API_URL}/deals?${params.toString()}`, {
-          method: 'GET',
-          headers: await authHeaders(),
-        });
-        const body: ApiListResponse = await readJsonResponse<ApiListResponse>(response);
-
-        deals.push(...body.data);
-        total = typeof body.meta?.total === 'number' ? body.meta.total : null;
-
-        if (body.data.length < DEALS_PER_PAGE) {
-          break;
-        }
-
-        page += 1;
-      }
-
-      set({ deals, isLoading: false });
+      const params = new URLSearchParams({
+        page: '1',
+        per_page: String(DEALS_PER_PAGE),
+        status: 'open',
+      });
+      const response: Response = await fetch(`${API_URL}/deals?${params.toString()}`, {
+        method: 'GET',
+        headers: await authHeaders(),
+      });
+      const body: ApiListResponse = await readJsonResponse<ApiListResponse>(response);
+      set({ deals: body.data, isLoading: false });
     } catch (e: unknown) {
       const msg: string = e instanceof Error ? e.message : 'Unknown error';
       set({ error: msg, isLoading: false });

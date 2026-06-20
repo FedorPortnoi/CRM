@@ -142,7 +142,7 @@ export default function TaskDetailScreen(): JSX.Element {
   const { data: auditLog = [] } = useAuditLog('task', id);
 
   const fetchTask = useCallback(
-    async (refreshing: boolean): Promise<void> => {
+    async (refreshing: boolean, signal?: AbortSignal): Promise<void> => {
       if (refreshing) {
         setIsRefreshing(true);
       } else {
@@ -151,7 +151,9 @@ export default function TaskDetailScreen(): JSX.Element {
       try {
         const res = await fetch(API_URL + '/tasks/' + id, {
           headers: { Authorization: 'Bearer ' + token },
+          signal,
         });
+        if (signal?.aborted) return;
         if (!res.ok) {
           const body = (await res.json()) as {
             error: { code: string; message: string };
@@ -162,22 +164,26 @@ export default function TaskDetailScreen(): JSX.Element {
           setTask(body.data);
           setFetchError(null);
         }
-      } catch {
+      } catch (e: unknown) {
+        if ((e as Error)?.name === 'AbortError') return;
         setFetchError(t('tasks.failedToLoad'));
       } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
+        if (!signal?.aborted) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
       }
     },
     [id, t, token],
   );
 
   useEffect(() => {
-    void fetchTask(false);
+    const controller = new AbortController();
+    void fetchTask(false, controller.signal);
+    return () => controller.abort();
   }, [fetchTask]);
-  const onRefresh = useCallback((): void => {
-    void fetchTask(true);
-  }, [fetchTask]);
+
+  const onRefresh = useCallback((): void => { void fetchTask(true); }, [fetchTask]);
 
   async function handleComplete(): Promise<void> {
     setIsActionLoading(true);

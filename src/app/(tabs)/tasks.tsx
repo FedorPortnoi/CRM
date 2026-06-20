@@ -110,10 +110,10 @@ export default function TasksScreen(): JSX.Element {
   const { data: allTasks = [], isLoading: allLoading, error: allError, refetch: refetchAll } = useQuery({
     queryKey: ['tasks-all', token, scope],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/tasks?per_page=100&scope=${scope}`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/tasks?per_page=100&scope=${scope}&sort=due_date&order=asc`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error(`Tasks failed: ${res.status}`);
       const json = (await res.json()) as { data: Task[] };
-      return sortByDueAsc(json.data.filter((t) => t.status !== 'cancelled'));
+      return json.data.filter((t) => t.status !== 'cancelled');
     },
     enabled: !!token,
   });

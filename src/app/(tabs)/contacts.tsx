@@ -122,69 +122,38 @@ export default function ContactsScreen(): JSX.Element {
   const [assignError, setAssignError] = useState<string | null>(null);
   const [showNoContact30d, setShowNoContact30d] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
-  const filter = showNoContact30d ? 'no-contact-30d' : 'all';
   const typeParam = segment === 'all' ? undefined : segment;
 
   const contactsQuery = useQuery<ContactsResponse, Error>({
-    queryKey: ['contacts', page, search, filter, typeParam, sortKey, token],
+    queryKey: ['contacts', page, search, showNoContact30d, typeParam, sortKey, token],
     queryFn: async (): Promise<ContactsResponse> => {
       if (!token) {
         throw new Error(t('errors.unauthorized'));
       }
 
+      const sortOrder = sortKey === 'first_name' ? 'asc' : 'desc';
+      const params = new URLSearchParams({
+        page: String(page),
+        per_page: String(PER_PAGE),
+        sort: sortKey,
+        order: sortOrder,
+      });
+
       const query = search.trim();
-
-      const fetchPage = async (currentPage: number): Promise<ContactsResponse> => {
-        const sortOrder = sortKey === 'first_name' ? 'asc' : 'desc';
-        const params = new URLSearchParams({
-          page: String(currentPage),
-          per_page: String(PER_PAGE),
-          sort: sortKey,
-          order: sortOrder,
-        });
-
-        if (query) {
-          params.set('q', query);
-        }
-
-        if (typeParam) {
-          params.set('type', typeParam);
-        }
-
-        const res = await fetch(
-          `${API_URL}/contacts?${params.toString()}`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-
-        if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
-
-        return (await res.json()) as ContactsResponse;
-      };
-
-      if (filter === 'no-contact-30d') {
-        const allContacts: Contact[] = [];
-        let currentPage = 1;
-        let total: number | null = null;
-
-        while (total === null || allContacts.length < total) {
-          const json = await fetchPage(currentPage);
-          allContacts.push(...json.data);
-          total = json.meta.total;
-
-          if (json.data.length < PER_PAGE) {
-            break;
-          }
-
-          currentPage += 1;
-        }
-
-        return {
-          data: allContacts,
-          meta: { total: total ?? allContacts.length },
-        };
+      if (query) params.set('q', query);
+      if (typeParam) params.set('type', typeParam);
+      if (showNoContact30d) {
+        params.set('last_contacted_before', new Date(Date.now() - 30 * 86_400_000).toISOString());
       }
 
-      return fetchPage(page);
+      const res = await fetch(
+        `${API_URL}/contacts?${params.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+
+      return (await res.json()) as ContactsResponse;
     },
     retry: (failureCount) => Boolean(token) && failureCount < 3,
   });
@@ -315,27 +284,21 @@ export default function ContactsScreen(): JSX.Element {
     },
   });
 
-  const contactPages =
-    filter === 'no-contact-30d'
-      ? contactsQuery.data
-        ? [contactsQuery.data]
-        : []
-      : Array.from({ length: page }, (_, index) =>
-          queryClient.getQueryData<ContactsResponse>([
-            'contacts',
-            index + 1,
-            search,
-            filter,
-            typeParam,
-            sortKey,
-            token,
-          ]),
-        ).filter((value): value is ContactsResponse => value !== undefined);
+  const contactPages = Array.from({ length: page }, (_, index) =>
+    queryClient.getQueryData<ContactsResponse>([
+      'contacts',
+      index + 1,
+      search,
+      showNoContact30d,
+      typeParam,
+      sortKey,
+      token,
+    ]),
+  ).filter((value): value is ContactsResponse => value !== undefined);
 
   const contacts = contactPages.flatMap((contactPage) => contactPage.data);
   const totalCount = contactsQuery.data?.meta.total ?? 0;
   const hasMore =
-    filter !== 'no-contact-30d' &&
     contactsQuery.data !== undefined &&
     contactsQuery.data.data.length === PER_PAGE &&
     contacts.length < contactsQuery.data.meta.total;
@@ -576,23 +539,13 @@ export default function ContactsScreen(): JSX.Element {
     t,
   ]);
 
-  const thirtyDaysAgo = useMemo(() => {
-    const date = new Date();
-    date.setDate(date.getDate() - 30);
-    return date;
-  }, []);
-
-  const filtered = showNoContact30d
-    ? contacts.filter((c) => !c.last_contacted_at || new Date(c.last_contacted_at) < thirtyDaysAgo)
-    : contacts;
-
   const listItems = useMemo((): ListItem[] => {
     if (search.trim() || showNoContact30d || sortKey !== 'first_name') {
-      return filtered.map(c => ({ _type: 'contact' as const, data: c }));
+      return contacts.map(c => ({ _type: 'contact' as const, data: c }));
     }
     const result: ListItem[] = [];
     let lastLetter = '';
-    for (const c of filtered) {
+    for (const c of contacts) {
       const letter = (c.first_name.charAt(0) || '#').toUpperCase();
       if (letter !== lastLetter) {
         result.push({ _type: 'header', letter });
@@ -601,7 +554,7 @@ export default function ContactsScreen(): JSX.Element {
       result.push({ _type: 'contact', data: c });
     }
     return result;
-  }, [filtered, search, showNoContact30d, sortKey]);
+  }, [contacts, search, showNoContact30d, sortKey]);
 
   const activityCaption = t('contacts.activityPrefix');
 
@@ -926,7 +879,7 @@ export default function ContactsScreen(): JSX.Element {
       contentContainerStyle={[
         styles.listContent,
         { paddingBottom: insets.bottom + (isSelectionMode ? 96 : 28) },
-        filtered.length === 0 ? styles.listContentEmpty : null,
+        contacts.length === 0 ? styles.listContentEmpty : null,
       ]}
     />
   );
