@@ -61,7 +61,7 @@ registerTool(
   async (args: Record<string, unknown>, user: McpUser) => {
     const id = typeof args.id === 'string' ? args.id : '';
     try {
-      const contact = await getContactForUser(id, user.org_id);
+      const contact = await getContactForUser(id, user.org_id, user);
       return { data: contact };
     } catch (err) {
       if (err instanceof ContactNotFoundError) {
@@ -168,7 +168,7 @@ registerTool(
     if (isContactType(args.type)) patch.type = args.type;
 
     try {
-      const contact = await updateContactForUser(id, user.org_id, user.sub, patch);
+      const contact = await updateContactForUser(id, user.org_id, user, patch);
       return { data: contact };
     } catch (err) {
       if (err instanceof ContactNotFoundError) {
@@ -199,7 +199,7 @@ registerTool(
     const id = typeof args.id === 'string' ? args.id : '';
 
     try {
-      const contact = await archiveContactForUser(id, user.org_id, user.sub);
+      const contact = await archiveContactForUser(id, user.org_id, user);
       return { data: contact };
     } catch (err) {
       if (err instanceof ContactNotFoundError) {

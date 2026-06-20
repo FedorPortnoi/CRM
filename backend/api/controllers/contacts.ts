@@ -234,7 +234,7 @@ export const ContactsController = {
   getById: async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
     try {
-      const contact = await getContactForUser(id, request.user.org_id);
+      const contact = await getContactForUser(id, request.user.org_id, request.user);
       return reply.send({ data: contact });
     } catch (err) {
       if (err instanceof ContactNotFoundError) {
@@ -248,7 +248,7 @@ export const ContactsController = {
     const { id } = request.params as { id: string };
     const body = request.body as Partial<ContactBody>;
     try {
-      const contact = await updateContactForUser(id, request.user.org_id, request.user.sub, body);
+      const contact = await updateContactForUser(id, request.user.org_id, request.user, body);
       return reply.send({ data: contact });
     } catch (err) {
       if (err instanceof ContactNotFoundError) {
@@ -264,7 +264,7 @@ export const ContactsController = {
   archive: async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
     try {
-      const contact = await archiveContactForUser(id, request.user.org_id, request.user.sub);
+      const contact = await archiveContactForUser(id, request.user.org_id, request.user);
       return reply.send({ data: contact });
     } catch (err) {
       if (err instanceof ContactNotFoundError) {

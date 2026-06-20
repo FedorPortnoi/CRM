@@ -77,9 +77,10 @@ registerTool(
   },
   async (args: Record<string, unknown>, user: McpUser) => {
     const id = typeof args.id === 'string' ? args.id : '';
+    const requester = user as { sub: string; org_id: string; role: 'owner' | 'admin' | 'member' | 'viewer' };
 
     try {
-      const deal = await getDealForUser(id, user.org_id);
+      const deal = await getDealForUser(id, user.org_id, requester);
       return { data: deal };
     } catch (err) {
       if (err instanceof DealDomainError) {
@@ -191,8 +192,9 @@ registerTool(
     if (typeof args.assigned_to === 'string') patch.assigned_to = args.assigned_to;
     if (typeof args.stage_id === 'string') patch.stage_id = args.stage_id;
 
+    const requester = user as { sub: string; org_id: string; role: 'owner' | 'admin' | 'member' | 'viewer' };
     try {
-      const updated = await updateDealForUser(id, user.org_id, user.sub, patch);
+      const updated = await updateDealForUser(id, user.org_id, requester, patch);
       return { data: updated };
     } catch (err) {
       if (err instanceof DealDomainError) {

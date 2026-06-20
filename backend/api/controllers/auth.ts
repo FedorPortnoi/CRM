@@ -458,6 +458,9 @@ export const AuthController = {
   },
 
   listUsers: async (request: FastifyRequest, reply: FastifyReply) => {
+    const callerRole = request.user.role as AuthRole;
+    const includeEmails = callerRole === 'owner' || callerRole === 'admin';
+
     const users = await db.user.findMany({
       where: {
         organization_id: request.user.org_id,
@@ -465,7 +468,7 @@ export const AuthController = {
       },
       select: {
         id: true,
-        email: true,
+        email: includeEmails,
         username: true,
         name: true,
         role: true,
@@ -475,7 +478,7 @@ export const AuthController = {
     });
 
     const response: AuthUsersResponse = {
-      data: users,
+      data: users as AuthUserListItem[],
       meta: { total: users.length },
     };
 
@@ -614,6 +617,14 @@ export const AuthController = {
     const { email: rawEmail, new_password } = request.body as { email: string; new_password: string };
     const email = normalizeEmail(rawEmail);
 
+    const callingUser = await db.user.findUnique({
+      where: { id: request.user.sub },
+      select: { must_change_email: true },
+    });
+    if (!callingUser?.must_change_email) {
+      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Credentials already set. Use the change-password flow instead.' } });
+    }
+
     const existing = await db.user.findUnique({ where: { email }, select: { id: true } });
     if (existing && existing.id !== request.user.sub) {
       return reply.status(409).send({ error: { code: 'EMAIL_ALREADY_EXISTS', message: 'An account with this email already exists' } });
@@ -751,7 +762,7 @@ export const AuthController = {
     });
 
     if (!user || !user.is_active) {
-      return reply.code(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
+      return reply.code(400).send({ error: { code: 'INVALID_CODE', message: 'Code is invalid or has expired' } });
     }
 
     if (user.is_verified) {

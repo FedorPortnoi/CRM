@@ -11,12 +11,14 @@ export type NotificationEventType =
   | 'task.deadline_2h'
   | 'task.overdue'
   | 'deal.assigned'
+  | 'deal.reassigned'
   | 'deal.stage_changed'
   | 'deal.won'
   | 'deal.lost'
   | 'deal.close_7d'
   | 'deal.close_1d'
-  | 'contact.assigned';
+  | 'contact.assigned'
+  | 'contact.reassigned';
 
 // Whether this event type needs deduplication (scheduled, fires repeatedly)
 const SCHEDULED_EVENTS = new Set<NotificationEventType>([
@@ -57,8 +59,8 @@ interface ContactCtx {
 
 type EventContext =
   | { eventType: 'task.assigned' | 'task.reassigned' | 'task.completed' | 'task.deadline_24h' | 'task.deadline_2h' | 'task.overdue'; orgId: string; task: TaskCtx }
-  | { eventType: 'deal.assigned' | 'deal.stage_changed' | 'deal.won' | 'deal.lost' | 'deal.close_7d' | 'deal.close_1d'; orgId: string; deal: DealCtx }
-  | { eventType: 'contact.assigned'; orgId: string; contact: ContactCtx };
+  | { eventType: 'deal.assigned' | 'deal.reassigned' | 'deal.stage_changed' | 'deal.won' | 'deal.lost' | 'deal.close_7d' | 'deal.close_1d'; orgId: string; deal: DealCtx }
+  | { eventType: 'contact.assigned' | 'contact.reassigned'; orgId: string; contact: ContactCtx };
 
 // ─── Message templates ────────────────────────────────────────────────────────
 
@@ -171,6 +173,19 @@ function buildMessages(ctx: EventContext): Array<{ recipientId: string; role: st
       }
       break;
 
+    case 'deal.reassigned':
+      add(ctx.deal.owner?.id, 'assignee', {
+        title: 'Сделка переназначена вам',
+        body: `${ctx.deal.creator?.name ?? 'Менеджер'} переназначил вам: «${ctx.deal.title}»`,
+      });
+      if (ctx.deal.creator && ctx.deal.owner && ctx.deal.creator.id !== ctx.deal.owner.id) {
+        add(ctx.deal.creator.id, 'assigner', {
+          title: 'Сделка переназначена',
+          body: `«${ctx.deal.title}» → ${ctx.deal.owner.name}`,
+        });
+      }
+      break;
+
     case 'deal.stage_changed':
       add(ctx.deal.owner?.id, 'owner', {
         title: 'Сделка продвинулась',
@@ -242,6 +257,25 @@ function buildMessages(ctx: EventContext): Array<{ recipientId: string; role: st
         title: 'Новый контакт',
         body: `${ctx.contact.assigner?.name ?? 'Менеджер'} назначил вам: ${ctx.contact.name}`,
       });
+      if (ctx.contact.assigner && ctx.contact.assigner.id !== ctx.contact.assignee.id) {
+        add(ctx.contact.assigner.id, 'assigner', {
+          title: 'Контакт назначен',
+          body: `${ctx.contact.name} → ${ctx.contact.assignee.name}`,
+        });
+      }
+      break;
+
+    case 'contact.reassigned':
+      add(ctx.contact.assignee.id, 'assignee', {
+        title: 'Контакт переназначен вам',
+        body: `${ctx.contact.assigner?.name ?? 'Менеджер'} переназначил вам: ${ctx.contact.name}`,
+      });
+      if (ctx.contact.assigner && ctx.contact.assigner.id !== ctx.contact.assignee.id) {
+        add(ctx.contact.assigner.id, 'assigner', {
+          title: 'Контакт переназначен',
+          body: `${ctx.contact.name} → ${ctx.contact.assignee.name}`,
+        });
+      }
       break;
   }
 
@@ -322,13 +356,13 @@ export async function taskCtx(taskId: string, assignerId?: string): Promise<Task
   return { id: t.id, title: t.title, due_date: t.due_date, assignee, assigner };
 }
 
-export async function dealCtx(dealId: string, stageName?: string): Promise<DealCtx | null> {
+export async function dealCtx(dealId: string, stageName?: string, actorId?: string): Promise<DealCtx | null> {
   const d = await db.deal.findUnique({
     where: { id: dealId },
     select: { id: true, title: true, expected_close: true, assigned_to: true, created_by: true, stage: { select: { name: true } } },
   });
   if (!d) return null;
-  const [owner, creator] = await Promise.all([userSnap(d.assigned_to), userSnap(d.created_by)]);
+  const [owner, creator] = await Promise.all([userSnap(d.assigned_to), userSnap(actorId ?? d.created_by)]);
   return { id: d.id, title: d.title, expected_close: d.expected_close, stage_name: stageName ?? d.stage?.name, owner, creator };
 }
 

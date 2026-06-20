@@ -14,7 +14,7 @@ import { encryptField, decryptField } from './encryption';
 import { evaluateWorkflows } from './workflows';
 import { logActivity } from '../api/controllers/activities';
 import { dispatchNotification, contactCtx } from './notificationEngine';
-import { getVisibleUserIds, ownerVisibilityWhere } from './visibility';
+import { getVisibleUserIds, getAccessibleUserIds, canSeeUser, ownerVisibilityWhere } from './visibility';
 import { userBelongsToOrg } from './contact-bulk';
 import { getLastContactedMap } from './lastContacted';
 
@@ -186,6 +186,7 @@ export async function listContactsForUser(
 export async function getContactForUser(
   contactId: string,
   orgId: string,
+  requester: ContactRequester,
 ): Promise<unknown> {
   const contact = await db.contact.findFirst({
     where: { id: contactId, organization_id: orgId },
@@ -194,6 +195,18 @@ export async function getContactForUser(
 
   if (!contact) {
     throw new ContactNotFoundError();
+  }
+
+  const accessibleIds = await getAccessibleUserIds({
+    sub: requester.sub,
+    org_id: orgId,
+    role: requester.role as 'owner' | 'admin' | 'member' | 'viewer',
+  });
+  if (accessibleIds !== null) {
+    const canSeeIt = canSeeUser(accessibleIds, contact.assigned_to) || canSeeUser(accessibleIds, contact.created_by);
+    if (!canSeeIt) {
+      throw new ContactNotFoundError();
+    }
   }
 
   return decryptContact(contact);
@@ -270,15 +283,29 @@ export async function createContactForUser(
 export async function updateContactForUser(
   contactId: string,
   orgId: string,
-  requestingUserId: string,
+  requester: ContactRequester,
   patch: ContactPatch,
 ): Promise<unknown> {
+  const requestingUserId = requester.sub;
+
   const existing = await db.contact.findFirst({
     where: { id: contactId, organization_id: orgId, status: { not: ContactStatus.archived } },
   });
 
   if (!existing) {
     throw new ContactNotFoundError();
+  }
+
+  const accessibleIds = await getAccessibleUserIds({
+    sub: requestingUserId,
+    org_id: orgId,
+    role: requester.role as 'owner' | 'admin' | 'member' | 'viewer',
+  });
+  if (accessibleIds !== null) {
+    const canSeeIt = canSeeUser(accessibleIds, existing.assigned_to) || canSeeUser(accessibleIds, existing.created_by);
+    if (!canSeeIt) {
+      throw new ContactNotFoundError();
+    }
   }
 
   if (patch.assigned_to !== undefined && patch.assigned_to !== requestingUserId) {
@@ -340,6 +367,13 @@ export async function updateContactForUser(
     changes,
   });
 
+  if (patch.assigned_to !== undefined && patch.assigned_to !== existing.assigned_to && patch.assigned_to !== requestingUserId) {
+    const eventType = existing.assigned_to ? 'contact.reassigned' : 'contact.assigned';
+    void contactCtx(contactId, requestingUserId).then((ctx) => {
+      if (ctx) void dispatchNotification({ eventType, orgId, contact: ctx });
+    });
+  }
+
   return decryptContact(contact);
 }
 
@@ -350,18 +384,32 @@ export async function updateContactForUser(
 export async function archiveContactForUser(
   contactId: string,
   orgId: string,
-  requestingUserId: string,
+  requester: ContactRequester,
 ): Promise<unknown> {
+  const requestingUserId = requester.sub;
+
   const existing = await db.contact.findFirst({
-    where: { id: contactId, organization_id: orgId },
+    where: { id: contactId, organization_id: orgId, status: { not: ContactStatus.archived } },
   });
 
   if (!existing) {
     throw new ContactNotFoundError();
   }
 
+  const accessibleIds = await getAccessibleUserIds({
+    sub: requestingUserId,
+    org_id: orgId,
+    role: requester.role as 'owner' | 'admin' | 'member' | 'viewer',
+  });
+  if (accessibleIds !== null) {
+    const canSeeIt = canSeeUser(accessibleIds, existing.assigned_to) || canSeeUser(accessibleIds, existing.created_by);
+    if (!canSeeIt) {
+      throw new ContactNotFoundError();
+    }
+  }
+
   const result = await db.contact.updateMany({
-    where: { id: contactId, organization_id: orgId },
+    where: { id: contactId, organization_id: orgId, status: { not: ContactStatus.archived } },
     data: { status: ContactStatus.archived },
   });
 

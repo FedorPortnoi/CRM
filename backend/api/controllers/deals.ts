@@ -172,7 +172,7 @@ async function getById(
   const { id } = request.params as IdParams;
 
   try {
-    const deal = await getDealForUser(id, request.user.org_id);
+    const deal = await getDealForUser(id, request.user.org_id, request.user);
     reply.send({ data: deal, meta: {} });
   } catch (err) {
     if (err instanceof DealDomainError) {
@@ -193,7 +193,7 @@ async function update(
   const body = request.body as UpdateBody;
 
   try {
-    const updated = await updateDealForUser(id, request.user.org_id, request.user.sub, body);
+    const updated = await updateDealForUser(id, request.user.org_id, request.user, body);
     reply.send({ data: updated, meta: {} });
   } catch (err) {
     if (err instanceof DealDomainError) {
@@ -257,6 +257,11 @@ async function moveStage(
     return;
   }
 
+  if (deal.stage_id === stage_id) {
+    reply.status(422).send({ error: { code: 'DEAL_ALREADY_IN_STAGE', message: 'Deal is already in this stage' } });
+    return;
+  }
+
   const stageExists = deal.pipeline_id !== null
     ? await stageBelongsToPipeline(stage_id, deal.pipeline_id, request.user.org_id)
     : false;
@@ -282,7 +287,7 @@ async function moveStage(
 
   void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: 'stage_changed', changes: { stage_id } });
 
-  void dealCtx(updated.id, updated.stage?.name).then((ctx) => {
+  void dealCtx(updated.id, updated.stage?.name, request.user.sub).then((ctx) => {
     if (ctx) void dispatchNotification({ eventType: 'deal.stage_changed', orgId: request.user.org_id, deal: ctx });
   });
 
@@ -305,8 +310,8 @@ async function markWon(
     return;
   }
 
-  if (deal.status === DealStatus.won) {
-    reply.status(422).send({ error: { code: 'DEAL_ALREADY_WON', message: 'Deal is already marked as won' } });
+  if (deal.status !== DealStatus.open) {
+    reply.status(422).send({ error: { code: 'DEAL_NOT_OPEN', message: 'Only open deals can be marked as won' } });
     return;
   }
 
@@ -327,7 +332,9 @@ async function markWon(
     triggerRecordId: updated.id,
   });
 
-  void dealCtx(updated.id).then((ctx) => {
+  void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: 'won' });
+
+  void dealCtx(updated.id, undefined, request.user.sub).then((ctx) => {
     if (ctx) void dispatchNotification({ eventType: 'deal.won', orgId: request.user.org_id, deal: ctx });
   });
 
@@ -350,8 +357,8 @@ async function markLost(
     return;
   }
 
-  if (deal.status === DealStatus.lost) {
-    reply.status(422).send({ error: { code: 'DEAL_ALREADY_LOST', message: 'Deal is already marked as lost' } });
+  if (deal.status !== DealStatus.open) {
+    reply.status(422).send({ error: { code: 'DEAL_NOT_OPEN', message: 'Only open deals can be marked as lost' } });
     return;
   }
 
@@ -367,7 +374,7 @@ async function markLost(
 
   void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: 'lost' });
 
-  void dealCtx(updated.id).then((ctx) => {
+  void dealCtx(updated.id, undefined, request.user.sub).then((ctx) => {
     if (ctx) void dispatchNotification({ eventType: 'deal.lost', orgId: request.user.org_id, deal: ctx });
   });
 

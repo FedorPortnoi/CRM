@@ -16,6 +16,8 @@ import { logActivity } from '../api/controllers/activities';
 import { dispatchNotification, dealCtx } from './notificationEngine';
 import {
   getVisibleUserIds,
+  getAccessibleUserIds,
+  canSeeUser,
   ownerVisibilityWhere,
   type VisibilityScope,
   type Requester,
@@ -172,6 +174,7 @@ export async function listDealsForUser(
 export async function getDealForUser(
   dealId: string,
   orgId: string,
+  requestingUser: Requester,
 ): Promise<Awaited<ReturnType<typeof db.deal.findFirst>> & object> {
   const deal = await db.deal.findFirst({
     where: { id: dealId, organization_id: orgId },
@@ -180,6 +183,14 @@ export async function getDealForUser(
 
   if (!deal) {
     throw new DealDomainError({ httpStatus: 404, code: 'DEAL_NOT_FOUND', message: 'Deal not found' });
+  }
+
+  const accessibleIds = await getAccessibleUserIds(requestingUser);
+  if (accessibleIds !== null) {
+    const canSeeIt = canSeeUser(accessibleIds, deal.assigned_to) || canSeeUser(accessibleIds, deal.created_by);
+    if (!canSeeIt) {
+      throw new DealDomainError({ httpStatus: 404, code: 'DEAL_NOT_FOUND', message: 'Deal not found' });
+    }
   }
 
   return deal;
@@ -288,15 +299,25 @@ export type UpdateDealResult = Awaited<ReturnType<typeof db.deal.update>>;
 export async function updateDealForUser(
   dealId: string,
   orgId: string,
-  requestingUserId: string,
+  requestingUser: Requester,
   patch: UpdateDealInput,
 ): Promise<UpdateDealResult> {
+  const requestingUserId = requestingUser.sub;
+
   const deal = await db.deal.findFirst({
     where: { id: dealId, organization_id: orgId },
   });
 
   if (!deal) {
     throw new DealDomainError({ httpStatus: 404, code: 'DEAL_NOT_FOUND', message: 'Deal not found' });
+  }
+
+  const accessibleIds = await getAccessibleUserIds(requestingUser);
+  if (accessibleIds !== null) {
+    const canSeeIt = canSeeUser(accessibleIds, deal.assigned_to) || canSeeUser(accessibleIds, deal.created_by);
+    if (!canSeeIt) {
+      throw new DealDomainError({ httpStatus: 404, code: 'DEAL_NOT_FOUND', message: 'Deal not found' });
+    }
   }
 
   // Validate stage/pipeline change
@@ -393,6 +414,12 @@ export async function updateDealForUser(
     entityId: updated.id,
     action: 'updated',
   });
+
+  if (patch.assigned_to !== undefined && patch.assigned_to !== deal.assigned_to) {
+    void dealCtx(updated.id, undefined, requestingUserId).then((ctx) => {
+      if (ctx) void dispatchNotification({ eventType: 'deal.reassigned', orgId, deal: ctx });
+    });
+  }
 
   return updated as UpdateDealResult;
 }
