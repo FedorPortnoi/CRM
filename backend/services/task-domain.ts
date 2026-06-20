@@ -403,7 +403,7 @@ export async function updateTaskForUser(
   });
 
   if (patch.assigned_to && patch.assigned_to !== existing.assigned_to) {
-    void taskCtx(updated.id).then((ctx) => {
+    void taskCtx(updated.id, requestingUser.sub).then((ctx) => {
       if (ctx) void dispatchNotification({ eventType: 'task.reassigned', orgId, task: ctx });
     });
   }

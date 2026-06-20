@@ -101,6 +101,12 @@ function buildMessages(ctx: EventContext): Array<{ recipientId: string; role: st
         title: 'Задача переназначена вам',
         body: `«${ctx.task.title}» теперь ваша`,
       });
+      if (ctx.task.assigner && ctx.task.assigner.id !== ctx.task.assignee.id) {
+        add(ctx.task.assigner.id, 'assigner', {
+          title: 'Задача переназначена',
+          body: `«${ctx.task.title}» → ${ctx.task.assignee.name}`,
+        });
+      }
       break;
 
     case 'task.completed':
@@ -302,13 +308,16 @@ async function userSnap(id: string | null | undefined): Promise<UserSnap | null>
   return u ?? null;
 }
 
-export async function taskCtx(taskId: string): Promise<TaskCtx | null> {
+export async function taskCtx(taskId: string, assignerId?: string): Promise<TaskCtx | null> {
   const t = await db.task.findUnique({
     where: { id: taskId },
     select: { id: true, title: true, due_date: true, assigned_to: true, created_by: true },
   });
   if (!t) return null;
-  const [assignee, assigner] = await Promise.all([userSnap(t.assigned_to), userSnap(t.created_by)]);
+  const [assignee, assigner] = await Promise.all([
+    userSnap(t.assigned_to),
+    userSnap(assignerId ?? t.created_by),
+  ]);
   if (!assignee) return null;
   return { id: t.id, title: t.title, due_date: t.due_date, assignee, assigner };
 }
