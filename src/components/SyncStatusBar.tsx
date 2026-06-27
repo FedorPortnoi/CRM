@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSyncStore, SyncStatus } from '../store/syncStore';
 
 type Config = {
@@ -15,6 +16,7 @@ const STYLE_CONFIG: Record<SyncStatus, Config> = {
 
 export default function SyncStatusBar(): JSX.Element | null {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const status = useSyncStore((s) => s.status);
   const opacity = useRef(new Animated.Value(0)).current;
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -44,7 +46,7 @@ export default function SyncStatusBar(): JSX.Element | null {
   const config = STYLE_CONFIG[status];
 
   return (
-    <Animated.View style={[styles.bar, { backgroundColor: config.bg, opacity }]}>
+    <Animated.View style={[styles.bar, { top: insets.top, backgroundColor: config.bg, opacity }]}>
       <Text style={styles.text}>{TEXT[status]}</Text>
     </Animated.View>
   );
@@ -52,6 +54,10 @@ export default function SyncStatusBar(): JSX.Element | null {
 
 const styles = StyleSheet.create({
   bar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 100,
     paddingVertical: 6,
     paddingHorizontal: 16,
     alignItems: 'center',
