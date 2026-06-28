@@ -9,6 +9,8 @@ import {
   View,
 } from 'react-native';
 import { MoreVertical, ChevronRight, Check, Phone } from 'lucide-react-native';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeColors } from '../theme';
 
 export type ContactCardType = 'customer' | 'partner' | 'lead' | 'other';
 
@@ -39,9 +41,6 @@ type ContactCardProps = {
 };
 
 const COLORS = {
-  lightCream: '#E8DDD6',
-  burntOrange: '#C45A10',
-  charcoal: '#333333',
   white: '#FFFFFF',
   black: '#161412',
   textMuted: '#6F625D',
@@ -54,12 +53,12 @@ const COLORS = {
   neutralSoft: '#F1EBE6',
 } as const;
 
-const TYPE_COLORS: Record<ContactCardType, { main: string; soft: string }> = {
-  customer: { main: COLORS.burntOrange, soft: 'rgba(196, 90, 16, 0.10)' },
+const getTypeColors = (c: ThemeColors): Record<ContactCardType, { main: string; soft: string }> => ({
+  customer: { main: c.orange, soft: 'rgba(204, 120, 92, 0.10)' },
   partner: { main: COLORS.green, soft: COLORS.greenSoft },
   lead: { main: COLORS.blue, soft: COLORS.blueSoft },
   other: { main: COLORS.neutral, soft: COLORS.neutralSoft },
-};
+});
 
 function getRuDealsLabel(count: number): string {
   const n = Math.abs(count);
@@ -71,11 +70,11 @@ function getRuDealsLabel(count: number): string {
   return `${count} сделок`;
 }
 
-function getActivityColor(daysAgo: number | null | undefined): string {
+function getActivityColor(daysAgo: number | null | undefined, c: ThemeColors): string {
   if (daysAgo == null) return COLORS.textMuted;
-  if (daysAgo <= 7) return '#16a34a';
-  if (daysAgo <= 30) return '#d97706';
-  return '#dc2626';
+  if (daysAgo <= 7) return c.wheat;
+  if (daysAgo <= 30) return c.amber;
+  return c.red;
 }
 
 function ContactCardComponent({
@@ -88,8 +87,10 @@ function ContactCardComponent({
   disabled,
   activityCaption,
 }: ContactCardProps): JSX.Element {
-  const typeColors = TYPE_COLORS[contact.type];
-  const activityColor = getActivityColor(contact.activityDaysAgo);
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
+  const typeColors = getTypeColors(colors)[contact.type];
+  const activityColor = getActivityColor(contact.activityDaysAgo, colors);
 
   return (
     <Pressable
@@ -166,7 +167,7 @@ function ContactCardComponent({
               hitSlop={6}
               onPress={() => Linking.openURL('tel:' + contact.phone)}
             >
-              <Phone size={14} color="#383432" />
+              <Phone size={14} color={colors.text1} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -202,9 +203,9 @@ function ContactCardComponent({
           disabled={disabled}
           style={({ pressed }) => [styles.moreButton, pressed && styles.pressed]}
         >
-          <MoreVertical size={20} color={COLORS.textMuted} />
+          <MoreVertical size={20} color={colors.textMuted} />
         </Pressable>
-        <ChevronRight size={26} color={COLORS.textMuted} />
+        <ChevronRight size={26} color={colors.textMuted} />
       </View>
     </Pressable>
   );
@@ -213,7 +214,7 @@ function ContactCardComponent({
 const ContactCard = React.memo(ContactCardComponent);
 export default ContactCard;
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   card: {
     minHeight: 104,
     flexDirection: 'row',
@@ -221,17 +222,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: 17,
     borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    backgroundColor: COLORS.white,
-    shadowColor: COLORS.charcoal,
+    borderColor: c.border,
+    backgroundColor: c.bgPanel,
+    shadowColor: c.text1,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.045,
     shadowRadius: 12,
     elevation: 2,
   },
   cardSelected: {
-    borderColor: COLORS.burntOrange,
-    backgroundColor: '#FEF6F0',
+    borderColor: c.orange,
+    backgroundColor: 'rgba(204,120,92,0.08)',
   },
   statusStrip: {
     position: 'absolute',
@@ -250,7 +251,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: COLORS.lightCream,
+    backgroundColor: c.border,
   },
   avatarFallback: {
     width: 50,
@@ -273,13 +274,13 @@ const styles = StyleSheet.create({
   },
   checkboxEmpty: {
     borderWidth: 2,
-    borderColor: '#CFADA3',
-    backgroundColor: COLORS.white,
+    borderColor: c.textMuted,
+    backgroundColor: c.bgPanel,
   },
   checkboxSelected: {
     borderWidth: 2,
-    borderColor: COLORS.burntOrange,
-    backgroundColor: COLORS.burntOrange,
+    borderColor: c.orange,
+    backgroundColor: c.orange,
   },
   info: {
     flex: 1.16,
@@ -287,14 +288,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   name: {
-    color: COLORS.black,
+    color: c.text1,
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: -0.2,
   },
   company: {
     marginTop: 4,
-    color: COLORS.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '500',
   },
@@ -320,7 +321,7 @@ const styles = StyleSheet.create({
   },
   dealCountPill: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(196,90,16,0.08)',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -329,7 +330,7 @@ const styles = StyleSheet.create({
   dealCountText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#C45A10',
+    color: c.orange,
   },
   dealInfo: {
     flex: 0.86,
@@ -338,14 +339,14 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
   },
   phone: {
-    color: COLORS.black,
+    color: c.text1,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
   activityCaption: {
     marginTop: 10,
-    color: COLORS.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     fontWeight: '500',
   },
@@ -366,7 +367,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#D0C4BC',
+    borderColor: c.border,
   },
   messengerWaBtn: {
     minWidth: 32,

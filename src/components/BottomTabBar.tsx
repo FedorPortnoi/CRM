@@ -7,10 +7,8 @@ import { CalendarCheck, Users, Kanban, MoreHorizontal } from 'lucide-react-nativ
 import { useChatStore } from '../store/chatStore';
 import { useNotificationStore } from '../store/notificationStore';
 import MoreSheet from './MoreSheet';
-
-const ACCENT = '#C45A10';
-const DARK = '#2B2724';
-const MUTED = '#8C7B72';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeColors } from '../theme';
 
 const MORE_PATHS = new Set(['/tasks', '/chat', '/notifications', '/calendar', '/settings']);
 
@@ -19,6 +17,8 @@ export default function BottomTabBar(): JSX.Element {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
 
   const chatUnread = useChatStore((s) => s.channels.reduce((sum, c) => sum + c.unread, 0));
   const notifUnread = useNotificationStore((s) => s.unreadCount);
@@ -46,7 +46,7 @@ export default function BottomTabBar(): JSX.Element {
                 activeOpacity={0.7}
                 accessibilityRole="button"
               >
-                <Icon size={24} color={active ? ACCENT : MUTED} strokeWidth={2.6} />
+                <Icon size={24} color={active ? colors.orange : colors.textMuted} strokeWidth={2.6} />
                 <Text style={[styles.label, active && styles.labelActive]}>{label}</Text>
               </TouchableOpacity>
             );
@@ -59,7 +59,7 @@ export default function BottomTabBar(): JSX.Element {
             accessibilityRole="button"
           >
             <View>
-              <MoreHorizontal size={24} color={isMoreActive ? ACCENT : MUTED} strokeWidth={2.6} />
+              <MoreHorizontal size={24} color={isMoreActive ? colors.orange : colors.textMuted} strokeWidth={2.6} />
               {moreBadge > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{moreBadge > 99 ? '99+' : moreBadge}</Text>
@@ -81,11 +81,11 @@ export default function BottomTabBar(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
-    backgroundColor: DARK,
+    backgroundColor: c.bgDark,
     borderTopWidth: 1,
-    borderTopColor: '#3D3330',
+    borderTopColor: c.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.3,
@@ -104,11 +104,11 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 11,
-    color: MUTED,
+    color: c.textMuted,
     fontWeight: '600',
   },
   labelActive: {
-    color: ACCENT,
+    color: c.orange,
     fontWeight: '700',
   },
   badge: {

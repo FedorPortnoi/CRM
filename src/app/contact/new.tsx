@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -6,6 +6,8 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { enqueue } from '../../utils/offlineQueue';
 import { useCreateMutation } from '../../hooks/useCreateMutation';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 type RouteParamValue = string | string[] | undefined;
 
@@ -63,6 +65,7 @@ async function queueContactCreation(
 
 export default function NewContactScreen(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
   const token = useUserStore((s) => s.token);
   const { phone: routePhone, capture_id: routeCaptureId } = useLocalSearchParams<NewContactParams>();
   const captureId = firstRouteParam(routeCaptureId)?.trim() || null;
@@ -74,6 +77,8 @@ export default function NewContactScreen(): JSX.Element {
   const [phone, setPhone] = useState<string>(() => firstRouteParam(routePhone) ?? '');
   const [notes, setNotes] = useState<string>('');
   const [showFirstNameError, setShowFirstNameError] = useState<boolean>(false);
+
+  const styles = makeStyles(colors);
 
   const { isSubmitting, apiError, submit } = useCreateMutation<Record<string, string>, { id: string }>({
     endpoint: `${API_URL}/contacts`,
@@ -206,44 +211,44 @@ export default function NewContactScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
   scrollView: { flex: 1 },
   content: { padding: 16 },
   errorBanner: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: 'rgba(204,82,71,0.12)',
     padding: 12,
     borderRadius: 12,
     marginBottom: 16,
   },
-  errorBannerText: { color: '#ef4444' },
+  errorBannerText: { color: c.red },
   fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#383432', marginBottom: 4 },
+  label: { fontSize: 13, fontWeight: '600', color: c.text1, marginBottom: 4 },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.inputBorder,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     minHeight: 44,
     fontSize: 15,
-    color: '#383432',
+    color: c.text1,
   },
   notesInput: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.inputBorder,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     height: 100,
     fontSize: 15,
-    color: '#383432',
+    color: c.text1,
   },
-  fieldError: { color: '#ef4444', fontSize: 12, marginTop: 4 },
+  fieldError: { color: c.red, fontSize: 12, marginTop: 4 },
   submitButton: {
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 12,
     minHeight: 48,
     justifyContent: 'center',

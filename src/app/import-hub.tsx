@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Phone, FileText, Upload, MessageSquare, ChevronRight, Zap } from 'lucide-react-native';
@@ -51,7 +51,7 @@ const SOURCES: Source[] = [
     label: 'Телефонная книга',
     sub: 'WhatsApp, Telegram, MAX — синхронизированы с контактами',
     icon: <Phone size={22} color="#fff" strokeWidth={2} />,
-    color: '#C45A10',
+    color: '#CC785C',
     route: '/contact/import-phone',
   },
   {
@@ -84,7 +84,7 @@ export default function ImportHubScreen() {
             <Text style={styles.cardLabel}>{s.label}</Text>
             <Text style={styles.cardSub}>{s.sub}</Text>
           </View>
-          <ChevronRight size={18} color="#CFADA3" strokeWidth={2} />
+          <ChevronRight size={18} color="rgba(232,224,212,0.35)" strokeWidth={2} />
         </TouchableOpacity>
       ))}
     </ScrollView>
@@ -92,13 +92,13 @@ export default function ImportHubScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAF6F3' },
+  container: { flex: 1, backgroundColor: '#0E0E0D' },
   content: { padding: 20, paddingBottom: 48 },
-  heading: { fontSize: 22, fontWeight: '800', color: '#383432', marginBottom: 6 },
-  sub: { fontSize: 14, color: '#B07868', marginBottom: 24, lineHeight: 20 },
+  heading: { fontSize: 22, fontWeight: '800', color: '#E8E0D4', marginBottom: 6 },
+  sub: { fontSize: 14, color: '#D4A27F', marginBottom: 24, lineHeight: 20 },
   card: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: '#fff', borderRadius: 14, padding: 16,
+    backgroundColor: '#1A1A18', borderRadius: 14, padding: 16,
     marginBottom: 12,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
@@ -109,6 +109,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   cardText: { flex: 1 },
-  cardLabel: { fontSize: 15, fontWeight: '700', color: '#383432', marginBottom: 2 },
-  cardSub: { fontSize: 12, color: '#B07868', lineHeight: 16 },
+  cardLabel: { fontSize: 15, fontWeight: '700', color: '#E8E0D4', marginBottom: 2 },
+  cardSub: { fontSize: 12, color: '#D4A27F', lineHeight: 16 },
 });

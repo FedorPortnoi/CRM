@@ -3,10 +3,12 @@ import { TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { useTheme } from '../hooks/useTheme';
 
 // Top-left arrow shown on every non-home screen; always returns to the dashboard.
 export default function HomeBackButton(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
   return (
     <TouchableOpacity
       onPress={() => router.replace('/' as never)}
@@ -15,7 +17,7 @@ export default function HomeBackButton(): JSX.Element {
       accessibilityLabel={t('common.back')}
       hitSlop={8}
     >
-      <ArrowLeft size={26} color="#2B2724" strokeWidth={2.4} />
+      <ArrowLeft size={26} color={colors.bgDark} strokeWidth={2.4} />
     </TouchableOpacity>
   );
 }

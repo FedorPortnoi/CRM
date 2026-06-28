@@ -10,6 +10,8 @@ import { scheduleTaskDueReminder } from '../../utils/notifications';
 import { formatMarketDate } from '../../market/profile';
 import { useCreateMutation } from '../../hooks/useCreateMutation';
 import { RECURRENCE_OPTIONS, labelKeyForRule } from '../../utils/recurrence';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 interface ContactPreview {
   id: string;
@@ -39,6 +41,8 @@ function contactDisplayName(c: { first_name: string; last_name: string | null })
 
 export default function NewTaskScreen(): JSX.Element | null {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const insets = useSafeAreaInsets();
   const token = useUserStore((s) => s.token);
   const user = useUserStore((s) => s.user);
@@ -125,7 +129,6 @@ export default function NewTaskScreen(): JSX.Element | null {
   }, [token, user]);
 
   // Holds an optional contact-id override set just before calling submit()
-  // (needed when the AI-suggestion modal resolves with a different contact).
   const pendingContactIdRef = useRef<string | null>(null);
 
   const { isSubmitting, apiError, submit } = useCreateMutation<
@@ -195,7 +198,6 @@ export default function NewTaskScreen(): JSX.Element | null {
     setTitle(text);
     setShowTitleError(false);
 
-    // Detect the last word being typed (2+ chars) and search contacts against it
     const match = text.match(/(?:^|[\s])(\S{2,})$/);
     if (match) {
       const query = match[1];
@@ -219,7 +221,6 @@ export default function NewTaskScreen(): JSX.Element | null {
     setContactResults([]);
   };
 
-  // Thin wrapper: set optional contact-id override into the ref, then delegate to the hook.
   const doSubmit = (overrideContactId?: string): void => {
     pendingContactIdRef.current = overrideContactId ?? null;
     void submit();
@@ -231,7 +232,6 @@ export default function NewTaskScreen(): JSX.Element | null {
       return;
     }
 
-    // If no contact linked, ask AI to suggest one
     if (!selectedContactId && title.trim().length > 3) {
       try {
         const res = await fetch(`${API_URL}/tasks/suggest-contact`, {
@@ -310,11 +310,11 @@ export default function NewTaskScreen(): JSX.Element | null {
         value={title}
         onChangeText={handleTitleChange}
         placeholder={t('tasks.titlePlaceholder')}
-        placeholderTextColor="#B07868"
+        placeholderTextColor={colors.placeholder}
       />
       {showTitleError && <Text style={styles.fieldError}>{t('tasks.titleRequired')}</Text>}
 
-      {/* @mention dropdown — appears right below the title field */}
+      {/* @mention dropdown */}
       {mentionResults.length > 0 && (
         <View style={styles.mentionDropdown}>
           {mentionResults.map((c) => (
@@ -355,7 +355,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           }}
           markedDates={
             dueDate
-              ? ({ [dueDate]: { selected: true, selectedColor: '#C45A10' } } as Record<string, { selected?: boolean; selectedColor?: string }>)
+              ? ({ [dueDate]: { selected: true, selectedColor: colors.orange } } as Record<string, { selected?: boolean; selectedColor?: string }>)
               : {}
           }
         />
@@ -386,7 +386,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           }}
           markedDates={
             reminderDate
-              ? ({ [reminderDate]: { selected: true, selectedColor: '#C45A10' } } as Record<string, { selected?: boolean; selectedColor?: string }>)
+              ? ({ [reminderDate]: { selected: true, selectedColor: colors.orange } } as Record<string, { selected?: boolean; selectedColor?: string }>)
               : {}
           }
         />
@@ -477,7 +477,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           value={contactQuery}
           onChangeText={setContactQuery}
           placeholder={t('contacts.searchByName')}
-          placeholderTextColor="#B07868"
+          placeholderTextColor={colors.placeholder}
         />
       )}
       {contactResults.length > 0 && selectedContactId === '' && (
@@ -513,81 +513,81 @@ export default function NewTaskScreen(): JSX.Element | null {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, backgroundColor: '#ffffff', flexGrow: 1 },
-  errorBanner: { backgroundColor: '#fef2f2', padding: 12, borderRadius: 12, marginBottom: 16 },
-  errorBannerText: { color: '#ef4444' },
-  label: { fontSize: 14, fontWeight: '600', color: '#383432', marginBottom: 6, marginTop: 16 },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { padding: 16, backgroundColor: c.bg, flexGrow: 1 },
+  errorBanner: { backgroundColor: 'rgba(204,82,71,0.12)', padding: 12, borderRadius: 12, marginBottom: 16 },
+  errorBannerText: { color: c.red },
+  label: { fontSize: 14, fontWeight: '600', color: c.text1, marginBottom: 6, marginTop: 16 },
   input: {
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.inputBorder,
     borderRadius: 12,
     padding: 12,
     minHeight: 44,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     justifyContent: 'center',
   },
   dropdownField: {
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 12,
     minHeight: 44,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  dropdownChevron: { color: '#B07868', fontSize: 18, marginLeft: 8 },
-  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  dropdownChevron: { color: c.amber, fontSize: 18, marginLeft: 8 },
+  pickerOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
   pickerSheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 32,
   },
-  pickerTitle: { fontSize: 16, fontWeight: '600', color: '#383432', marginBottom: 8 },
+  pickerTitle: { fontSize: 16, fontWeight: '600', color: c.text1, marginBottom: 8 },
   pickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0E8E2',
+    borderBottomColor: c.border,
   },
-  pickerRowText: { fontSize: 16, color: '#383432' },
-  pickerRowTextSelected: { color: '#C45A10', fontWeight: '600' },
-  pickerCheck: { color: '#C45A10', fontSize: 16, fontWeight: '700' },
-  inputText: { color: '#383432', fontSize: 16 },
-  placeholderText: { color: '#B07868', fontSize: 16 },
-  fieldError: { color: '#ef4444', fontSize: 12, marginTop: 4 },
-  clearLink: { color: '#C45A10', fontSize: 12, marginTop: 4 },
+  pickerRowText: { fontSize: 16, color: c.text1 },
+  pickerRowTextSelected: { color: c.orange, fontWeight: '600' },
+  pickerCheck: { color: c.orange, fontSize: 16, fontWeight: '700' },
+  inputText: { color: c.text1, fontSize: 16 },
+  placeholderText: { color: c.amber, fontSize: 16 },
+  fieldError: { color: c.red, fontSize: 12, marginTop: 4 },
+  clearLink: { color: c.orange, fontSize: 12, marginTop: 4 },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8DDD6',
+    borderBottomColor: c.border,
   },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: '#383432' },
-  modalDone: { fontSize: 16, color: '#C45A10', fontWeight: '600' },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: c.text1 },
+  modalDone: { fontSize: 16, color: c.orange, fontWeight: '600' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     borderRadius: 20,
     paddingVertical: 6,
     paddingHorizontal: 12,
     alignSelf: 'flex-start',
   },
-  chipText: { color: '#C45A10', fontSize: 14, marginRight: 8 },
-  chipRemove: { color: '#C45A10', fontSize: 14, fontWeight: '600' },
+  chipText: { color: c.orange, fontSize: 14, marginRight: 8 },
+  chipRemove: { color: c.orange, fontSize: 14, fontWeight: '600' },
   dropdown: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     marginTop: 4,
     elevation: 2,
@@ -596,15 +596,15 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
   },
-  dropdownRow: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#E8DDD6' },
-  dropdownText: { color: '#383432', fontSize: 14 },
+  dropdownRow: { padding: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+  dropdownText: { color: c.text1, fontSize: 14 },
   mentionDropdown: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     marginTop: 4,
     marginBottom: 4,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     elevation: 4,
     shadowColor: '#000000',
     shadowOpacity: 0.12,
@@ -618,19 +618,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0E8E2',
+    borderBottomColor: c.border,
   },
-  mentionName: { fontSize: 14, fontWeight: '600', color: '#383432' },
-  mentionCompany: { fontSize: 12, color: '#B07868' },
+  mentionName: { fontSize: 14, fontWeight: '600', color: c.text1 },
+  mentionCompany: { fontSize: 12, color: c.amber },
   suggestionOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: c.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
   suggestionCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 16,
     padding: 24,
     width: '100%',
@@ -640,12 +640,12 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
-  suggestionTitle: { fontSize: 17, fontWeight: '700', color: '#383432', marginBottom: 8 },
-  suggestionBody: { fontSize: 14, color: '#6B6360', lineHeight: 20, marginBottom: 20 },
+  suggestionTitle: { fontSize: 17, fontWeight: '700', color: c.text1, marginBottom: 8 },
+  suggestionBody: { fontSize: 14, color: c.textMuted, lineHeight: 20, marginBottom: 20 },
   suggestionButtons: { flexDirection: 'row', gap: 10 },
   suggestionBtnPrimary: {
     flex: 1,
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
@@ -653,14 +653,14 @@ const styles = StyleSheet.create({
   suggestionBtnTextPrimary: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   suggestionBtnSecondary: {
     flex: 1,
-    backgroundColor: '#F0E8E2',
+    backgroundColor: c.wheat,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
   },
-  suggestionBtnTextSecondary: { color: '#6B6360', fontSize: 15, fontWeight: '600' },
+  suggestionBtnTextSecondary: { color: c.textMuted, fontSize: 15, fontWeight: '600' },
   submitButton: {
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',

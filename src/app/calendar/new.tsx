@@ -1,4 +1,4 @@
-﻿import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -14,6 +14,8 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { useCreateMutation } from '../../hooks/useCreateMutation';
 import { formatMarketDateTime } from '../../market/profile';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 type FieldErrors = {
   title?: string;
@@ -72,6 +74,8 @@ function formatPreview(date: Date): string {
 
 export default function NewCalendarEventScreen(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const token = useUserStore((s) => s.token);
   const defaultStart = useMemo(() => roundedNextHour(), []);
   const defaultEnd = useMemo(() => {
@@ -97,7 +101,6 @@ export default function NewCalendarEventScreen(): JSX.Element {
       ? `${formatPreview(startDateTime)} - ${formatPreview(endDateTime)}`
       : null;
 
-  // Stores the validated { start, end } dates between validate() and buildPayload() calls.
   const validatedDatesRef = useRef<{ start: Date; end: Date } | null>(null);
 
   const { isSubmitting, apiError, submit } = useCreateMutation<
@@ -192,7 +195,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
               setFieldErrors((prev) => ({ ...prev, title: undefined }));
             }}
             placeholder={t('calendar.titlePlaceholder')}
-            placeholderTextColor="#B07868"
+            placeholderTextColor={colors.placeholder}
             autoCapitalize="sentences"
           />
           {fieldErrors.title ? <Text style={styles.fieldError}>{fieldErrors.title}</Text> : null}
@@ -209,7 +212,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
                 setFieldErrors((prev) => ({ ...prev, start: undefined }));
               }}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor="#B07868"
+              placeholderTextColor={colors.placeholder}
               keyboardType="numbers-and-punctuation"
             />
           </View>
@@ -223,7 +226,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
                 setFieldErrors((prev) => ({ ...prev, start: undefined }));
               }}
               placeholder="HH:mm"
-              placeholderTextColor="#B07868"
+              placeholderTextColor={colors.placeholder}
               keyboardType="numbers-and-punctuation"
             />
           </View>
@@ -241,7 +244,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
                 setFieldErrors((prev) => ({ ...prev, end: undefined }));
               }}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor="#B07868"
+              placeholderTextColor={colors.placeholder}
               keyboardType="numbers-and-punctuation"
             />
           </View>
@@ -255,7 +258,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
                 setFieldErrors((prev) => ({ ...prev, end: undefined }));
               }}
               placeholder="HH:mm"
-              placeholderTextColor="#B07868"
+              placeholderTextColor={colors.placeholder}
               keyboardType="numbers-and-punctuation"
             />
           </View>
@@ -276,7 +279,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
             value={location}
             onChangeText={setLocation}
             placeholder={t('calendar.locationPlaceholder')}
-            placeholderTextColor="#B07868"
+            placeholderTextColor={colors.placeholder}
           />
         </View>
 
@@ -287,7 +290,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
             value={notes}
             onChangeText={setNotes}
             placeholder={t('calendar.notesPlaceholder')}
-            placeholderTextColor="#B07868"
+            placeholderTextColor={colors.placeholder}
             multiline
             numberOfLines={5}
             textAlignVertical="top"
@@ -296,9 +299,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
 
         <TouchableOpacity
           style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-          onPress={() => {
-            void submit();
-          }}
+          onPress={() => { void submit(); }}
           disabled={isSubmitting}
           accessibilityRole="button"
         >
@@ -313,23 +314,23 @@ export default function NewCalendarEventScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.bg,
   },
   content: {
     padding: 16,
     paddingBottom: 32,
   },
   errorBanner: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: 'rgba(204,82,71,0.12)',
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
   },
   errorBannerText: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 14,
   },
   fieldGroup: {
@@ -338,26 +339,26 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#383432',
+    color: c.text1,
     marginBottom: 5,
   },
   input: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E8DDD6',
+    backgroundColor: c.inputBg,
+    borderColor: c.inputBorder,
     borderRadius: 12,
     borderWidth: 1,
-    color: '#383432',
+    color: c.text1,
     fontSize: 15,
     minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   notesInput: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E8DDD6',
+    backgroundColor: c.inputBg,
+    borderColor: c.inputBorder,
     borderRadius: 12,
     borderWidth: 1,
-    color: '#383432',
+    color: c.text1,
     fontSize: 15,
     height: 112,
     paddingHorizontal: 12,
@@ -375,32 +376,32 @@ const styles = StyleSheet.create({
     width: 108,
   },
   fieldError: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 12,
     marginBottom: 10,
     marginTop: -2,
   },
   previewBox: {
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     borderRadius: 12,
     padding: 12,
     marginTop: 4,
     marginBottom: 16,
   },
   previewLabel: {
-    color: '#C45A10',
+    color: c.orange,
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 4,
     textTransform: 'uppercase',
   },
   previewText: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 14,
   },
   submitButton: {
     alignItems: 'center',
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 12,
     justifyContent: 'center',
     marginTop: 12,

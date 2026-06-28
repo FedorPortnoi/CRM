@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,8 +14,9 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { notifyPendingCaptureCount } from '../../utils/notifications';
 import { formatMarketDate, formatMarketNumber, formatMoney, formatMarketTime } from '../../market/profile';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
-const TEAL = '#C45A10';
 const CAPTURE_COUNT_POLL_INTERVAL_MS = 60000;
 
 type TodayEvent = {
@@ -107,14 +108,16 @@ interface SectionErrorProps {
   message: string;
   onRetry: () => void;
   retryLabel: string;
+  colors: ThemeColors;
 }
 
-function SectionError({ message, onRetry, retryLabel }: SectionErrorProps): JSX.Element {
+function SectionError({ message, onRetry, retryLabel, colors }: SectionErrorProps): JSX.Element {
+  const s = makeStyles(colors);
   return (
-    <View style={styles.inlineError}>
-      <Text style={styles.inlineErrorText}>{message}</Text>
-      <TouchableOpacity style={styles.inlineRetryButton} onPress={onRetry}>
-        <Text style={styles.inlineRetryText}>{retryLabel}</Text>
+    <View style={s.inlineError}>
+      <Text style={s.inlineErrorText}>{message}</Text>
+      <TouchableOpacity style={s.inlineRetryButton} onPress={onRetry}>
+        <Text style={s.inlineRetryText}>{retryLabel}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -122,6 +125,8 @@ function SectionError({ message, onRetry, retryLabel }: SectionErrorProps): JSX.
 
 export default function DashboardScreen(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const token = useUserStore((s) => s.token);
   const user = useUserStore((s) => s.user);
   const [summary, setSummary] = useState<SectionState<DashboardData>>(initialSection<DashboardData>);
@@ -291,7 +296,7 @@ export default function DashboardScreen(): JSX.Element {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={TEAL} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.orange} />}
     >
       <View style={styles.circle1} pointerEvents="none" />
       <View style={styles.circle2} pointerEvents="none" />
@@ -318,13 +323,13 @@ export default function DashboardScreen(): JSX.Element {
           </>
         ) : summary.error ? (
           <View style={styles.fullWidth}>
-            <SectionError message={summary.error} onRetry={() => { void fetchSummary(true); }} retryLabel={t('common.retry')} />
+            <SectionError message={summary.error} onRetry={() => { void fetchSummary(true); }} retryLabel={t('common.retry')} colors={colors} />
           </View>
         ) : summary.data ? (
           <>
             <View style={styles.metricCard}>
               <View style={[styles.metricIconBox, { backgroundColor: 'rgba(6,95,70,0.08)' }]}>
-                <TrendingUp size={18} color={TEAL} />
+                <TrendingUp size={18} color={colors.orange} />
               </View>
               <Text style={styles.metricNumber}>{summary.data.open_deals.count}</Text>
               <Text style={styles.metricLabel}>{t('dashboard.openDeals')}</Text>
@@ -332,7 +337,7 @@ export default function DashboardScreen(): JSX.Element {
             </View>
             <View style={styles.metricCard}>
               <View style={[styles.metricIconBox, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
-                <CheckSquare size={18} color="#f59e0b" />
+                <CheckSquare size={18} color={colors.amber} />
               </View>
               <Text style={styles.metricNumber}>{summary.data.tasks_due_today}</Text>
               <Text style={styles.metricLabel}>{t('dashboard.dueToday')}</Text>
@@ -340,9 +345,9 @@ export default function DashboardScreen(): JSX.Element {
             </View>
             <View style={styles.metricCard}>
               <View style={[styles.metricIconBox, { backgroundColor: summary.data.overdue_tasks_count > 0 ? 'rgba(220,38,38,0.1)' : 'rgba(6,95,70,0.08)' }]}>
-                <AlertCircle size={18} color={summary.data.overdue_tasks_count > 0 ? '#dc2626' : TEAL} />
+                <AlertCircle size={18} color={summary.data.overdue_tasks_count > 0 ? colors.red : colors.orange} />
               </View>
-              <Text style={[styles.metricNumber, summary.data.overdue_tasks_count > 0 && { color: '#dc2626' }]}>
+              <Text style={[styles.metricNumber, summary.data.overdue_tasks_count > 0 && { color: colors.red }]}>
                 {summary.data.overdue_tasks_count}
               </Text>
               <Text style={styles.metricLabel}>{t('dashboard.overdueTasks')}</Text>
@@ -357,7 +362,7 @@ export default function DashboardScreen(): JSX.Element {
         const target = summary.data.monthly_revenue_target;
         const actual = summary.data.monthly_revenue_actual;
         const progress = Math.min(actual / target, 1);
-        const progressColor = progress >= 1 ? '#16a34a' : progress >= 0.8 ? '#C45A10' : progress >= 0.5 ? '#d97706' : '#dc2626';
+        const progressColor = progress >= 1 ? colors.wheat : progress >= 0.8 ? colors.orange : progress >= 0.5 ? colors.amber : colors.red;
         const pct = Math.round(progress * 100);
         return (
           <View style={styles.monthlyPlanCard}>
@@ -385,14 +390,14 @@ export default function DashboardScreen(): JSX.Element {
           accessibilityRole="button"
         >
           <View style={styles.captureBannerIcon}>
-            <MessageCircle size={18} color="#ea580c" />
+            <MessageCircle size={18} color={colors.orange} />
           </View>
           <View style={styles.alertBannerContent}>
             <Text style={styles.captureBannerCount}>{captureCount}</Text>
             <Text style={styles.captureBannerLabel}>{t('dashboard.pendingCaptures')}</Text>
             <Text style={styles.captureBannerSub}>{t('dashboard.pendingCapturesBannerSub', { count: captureCount })}</Text>
           </View>
-          <ChevronRight size={16} color="#ea580c" />
+          <ChevronRight size={16} color={colors.orange} />
         </TouchableOpacity>
       )}
 
@@ -404,14 +409,14 @@ export default function DashboardScreen(): JSX.Element {
           accessibilityRole="button"
         >
           <View style={styles.alertBannerIcon}>
-            <AlertTriangle size={18} color="#d97706" />
+            <AlertTriangle size={18} color={colors.amber} />
           </View>
           <View style={styles.alertBannerContent}>
             <Text style={styles.alertBannerCount}>{summary.data.deals_without_tasks_count}</Text>
             <Text style={styles.alertBannerLabel}>{t('dashboard.dealsWithoutTasks')}</Text>
             <Text style={styles.alertBannerSub}>{t('dashboard.dealsWithoutTasksSub')}</Text>
           </View>
-          <ChevronRight size={16} color="#d97706" />
+          <ChevronRight size={16} color={colors.amber} />
         </TouchableOpacity>
       )}
 
@@ -425,7 +430,7 @@ export default function DashboardScreen(): JSX.Element {
             accessibilityRole="button"
           >
             <View style={styles.quickActionIcon}>
-              <UserPlus size={18} color={TEAL} />
+              <UserPlus size={18} color={colors.orange} />
             </View>
             <Text style={styles.quickActionLabel}>{t('contacts.add')}</Text>
           </TouchableOpacity>
@@ -435,7 +440,7 @@ export default function DashboardScreen(): JSX.Element {
             accessibilityRole="button"
           >
             <View style={styles.quickActionIcon}>
-              <PlusCircle size={18} color={TEAL} />
+              <PlusCircle size={18} color={colors.orange} />
             </View>
             <Text style={styles.quickActionLabel}>{t('deals.add')}</Text>
           </TouchableOpacity>
@@ -445,7 +450,7 @@ export default function DashboardScreen(): JSX.Element {
             accessibilityRole="button"
           >
             <View style={styles.quickActionIcon}>
-              <ListChecks size={18} color={TEAL} />
+              <ListChecks size={18} color={colors.orange} />
             </View>
             <Text style={styles.quickActionLabel}>{t('tasks.add')}</Text>
           </TouchableOpacity>
@@ -466,7 +471,7 @@ export default function DashboardScreen(): JSX.Element {
             <View style={styles.rowSkeleton} />
           </>
         ) : tasks.error ? (
-          <SectionError message={tasks.error} onRetry={() => { void fetchTasks(true); }} retryLabel={t('common.retry')} />
+          <SectionError message={tasks.error} onRetry={() => { void fetchTasks(true); }} retryLabel={t('common.retry')} colors={colors} />
         ) : tasks.data && tasks.data.length > 0 ? (
           tasks.data.map((task) => (
             <TouchableOpacity
@@ -475,12 +480,12 @@ export default function DashboardScreen(): JSX.Element {
               onPress={() => { router.push({ pathname: '/task/[id]', params: { id: task.id } }); }}
               accessibilityRole="button"
             >
-              <View style={[styles.statusDot, { backgroundColor: task.status === 'done' ? TEAL : task.status === 'in_progress' ? '#f59e0b' : '#E8DDD6' }]} />
+              <View style={[styles.statusDot, { backgroundColor: task.status === 'done' ? colors.orange : task.status === 'in_progress' ? colors.amber : colors.skeleton }]} />
               <View style={styles.listCardContent}>
                 <Text style={styles.listCardTitle} numberOfLines={1}>{task.title}</Text>
                 <Text style={styles.listCardSub}>{formatDueDate(task.due_date) || t('tasks.today')}</Text>
               </View>
-              <ChevronRight size={16} color="#CFADA3" />
+              <ChevronRight size={16} color={colors.textMuted} />
             </TouchableOpacity>
           ))
         ) : (
@@ -499,7 +504,7 @@ export default function DashboardScreen(): JSX.Element {
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.closingScroll}>
             {(summary.data.todays_events ?? []).map((event) => {
-              const contactName = event.contact
+              const evContactName = event.contact
                 ? [event.contact.first_name, event.contact.last_name].filter(Boolean).join(' ')
                 : null;
               return (
@@ -510,12 +515,12 @@ export default function DashboardScreen(): JSX.Element {
                   accessibilityRole="button"
                 >
                   <View style={styles.eventTimeBadge}>
-                    <Calendar size={12} color={TEAL} />
+                    <Calendar size={12} color={colors.orange} />
                     <Text style={styles.eventTime}>{formatMarketTime(event.start_time)}</Text>
                   </View>
                   <Text style={styles.eventTitle} numberOfLines={2}>{event.title}</Text>
-                  {contactName ? (
-                    <Text style={styles.eventContact} numberOfLines={1}>{contactName}</Text>
+                  {evContactName ? (
+                    <Text style={styles.eventContact} numberOfLines={1}>{evContactName}</Text>
                   ) : null}
                 </TouchableOpacity>
               );
@@ -535,13 +540,13 @@ export default function DashboardScreen(): JSX.Element {
         {closingDeals.isLoading ? (
           <View style={styles.closingSkeleton} />
         ) : closingDeals.error ? (
-          <SectionError message={closingDeals.error} onRetry={() => { void fetchClosingDeals(true); }} retryLabel={t('common.retry')} />
+          <SectionError message={closingDeals.error} onRetry={() => { void fetchClosingDeals(true); }} retryLabel={t('common.retry')} colors={colors} />
         ) : closingDeals.data && closingDeals.data.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.closingScroll}>
             {closingDeals.data.map((deal) => {
               const daysRemaining = Math.ceil((new Date(deal.expected_close ?? '').getTime() - Date.now()) / 86400000);
-              const badgeColor = daysRemaining <= 2 ? '#dc2626' : daysRemaining <= 5 ? '#d97706' : TEAL;
-              const contact = deal.contact
+              const badgeColor = daysRemaining <= 2 ? colors.red : daysRemaining <= 5 ? colors.amber : colors.orange;
+              const dealContact = deal.contact
                 ? [deal.contact.first_name, deal.contact.last_name].filter(Boolean).join(' ')
                 : '';
               return (
@@ -555,7 +560,7 @@ export default function DashboardScreen(): JSX.Element {
                     <Text style={styles.closingBadgeText}>{daysRemaining}{t('dashboard.daysUnit')}</Text>
                   </View>
                   <Text style={styles.closingTitle} numberOfLines={2}>{deal.title}</Text>
-                  <Text style={styles.closingContact} numberOfLines={1}>{contact}</Text>
+                  <Text style={styles.closingContact} numberOfLines={1}>{dealContact}</Text>
                   {deal.value != null ? (
                     <Text style={styles.closingValue}>{formatCurrency(Number(deal.value))}</Text>
                   ) : null}
@@ -577,22 +582,22 @@ export default function DashboardScreen(): JSX.Element {
               <Text style={styles.viewAllText}>{t('dashboard.viewAll')}</Text>
             </TouchableOpacity>
           </View>
-          {(summary.data.stale_contacts ?? []).map((contact) => {
-            const days = daysSince(contact.updated_at);
-            const urgentColor = days >= 30 ? '#dc2626' : '#d97706';
+          {(summary.data.stale_contacts ?? []).map((staleContact) => {
+            const days = daysSince(staleContact.updated_at);
+            const urgentColor = days >= 30 ? colors.red : colors.amber;
             return (
               <TouchableOpacity
-                key={contact.id}
+                key={staleContact.id}
                 style={styles.listCard}
-                onPress={() => { router.push({ pathname: '/contact/[id]', params: { id: contact.id } }); }}
+                onPress={() => { router.push({ pathname: '/contact/[id]', params: { id: staleContact.id } }); }}
                 accessibilityRole="button"
               >
                 <View style={styles.contactAvatar}>
-                  <Text style={styles.contactAvatarText}>{getInitials(contactName(contact))}</Text>
+                  <Text style={styles.contactAvatarText}>{getInitials(contactName(staleContact))}</Text>
                 </View>
                 <View style={styles.listCardContent}>
-                  <Text style={styles.listCardTitle} numberOfLines={1}>{contactName(contact)}</Text>
-                  <Text style={styles.listCardSub} numberOfLines={1}>{contact.company ?? ''}</Text>
+                  <Text style={styles.listCardTitle} numberOfLines={1}>{contactName(staleContact)}</Text>
+                  <Text style={styles.listCardSub} numberOfLines={1}>{staleContact.company ?? ''}</Text>
                 </View>
                 <Text style={[styles.staleDaysLabel, { color: urgentColor }]}>
                   {t('dashboard.daysWithoutActivity', { count: days })}
@@ -611,7 +616,7 @@ export default function DashboardScreen(): JSX.Element {
             onPress={() => { router.push('/workflows' as never); }}
             accessibilityRole="button"
           >
-            <Zap size={16} color={TEAL} />
+            <Zap size={16} color={colors.orange} />
             <Text style={styles.outlineButtonText}>
               {`${workflowCount.data ?? 0} ${t('dashboard.workflows')}`}
             </Text>
@@ -622,10 +627,10 @@ export default function DashboardScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.bg,
   },
   contentContainer: {
     paddingBottom: 40,
@@ -671,18 +676,18 @@ const styles = StyleSheet.create({
   greetingText: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#383432',
+    color: c.text1,
   },
   greetingSub: {
     fontSize: 14,
-    color: '#B07868',
+    color: c.amber,
     marginTop: 2,
   },
   avatarCircle: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 12,
@@ -704,7 +709,7 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 16,
     padding: 14,
     shadowColor: '#000',
@@ -716,7 +721,7 @@ const styles = StyleSheet.create({
   metricSkeleton: {
     flex: 1,
     height: 110,
-    backgroundColor: '#E8DDD6',
+    backgroundColor: c.skeleton,
     borderRadius: 16,
   },
   metricIconBox: {
@@ -730,17 +735,17 @@ const styles = StyleSheet.create({
   metricNumber: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#383432',
+    color: c.text1,
   },
   metricLabel: {
     fontSize: 11,
-    color: '#B07868',
+    color: c.amber,
     fontWeight: '600',
     marginTop: 2,
   },
   metricSub: {
     fontSize: 11,
-    color: '#CFADA3',
+    color: c.textMuted,
     marginTop: 2,
   },
   section: {
@@ -756,14 +761,14 @@ const styles = StyleSheet.create({
   sectionHeader: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#B07868',
+    color: c.amber,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: 12,
   },
   viewAllText: {
     fontSize: 13,
-    color: '#C45A10',
+    color: c.orange,
     fontWeight: '500',
   },
   quickActionsRow: {
@@ -772,10 +777,10 @@ const styles = StyleSheet.create({
   },
   quickAction: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#C45A10',
+    borderColor: c.orange,
     paddingVertical: 14,
     alignItems: 'center',
     gap: 6,
@@ -790,12 +795,12 @@ const styles = StyleSheet.create({
   },
   quickActionLabel: {
     fontSize: 11,
-    color: '#C45A10',
+    color: c.orange,
     fontWeight: '600',
     textAlign: 'center',
   },
   listCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     padding: 14,
     marginBottom: 8,
@@ -819,11 +824,11 @@ const styles = StyleSheet.create({
   listCardTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#383432',
+    color: c.text1,
   },
   listCardSub: {
     fontSize: 12,
-    color: '#CFADA3',
+    color: c.textMuted,
     marginTop: 2,
   },
   contactAvatar: {
@@ -837,22 +842,22 @@ const styles = StyleSheet.create({
   contactAvatarText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#C45A10',
+    color: c.orange,
   },
   emptyText: {
-    color: '#CFADA3',
+    color: c.textMuted,
     fontSize: 14,
     paddingVertical: 8,
   },
   rowSkeleton: {
     height: 60,
-    backgroundColor: '#E8DDD6',
+    backgroundColor: c.skeleton,
     borderRadius: 12,
     marginBottom: 8,
   },
   closingSkeleton: {
     height: 116,
-    backgroundColor: '#E8DDD6',
+    backgroundColor: c.skeleton,
     borderRadius: 12,
   },
   closingScroll: {
@@ -862,11 +867,11 @@ const styles = StyleSheet.create({
   closingCard: {
     width: 180,
     minHeight: 116,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#FEF0E8',
+    borderColor: c.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
@@ -886,24 +891,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   closingTitle: {
-    color: '#C45A10',
+    color: c.orange,
     fontSize: 14,
     fontWeight: '700',
   },
   closingContact: {
-    color: '#B07868',
+    color: c.amber,
     fontSize: 12,
     marginTop: 4,
   },
   closingValue: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 13,
     fontWeight: '600',
     marginTop: 8,
   },
   outlineButton: {
     borderWidth: 1.5,
-    borderColor: '#C45A10',
+    borderColor: c.orange,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -913,14 +918,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   outlineButtonText: {
-    color: '#C45A10',
+    color: c.orange,
     fontSize: 13,
     fontWeight: '600',
   },
   inlineError: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: 'rgba(204,82,71,0.12)',
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: 'rgba(204,82,71,0.12)',
     borderRadius: 12,
     padding: 12,
     flexDirection: 'row',
@@ -929,11 +934,11 @@ const styles = StyleSheet.create({
   },
   inlineErrorText: {
     flex: 1,
-    color: '#ef4444',
+    color: c.red,
     fontSize: 13,
   },
   inlineRetryButton: {
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
@@ -953,10 +958,10 @@ const styles = StyleSheet.create({
   monthlyPlanCard: {
     marginHorizontal: 16,
     marginTop: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     paddingVertical: 14,
     paddingHorizontal: 16,
     shadowColor: '#000',
@@ -974,7 +979,7 @@ const styles = StyleSheet.create({
   monthlyPlanTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#B07868',
+    color: c.amber,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
@@ -984,7 +989,7 @@ const styles = StyleSheet.create({
   },
   progressTrack: {
     height: 8,
-    backgroundColor: '#F0EAE6',
+    backgroundColor: c.wheat,
     borderRadius: 4,
     overflow: 'hidden',
     marginBottom: 8,
@@ -995,17 +1000,17 @@ const styles = StyleSheet.create({
   },
   monthlyPlanSub: {
     fontSize: 12,
-    color: '#B07868',
+    color: c.amber,
   },
   captureBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 16,
     marginTop: 16,
-    backgroundColor: '#fff7ed',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#fed7aa',
+    borderColor: 'rgba(212,162,127,0.2)',
     paddingVertical: 12,
     paddingHorizontal: 14,
     gap: 12,
@@ -1021,18 +1026,18 @@ const styles = StyleSheet.create({
   captureBannerCount: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#ea580c',
+    color: c.orange,
     lineHeight: 24,
   },
   captureBannerLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#7c2d12',
+    color: c.orange,
     marginTop: 1,
   },
   captureBannerSub: {
     fontSize: 11,
-    color: '#9a3412',
+    color: c.orange,
     marginTop: 1,
   },
   alertBanner: {
@@ -1040,10 +1045,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 16,
     marginTop: 16,
-    backgroundColor: '#fffbeb',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#fcd34d',
+    borderColor: 'rgba(212,162,127,0.2)',
     paddingVertical: 12,
     paddingHorizontal: 14,
     gap: 12,
@@ -1062,27 +1067,27 @@ const styles = StyleSheet.create({
   alertBannerCount: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#d97706',
+    color: c.amber,
     lineHeight: 24,
   },
   alertBannerLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#92400e',
+    color: c.orange,
     marginTop: 1,
   },
   alertBannerSub: {
     fontSize: 11,
-    color: '#b45309',
+    color: c.orange,
     marginTop: 1,
   },
   eventCard: {
     width: 152,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#EDE8E5',
+    borderColor: c.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
@@ -1098,17 +1103,17 @@ const styles = StyleSheet.create({
   eventTime: {
     fontSize: 12,
     fontWeight: '700',
-    color: TEAL,
+    color: c.orange,
   },
   eventTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#383432',
+    color: c.text1,
     lineHeight: 19,
   },
   eventContact: {
     fontSize: 12,
-    color: '#B07868',
+    color: c.amber,
     marginTop: 6,
   },
 });

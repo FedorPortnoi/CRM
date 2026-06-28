@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +10,8 @@ import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { formatMarketDate } from '../../market/profile';
 import { labelKeyForRule } from '../../utils/recurrence';
 import { useAuditLog } from '../../hooks/useAuditLog';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 interface TaskAssignee {
   id: string;
@@ -30,10 +32,10 @@ function taskActionLabel(action: string): string {
   return map[action] ?? action;
 }
 
-function taskActionColor(action: string): { bg: string; text: string } {
-  if (action === 'created') return { bg: '#FEF0E8', text: '#C45A10' };
-  if (action === 'completed') return { bg: '#dcfce7', text: '#16a34a' };
-  return { bg: '#FAF6F3', text: '#383432' };
+function taskActionColor(action: string, c: ThemeColors): { bg: string; text: string } {
+  if (action === 'created') return { bg: 'rgba(204,120,92,0.08)', text: c.orange };
+  if (action === 'completed') return { bg: '#dcfce7', text: c.wheat };
+  return { bg: c.bg, text: c.text1 };
 }
 
 interface Task {
@@ -63,18 +65,18 @@ function isOverdue(due_date: string | null, status: string): boolean {
   return new Date(due_date) < new Date();
 }
 
-function priorityBadgeColor(priority: string): string {
-  if (priority === 'urgent') return '#ef4444';
+function priorityBadgeColor(priority: string, c: ThemeColors): string {
+  if (priority === 'urgent') return c.red;
   if (priority === 'high') return '#E8A000';
-  if (priority === 'medium') return '#C4704F';
-  return '#CFADA3';
+  if (priority === 'medium') return c.orange;
+  return c.textMuted;
 }
 
-function statusBadgeColor(status: string): string {
-  if (status === 'done') return '#C4704F';
-  if (status === 'in_progress') return '#C4704F';
+function statusBadgeColor(status: string, c: ThemeColors): string {
+  if (status === 'done') return c.orange;
+  if (status === 'in_progress') return c.orange;
   if (status === 'pending') return '#E8A000';
-  return '#CFADA3';
+  return c.textMuted;
 }
 
 function formatRecurrence(isRecurring: boolean, rule: string | null, t: (key: string) => string): string {
@@ -120,7 +122,7 @@ function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: Skel
       style={{
         width,
         height,
-        backgroundColor: '#FEF0E8',
+        backgroundColor: 'rgba(204,120,92,0.08)',
         borderRadius,
         marginBottom,
       }}
@@ -130,6 +132,8 @@ function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: Skel
 
 export default function TaskDetailScreen(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
 
@@ -338,7 +342,7 @@ export default function TaskDetailScreen(): JSX.Element {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.orange} />}
       >
         <View style={styles.card}>
           <Text style={styles.taskTitle}>{task.title}</Text>
@@ -346,10 +350,10 @@ export default function TaskDetailScreen(): JSX.Element {
             <Text style={[styles.dueDate, dueDateOverdue ? styles.dueDateOverdue : null]}>{t('tasks.dueOn', { date: formatDate(task.due_date) })}</Text>
           ) : null}
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-            <View style={[styles.badge, { backgroundColor: priorityBadgeColor(task.priority) }]}>
+            <View style={[styles.badge, { backgroundColor: priorityBadgeColor(task.priority, colors) }]}>
               <Text style={styles.badgeText}>{formatPriority(task.priority, t)}</Text>
             </View>
-            <View style={[styles.badge, { backgroundColor: statusBadgeColor(task.status) }]}>
+            <View style={[styles.badge, { backgroundColor: statusBadgeColor(task.status, colors) }]}>
               <Text style={styles.badgeText}>{formatStatus(task.status, t)}</Text>
             </View>
           </View>
@@ -431,6 +435,7 @@ export default function TaskDetailScreen(): JSX.Element {
             ) : null}
           </View>
         ) : null}
+
         {/* Activity log */}
         <View style={styles.auditSection}>
           <Text style={styles.auditSectionTitle}>{t('contacts.activityLog')}</Text>
@@ -438,11 +443,11 @@ export default function TaskDetailScreen(): JSX.Element {
             <Text style={styles.auditEmpty}>{t('contacts.noActivity')}</Text>
           ) : (
             auditLog.map((entry) => {
-              const colors = taskActionColor(entry.action);
+              const actionColors = taskActionColor(entry.action, colors);
               return (
                 <View key={entry.id} style={styles.auditRow}>
-                  <View style={[styles.auditBadge, { backgroundColor: colors.bg }]}>
-                    <Text style={[styles.auditBadgeText, { color: colors.text }]}>{taskActionLabel(entry.action)}</Text>
+                  <View style={[styles.auditBadge, { backgroundColor: actionColors.bg }]}>
+                    <Text style={[styles.auditBadgeText, { color: actionColors.text }]}>{taskActionLabel(entry.action)}</Text>
                   </View>
                   <Text style={styles.auditDate}>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</Text>
                 </View>
@@ -457,11 +462,11 @@ export default function TaskDetailScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FEF0E8' },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: 'rgba(204,120,92,0.08)' },
   content: { padding: 16, paddingBottom: 40 },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     padding: 16,
     shadowColor: '#000',
@@ -473,11 +478,11 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#383432',
+    color: c.text1,
     marginBottom: 6,
   },
-  dueDate: { fontSize: 13, color: '#B07868' },
-  dueDateOverdue: { color: '#ef4444', fontWeight: '500' },
+  dueDate: { fontSize: 13, color: c.amber },
+  dueDateOverdue: { color: c.red, fontWeight: '500' },
   badge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 8,
@@ -491,45 +496,45 @@ const styles = StyleSheet.create({
   },
   cancelledBanner: {
     marginTop: 12,
-    backgroundColor: '#fef2f2',
+    backgroundColor: 'rgba(204,82,71,0.12)',
     borderRadius: 12,
     padding: 12,
     borderLeftWidth: 3,
-    borderLeftColor: '#ef4444',
+    borderLeftColor: c.red,
   },
-  cancelledText: { fontSize: 13, color: '#ef4444', fontWeight: '500' },
+  cancelledText: { fontSize: 13, color: c.red, fontWeight: '500' },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  detailLabel: { fontSize: 13, color: '#CFADA3', width: 100 },
-  detailValue: { fontSize: 13, color: '#383432', flex: 1, textAlign: 'right' },
-  recurrenceValue: { fontSize: 13, color: '#C45A10', flex: 1, textAlign: 'right', fontWeight: '600' },
+  detailLabel: { fontSize: 13, color: c.textMuted, width: 100 },
+  detailValue: { fontSize: 13, color: c.text1, flex: 1, textAlign: 'right' },
+  recurrenceValue: { fontSize: 13, color: c.orange, flex: 1, textAlign: 'right', fontWeight: '600' },
   linkText: {
     fontSize: 13,
-    color: '#C4704F',
+    color: c.orange,
     fontWeight: '500',
     textAlign: 'right',
   },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#CFADA3',
+    color: c.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
   },
-  notesText: { fontSize: 14, color: '#383432', lineHeight: 20 },
-  emptyText: { fontSize: 14, color: '#CFADA3' },
+  notesText: { fontSize: 14, color: c.text1, lineHeight: 20 },
+  emptyText: { fontSize: 14, color: c.textMuted },
   button: {
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  buttonPrimary: { backgroundColor: '#C4704F' },
-  buttonDestructive: { backgroundColor: '#ef4444' },
+  buttonPrimary: { backgroundColor: c.orange },
+  buttonDestructive: { backgroundColor: c.red },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   errorContainer: {
@@ -540,14 +545,14 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 14,
-    color: '#ef4444',
+    color: c.red,
     textAlign: 'center',
     marginBottom: 8,
   },
   retryButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#C4704F',
+    backgroundColor: c.orange,
     borderRadius: 6,
   },
   retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
@@ -557,14 +562,14 @@ const styles = StyleSheet.create({
   auditSectionTitle: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#B07868',
+    color: c.amber,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     marginBottom: 8,
   },
   auditEmpty: {
     fontSize: 13,
-    color: '#CFADA3',
+    color: c.textMuted,
   },
   auditRow: {
     flexDirection: 'row',
@@ -572,7 +577,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#FAF6F3',
+    borderBottomColor: c.bg,
   },
   auditBadge: {
     paddingHorizontal: 8,
@@ -585,14 +590,14 @@ const styles = StyleSheet.create({
   },
   auditDate: {
     fontSize: 12,
-    color: '#CFADA3',
+    color: c.textMuted,
   },
   headerEditButton: {
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   headerEditText: {
-    color: '#C4704F',
+    color: c.orange,
     fontSize: 16,
     fontWeight: '600',
   },

@@ -16,6 +16,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Paperclip, Trash2, FileText, Image } from 'lucide-react-native';
 import { useUserStore } from '../store/userStore';
 import { API_URL } from '../utils/api';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeColors } from '../theme';
 
 type EntityType = 'contact' | 'deal' | 'task' | 'calendar_event';
 
@@ -49,6 +51,8 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
   const { token } = useUserStore();
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
 
   const fetchAttachments = useCallback(async () => {
     if (!token || !entityId) return;
@@ -203,7 +207,7 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
           activeOpacity={0.7}
         >
           {uploading
-            ? <ActivityIndicator size="small" color="#C45A10" />
+            ? <ActivityIndicator size="small" color={colors.orange} />
             : <Text style={styles.addButtonText}>{t('attachments.add')}</Text>}
         </TouchableOpacity>
       </View>
@@ -222,8 +226,8 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
         >
           <View style={styles.fileIcon}>
             {isImage(att.mime_type)
-              ? <Image size={16} color="#C45A10" />
-              : <FileText size={16} color="#C45A10" />}
+              ? <Image size={16} color={colors.orange} />
+              : <FileText size={16} color={colors.orange} />}
           </View>
           <View style={styles.fileInfo}>
             <Text style={styles.filename} numberOfLines={1}>{att.filename}</Text>
@@ -234,14 +238,14 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
             style={styles.deleteBtn}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Trash2 size={16} color="#CFADA3" />
+            <Trash2 size={16} color={colors.textMuted} />
           </TouchableOpacity>
         </TouchableOpacity>
       ))}
 
       {uploading && (
         <View style={styles.uploadingRow}>
-          <Paperclip size={16} color="#CFADA3" />
+          <Paperclip size={16} color={colors.textMuted} />
           <Text style={styles.uploadingText}>{t('attachments.uploading')}</Text>
         </View>
       )}
@@ -249,10 +253,10 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   section: {
     marginTop: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     padding: 16,
     shadowColor: '#000',
@@ -270,7 +274,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#383432',
+    color: c.text1,
   },
   addButton: {
     minWidth: 44,
@@ -279,13 +283,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   addButtonText: {
-    color: '#C45A10',
+    color: c.orange,
     fontSize: 14,
     fontWeight: '500',
   },
   empty: {
     fontSize: 14,
-    color: '#CFADA3',
+    color: c.textMuted,
     textAlign: 'center',
     paddingVertical: 8,
   },
@@ -294,14 +298,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: '#FAF6F3',
+    borderTopColor: c.bg,
     gap: 10,
   },
   fileIcon: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -310,12 +314,12 @@ const styles = StyleSheet.create({
   },
   filename: {
     fontSize: 14,
-    color: '#383432',
+    color: c.text1,
     fontWeight: '500',
   },
   fileSize: {
     fontSize: 12,
-    color: '#CFADA3',
+    color: c.textMuted,
     marginTop: 2,
   },
   deleteBtn: {
@@ -327,10 +331,10 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#FAF6F3',
+    borderTopColor: c.bg,
   },
   uploadingText: {
     fontSize: 14,
-    color: '#CFADA3',
+    color: c.textMuted,
   },
 });

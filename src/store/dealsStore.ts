@@ -53,7 +53,7 @@ type ApiErrorResponse = {
   message?: string;
 };
 
-const DEALS_PER_PAGE = 300;
+const DEALS_PER_PAGE = 100;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -116,20 +116,32 @@ export const useDealsStore = create<DealsState>()((set, get) => ({
   error: null,
 
   fetchDeals: async (): Promise<void> => {
+    if (get().isLoading) return;
     set({ isLoading: true, error: null });
 
     try {
-      const params = new URLSearchParams({
-        page: '1',
-        per_page: String(DEALS_PER_PAGE),
-        status: 'open',
-      });
-      const response: Response = await fetch(`${API_URL}/deals?${params.toString()}`, {
-        method: 'GET',
-        headers: await authHeaders(),
-      });
-      const body: ApiListResponse = await readJsonResponse<ApiListResponse>(response);
-      set({ deals: body.data, isLoading: false });
+      const headers = await authHeaders();
+      const allDeals: Deal[] = [];
+      let page = 1;
+
+      while (true) {
+        const params = new URLSearchParams({
+          page: String(page),
+          per_page: String(DEALS_PER_PAGE),
+          status: 'open',
+        });
+        const response: Response = await fetch(`${API_URL}/deals?${params.toString()}`, {
+          method: 'GET',
+          headers,
+        });
+        const body: ApiListResponse = await readJsonResponse<ApiListResponse>(response);
+        allDeals.push(...body.data);
+        const total = body.meta?.total ?? 0;
+        if (allDeals.length >= total || body.data.length < DEALS_PER_PAGE) break;
+        page++;
+      }
+
+      set({ deals: allDeals, isLoading: false });
     } catch (e: unknown) {
       const msg: string = e instanceof Error ? e.message : 'Unknown error';
       set({ error: msg, isLoading: false });

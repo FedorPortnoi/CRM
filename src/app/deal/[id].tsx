@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,8 +18,8 @@ import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { formatMarketDate, formatMoney } from '../../market/profile';
 import AttachmentsSection from '../../components/AttachmentsSection';
 import { useAuditLog } from '../../hooks/useAuditLog';
-
-const TEAL = '#C45A10';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 interface Deal {
   id: string;
@@ -64,30 +64,32 @@ function dealActionLabel(action: string): string {
   return map[action] ?? action;
 }
 
-function dealActionColor(action: string): { bg: string; text: string } {
-  if (action === 'created') return { bg: '#FEF0E8', text: '#C45A10' };
-  if (action === 'won') return { bg: '#dcfce7', text: '#16a34a' };
-  if (action === 'lost') return { bg: '#fee2e2', text: '#dc2626' };
+function dealActionColor(action: string, c: ThemeColors): { bg: string; text: string } {
+  if (action === 'created') return { bg: 'rgba(204,120,92,0.08)', text: c.orange };
+  if (action === 'won') return { bg: '#dcfce7', text: c.wheat };
+  if (action === 'lost') return { bg: '#fee2e2', text: c.red };
   if (action === 'stage_changed') return { bg: '#dbeafe', text: '#1d4ed8' };
-  return { bg: '#FAF6F3', text: '#383432' };
+  return { bg: c.bg, text: c.text1 };
 }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: '#FEF0E8', borderRadius, marginBottom }} />;
+  return <View style={{ width, height, backgroundColor: 'rgba(204,120,92,0.08)', borderRadius, marginBottom }} />;
 }
 
 function formatValue(value: number | null, _currency: string | null): string {
   return formatMoney(value, _currency, { empty: '—' });
 }
 
-function getStatusColor(status: Deal['status']): string {
-  if (status === 'lost') return '#ef4444';
-  if (status === 'archived') return '#CFADA3';
-  return '#C4704F';
+function getStatusColor(status: Deal['status'], c: ThemeColors): string {
+  if (status === 'lost') return c.red;
+  if (status === 'archived') return c.textMuted;
+  return c.orange;
 }
 
 export default function DealDetailScreen(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
 
@@ -256,7 +258,7 @@ export default function DealDetailScreen(): JSX.Element {
     <ScrollView
       style={styles.container}
       contentContainerStyle={{ paddingTop: 16, paddingBottom: 32 }}
-      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
+      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.orange} />}
     >
       <Stack.Screen
         options={{
@@ -279,11 +281,11 @@ export default function DealDetailScreen(): JSX.Element {
         <Text style={styles.value}>{formatValue(deal.value, deal.currency)}</Text>
         <View style={styles.badgeRow}>
           {deal.stage !== null && (
-            <View style={[styles.badge, { backgroundColor: '#C4704F' }]}>
+            <View style={[styles.badge, { backgroundColor: colors.orange }]}>
               <Text style={styles.badgeText}>{deal.stage.name}</Text>
             </View>
           )}
-          <View style={[styles.badge, { backgroundColor: getStatusColor(deal.status) }]}>
+          <View style={[styles.badge, { backgroundColor: getStatusColor(deal.status, colors) }]}>
             <Text style={styles.badgeText}>
               {{ open: t('deals.statusOpen'), won: t('deals.statusWon'), lost: t('deals.statusLost'), archived: t('deals.statusArchived') }[deal.status] ?? deal.status}
             </Text>
@@ -380,6 +382,7 @@ export default function DealDetailScreen(): JSX.Element {
           </TouchableOpacity>
         </View>
       )}
+
       {/* Activity log */}
       <View style={styles.auditSection}>
         <Text style={styles.auditSectionTitle}>{t('contacts.activityLog')}</Text>
@@ -387,11 +390,11 @@ export default function DealDetailScreen(): JSX.Element {
           <Text style={styles.auditEmpty}>{t('contacts.noActivity')}</Text>
         ) : (
           auditLog.map((entry) => {
-            const colors = dealActionColor(entry.action);
+            const actionColors = dealActionColor(entry.action, colors);
             return (
               <View key={entry.id} style={styles.auditRow}>
-                <View style={[styles.auditBadge, { backgroundColor: colors.bg }]}>
-                  <Text style={[styles.auditBadgeText, { color: colors.text }]}>{dealActionLabel(entry.action)}</Text>
+                <View style={[styles.auditBadge, { backgroundColor: actionColors.bg }]}>
+                  <Text style={[styles.auditBadgeText, { color: actionColors.text }]}>{dealActionLabel(entry.action)}</Text>
                 </View>
                 <Text style={styles.auditDate}>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</Text>
               </View>
@@ -405,13 +408,13 @@ export default function DealDetailScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     marginHorizontal: 16,
     marginBottom: 16,
@@ -423,7 +426,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   skeletonCard: {
-    backgroundColor: '#fff',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     marginHorizontal: 16,
     marginBottom: 16,
@@ -433,13 +436,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#383432',
+    color: c.text1,
     marginBottom: 8,
   },
   value: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#383432',
+    color: c.text1,
     marginBottom: 12,
   },
   badgeRow: {
@@ -460,35 +463,35 @@ const styles = StyleSheet.create({
   },
   mutedText: {
     fontSize: 13,
-    color: '#B07868',
+    color: c.amber,
   },
   nextActionLabel: {
-    color: TEAL,
+    color: c.orange,
     fontWeight: '600',
     fontSize: 13,
     marginBottom: 6,
   },
   nextActionText: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 15,
     fontWeight: '500',
   },
   nextActionDue: {
-    color: '#B07868',
+    color: c.amber,
     fontSize: 13,
     marginTop: 6,
   },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#B07868',
+    color: c.amber,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     marginBottom: 8,
   },
   linkText: {
     fontSize: 15,
-    color: '#C4704F',
+    color: c.orange,
     fontWeight: '500',
   },
   detailRow: {
@@ -498,11 +501,11 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 14,
-    color: '#B07868',
+    color: c.amber,
   },
   detailValue: {
     fontSize: 14,
-    color: '#383432',
+    color: c.text1,
     fontWeight: '500',
     flexShrink: 1,
     textAlign: 'right',
@@ -514,10 +517,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   buttonPrimary: {
-    backgroundColor: '#C4704F',
+    backgroundColor: c.orange,
   },
   buttonDestructive: {
-    backgroundColor: '#ef4444',
+    backgroundColor: c.red,
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -528,7 +531,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   actionError: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 13,
     marginBottom: 10,
     textAlign: 'center',
@@ -537,18 +540,18 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     padding: 24,
   },
   errorText: {
     fontSize: 15,
-    color: '#ef4444',
+    color: c.red,
     textAlign: 'center',
     marginBottom: 16,
   },
   retryText: {
     fontSize: 15,
-    color: '#C4704F',
+    color: c.orange,
     fontWeight: '600',
   },
   auditSection: {
@@ -558,14 +561,14 @@ const styles = StyleSheet.create({
   auditSectionTitle: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#B07868',
+    color: c.amber,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     marginBottom: 8,
   },
   auditEmpty: {
     fontSize: 13,
-    color: '#CFADA3',
+    color: c.textMuted,
   },
   auditRow: {
     flexDirection: 'row',
@@ -573,7 +576,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#FAF6F3',
+    borderBottomColor: c.bg,
   },
   auditBadge: {
     paddingHorizontal: 8,
@@ -586,14 +589,14 @@ const styles = StyleSheet.create({
   },
   auditDate: {
     fontSize: 12,
-    color: '#CFADA3',
+    color: c.textMuted,
   },
   headerEditButton: {
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   headerEditText: {
-    color: '#C4704F',
+    color: c.orange,
     fontSize: 16,
     fontWeight: '600',
   },

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,8 @@ import { useUserStore } from '../../store/userStore';
 import { usePipelinesStore } from '../../store/pipelinesStore';
 import { API_URL } from '../../utils/api';
 import { useCreateMutation } from '../../hooks/useCreateMutation';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 interface PipelineStage {
   id: string;
@@ -42,6 +44,8 @@ interface ContactPreview {
 
 export default function NewDealScreen(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const insets = useSafeAreaInsets();
   const token = useUserStore((s) => s.token);
   const { pipelines, isLoading, fetchPipelines } = usePipelinesStore() as {
@@ -226,7 +230,7 @@ export default function NewDealScreen(): JSX.Element {
           setShowTitleError(false);
         }}
         placeholder={t('deals.titlePlaceholder')}
-        placeholderTextColor="#B07868"
+        placeholderTextColor={colors.placeholder}
       />
       {showTitleError && <Text style={styles.fieldError}>{t('deals.titleRequired')}</Text>}
 
@@ -237,13 +241,13 @@ export default function NewDealScreen(): JSX.Element {
         onChangeText={setValueStr}
         keyboardType="numeric"
         placeholder="0.00"
-        placeholderTextColor="#B07868"
+        placeholderTextColor={colors.placeholder}
       />
 
       <Text style={styles.label}>{t('deals.pipeline')} *</Text>
       <TouchableOpacity style={styles.pickerButton} onPress={() => setShowPipelineModal(true)}>
         {isLoading ? (
-          <ActivityIndicator color="#C45A10" />
+          <ActivityIndicator color={colors.orange} />
         ) : (
           <Text style={styles.pickerButtonText}>
             {selectedPipelineId
@@ -335,7 +339,7 @@ export default function NewDealScreen(): JSX.Element {
             value={contactQuery}
             onChangeText={setContactQuery}
             placeholder={t('deals.searchContactsPlaceholder')}
-            placeholderTextColor="#B07868"
+            placeholderTextColor={colors.placeholder}
           />
           {contactResults.slice(0, 5).length > 0 && (
             <View style={styles.contactResultsContainer}>
@@ -356,7 +360,7 @@ export default function NewDealScreen(): JSX.Element {
         value={nextAction}
         onChangeText={setNextAction}
         placeholder={t('deals.nextActionPlaceholder')}
-        placeholderTextColor="#B07868"
+        placeholderTextColor={colors.placeholder}
       />
 
       <Text style={styles.label}>{t('tasks.dueDateOptional')}</Text>
@@ -365,7 +369,7 @@ export default function NewDealScreen(): JSX.Element {
         value={nextActionDue}
         onChangeText={setNextActionDue}
         placeholder={t('deals.nextActionDuePlaceholder')}
-        placeholderTextColor="#B07868"
+        placeholderTextColor={colors.placeholder}
         autoCapitalize="none"
       />
 
@@ -385,49 +389,49 @@ export default function NewDealScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.bg,
   },
   content: {
     padding: 16,
   },
   errorBanner: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: 'rgba(204,82,71,0.12)',
     padding: 12,
     borderRadius: 12,
     marginBottom: 16,
   },
   errorBannerText: {
-    color: '#ef4444',
+    color: c.red,
   },
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#383432',
+    color: c.text1,
     marginTop: 16,
     marginBottom: 6,
   },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.inputBorder,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    color: '#383432',
+    color: c.text1,
   },
   fieldError: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 13,
     marginTop: 4,
   },
   pickerButton: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
@@ -438,11 +442,11 @@ const styles = StyleSheet.create({
   },
   pickerButtonText: {
     fontSize: 16,
-    color: '#383432',
+    color: c.text1,
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bg,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -450,38 +454,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8DDD6',
+    borderBottomColor: c.border,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#383432',
+    color: c.text1,
   },
   modalClose: {
     fontSize: 18,
-    color: '#B07868',
+    color: c.amber,
     paddingHorizontal: 8,
   },
   modalItem: {
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8DDD6',
+    borderBottomColor: c.border,
   },
   modalItemText: {
     fontSize: 16,
-    color: '#383432',
+    color: c.text1,
   },
   modalItemTextSelected: {
-    color: '#C45A10',
+    color: c.orange,
     fontWeight: '600',
   },
   contactChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -489,17 +493,17 @@ const styles = StyleSheet.create({
   },
   contactChipText: {
     fontSize: 14,
-    color: '#383432',
+    color: c.text1,
     marginRight: 8,
   },
   contactChipRemove: {
     fontSize: 14,
-    color: '#B07868',
+    color: c.amber,
   },
   contactResultsContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     borderRadius: 12,
     marginTop: 4,
   },
@@ -507,14 +511,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8DDD6',
+    borderBottomColor: c.border,
   },
   contactResultText: {
     fontSize: 15,
-    color: '#383432',
+    color: c.text1,
   },
   submitButton: {
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',

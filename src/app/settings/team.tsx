@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, Modal, TextInput, ListRenderItemInfo,
@@ -8,6 +8,8 @@ import { Stack } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 type Role = 'owner' | 'admin' | 'member' | 'viewer';
 
@@ -27,9 +29,9 @@ interface CompanyCode {
 
 const ROLE_COLORS: Record<Role, string> = {
   owner: '#3b82f6',
-  admin: '#C4704F',
-  member: '#B07868',
-  viewer: '#B07868',
+  admin: '#CC785C',
+  member: '#D4A27F',
+  viewer: '#D4A27F',
 };
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -45,6 +47,8 @@ export default function TeamScreen(): JSX.Element {
   const token = useUserStore((s) => s.token);
   const currentUser = useUserStore((s) => s.user);
   const queryClient = useQueryClient();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
 
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteFirstName, setInviteFirstName] = useState('');
@@ -214,19 +218,19 @@ export default function TeamScreen(): JSX.Element {
               <Text style={styles.actionBtnText}>Рук-ль</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionBtn, styles.deactivateBtn]} onPress={() => confirmDeactivate(item)}>
-              <Text style={[styles.actionBtnText, { color: '#ef4444' }]}>Убрать</Text>
+              <Text style={[styles.actionBtnText, { color: colors.red }]}>Убрать</Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
     );
-  }, [canManage, isOwner, currentUser?.id, members, confirmDeactivate, promptRoleChange, promptManagerChange]);
+  }, [canManage, isOwner, currentUser?.id, members, confirmDeactivate, promptRoleChange, promptManagerChange, styles, colors.red]);
 
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: 'Команда', headerBackTitle: 'Настройки' }} />
       {isLoading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color="#C45A10" />
+        <ActivityIndicator style={{ marginTop: 40 }} color={colors.orange} />
       ) : error ? (
         <Text style={styles.errorText}>{(error as Error).message}</Text>
       ) : (
@@ -333,9 +337,9 @@ export default function TeamScreen(): JSX.Element {
         <View style={styles.modal}>
           <Text style={styles.modalTitle}>Добавить сотрудника</Text>
           <Text style={styles.label}>Имя</Text>
-          <TextInput style={styles.input} value={inviteFirstName} onChangeText={setInviteFirstName} placeholder="Иван" placeholderTextColor="#B07868" autoCapitalize="words" />
+          <TextInput style={styles.input} value={inviteFirstName} onChangeText={setInviteFirstName} placeholder="Иван" placeholderTextColor={colors.placeholder} autoCapitalize="words" />
           <Text style={styles.label}>Фамилия</Text>
-          <TextInput style={styles.input} value={inviteLastName} onChangeText={setInviteLastName} placeholder="Петров" placeholderTextColor="#B07868" autoCapitalize="words" />
+          <TextInput style={styles.input} value={inviteLastName} onChangeText={setInviteLastName} placeholder="Петров" placeholderTextColor={colors.placeholder} autoCapitalize="words" />
           <Text style={styles.label}>Роль</Text>
           <View style={styles.roleRow}>
             {ASSIGNABLE_ROLES.map((r) => (
@@ -360,55 +364,55 @@ export default function TeamScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAF6F3' },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
   list: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 80 },
-  count: { fontSize: 13, color: '#B07868', marginBottom: 12 },
-  codeCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E8DDD6' },
-  codeLabel: { fontSize: 12, fontWeight: '600', color: '#B07868', textTransform: 'uppercase', letterSpacing: 0.5 },
-  codeValue: { fontSize: 22, fontWeight: '700', color: '#383432', marginTop: 6, letterSpacing: 1 },
-  codeHint: { fontSize: 12, color: '#B07868', marginTop: 8, lineHeight: 17 },
+  count: { fontSize: 13, color: c.amber, marginBottom: 12 },
+  codeCard: { backgroundColor: c.bgPanel, borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: c.border },
+  codeLabel: { fontSize: 12, fontWeight: '600', color: c.amber, textTransform: 'uppercase', letterSpacing: 0.5 },
+  codeValue: { fontSize: 22, fontWeight: '700', color: c.text1, marginTop: 6, letterSpacing: 1 },
+  codeHint: { fontSize: 12, color: c.amber, marginTop: 8, lineHeight: 17 },
   codeActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14 },
-  codeCopy: { fontSize: 14, color: '#C45A10', fontWeight: '600' },
-  codeRotate: { fontSize: 14, color: '#C45A10', fontWeight: '600' },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8, gap: 10 },
+  codeCopy: { fontSize: 14, color: c.orange, fontWeight: '600' },
+  codeRotate: { fontSize: 14, color: c.orange, fontWeight: '600' },
+  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.bgPanel, borderRadius: 10, padding: 12, marginBottom: 8, gap: 10 },
   avatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   rowInfo: { flex: 1 },
-  rowName: { fontSize: 15, fontWeight: '600', color: '#383432' },
-  rowEmail: { fontSize: 12, color: '#B07868', marginTop: 2 },
-  rowManager: { fontSize: 11, color: '#C45A10', marginTop: 2 },
+  rowName: { fontSize: 15, fontWeight: '600', color: c.text1 },
+  rowEmail: { fontSize: 12, color: c.amber, marginTop: 2 },
+  rowManager: { fontSize: 11, color: c.orange, marginTop: 2 },
   badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { fontSize: 12, fontWeight: '600' },
   actions: { flexDirection: 'row', gap: 6 },
-  actionBtn: { borderRadius: 6, borderWidth: 1, borderColor: '#E8DDD6', paddingHorizontal: 8, paddingVertical: 4 },
-  deactivateBtn: { borderColor: '#fecaca' },
-  actionBtnText: { fontSize: 12, color: '#383432' },
-  errorText: { color: '#ef4444', textAlign: 'center', marginTop: 40, paddingHorizontal: 24 },
-  inviteButton: { margin: 16, backgroundColor: '#C45A10', borderRadius: 10, padding: 14, alignItems: 'center' },
+  actionBtn: { borderRadius: 6, borderWidth: 1, borderColor: c.border, paddingHorizontal: 8, paddingVertical: 4 },
+  deactivateBtn: { borderColor: 'rgba(204,82,71,0.12)' },
+  actionBtnText: { fontSize: 12, color: c.text1 },
+  errorText: { color: c.red, textAlign: 'center', marginTop: 40, paddingHorizontal: 24 },
+  inviteButton: { margin: 16, backgroundColor: c.orange, borderRadius: 10, padding: 14, alignItems: 'center' },
   inviteButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  modal: { flex: 1, backgroundColor: '#FAF6F3', padding: 24, paddingTop: 60 },
-  modalTitle: { fontSize: 22, fontWeight: '700', color: '#383432', marginBottom: 24 },
-  label: { fontSize: 13, fontWeight: '600', color: '#383432', marginBottom: 6, marginTop: 12 },
-  input: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#E8DDD6', padding: 12, fontSize: 15, color: '#383432' },
+  modal: { flex: 1, backgroundColor: c.bg, padding: 24, paddingTop: 60 },
+  modalTitle: { fontSize: 22, fontWeight: '700', color: c.text1, marginBottom: 24 },
+  label: { fontSize: 13, fontWeight: '600', color: c.text1, marginBottom: 6, marginTop: 12 },
+  input: { backgroundColor: c.inputBg, borderRadius: 8, borderWidth: 1, borderColor: c.inputBorder, padding: 12, fontSize: 15, color: c.text1 },
   roleRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  rolePill: { borderRadius: 20, borderWidth: 1, borderColor: '#E8DDD6', paddingHorizontal: 14, paddingVertical: 6 },
-  rolePillSelected: { backgroundColor: '#C45A10', borderColor: '#C45A10' },
-  rolePillText: { fontSize: 13, color: '#383432' },
+  rolePill: { borderRadius: 20, borderWidth: 1, borderColor: c.border, paddingHorizontal: 14, paddingVertical: 6 },
+  rolePillSelected: { backgroundColor: c.orange, borderColor: c.orange },
+  rolePillText: { fontSize: 13, color: c.text1 },
   rolePillTextSelected: { color: '#fff', fontWeight: '600' },
   cancelBtn: { marginTop: 12, alignItems: 'center', padding: 12 },
-  cancelBtnText: { color: '#B07868', fontSize: 15 },
-  credOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 },
-  credCard: { backgroundColor: '#fff', borderRadius: 16, padding: 24 },
-  credTitle: { fontSize: 20, fontWeight: '700', color: '#383432', marginBottom: 8 },
-  credSubtitle: { fontSize: 14, color: '#B07868', marginBottom: 20, lineHeight: 20 },
-  credLabel: { fontSize: 12, fontWeight: '600', color: '#B07868', marginBottom: 4, marginTop: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
-  credRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FAF6F3', borderRadius: 8, borderWidth: 1, borderColor: '#E8DDD6', paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
-  credValue: { flex: 1, fontSize: 15, color: '#383432', fontWeight: '600' },
-  credCopy: { fontSize: 13, color: '#C45A10', fontWeight: '600' },
-  credHint: { fontSize: 12, color: '#CFADA3', marginTop: 16, textAlign: 'center' },
-  credShare: { marginTop: 20, backgroundColor: '#383432', borderRadius: 10, padding: 14, alignItems: 'center' },
-  credShareText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  cancelBtnText: { color: c.amber, fontSize: 15 },
+  credOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 24 },
+  credCard: { backgroundColor: c.bgPanel, borderRadius: 16, padding: 24 },
+  credTitle: { fontSize: 20, fontWeight: '700', color: c.text1, marginBottom: 8 },
+  credSubtitle: { fontSize: 14, color: c.amber, marginBottom: 20, lineHeight: 20 },
+  credLabel: { fontSize: 12, fontWeight: '600', color: c.amber, marginBottom: 4, marginTop: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
+  credRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.bg, borderRadius: 8, borderWidth: 1, borderColor: c.border, paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
+  credValue: { flex: 1, fontSize: 15, color: c.text1, fontWeight: '600' },
+  credCopy: { fontSize: 13, color: c.orange, fontWeight: '600' },
+  credHint: { fontSize: 12, color: c.textMuted, marginTop: 16, textAlign: 'center' },
+  credShare: { marginTop: 20, backgroundColor: c.border, borderRadius: 10, padding: 14, alignItems: 'center' },
+  credShareText: { color: c.text1, fontWeight: '700', fontSize: 15 },
   credDone: { marginTop: 10, alignItems: 'center', padding: 12 },
-  credDoneText: { color: '#B07868', fontSize: 15 },
+  credDoneText: { color: c.amber, fontSize: 15 },
 });

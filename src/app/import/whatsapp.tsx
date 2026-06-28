@@ -1,4 +1,4 @@
-import { Text, View, StyleSheet } from 'react-native';
+﻿import { Text, View, StyleSheet } from 'react-native';
 import FileImportScreen, { rowStyles } from './FileImportScreen';
 
 interface WaContact { name: string; phone?: string; message_count: number }
@@ -51,5 +51,5 @@ export default function WhatsAppImportScreen() {
 const styles = StyleSheet.create({
   row:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   textBlock: { flex: 1 },
-  count:     { fontSize: 11, color: '#CFADA3' },
+  count:     { fontSize: 11, color: 'rgba(232,224,212,0.35)' },
 });

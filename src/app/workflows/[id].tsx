@@ -63,7 +63,7 @@ interface SkeletonBoxProps {
 }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: '#FEF0E8', borderRadius, marginBottom }} />;
+  return <View style={{ width, height, backgroundColor: 'rgba(204,120,92,0.08)', borderRadius, marginBottom }} />;
 }
 
 const TRIGGER_KEY_MAP: Record<string, string> = {
@@ -83,9 +83,9 @@ function getConditionRows(conditions: ConditionsValue): WorkflowCondition[] {
 }
 
 function getStatusColor(status: WorkflowDetail['status']): string {
-  if (status === 'active') return '#C4704F';
+  if (status === 'active') return '#CC785C';
   if (status === 'paused') return '#F9AB00';
-  return '#CFADA3';
+  return 'rgba(232,224,212,0.35)';
 }
 
 function getActionLabel(action: ActionItem): string {
@@ -316,7 +316,7 @@ export default function WorkflowDetailScreen(): JSX.Element {
                 <View
                   style={[
                     styles.runBadge,
-                    { backgroundColor: run.status === 'success' ? '#C4704F' : '#C5221F' },
+                    { backgroundColor: run.status === 'success' ? '#CC785C' : '#C5221F' },
                   ]}
                 >
                   <Text style={styles.runBadgeText}>
@@ -343,7 +343,7 @@ export default function WorkflowDetailScreen(): JSX.Element {
             <TouchableOpacity
               style={[
                 styles.bottomButton,
-                { backgroundColor: workflow.status === 'active' ? '#F9AB00' : '#C4704F' },
+                { backgroundColor: workflow.status === 'active' ? '#F9AB00' : '#CC785C' },
                 isActionLoading ? styles.buttonDisabled : null,
               ]}
               onPress={handleToggle}
@@ -361,7 +361,7 @@ export default function WorkflowDetailScreen(): JSX.Element {
           <TouchableOpacity
             style={[
               styles.bottomButton,
-              { backgroundColor: '#C4704F' },
+              { backgroundColor: '#CC785C' },
               isActionLoading ? styles.buttonDisabled : null,
             ]}
             onPress={() => router.push(('/workflows/edit/' + id) as never)}
@@ -386,10 +386,10 @@ export default function WorkflowDetailScreen(): JSX.Element {
   );
 }
 const styles = StyleSheet.create({
-  outerContainer: { flex: 1, backgroundColor: '#FEF0E8' },
-  container: { flex: 1, backgroundColor: '#FEF0E8' },
+  outerContainer: { flex: 1, backgroundColor: 'rgba(204,120,92,0.08)' },
+  container: { flex: 1, backgroundColor: 'rgba(204,120,92,0.08)' },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1A1A18',
     borderRadius: 12,
     marginHorizontal: 16,
     marginBottom: 16,
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   skeletonCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1A1A18',
     borderRadius: 12,
     marginHorizontal: 16,
     marginBottom: 16,
@@ -412,41 +412,41 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     padding: 24,
   },
   errorText: { fontSize: 15, color: '#C5221F', textAlign: 'center', marginBottom: 16 },
-  retryText: { fontSize: 15, color: '#C4704F', fontWeight: '600' },
-  workflowName: { fontSize: 22, fontWeight: '700', color: '#383432', marginBottom: 6 },
-  triggerText: { fontSize: 14, color: '#B07868', marginBottom: 10 },
+  retryText: { fontSize: 15, color: '#CC785C', fontWeight: '600' },
+  workflowName: { fontSize: 22, fontWeight: '700', color: '#E8E0D4', marginBottom: 6 },
+  triggerText: { fontSize: 14, color: '#D4A27F', marginBottom: 10 },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   badgeText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  descriptionText: { fontSize: 13, color: '#B07868', marginTop: 4 },
-  sectionLabel: { fontSize: 11, fontWeight: '600', color: '#B07868', letterSpacing: 0.5, marginBottom: 10 },
-  conditionRow: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#FAF6F3' },
-  conditionText: { fontSize: 14, color: '#383432' },
+  descriptionText: { fontSize: 13, color: '#D4A27F', marginTop: 4 },
+  sectionLabel: { fontSize: 11, fontWeight: '600', color: '#D4A27F', letterSpacing: 0.5, marginBottom: 10 },
+  conditionRow: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#0E0E0D' },
+  conditionText: { fontSize: 14, color: '#E8E0D4' },
   actionRow: {
     flexDirection: 'row',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#FAF6F3',
+    borderBottomColor: '#0E0E0D',
     gap: 6,
   },
-  actionIndex: { fontSize: 14, fontWeight: '600', color: '#B07868', minWidth: 20 },
-  actionText: { fontSize: 14, color: '#383432', flex: 1 },
-  emptyText: { fontSize: 14, color: '#CFADA3', fontStyle: 'italic' },
-  runRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#FAF6F3', gap: 4 },
-  runDate: { fontSize: 13, color: '#B07868', marginBottom: 4 },
+  actionIndex: { fontSize: 14, fontWeight: '600', color: '#D4A27F', minWidth: 20 },
+  actionText: { fontSize: 14, color: '#E8E0D4', flex: 1 },
+  emptyText: { fontSize: 14, color: 'rgba(232,224,212,0.35)', fontStyle: 'italic' },
+  runRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#0E0E0D', gap: 4 },
+  runDate: { fontSize: 13, color: '#D4A27F', marginBottom: 4 },
   runBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   runBadgeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
   runError: { fontSize: 12, color: '#C5221F', marginTop: 2 },
-  bottomBar: { backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E8DDD6', padding: 16 },
+  bottomBar: { backgroundColor: '#1A1A18', borderTopWidth: 1, borderTopColor: 'rgba(232,224,212,0.08)', padding: 16 },
   actionError: { color: '#C5221F', fontSize: 13, textAlign: 'center', marginBottom: 8 },
   bottomButtons: { flexDirection: 'row', gap: 8 },
   bottomButton: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
   bottomButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   buttonDisabled: { opacity: 0.6 },
   headerEditButton: { paddingHorizontal: 8, paddingVertical: 4 },
-  headerEditText: { color: '#C4704F', fontSize: 16, fontWeight: '600' },
+  headerEditText: { color: '#CC785C', fontSize: 16, fontWeight: '600' },
 });

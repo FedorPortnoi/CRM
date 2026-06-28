@@ -4,9 +4,8 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { CheckSquare, MessageSquare, Bell, Calendar, Settings } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const ACCENT = '#C45A10';
-const DARK = '#2B2724';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeColors } from '../theme';
 
 interface Props {
   visible: boolean;
@@ -18,6 +17,8 @@ interface Props {
 export default function MoreSheet({ visible, onClose, chatUnread, notifUnread }: Props): JSX.Element {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
 
   const navigate = (path: string): void => {
     onClose();
@@ -51,7 +52,7 @@ export default function MoreSheet({ visible, onClose, chatUnread, notifUnread }:
               activeOpacity={0.7}
             >
               <View style={styles.optionIcon}>
-                <Icon size={20} color={ACCENT} strokeWidth={2.2} />
+                <Icon size={20} color={colors.orange} strokeWidth={2.2} />
               </View>
               <Text style={styles.optionLabel}>{label}</Text>
               {badge > 0 && (
@@ -67,7 +68,7 @@ export default function MoreSheet({ visible, onClose, chatUnread, notifUnread }:
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -77,7 +78,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingHorizontal: 20,
@@ -88,7 +89,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#D1C4B8',
+    backgroundColor: c.border,
     marginBottom: 8,
   },
   option: {
@@ -97,19 +98,19 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0E8E2',
+    borderBottomColor: c.border,
   },
   optionIcon: {
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   optionLabel: {
     fontSize: 16,
-    color: DARK,
+    color: c.text1,
     fontWeight: '500',
     flex: 1,
   },
@@ -117,7 +118,7 @@ const styles = StyleSheet.create({
     minWidth: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#E5484D',
+    backgroundColor: c.red,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,

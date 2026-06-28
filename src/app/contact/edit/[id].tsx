@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -13,6 +13,8 @@ import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
 import { useCreateMutation } from '../../../hooks/useCreateMutation';
+import { useTheme } from '../../../hooks/useTheme';
+import { ThemeColors } from '../../../theme';
 
 interface Contact {
   id: string;
@@ -67,6 +69,8 @@ function changedFields(current: ContactForm, original: ContactForm): ContactPatc
 
 export default function EditContactScreen(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
 
@@ -175,7 +179,7 @@ export default function EditContactScreen(): JSX.Element {
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#C45A10" />
+            <ActivityIndicator size="large" color={colors.orange} />
           </View>
         ) : (
           <>
@@ -258,47 +262,47 @@ export default function EditContactScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
   scrollView: { flex: 1 },
   content: { padding: 16 },
   loadingContainer: { paddingTop: 48 },
   errorBanner: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: 'rgba(204,82,71,0.12)',
     padding: 12,
     borderRadius: 12,
     marginBottom: 16,
   },
-  errorBannerText: { color: '#ef4444' },
+  errorBannerText: { color: c.red },
   bannerRetry: { marginTop: 8, alignSelf: 'flex-start' },
-  bannerRetryText: { color: '#C45A10', fontWeight: '600' },
+  bannerRetryText: { color: c.orange, fontWeight: '600' },
   fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#383432', marginBottom: 4 },
+  label: { fontSize: 13, fontWeight: '600', color: c.text1, marginBottom: 4 },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.inputBorder,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     minHeight: 44,
     fontSize: 15,
-    color: '#383432',
+    color: c.text1,
   },
   notesInput: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     height: 100,
     fontSize: 15,
-    color: '#383432',
+    color: c.text1,
   },
-  fieldError: { color: '#ef4444', fontSize: 12, marginTop: 4 },
+  fieldError: { color: c.red, fontSize: 12, marginTop: 4 },
   submitButton: {
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 12,
     minHeight: 48,
     justifyContent: 'center',

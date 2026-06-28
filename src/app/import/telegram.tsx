@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -90,7 +90,7 @@ export default function TelegramImportScreen() {
             value={phone}
             onChangeText={setPhone}
             placeholder="+7 999 000 00 00"
-            placeholderTextColor="#CFADA3"
+            placeholderTextColor="rgba(232,224,212,0.3)"
             keyboardType="phone-pad"
             autoFocus
           />
@@ -102,7 +102,7 @@ export default function TelegramImportScreen() {
             value={code}
             onChangeText={setCode}
             placeholder="·····"
-            placeholderTextColor="#CFADA3"
+            placeholderTextColor="rgba(232,224,212,0.3)"
             keyboardType="number-pad"
             maxLength={8}
             autoFocus
@@ -131,21 +131,21 @@ export default function TelegramImportScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAF6F3' },
+  container: { flex: 1, backgroundColor: '#0E0E0D' },
   content: { flex: 1, padding: 24, justifyContent: 'center' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F3', gap: 16 },
-  title: { fontSize: 24, fontWeight: '800', color: '#383432', marginBottom: 6 },
-  sub: { fontSize: 14, color: '#B07868', marginBottom: 28, lineHeight: 20 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0E0E0D', gap: 16 },
+  title: { fontSize: 24, fontWeight: '800', color: '#E8E0D4', marginBottom: 6 },
+  sub: { fontSize: 14, color: '#D4A27F', marginBottom: 28, lineHeight: 20 },
   input: {
-    height: 54, borderWidth: 1, borderColor: '#E8DDD6', borderRadius: 12,
-    backgroundColor: '#fff', paddingHorizontal: 16, fontSize: 17, color: '#383432', marginBottom: 12,
+    height: 54, borderWidth: 1, borderColor: 'rgba(232,224,212,0.12)', borderRadius: 12,
+    backgroundColor: '#1A1A18', paddingHorizontal: 16, fontSize: 17, color: '#E8E0D4', marginBottom: 12,
   },
   codeInput: { fontSize: 30, fontWeight: '700', textAlign: 'center', letterSpacing: 10 },
   btn: { height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   back: { alignItems: 'center', paddingVertical: 10 },
-  backText: { color: '#B07868', fontSize: 14 },
-  error: { color: '#ef4444', fontSize: 13, marginBottom: 10, textAlign: 'center' },
+  backText: { color: '#D4A27F', fontSize: 14 },
+  error: { color: '#CC5247', fontSize: 13, marginBottom: 10, textAlign: 'center' },
   doneEmoji: { fontSize: 52, color: '#2AABEE', fontWeight: '700' },
-  doneTitle: { fontSize: 18, fontWeight: '700', color: '#383432' },
+  doneTitle: { fontSize: 18, fontWeight: '700', color: '#E8E0D4' },
 });

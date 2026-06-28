@@ -440,6 +440,8 @@ const ru = {
     matchTitle: 'Привязать к контакту',
     searchPlaceholder: 'Поиск по имени или телефону...',
   },  settings: {
+    appearance: 'Внешний вид',
+    darkTheme: 'Тёмная тема',
     title: 'Настройки',
     language: 'Язык',
     profile: 'Профиль',

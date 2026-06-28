@@ -1,14 +1,18 @@
-﻿import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useOnboardingStore, WALKTHROUGH_STEPS } from '../store/onboardingStore';
 import { useUserStore } from '../store/userStore';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeColors } from '../theme';
 
 export function OnboardingWalkthrough(): JSX.Element | null {
   const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
   const { visible, currentStepIndex, completeStep, skipAll } = useOnboardingStore();
   const translateY = useRef(new Animated.Value(120)).current;
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
 
   useEffect(() => {
     if (visible) {
@@ -70,13 +74,13 @@ export function OnboardingWalkthrough(): JSX.Element | null {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     position: 'absolute',
     bottom: 90,
     left: 16,
     right: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     padding: 16,
     zIndex: 9998,
@@ -94,7 +98,7 @@ const styles = StyleSheet.create({
   },
   progress: {
     fontSize: 12,
-    color: '#888',
+    color: c.textMuted,
     fontWeight: '500',
   },
   dots: {
@@ -105,21 +109,21 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#DDD',
+    backgroundColor: c.border,
   },
   dotActive: {
-    backgroundColor: '#C4704F',
+    backgroundColor: c.orange,
     width: 16,
   },
   title: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111',
+    color: c.text1,
     marginBottom: 6,
   },
   desc: {
     fontSize: 14,
-    color: '#555',
+    color: c.textMuted,
     lineHeight: 20,
     marginBottom: 16,
   },
@@ -134,18 +138,18 @@ const styles = StyleSheet.create({
   },
   skipText: {
     fontSize: 14,
-    color: '#888',
+    color: c.textMuted,
     fontWeight: '500',
   },
   gotItBtn: {
-    backgroundColor: '#C4704F',
+    backgroundColor: c.orange,
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 12,
   },
   gotItText: {
     fontSize: 14,
-    color: '#FFF',
+    color: '#FFFFFF',
     fontWeight: '600',
   },
 });

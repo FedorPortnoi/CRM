@@ -26,6 +26,8 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import ContactCard, { ContactCardData, ContactCardType } from '../../components/ContactCard';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 type ContactTypeValue = 'lead' | 'customer' | 'partner' | 'other';
 
@@ -72,19 +74,7 @@ type ListItem = { _type: 'contact'; data: Contact } | { _type: 'header'; letter:
 
 const PER_PAGE = 20;
 
-const COLORS = {
-  cream: '#F7F1EC',
-  lightCream: '#E8DDD6',
-  burntOrange: '#C45A10',
-  charcoal: '#333333',
-  white: '#FFFFFF',
-  black: '#161412',
-  textMuted: '#6F625D',
-  cardBorder: '#EEE5DF',
-  darkBrown: '#8B3A00',
-} as const;
-
-const AVATAR_COLORS = ['#C45A10', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
+const AVATAR_COLORS = ['#CC785C', '#6366f1', '#D4A27F', '#CC5247', '#8b5cf6', '#0ea5e9'];
 
 function getInitials(firstName: string, lastName: string | null): string {
   const f = firstName.charAt(0).toUpperCase();
@@ -105,6 +95,8 @@ function normalizeType(type?: ContactTypeValue | null): ContactCardType {
 
 export default function ContactsScreen(): JSX.Element {
   const { t, i18n } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { token } = useUserStore();
@@ -158,8 +150,6 @@ export default function ContactsScreen(): JSX.Element {
     retry: (failureCount) => Boolean(token) && failureCount < 3,
   });
 
-  // Lightweight per-segment totals (page 1, single row) so the tab counts
-  // reflect the real backend totals regardless of the loaded page / filter.
   const countsQuery = useQuery<Record<SegmentKey, number>, Error>({
     queryKey: ['contacts-counts', search, token],
     enabled: Boolean(token),
@@ -620,7 +610,7 @@ export default function ContactsScreen(): JSX.Element {
       }
       return renderItem({ item: item.data } as ListRenderItemInfo<Contact>);
     },
-    [renderItem],
+    [renderItem, styles],
   );
 
   const renderOrgUserItem = useCallback(
@@ -660,7 +650,7 @@ export default function ContactsScreen(): JSX.Element {
         </TouchableOpacity>
       );
     },
-    [isAssigning, selectedUserId],
+    [isAssigning, selectedUserId, styles],
   );
 
   const segments: { key: SegmentKey; label: string; count: number | undefined }[] = [
@@ -678,7 +668,7 @@ export default function ContactsScreen(): JSX.Element {
 
   const renderHeader = (): JSX.Element => (
     <LinearGradient
-      colors={[COLORS.charcoal, '#222222']}
+      colors={[colors.bgDark, colors.bgDark]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[styles.header, { paddingTop: insets.top + 10 }]}
@@ -699,9 +689,9 @@ export default function ContactsScreen(): JSX.Element {
           style={({ pressed }) => [styles.headerIconButton, pressed && styles.pressed]}
         >
           {searchOpen ? (
-            <X size={25} color={COLORS.white} strokeWidth={2.2} />
+            <X size={25} color="#FFFFFF" strokeWidth={2.2} />
           ) : (
-            <Search size={24} color={COLORS.white} strokeWidth={2.2} />
+            <Search size={24} color="#FFFFFF" strokeWidth={2.2} />
           )}
         </Pressable>
 
@@ -712,23 +702,23 @@ export default function ContactsScreen(): JSX.Element {
           style={({ pressed }) => [styles.addButtonWrap, pressed && styles.pressed]}
         >
           <LinearGradient
-            colors={[COLORS.burntOrange, '#FA6A1E']}
+            colors={[colors.orange, '#FA6A1E']}
             start={{ x: 0.15, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.addButton}
           >
-            <Plus size={26} color={COLORS.white} strokeWidth={2.6} />
+            <Plus size={26} color="#FFFFFF" strokeWidth={2.6} />
           </LinearGradient>
         </Pressable>
       </View>
 
       {searchOpen ? (
         <View style={styles.searchWrapper}>
-          <Search size={18} color="#CFADA3" />
+          <Search size={18} color={colors.textMuted} />
           <TextInput
             style={styles.searchInput}
             placeholder={t('contacts.searchPlaceholder')}
-            placeholderTextColor="#CFADA3"
+            placeholderTextColor={colors.placeholder}
             value={search}
             onChangeText={handleSearchChange}
             autoCapitalize="none"
@@ -783,7 +773,7 @@ export default function ContactsScreen(): JSX.Element {
         >
           <SlidersHorizontal
             size={22}
-            color={showNoContact30d ? COLORS.burntOrange : COLORS.textMuted}
+            color={showNoContact30d ? colors.orange : colors.textMuted}
           />
         </Pressable>
       </View>
@@ -811,7 +801,7 @@ export default function ContactsScreen(): JSX.Element {
         <View style={styles.filterChip}>
           <Text style={styles.filterChipText}>Нет контакта 30+ дней</Text>
           <TouchableOpacity onPress={handleToggleNoContactFilter} hitSlop={8}>
-            <X size={14} color="#C45A10" />
+            <X size={14} color={colors.orange} />
           </TouchableOpacity>
         </View>
       ) : null}
@@ -829,8 +819,8 @@ export default function ContactsScreen(): JSX.Element {
         <RefreshControl
           refreshing={isRefreshing}
           onRefresh={handleRefresh}
-          colors={[COLORS.burntOrange]}
-          tintColor={COLORS.burntOrange}
+          colors={[colors.orange]}
+          tintColor={colors.orange}
         />
       }
       onEndReached={loadMore}
@@ -872,7 +862,7 @@ export default function ContactsScreen(): JSX.Element {
       ListFooterComponent={
         isFetchingMore ? (
           <View style={styles.footer}>
-            <ActivityIndicator size="small" color={COLORS.burntOrange} />
+            <ActivityIndicator size="small" color={colors.orange} />
           </View>
         ) : null
       }
@@ -980,7 +970,7 @@ export default function ContactsScreen(): JSX.Element {
             <View style={styles.userListContainer}>
               {isLoadingUsers ? (
                 <View style={styles.modalStateContainer}>
-                  <ActivityIndicator size="small" color={COLORS.burntOrange} />
+                  <ActivityIndicator size="small" color={colors.orange} />
                   <Text style={styles.modalStateText}>{t('contacts.loadingUsers')}</Text>
                 </View>
               ) : usersError ? (
@@ -1051,20 +1041,20 @@ export default function ContactsScreen(): JSX.Element {
 }
 
 function ItemSeparator(): JSX.Element {
-  return <View style={styles.separator} />;
+  return <View style={{ height: 12 }} />;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.cream,
+    backgroundColor: c.bg,
   },
   header: {
     paddingBottom: 22,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
-    shadowColor: COLORS.charcoal,
+    shadowColor: c.text1,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.16,
     shadowRadius: 16,
@@ -1084,7 +1074,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    color: COLORS.white,
+    color: '#FFFFFF',
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.6,
@@ -1098,7 +1088,7 @@ const styles = StyleSheet.create({
   addButtonWrap: {
     marginLeft: 12,
     borderRadius: 24,
-    shadowColor: COLORS.darkBrown,
+    shadowColor: '#8B3A00',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.28,
     shadowRadius: 12,
@@ -1114,7 +1104,7 @@ const styles = StyleSheet.create({
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.white,
+    backgroundColor: c.inputBg,
     marginTop: 16,
     paddingHorizontal: 14,
     borderRadius: 14,
@@ -1124,7 +1114,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#383432',
+    color: c.text1,
     paddingVertical: 10,
   },
   body: {
@@ -1141,9 +1131,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    backgroundColor: COLORS.white,
-    shadowColor: COLORS.charcoal,
+    borderColor: c.border,
+    backgroundColor: c.bgPanel,
+    shadowColor: c.text1,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.04,
     shadowRadius: 14,
@@ -1159,24 +1149,24 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   activeTab: {
-    borderBottomColor: COLORS.burntOrange,
+    borderBottomColor: c.orange,
   },
   tabLabel: {
-    color: COLORS.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '700',
   },
   activeTabLabel: {
-    color: COLORS.burntOrange,
+    color: c.orange,
   },
   tabCount: {
     marginTop: 4,
-    color: COLORS.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     fontWeight: '600',
   },
   activeTabCount: {
-    color: COLORS.burntOrange,
+    color: c.orange,
   },
   filterButton: {
     width: 54,
@@ -1184,17 +1174,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    backgroundColor: COLORS.white,
-    shadowColor: COLORS.charcoal,
+    borderColor: c.border,
+    backgroundColor: c.bgPanel,
+    shadowColor: c.text1,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.04,
     shadowRadius: 14,
     elevation: 2,
   },
   filterButtonActive: {
-    borderColor: COLORS.burntOrange,
-    backgroundColor: '#FEF0E8',
+    borderColor: c.orange,
+    backgroundColor: 'rgba(204,120,92,0.08)',
   },
   sortRow: {
     flexDirection: 'row',
@@ -1207,20 +1197,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#EEE5DF',
-    backgroundColor: COLORS.white,
+    borderColor: c.border,
+    backgroundColor: c.bgPanel,
   },
   sortPillActive: {
-    backgroundColor: '#C45A10',
-    borderColor: '#C45A10',
+    backgroundColor: c.orange,
+    borderColor: c.orange,
   },
   sortPillText: {
     fontSize: 13,
-    color: '#6F625D',
+    color: c.textMuted,
     fontWeight: '500',
   },
   sortPillTextActive: {
-    color: COLORS.white,
+    color: '#FFFFFF',
   },
   filterChip: {
     flexDirection: 'row',
@@ -1228,23 +1218,23 @@ const styles = StyleSheet.create({
     gap: 6,
     marginHorizontal: 16,
     marginBottom: 8,
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
     alignSelf: 'flex-start',
     borderWidth: 1,
-    borderColor: '#FBBF87',
+    borderColor: c.borderStrong,
   },
   filterChipText: {
     fontSize: 13,
-    color: '#C45A10',
+    color: c.orange,
     fontWeight: '500',
   },
   sectionHeader: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#B07868',
+    color: c.amber,
     paddingHorizontal: 4,
     paddingTop: 12,
     paddingBottom: 4,
@@ -1265,10 +1255,10 @@ const styles = StyleSheet.create({
   },
   skeletonCard: {
     height: 104,
-    backgroundColor: '#FBF6F2',
+    backgroundColor: c.skeleton,
     borderRadius: 17,
     borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    borderColor: c.border,
     marginBottom: 12,
   },
   stateContainer: {
@@ -1278,13 +1268,13 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   errorText: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 15,
     textAlign: 'center',
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: COLORS.burntOrange,
+    backgroundColor: c.orange,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
@@ -1305,7 +1295,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
-    color: '#9A8C84',
+    color: c.textMuted,
     textAlign: 'center',
   },
   emptyActions: {
@@ -1314,7 +1304,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyPrimaryButton: {
-    backgroundColor: COLORS.burntOrange,
+    backgroundColor: c.orange,
     borderRadius: 14,
     minHeight: 48,
     alignItems: 'center',
@@ -1328,16 +1318,16 @@ const styles = StyleSheet.create({
   },
   emptySecondaryButton: {
     borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    borderColor: c.border,
     borderRadius: 14,
     minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 18,
-    backgroundColor: COLORS.white,
+    backgroundColor: c.bgPanel,
   },
   emptySecondaryText: {
-    color: COLORS.burntOrange,
+    color: c.orange,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -1353,12 +1343,12 @@ const styles = StyleSheet.create({
   filterEmptyTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#383432',
+    color: c.text1,
     textAlign: 'center',
   },
   filterEmptySubtitle: {
     fontSize: 14,
-    color: '#9A8C84',
+    color: c.textMuted,
     textAlign: 'center',
     marginTop: 8,
   },
@@ -1367,7 +1357,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   archiveErrorText: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 13,
     marginHorizontal: 16,
     marginTop: 12,
@@ -1378,9 +1368,9 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     paddingTop: 10,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderTopWidth: 1,
-    borderTopColor: COLORS.cardBorder,
+    borderTopColor: c.border,
   },
   cancelSelectionButton: {
     minHeight: 44,
@@ -1389,10 +1379,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    borderColor: c.border,
   },
   cancelSelectionText: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1401,7 +1391,7 @@ const styles = StyleSheet.create({
     minWidth: 96,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: COLORS.burntOrange,
+    backgroundColor: c.orange,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -1419,7 +1409,7 @@ const styles = StyleSheet.create({
     minWidth: 96,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: '#ef4444',
+    backgroundColor: c.red,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
@@ -1436,12 +1426,12 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    backgroundColor: c.overlay,
     justifyContent: 'flex-end',
   },
   assignModal: {
     maxHeight: '78%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingHorizontal: 16,
@@ -1452,17 +1442,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   modalTitle: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 18,
     fontWeight: '700',
   },
   modalSubtitle: {
-    color: '#B07868',
+    color: c.amber,
     fontSize: 13,
     marginTop: 4,
   },
   assignErrorText: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 13,
     marginBottom: 10,
   },
@@ -1477,13 +1467,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   modalStateText: {
-    color: '#B07868',
+    color: c.amber,
     fontSize: 14,
     marginTop: 10,
     textAlign: 'center',
   },
   modalErrorText: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 12,
@@ -1492,7 +1482,7 @@ const styles = StyleSheet.create({
     minHeight: 40,
     paddingHorizontal: 18,
     borderRadius: 12,
-    backgroundColor: COLORS.burntOrange,
+    backgroundColor: c.orange,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1505,17 +1495,17 @@ const styles = StyleSheet.create({
     minHeight: 64,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    borderColor: c.border,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
   },
   userRowSelected: {
-    borderColor: COLORS.burntOrange,
-    backgroundColor: '#FEF0E8',
+    borderColor: c.orange,
+    backgroundColor: 'rgba(204,120,92,0.08)',
   },
   userRowText: {
     flex: 1,
@@ -1523,12 +1513,12 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   userName: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 15,
     fontWeight: '600',
   },
   userEmail: {
-    color: '#B07868',
+    color: c.amber,
     fontSize: 13,
     marginTop: 3,
   },
@@ -1541,13 +1531,13 @@ const styles = StyleSheet.create({
   },
   userSelectionIndicatorEmpty: {
     borderWidth: 1.5,
-    borderColor: '#CFADA3',
-    backgroundColor: '#FFFFFF',
+    borderColor: c.textMuted,
+    backgroundColor: c.bgPanel,
   },
   userSelectionIndicatorSelected: {
     borderWidth: 1.5,
-    borderColor: COLORS.burntOrange,
-    backgroundColor: COLORS.burntOrange,
+    borderColor: c.orange,
+    backgroundColor: c.orange,
   },
   modalActions: {
     flexDirection: 'row',
@@ -1561,10 +1551,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    borderColor: c.border,
   },
   modalCancelText: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1572,7 +1562,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: COLORS.burntOrange,
+    backgroundColor: c.orange,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',

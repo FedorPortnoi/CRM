@@ -440,6 +440,8 @@ const en = {
     matchTitle: 'Match to Contact',
     searchPlaceholder: 'Search by name or phone...',
   },  settings: {
+    appearance: 'Appearance',
+    darkTheme: 'Dark theme',
     title: 'Settings',
     language: 'Language',
     profile: 'Profile',

@@ -322,16 +322,16 @@ export default function ScanCardScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#FAF6F3' },
+  safe: { flex: 1, backgroundColor: '#0E0E0D' },
   container: { padding: 16, paddingBottom: 28 },
-  title: { fontSize: 26, fontWeight: '700', color: '#383432', marginBottom: 8 },
+  title: { fontSize: 26, fontWeight: '700', color: '#E8E0D4', marginBottom: 8 },
   helperText: { color: '#4B5563', lineHeight: 20, marginBottom: 12 },
   capturePanel: {
     minHeight: 190,
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1A1A18',
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: 'rgba(232,224,212,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
     height: 52,
     minWidth: 180,
     borderRadius: 12,
-    backgroundColor: '#C4704F',
+    backgroundColor: '#CC785C',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -372,17 +372,17 @@ const styles = StyleSheet.create({
   sectionLabel: {
     marginTop: 16,
     marginBottom: 8,
-    color: '#383432',
+    color: '#E8E0D4',
     fontWeight: '700',
   },
   input: {
     minHeight: 160,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
-    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(232,224,212,0.12)',
+    backgroundColor: '#1A1A18',
     padding: 12,
-    color: '#383432',
+    color: '#E8E0D4',
   },
   errorBox: {
     marginTop: 12,
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
   errorAction: {
     minHeight: 38,
     borderRadius: 10,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1A1A18',
     borderWidth: 1,
     borderColor: '#FCA5A5',
     alignItems: 'center',
@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
   button: {
     height: 52,
     borderRadius: 12,
-    backgroundColor: '#C4704F',
+    backgroundColor: '#CC785C',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',

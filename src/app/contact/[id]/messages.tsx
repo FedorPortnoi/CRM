@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -20,6 +20,8 @@ import { API_URL } from '../../../utils/api';
 import { useOrgWebSocket } from '../../../utils/websocket';
 import { sendOrQueueMutation } from '../../../utils/offlineMutation';
 import { formatMarketDateTime } from '../../../market/profile';
+import { useTheme } from '../../../hooks/useTheme';
+import { ThemeColors } from '../../../theme';
 
 type MessageDirection = 'inbound' | 'outbound';
 type MessageChannel = 'sms' | 'in_app' | 'email';
@@ -152,6 +154,8 @@ function submitErrorMessage(error: unknown, fallback: string): string {
 
 export default function ContactMessagesScreen(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
 
@@ -405,14 +409,14 @@ export default function ContactMessagesScreen(): JSX.Element {
             ) : null}
             <Text style={[styles.messageText, bubbleTextStyle]}>{bodyParts.bodyText}</Text>
             <View style={styles.statusRow}>
-              {item.status === 'read' ? <Check size={12} color={isOutbound ? '#D8E8FF' : '#B07868'} /> : null}
+              {item.status === 'read' ? <Check size={12} color={isOutbound ? '#D8E8FF' : colors.amber} /> : null}
               <Text style={[styles.statusText, mutedTextStyle]}>{statusText(item, t)}</Text>
             </View>
           </View>
         </View>
       );
     },
-    [t],
+    [styles, t, colors.amber],
   );
 
   const noteDisabled = isSubmitting || noteBody.trim() === '';
@@ -427,7 +431,7 @@ export default function ContactMessagesScreen(): JSX.Element {
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#C4704F" />
+          <ActivityIndicator size="large" color={colors.orange} />
         </View>
       ) : fetchError !== null ? (
         <View style={styles.errorContainer}>
@@ -442,7 +446,13 @@ export default function ContactMessagesScreen(): JSX.Element {
             data={messages}
             keyExtractor={(item) => item.id}
             renderItem={renderMessage}
-            refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={colors.orange}
+              />
+            }
             contentContainerStyle={messages.length === 0 ? styles.emptyListContent : styles.listContent}
             ListHeaderComponent={
               contact !== null ? (
@@ -461,7 +471,7 @@ export default function ContactMessagesScreen(): JSX.Element {
             }
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <MessageCircle size={34} color="#CFADA3" />
+                <MessageCircle size={34} color={colors.textMuted} />
                 <Text style={styles.emptyTitle}>{t('contacts.noConversationYet')}</Text>
                 <Text style={styles.emptyText}>{t('contacts.startConversation')}</Text>
               </View>
@@ -482,7 +492,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                 disabled={isSubmitting}
                 activeOpacity={0.7}
               >
-                <MessageCircle size={16} color={mode === 'note' ? '#FFFFFF' : '#C4704F'} />
+                <MessageCircle size={16} color={mode === 'note' ? '#FFFFFF' : colors.orange} />
                 <Text style={[styles.modeButtonText, mode === 'note' ? styles.modeButtonTextActive : null]}>
                   {t('contacts.noteMode')}
                 </Text>
@@ -493,7 +503,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                 disabled={isSubmitting}
                 activeOpacity={0.7}
               >
-                <PhoneCall size={16} color={mode === 'call' ? '#FFFFFF' : '#C4704F'} />
+                <PhoneCall size={16} color={mode === 'call' ? '#FFFFFF' : colors.orange} />
                 <Text style={[styles.modeButtonText, mode === 'call' ? styles.modeButtonTextActive : null]}>
                   {t('contacts.callMode')}
                 </Text>
@@ -507,7 +517,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                   value={noteBody}
                   onChangeText={setNoteBody}
                   placeholder={t('contacts.writeInAppNote')}
-                  placeholderTextColor="#CFADA3"
+                  placeholderTextColor={colors.placeholder}
                   multiline
                   textAlignVertical="top"
                   editable={!isSubmitting}
@@ -573,7 +583,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                     value={durationMinutes}
                     onChangeText={setDurationMinutes}
                     placeholder={t('contacts.durationMin')}
-                    placeholderTextColor="#CFADA3"
+                    placeholderTextColor={colors.placeholder}
                     keyboardType="decimal-pad"
                     editable={!isSubmitting}
                   />
@@ -582,7 +592,7 @@ export default function ContactMessagesScreen(): JSX.Element {
                     value={callNotes}
                     onChangeText={setCallNotes}
                     placeholder={t('contacts.callNotes')}
-                    placeholderTextColor="#CFADA3"
+                    placeholderTextColor={colors.placeholder}
                     multiline
                     textAlignVertical="top"
                     editable={!isSubmitting}
@@ -614,8 +624,8 @@ export default function ContactMessagesScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FEF0E8' },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: 'rgba(204,120,92,0.08)' },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorContainer: {
     flex: 1,
@@ -623,9 +633,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
   },
-  errorText: { color: '#ef4444', fontSize: 14, textAlign: 'center', marginBottom: 16 },
+  errorText: { color: c.red, fontSize: 14, textAlign: 'center', marginBottom: 16 },
   retryButton: {
-    backgroundColor: '#C4704F',
+    backgroundColor: c.orange,
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 12,
@@ -636,23 +646,23 @@ const styles = StyleSheet.create({
   listContent: { padding: 12, paddingBottom: 16 },
   emptyListContent: { flexGrow: 1, padding: 12 },
   threadHeader: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
   },
-  threadName: { color: '#383432', fontSize: 17, fontWeight: '700', marginBottom: 4 },
-  threadDetail: { color: '#B07868', fontSize: 12, lineHeight: 18 },
+  threadName: { color: c.text1, fontSize: 17, fontWeight: '700', marginBottom: 4 },
+  threadDetail: { color: c.amber, fontSize: 12, lineHeight: 18 },
   emptyState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  emptyTitle: { color: '#383432', fontSize: 17, fontWeight: '700', marginTop: 12 },
-  emptyText: { color: '#B07868', fontSize: 14, marginTop: 4, textAlign: 'center' },
+  emptyTitle: { color: c.text1, fontSize: 17, fontWeight: '700', marginTop: 12 },
+  emptyText: { color: c.amber, fontSize: 14, marginTop: 4, textAlign: 'center' },
   messageRow: { flexDirection: 'row', marginBottom: 10 },
   outboundRow: { justifyContent: 'flex-end' },
   inboundRow: { justifyContent: 'flex-start' },
@@ -662,11 +672,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
-  outboundBubble: { backgroundColor: '#C4704F' },
+  outboundBubble: { backgroundColor: c.orange },
   inboundBubble: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderWidth: 1,
-    borderColor: '#E4E4E4',
+    borderColor: c.border,
   },
   messageMetaRow: {
     flexDirection: 'row',
@@ -679,9 +689,9 @@ const styles = StyleSheet.create({
   messageTime: { fontSize: 11 },
   messageText: { fontSize: 14, lineHeight: 20 },
   outboundText: { color: '#FFFFFF' },
-  inboundText: { color: '#383432' },
+  inboundText: { color: c.text1 },
   outboundMutedText: { color: '#D8E8FF' },
-  inboundMutedText: { color: '#B07868' },
+  inboundMutedText: { color: c.amber },
   durationText: { fontSize: 12, fontWeight: '600', marginBottom: 3 },
   statusRow: {
     flexDirection: 'row',
@@ -692,24 +702,24 @@ const styles = StyleSheet.create({
   },
   statusText: { fontSize: 11 },
   composer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderTopWidth: 1,
-    borderTopColor: '#E8DDD6',
+    borderTopColor: c.border,
     paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 14,
   },
   submitErrorBanner: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: 'rgba(204,82,71,0.12)',
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 8,
     marginBottom: 10,
   },
-  submitErrorText: { color: '#ef4444', fontSize: 13 },
+  submitErrorText: { color: c.red, fontSize: 13 },
   modeRow: {
     flexDirection: 'row',
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     borderRadius: 12,
     padding: 3,
     marginBottom: 10,
@@ -723,28 +733,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
   },
-  modeButtonActive: { backgroundColor: '#C4704F' },
-  modeButtonText: { color: '#C4704F', fontSize: 13, fontWeight: '700' },
+  modeButtonActive: { backgroundColor: c.orange },
+  modeButtonText: { color: c.orange, fontSize: 13, fontWeight: '700' },
   modeButtonTextActive: { color: '#FFFFFF' },
   noteComposerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   noteInput: {
     flex: 1,
     minHeight: 44,
     maxHeight: 104,
-    backgroundColor: '#F7F7F7',
+    backgroundColor: c.inputBg,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#383432',
+    color: c.text1,
     fontSize: 14,
   },
   sendButton: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#C4704F',
+    backgroundColor: c.orange,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -755,24 +765,24 @@ const styles = StyleSheet.create({
     minHeight: 36,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#D6E4FA',
+    borderColor: c.border,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
   },
-  directionButtonActive: { backgroundColor: '#FEF0E8', borderColor: '#C4704F' },
-  directionButtonText: { color: '#B07868', fontSize: 13, fontWeight: '700' },
-  directionButtonTextActive: { color: '#C4704F' },
+  directionButtonActive: { backgroundColor: 'rgba(204,120,92,0.08)', borderColor: c.orange },
+  directionButtonText: { color: c.amber, fontSize: 13, fontWeight: '700' },
+  directionButtonTextActive: { color: c.orange },
   callFieldsRow: { flexDirection: 'row', gap: 8 },
   callInput: {
-    backgroundColor: '#F7F7F7',
+    backgroundColor: c.inputBg,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     paddingHorizontal: 12,
     paddingVertical: 10,
     minHeight: 44,
-    color: '#383432',
+    color: c.text1,
     fontSize: 14,
   },
   durationInput: { width: 72 },

@@ -13,6 +13,9 @@ import {
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
+import { useThemeStore } from '../../store/themeStore';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 import { getStoredLanguage } from '../../i18n/storage';
 import { API_URL } from '../../utils/api';
 import { downloadAuthenticatedPdf } from '../../utils/exportFile';
@@ -34,6 +37,10 @@ export default function SettingsScreen(): JSX.Element {
   const user = useUserStore((s) => s.user);
   const token = useUserStore((s) => s.token);
   const logout = useUserStore((s) => s.logout);
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const toggleTheme = useThemeStore((s) => s.toggle);
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [canAskNotifications, setCanAskNotifications] = useState<boolean>(true);
@@ -216,6 +223,19 @@ export default function SettingsScreen(): JSX.Element {
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <Text style={styles.pageTitle}>{t('settings.title')}</Text>
 
+      <Text style={styles.sectionHeader}>{t('settings.appearance') ?? 'Внешний вид'}</Text>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>{t('settings.darkTheme')}</Text>
+          <Switch
+            value={isDark}
+            onValueChange={toggleTheme}
+            trackColor={{ false: '#E8DDD6', true: '#CC785C' }}
+            thumbColor={isDark ? '#EBDBBC' : '#FFFFFF'}
+          />
+        </View>
+      </View>
+
       <Text style={styles.sectionHeader}>{t('settings.profile')}</Text>
       <View style={styles.card}>
         <View style={styles.profileRow}>
@@ -266,7 +286,7 @@ export default function SettingsScreen(): JSX.Element {
                 onChangeText={(v) => { setMonthlyTarget(v); setTargetSaved(false); }}
                 keyboardType="numeric"
                 placeholder={t('settings.monthlyTargetPlaceholder')}
-                placeholderTextColor="#CFADA3"
+                placeholderTextColor={colors.placeholder}
                 returnKeyType="done"
               />
               <TouchableOpacity
@@ -316,7 +336,7 @@ export default function SettingsScreen(): JSX.Element {
             value={notificationsEnabled}
             onValueChange={(value) => { void handleNotificationsToggle(value); }}
             disabled={notificationsDisabled}
-            trackColor={{ false: '#E8DDD6', true: '#C45A10' }}
+            trackColor={{ false: 'rgba(232,224,212,0.08)', true: '#CC785C' }}
             thumbColor='#FFFFFF'
           />
         </View>
@@ -395,17 +415,17 @@ export default function SettingsScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   wrapper: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.bg,
   },
   circle1: {
     position: 'absolute',
     width: 350,
     height: 350,
     borderRadius: 175,
-    backgroundColor: 'rgba(6,95,70,0.04)',
+    backgroundColor: c.skeleton,
     top: -80,
     right: -100,
   },
@@ -414,7 +434,7 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: 'rgba(6,95,70,0.03)',
+    backgroundColor: c.skeleton,
     bottom: 100,
     left: -80,
   },
@@ -423,7 +443,7 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: 'rgba(6,95,70,0.03)',
+    backgroundColor: c.skeleton,
     top: '40%',
     right: -60,
   },
@@ -437,7 +457,7 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#383432',
+    color: c.text1,
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 8,
@@ -445,7 +465,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#B07868',
+    color: c.amber,
     paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: 6,
@@ -453,11 +473,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     marginHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     overflow: 'hidden',
   },
   profileRow: {
@@ -472,15 +492,15 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#383432',
+    color: c.text1,
   },
   profileEmail: {
     fontSize: 13,
-    color: '#B07868',
+    color: c.amber,
     marginTop: 2,
   },
   roleBadge: {
-    backgroundColor: '#f0fdf4',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -489,7 +509,7 @@ const styles = StyleSheet.create({
   roleBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#C45A10',
+    color: c.orange,
     textTransform: 'capitalize',
   },
   row: {
@@ -504,12 +524,12 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     fontSize: 15,
-    color: '#383432',
+    color: c.text1,
     fontWeight: '500',
   },
   rowValue: {
     fontSize: 14,
-    color: '#B07868',
+    color: c.amber,
     marginLeft: 8,
     flex: 1,
     textAlign: 'right',
@@ -520,7 +540,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   languageChip: {
-    backgroundColor: '#f0fdf4',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -528,16 +548,16 @@ const styles = StyleSheet.create({
   languageChipText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#C45A10',
+    color: c.orange,
   },
   chevron: {
     fontSize: 20,
-    color: '#CFADA3',
+    color: c.textMuted,
     lineHeight: 22,
   },
   comingSoon: {
     fontSize: 12,
-    color: '#CFADA3',
+    color: c.textMuted,
     marginTop: 2,
   },
   notificationSettingsButton: {
@@ -548,7 +568,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   notificationSettingsText: {
-    color: '#C45A10',
+    color: c.orange,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -559,13 +579,13 @@ const styles = StyleSheet.create({
   },
   helperText: {
     fontSize: 12,
-    color: '#B07868',
+    color: c.amber,
     marginTop: 4,
     lineHeight: 17,
   },
   divider: {
     height: 1,
-    backgroundColor: '#FAF6F3',
+    backgroundColor: c.border,
   },
   exportActions: {
     flexDirection: 'row',
@@ -576,7 +596,7 @@ const styles = StyleSheet.create({
   },
   exportButton: {
     flex: 1,
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 10,
     minHeight: 44,
     alignItems: 'center',
@@ -594,7 +614,7 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 12,
-    color: '#B07868',
+    color: c.amber,
     paddingHorizontal: 14,
     paddingBottom: 12,
   },
@@ -606,40 +626,40 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 10,
     borderRadius: 10,
-    backgroundColor: '#f0fdf4',
+    backgroundColor: 'rgba(204,120,92,0.08)',
   },
   successText: {
     fontSize: 13,
-    color: '#C45A10',
+    color: c.orange,
     fontWeight: '700',
   },
   savedPath: {
     fontSize: 11,
-    color: '#B07868',
+    color: c.amber,
     marginTop: 2,
   },
   openButton: {
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#C45A10',
+    borderColor: c.orange,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
   openButtonText: {
-    color: '#C45A10',
+    color: c.orange,
     fontSize: 12,
     fontWeight: '700',
   },
   errorText: {
     fontSize: 12,
-    color: '#ef4444',
+    color: c.red,
     paddingHorizontal: 14,
     paddingBottom: 12,
   },
   logoutButton: {
     marginHorizontal: 12,
     marginTop: 28,
-    backgroundColor: '#ef4444',
+    backgroundColor: c.red,
     borderRadius: 12,
     minHeight: 50,
     alignItems: 'center',
@@ -660,7 +680,7 @@ const styles = StyleSheet.create({
   },
   targetSavedText: {
     fontSize: 12,
-    color: '#16a34a',
+    color: c.wheat,
     fontWeight: '600',
   },
   targetInputRow: {
@@ -673,16 +693,16 @@ const styles = StyleSheet.create({
   targetInput: {
     flex: 1,
     borderWidth: 1.5,
-    borderColor: '#E8DDD6',
+    borderColor: c.inputBorder,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
-    color: '#383432',
-    backgroundColor: '#FAFAF9',
+    color: c.text1,
+    backgroundColor: c.inputBg,
   },
   targetSaveButton: {
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 10,
     minHeight: 44,
     minWidth: 80,

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, ScrollView, Switch,
@@ -72,7 +72,7 @@ export default function Bitrix24ImportScreen() {
         value={webhookUrl}
         onChangeText={setWebhookUrl}
         placeholder="https://домен.bitrix24.ru/rest/1/ключ/"
-        placeholderTextColor="#CFADA3"
+        placeholderTextColor="rgba(232,224,212,0.3)"
         autoCapitalize="none"
         autoCorrect={false}
       />
@@ -83,7 +83,7 @@ export default function Bitrix24ImportScreen() {
           value={includeDeals}
           onValueChange={setIncludeDeals}
           thumbColor="#fff"
-          trackColor={{ true: '#FF5752', false: '#E8DDD6' }}
+          trackColor={{ true: '#FF5752', false: 'rgba(232,224,212,0.08)' }}
         />
       </View>
 
@@ -97,26 +97,26 @@ export default function Bitrix24ImportScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAF6F3' },
+  container: { flex: 1, backgroundColor: '#0E0E0D' },
   content: { padding: 24, paddingTop: 32 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF6F3', gap: 12 },
-  title: { fontSize: 24, fontWeight: '800', color: '#383432', marginBottom: 6 },
-  sub: { fontSize: 13, color: '#B07868', marginBottom: 24, lineHeight: 18 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0E0E0D', gap: 12 },
+  title: { fontSize: 24, fontWeight: '800', color: '#E8E0D4', marginBottom: 6 },
+  sub: { fontSize: 13, color: '#D4A27F', marginBottom: 24, lineHeight: 18 },
   input: {
-    height: 54, borderWidth: 1, borderColor: '#E8DDD6', borderRadius: 12,
-    backgroundColor: '#fff', paddingHorizontal: 16, fontSize: 14, color: '#383432', marginBottom: 16,
+    height: 54, borderWidth: 1, borderColor: 'rgba(232,224,212,0.12)', borderRadius: 12,
+    backgroundColor: '#1A1A18', paddingHorizontal: 16, fontSize: 14, color: '#E8E0D4', marginBottom: 16,
   },
   switchRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 20,
+    backgroundColor: '#1A1A18', borderRadius: 12, padding: 16, marginBottom: 20,
     borderWidth: 1, borderColor: '#F5EDE8',
   },
-  switchLabel: { fontSize: 15, color: '#383432', fontWeight: '500' },
+  switchLabel: { fontSize: 15, color: '#E8E0D4', fontWeight: '500' },
   btn: { height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  error: { color: '#ef4444', fontSize: 13, marginBottom: 12, textAlign: 'center' },
-  loadingText: { fontSize: 15, color: '#383432', fontWeight: '600' },
+  error: { color: '#CC5247', fontSize: 13, marginBottom: 12, textAlign: 'center' },
+  loadingText: { fontSize: 15, color: '#E8E0D4', fontWeight: '600' },
   doneEmoji: { fontSize: 52, fontWeight: '700' },
-  doneTitle: { fontSize: 22, fontWeight: '800', color: '#383432' },
-  doneSub: { fontSize: 15, color: '#B07868' },
+  doneTitle: { fontSize: 22, fontWeight: '800', color: '#E8E0D4' },
+  doneSub: { fontSize: 15, color: '#D4A27F' },
 });

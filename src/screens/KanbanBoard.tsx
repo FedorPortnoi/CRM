@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
   View,
@@ -16,6 +16,8 @@ import { useTranslation } from 'react-i18next';
 import { useDealsStore } from '../store/dealsStore';
 import { usePipelinesStore } from '../store/pipelinesStore';
 import { formatMoney } from '../market/profile';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeColors } from '../theme';
 
 type DealStatus = 'open' | 'won' | 'lost' | 'archived';
 
@@ -77,6 +79,8 @@ function DealCard({
   onLongPress,
 }: DealCardProps): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const translateX = useRef(new Animated.Value(0)).current;
   const [isDragging, setIsDragging] = React.useState(false);
 
@@ -199,6 +203,8 @@ function DealCard({
 
 const KanbanBoard: React.FC = () => {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const deals = useDealsStore((s) => s.deals) as Deal[];
   const dealsLoading = useDealsStore((s) => s.isLoading);
   const dealsError = useDealsStore((s) => s.error);
@@ -212,7 +218,7 @@ const KanbanBoard: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
-      void Promise.all([fetchDeals(), fetchPipelines()]);
+      void fetchPipelines().then(() => fetchDeals());
     }, [fetchDeals, fetchPipelines]),
   );
 
@@ -255,7 +261,7 @@ const KanbanBoard: React.FC = () => {
   if (dealsLoading || pipelinesLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#C45A10" />
+        <ActivityIndicator size="large" color={colors.orange} />
       </View>
     );
   }
@@ -263,7 +269,7 @@ const KanbanBoard: React.FC = () => {
   if (dealsError || pipelinesError) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text>{dealsError ?? pipelinesError}</Text>
+        <Text style={{ color: colors.text1 }}>{dealsError ?? pipelinesError}</Text>
       </View>
     );
   }
@@ -271,7 +277,7 @@ const KanbanBoard: React.FC = () => {
   if (stagesWithDeals.length === 0) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
-        <Text style={{ fontSize: 15, color: '#CFADA3', textAlign: 'center', lineHeight: 22 }}>
+        <Text style={{ fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 22 }}>
           {t('deals.noPipeline')}
         </Text>
       </View>
@@ -320,7 +326,7 @@ const KanbanBoard: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   board: {
     flex: 1,
   },
@@ -330,7 +336,7 @@ const styles = StyleSheet.create({
   stageColumn: {
     width: STAGE_WIDTH,
     margin: 8,
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     borderRadius: 12,
     padding: 8,
   },
@@ -345,11 +351,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontWeight: '700',
     fontSize: 15,
-    color: '#383432',
+    color: c.text1,
     marginRight: 8,
   },
   stageCount: {
-    color: '#CFADA3',
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -365,11 +371,11 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   dealCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -380,7 +386,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
     marginBottom: 4,
-    color: '#383432',
+    color: c.text1,
   },
   warningBadge: {
     borderRadius: 4,
@@ -390,32 +396,32 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   overdueBadge: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: 'rgba(204,82,71,0.12)',
   },
   todayBadge: {
-    backgroundColor: '#fffbeb',
+    backgroundColor: 'rgba(204,120,92,0.08)',
   },
   warningBadgeText: {
     fontSize: 10,
   },
   overdueText: {
-    color: '#dc2626',
+    color: c.red,
   },
   todayText: {
-    color: '#d97706',
+    color: c.amber,
   },
   dealValue: {
     marginBottom: 4,
-    color: '#C45A10',
+    color: c.orange,
     fontWeight: '600',
     fontSize: 13,
   },
   dealContact: {
-    color: '#B07868',
+    color: c.amber,
     fontSize: 12,
   },
   nextActionText: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 12,
     marginBottom: 4,
   },

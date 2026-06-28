@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -16,6 +16,8 @@ import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { formatMarketDateTime } from '../../market/profile';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 type PendingCapture = {
   id: string;
@@ -51,6 +53,8 @@ export default function CapturesScreen(): JSX.Element {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const token = useUserStore((s) => s.token);
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
 
   const [captures, setCaptures] = useState<PendingCapture[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -245,7 +249,7 @@ export default function CapturesScreen(): JSX.Element {
         </View>
       );
     },
-    [actionId, t, typeLabel, openMatchModal, handleCreateContact, handleDismiss],
+    [actionId, t, typeLabel, openMatchModal, handleCreateContact, handleDismiss, styles],
   );
 
   const renderContactResult = useCallback(
@@ -264,7 +268,7 @@ export default function CapturesScreen(): JSX.Element {
         <Text style={styles.selectLabel}>{t('captures.selectContact')}</Text>
       </TouchableOpacity>
     ),
-    [handleMatchToContact, t],
+    [handleMatchToContact, t, styles],
   );
 
   const keyExtractorCapture = useCallback((item: PendingCapture): string => item.id, []);
@@ -273,7 +277,7 @@ export default function CapturesScreen(): JSX.Element {
   const ListEmpty = useCallback((): JSX.Element | null => {
     if (isLoading) return null;
     return <Text style={styles.emptyText}>{t('captures.empty')}</Text>;
-  }, [isLoading, t]);
+  }, [isLoading, t, styles]);
 
   return (
     <View style={styles.container}>
@@ -281,7 +285,7 @@ export default function CapturesScreen(): JSX.Element {
 
       {isLoading && captures.length === 0 ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#C4704F" />
+          <ActivityIndicator size="large" color={colors.orange} />
         </View>
       ) : error ? (
         <View style={styles.centered}>
@@ -326,13 +330,13 @@ export default function CapturesScreen(): JSX.Element {
             value={contactSearch}
             onChangeText={handleSearchContacts}
             placeholder={t('captures.searchPlaceholder')}
-            placeholderTextColor="#CFADA3"
+            placeholderTextColor={colors.placeholder}
             autoFocus
             returnKeyType="search"
           />
 
           {isSearching ? (
-            <ActivityIndicator style={styles.searchSpinner} color="#C4704F" />
+            <ActivityIndicator style={styles.searchSpinner} color={colors.orange} />
           ) : (
             <FlatList
               data={contactResults}
@@ -348,10 +352,10 @@ export default function CapturesScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
   },
   centered: {
     flex: 1,
@@ -363,10 +367,10 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     marginBottom: 10,
     padding: 12,
   },
@@ -378,13 +382,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   typeBadge: {
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   typeBadgeText: {
-    color: '#C4704F',
+    color: c.orange,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -392,11 +396,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
-    color: '#383432',
+    color: c.text1,
   },
   timestampText: {
     fontSize: 12,
-    color: '#CFADA3',
+    color: c.textMuted,
   },
   cardActions: {
     flexDirection: 'row',
@@ -411,17 +415,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   cardButtonPrimary: {
-    backgroundColor: '#C4704F',
+    backgroundColor: c.orange,
   },
   cardButtonSecondary: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderWidth: 1,
-    borderColor: '#C4704F',
+    borderColor: c.orange,
   },
   cardButtonDanger: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderWidth: 1,
-    borderColor: '#ef4444',
+    borderColor: c.red,
   },
   cardButtonDisabled: {
     opacity: 0.5,
@@ -432,29 +436,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   cardButtonSecondaryText: {
-    color: '#C4704F',
+    color: c.orange,
     fontSize: 13,
     fontWeight: '600',
   },
   cardButtonDangerText: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 13,
     fontWeight: '600',
   },
   emptyText: {
-    color: '#CFADA3',
+    color: c.textMuted,
     fontSize: 14,
     textAlign: 'center',
     paddingVertical: 24,
   },
   errorText: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 12,
   },
   retryButton: {
-    backgroundColor: '#C4704F',
+    backgroundColor: c.orange,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 12,
@@ -467,7 +471,7 @@ const styles = StyleSheet.create({
   // Modal
   modalContainer: {
     flex: 1,
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     paddingTop: 16,
   },
   modalHeader: {
@@ -480,26 +484,26 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#383432',
+    color: c.text1,
   },
   closeButton: {
     padding: 8,
   },
   closeButtonText: {
-    color: '#C4704F',
+    color: c.orange,
     fontSize: 15,
     fontWeight: '600',
   },
   searchInput: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.inputBorder,
     borderRadius: 12,
     marginHorizontal: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 15,
-    color: '#383432',
+    color: c.text1,
     marginBottom: 12,
   },
   searchSpinner: {
@@ -509,10 +513,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   contactRow: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     marginBottom: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -526,15 +530,15 @@ const styles = StyleSheet.create({
   contactRowName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#383432',
+    color: c.text1,
   },
   contactRowPhone: {
     fontSize: 12,
-    color: '#B07868',
+    color: c.amber,
     marginTop: 2,
   },
   selectLabel: {
-    color: '#C4704F',
+    color: c.orange,
     fontSize: 13,
     fontWeight: '600',
   },

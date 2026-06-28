@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,6 +17,8 @@ import { API_URL } from '../../../utils/api';
 import { formatMarketDateTime } from '../../../market/profile';
 import { useContactSearch } from '../../../hooks/useContactSearch';
 import { useCreateMutation } from '../../../hooks/useCreateMutation';
+import { useTheme } from '../../../hooks/useTheme';
+import { ThemeColors } from '../../../theme';
 
 type CalendarContact = {
   id: string;
@@ -178,6 +180,8 @@ function buildPatch(
 
 export default function EditCalendarEventScreen(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
 
@@ -348,7 +352,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator color="#C45A10" size="large" />
+            <ActivityIndicator color={colors.orange} size="large" />
           </View>
         ) : original !== null ? (
           <>
@@ -362,7 +366,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                   setFieldErrors((prev) => ({ ...prev, title: undefined }));
                 }}
                 placeholder={t('calendar.titlePlaceholder')}
-                placeholderTextColor="#B07868"
+                placeholderTextColor={colors.placeholder}
                 autoCapitalize="sentences"
               />
               {fieldErrors.title ? <Text style={styles.fieldError}>{fieldErrors.title}</Text> : null}
@@ -379,7 +383,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     setFieldErrors((prev) => ({ ...prev, start: undefined }));
                   }}
                   placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#B07868"
+                  placeholderTextColor={colors.placeholder}
                   keyboardType="numbers-and-punctuation"
                 />
               </View>
@@ -393,7 +397,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     setFieldErrors((prev) => ({ ...prev, start: undefined }));
                   }}
                   placeholder="HH:mm"
-                  placeholderTextColor="#B07868"
+                  placeholderTextColor={colors.placeholder}
                   keyboardType="numbers-and-punctuation"
                 />
               </View>
@@ -411,7 +415,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     setFieldErrors((prev) => ({ ...prev, end: undefined }));
                   }}
                   placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#B07868"
+                  placeholderTextColor={colors.placeholder}
                   keyboardType="numbers-and-punctuation"
                 />
               </View>
@@ -425,7 +429,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     setFieldErrors((prev) => ({ ...prev, end: undefined }));
                   }}
                   placeholder="HH:mm"
-                  placeholderTextColor="#B07868"
+                  placeholderTextColor={colors.placeholder}
                   keyboardType="numbers-and-punctuation"
                 />
               </View>
@@ -446,7 +450,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                 value={notes}
                 onChangeText={setNotes}
                 placeholder={t('calendar.notesPlaceholder')}
-                placeholderTextColor="#B07868"
+                placeholderTextColor={colors.placeholder}
                 multiline
                 numberOfLines={5}
                 textAlignVertical="top"
@@ -477,7 +481,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     value={contactQuery}
                     onChangeText={setContactQuery}
                     placeholder={t('contacts.searchByName')}
-                    placeholderTextColor="#B07868"
+                    placeholderTextColor={colors.placeholder}
                   />
                   {visibleContactResults.length > 0 ? (
                     <View style={styles.contactResultsContainer}>
@@ -523,9 +527,9 @@ export default function EditCalendarEventScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
-    backgroundColor: '#ffffff',
+    backgroundColor: c.bg,
     flex: 1,
   },
   scrollView: {
@@ -539,30 +543,30 @@ const styles = StyleSheet.create({
     paddingTop: 48,
   },
   errorBanner: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: 'rgba(204,82,71,0.12)',
     borderRadius: 12,
     marginBottom: 16,
     padding: 12,
   },
   errorBannerText: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 14,
   },
   fieldGroup: {
     marginBottom: 16,
   },
   label: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 13,
     fontWeight: '600',
     marginBottom: 5,
   },
   input: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E8DDD6',
+    backgroundColor: c.inputBg,
+    borderColor: c.inputBorder,
     borderRadius: 12,
     borderWidth: 1,
-    color: '#383432',
+    color: c.text1,
     fontSize: 15,
     justifyContent: 'center',
     minHeight: 44,
@@ -570,11 +574,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   notesInput: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E8DDD6',
+    backgroundColor: c.inputBg,
+    borderColor: c.border,
     borderRadius: 12,
     borderWidth: 1,
-    color: '#383432',
+    color: c.text1,
     fontSize: 15,
     height: 112,
     paddingHorizontal: 12,
@@ -592,34 +596,34 @@ const styles = StyleSheet.create({
     width: 108,
   },
   fieldError: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 12,
     marginBottom: 10,
     marginTop: -2,
   },
   previewBox: {
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     borderRadius: 12,
     marginBottom: 16,
     marginTop: 4,
     padding: 12,
   },
   previewLabel: {
-    color: '#C45A10',
+    color: c.orange,
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 4,
     textTransform: 'uppercase',
   },
   previewText: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 14,
   },
   contactChip: {
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E8DDD6',
+    backgroundColor: c.bgPanel,
+    borderColor: c.border,
     borderRadius: 20,
     borderWidth: 1,
     flexDirection: 'row',
@@ -628,36 +632,36 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   contactChipText: {
-    color: '#383432',
+    color: c.text1,
     flexShrink: 1,
     fontSize: 14,
     marginRight: 8,
   },
   contactChipRemove: {
-    color: '#C45A10',
+    color: c.orange,
     fontSize: 14,
     fontWeight: '600',
   },
   contactResultsContainer: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E8DDD6',
+    backgroundColor: c.bgPanel,
+    borderColor: c.border,
     borderRadius: 12,
     borderWidth: 1,
     marginTop: 4,
   },
   contactResultItem: {
-    borderBottomColor: '#E8DDD6',
+    borderBottomColor: c.border,
     borderBottomWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
   contactResultText: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 15,
   },
   submitButton: {
     alignItems: 'center',
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 12,
     justifyContent: 'center',
     marginBottom: 32,
@@ -675,7 +679,7 @@ const styles = StyleSheet.create({
   retryButton: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 12,
     justifyContent: 'center',
     marginTop: 16,

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
@@ -12,6 +12,8 @@ import { formatMarketDate } from '../../../market/profile';
 import { RECURRENCE_OPTIONS, labelKeyForRule, normalizeRule } from '../../../utils/recurrence';
 import { useContactSearch } from '../../../hooks/useContactSearch';
 import { useCreateMutation } from '../../../hooks/useCreateMutation';
+import { useTheme } from '../../../hooks/useTheme';
+import { ThemeColors } from '../../../theme';
 
 interface TaskContact {
   id: string;
@@ -159,6 +161,8 @@ function buildPatch(current: TaskForm, original: TaskForm): TaskPatch {
 
 export default function EditTaskScreen(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
@@ -340,7 +344,7 @@ export default function EditTaskScreen(): JSX.Element {
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#C45A10" />
+            <ActivityIndicator size="large" color={colors.orange} />
           </View>
         ) : original !== null ? (
           <>
@@ -354,7 +358,7 @@ export default function EditTaskScreen(): JSX.Element {
                   setShowTitleError(false);
                 }}
                 placeholder={t('tasks.titlePlaceholder')}
-                placeholderTextColor="#B07868"
+                placeholderTextColor={colors.placeholder}
                 autoCapitalize="sentences"
               />
               {showTitleError ? <Text style={styles.fieldError}>{t('tasks.titleRequired')}</Text> : null}
@@ -390,7 +394,7 @@ export default function EditTaskScreen(): JSX.Element {
                 markedDates={
                   dueDate !== ''
                     ? ({
-                        [dueDate]: { selected: true, selectedColor: '#C45A10' },
+                        [dueDate]: { selected: true, selectedColor: colors.orange },
                       } as Record<string, { selected?: boolean; selectedColor?: string }>)
                     : {}
                 }
@@ -422,7 +426,7 @@ export default function EditTaskScreen(): JSX.Element {
                   }}
                   markedDates={
                     reminderDate
-                      ? ({ [reminderDate]: { selected: true, selectedColor: '#C45A10' } } as Record<string, { selected?: boolean; selectedColor?: string }>)
+                      ? ({ [reminderDate]: { selected: true, selectedColor: colors.orange } } as Record<string, { selected?: boolean; selectedColor?: string }>)
                       : {}
                   }
                 />
@@ -504,7 +508,7 @@ export default function EditTaskScreen(): JSX.Element {
                 value={notes}
                 onChangeText={setNotes}
                 placeholder={t('tasks.notesPlaceholder')}
-                placeholderTextColor="#B07868"
+                placeholderTextColor={colors.placeholder}
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
@@ -535,7 +539,7 @@ export default function EditTaskScreen(): JSX.Element {
                     value={contactQuery}
                     onChangeText={setContactQuery}
                     placeholder={t('contacts.searchByName')}
-                    placeholderTextColor="#B07868"
+                    placeholderTextColor={colors.placeholder}
                   />
                   {contactResults.slice(0, 5).length > 0 ? (
                     <View style={styles.contactResultsContainer}>
@@ -572,41 +576,41 @@ export default function EditTaskScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
   scrollView: { flex: 1 },
   content: { padding: 16 },
   loadingContainer: { paddingTop: 48 },
   errorBanner: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: 'rgba(204,82,71,0.12)',
     padding: 12,
     borderRadius: 12,
     marginBottom: 16,
   },
-  errorBannerText: { color: '#ef4444' },
+  errorBannerText: { color: c.red },
   bannerRetry: { marginTop: 8, alignSelf: 'flex-start' },
-  bannerRetryText: { color: '#C45A10', fontWeight: '600' },
+  bannerRetryText: { color: c.orange, fontWeight: '600' },
   fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 14, fontWeight: '600', color: '#383432', marginBottom: 6 },
+  label: { fontSize: 14, fontWeight: '600', color: c.text1, marginBottom: 6 },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.inputBorder,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     minHeight: 44,
     justifyContent: 'center',
     fontSize: 16,
-    color: '#383432',
+    color: c.text1,
   },
-  inputText: { color: '#383432', fontSize: 16 },
-  placeholderText: { color: '#B07868', fontSize: 16 },
-  clearLink: { color: '#C45A10', fontSize: 12, marginTop: 4 },
+  inputText: { color: c.text1, fontSize: 16 },
+  placeholderText: { color: c.amber, fontSize: 16 },
+  clearLink: { color: c.orange, fontSize: 12, marginTop: 4 },
   dropdownField: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 12,
     minHeight: 44,
@@ -614,28 +618,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  dropdownChevron: { color: '#B07868', fontSize: 18, marginLeft: 8 },
-  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  dropdownChevron: { color: c.amber, fontSize: 18, marginLeft: 8 },
+  pickerOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
   pickerSheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 32,
   },
-  pickerTitle: { fontSize: 16, fontWeight: '600', color: '#383432', marginBottom: 8 },
+  pickerTitle: { fontSize: 16, fontWeight: '600', color: c.text1, marginBottom: 8 },
   pickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0E8E2',
+    borderBottomColor: c.border,
   },
-  pickerRowText: { fontSize: 16, color: '#383432' },
-  pickerRowTextSelected: { color: '#C45A10', fontWeight: '600' },
-  pickerCheck: { color: '#C45A10', fontSize: 16, fontWeight: '700' },
+  pickerRowText: { fontSize: 16, color: c.text1 },
+  pickerRowTextSelected: { color: c.orange, fontWeight: '600' },
+  pickerCheck: { color: c.orange, fontSize: 16, fontWeight: '700' },
   segmentedControl: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -643,48 +647,48 @@ const styles = StyleSheet.create({
   },
   segmentButton: {
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
   },
   segmentButtonSelected: {
-    borderColor: '#C45A10',
-    backgroundColor: '#FEF0E8',
+    borderColor: c.orange,
+    backgroundColor: 'rgba(204,120,92,0.08)',
   },
-  segmentText: { color: '#383432', fontSize: 14, fontWeight: '500' },
-  segmentTextSelected: { color: '#C45A10' },
+  segmentText: { color: c.text1, fontSize: 14, fontWeight: '500' },
+  segmentTextSelected: { color: c.orange },
   customRuleInput: { marginTop: 10 },
   notesInput: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.inputBg,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     height: 100,
     fontSize: 16,
-    color: '#383432',
+    color: c.text1,
   },
-  fieldError: { color: '#ef4444', fontSize: 12, marginTop: 4 },
+  fieldError: { color: c.red, fontSize: 12, marginTop: 4 },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8DDD6',
+    borderBottomColor: c.border,
   },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: '#383432' },
-  modalDone: { fontSize: 16, color: '#C45A10', fontWeight: '600' },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: c.text1 },
+  modalDone: { fontSize: 16, color: c.orange, fontWeight: '600' },
   contactChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -693,15 +697,15 @@ const styles = StyleSheet.create({
   },
   contactChipText: {
     fontSize: 14,
-    color: '#383432',
+    color: c.text1,
     marginRight: 8,
     flexShrink: 1,
   },
-  contactChipRemove: { fontSize: 14, color: '#C45A10', fontWeight: '600' },
+  contactChipRemove: { fontSize: 14, color: c.orange, fontWeight: '600' },
   contactResultsContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     borderRadius: 12,
     marginTop: 4,
   },
@@ -709,11 +713,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8DDD6',
+    borderBottomColor: c.border,
   },
-  contactResultText: { fontSize: 15, color: '#383432' },
+  contactResultText: { fontSize: 15, color: c.text1 },
   submitButton: {
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 12,
     minHeight: 48,
     justifyContent: 'center',

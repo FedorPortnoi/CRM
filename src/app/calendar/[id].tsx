@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +21,8 @@ import { enqueue } from '../../utils/offlineQueue';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { formatMarketDateTime, formatMarketTime } from '../../market/profile';
 import AttachmentsSection from '../../components/AttachmentsSection';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 type CalendarEventStatus = 'scheduled' | 'completed' | 'cancelled';
 
@@ -74,10 +76,10 @@ function formatTime(dateString: string): string {
   });
 }
 
-function statusColor(status: CalendarEventStatus): string {
-  if (status === 'completed') return '#C4704F';
-  if (status === 'cancelled') return '#CFADA3';
-  return '#C4704F';
+function statusColor(status: CalendarEventStatus, c: ThemeColors): string {
+  if (status === 'completed') return c.orange;
+  if (status === 'cancelled') return c.textMuted;
+  return c.orange;
 }
 
 function contactName(contact: CalendarContact): string {
@@ -108,7 +110,7 @@ function SkeletonBox({ height, width = '100%', marginBottom = 0 }: SkeletonBoxPr
         width,
         marginBottom,
         borderRadius: 12,
-        backgroundColor: '#FEF0E8',
+        backgroundColor: 'rgba(204,120,92,0.08)',
       }}
     />
   );
@@ -117,6 +119,8 @@ function SkeletonBox({ height, width = '100%', marginBottom = 0 }: SkeletonBoxPr
 export default function CalendarEventDetailScreen(): JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const token = useUserStore((s) => s.token);
   const [event, setEvent] = useState<CalendarEvent | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -425,9 +429,8 @@ export default function CalendarEventDetailScreen(): JSX.Element {
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
-            onRefresh={() => {
-              void fetchEvent(true);
-            }}
+            onRefresh={() => { void fetchEvent(true); }}
+            tintColor={colors.orange}
           />
         }
       >
@@ -436,7 +439,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
           <Text style={styles.timeRange}>
             {formatDateTime(event.start_time)} - {formatTime(event.end_time)}
           </Text>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor(event.status) }]}>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor(event.status, colors) }]}>
             <Text style={styles.statusText}>{t(`calendar.${event.status}`)}</Text>
           </View>
         </View>
@@ -513,7 +516,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               numberOfLines={5}
               textAlignVertical="top"
               placeholder={t('calendar.outcomesPlaceholder')}
-              placeholderTextColor="#B07868"
+              placeholderTextColor={colors.placeholder}
             />
             {notesFieldError ? <Text style={styles.fieldError}>{notesFieldError}</Text> : null}
             <TouchableOpacity
@@ -522,9 +525,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
                 styles.buttonPrimary,
                 isActionDisabled && styles.buttonDisabled,
               ]}
-              onPress={() => {
-                void handleSaveNotes();
-              }}
+              onPress={() => { void handleSaveNotes(); }}
               disabled={isActionDisabled}
               accessibilityRole="button"
             >
@@ -550,9 +551,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
                 styles.buttonPrimary,
                 isActionDisabled && styles.buttonDisabled,
               ]}
-              onPress={() => {
-                void handleToggleComplete();
-              }}
+              onPress={() => { void handleToggleComplete(); }}
               disabled={isActionDisabled}
               accessibilityRole="button"
             >
@@ -571,9 +570,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
                   styles.secondaryAction,
                   isActionDisabled && styles.buttonDisabled,
                 ]}
-                onPress={() => {
-                  void handleCancel();
-                }}
+                onPress={() => { void handleCancel(); }}
                 disabled={isActionDisabled}
                 accessibilityRole="button"
               >
@@ -610,7 +607,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               numberOfLines={4}
               textAlignVertical="top"
               placeholder={t('calendar.completeNotesPromptPlaceholder')}
-              placeholderTextColor="#B07868"
+              placeholderTextColor={colors.placeholder}
               editable={!isActionDisabled}
               autoFocus
             />
@@ -649,10 +646,10 @@ export default function CalendarEventDetailScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
   },
   content: {
     padding: 16,
@@ -660,20 +657,20 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     padding: 16,
   },
   title: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 22,
     fontWeight: '700',
     marginBottom: 8,
   },
   timeRange: {
-    color: '#B07868',
+    color: c.amber,
     fontSize: 13,
     lineHeight: 19,
     marginBottom: 12,
@@ -691,85 +688,85 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   cancelledBanner: {
-    backgroundColor: '#fef2f2',
-    borderLeftColor: '#ef4444',
+    backgroundColor: 'rgba(204,82,71,0.12)',
+    borderLeftColor: c.red,
     borderLeftWidth: 3,
     borderRadius: 12,
     padding: 12,
   },
   cancelledText: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 13,
     fontWeight: '600',
   },
   detailRow: {
     alignItems: 'center',
-    borderBottomColor: '#F1F1F1',
+    borderBottomColor: c.border,
     borderBottomWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 10,
   },
   detailLabel: {
-    color: '#B07868',
+    color: c.amber,
     fontSize: 13,
     fontWeight: '600',
     width: 82,
   },
   detailValue: {
-    color: '#383432',
+    color: c.text1,
     flex: 1,
     fontSize: 14,
     textAlign: 'right',
   },
   emptyValue: {
-    color: '#CFADA3',
+    color: c.textMuted,
     flex: 1,
     fontSize: 14,
     textAlign: 'right',
   },
   linkText: {
-    color: '#C4704F',
+    color: c.orange,
     fontSize: 14,
     fontWeight: '600',
     maxWidth: 220,
     textAlign: 'right',
   },
   sectionLabel: {
-    color: '#B07868',
+    color: c.amber,
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 8,
     textTransform: 'uppercase',
   },
   bodyText: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 14,
     lineHeight: 20,
   },
   notesInput: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E8DDD6',
+    backgroundColor: c.inputBg,
+    borderColor: c.inputBorder,
     borderRadius: 12,
     borderWidth: 1,
-    color: '#383432',
+    color: c.text1,
     fontSize: 15,
     minHeight: 116,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   fieldError: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 12,
     marginTop: 6,
   },
   infoBox: {
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     borderRadius: 12,
     padding: 12,
   },
   infoText: {
-    color: '#C4704F',
+    color: c.orange,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -781,10 +778,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   buttonPrimary: {
-    backgroundColor: '#C4704F',
+    backgroundColor: c.orange,
   },
   buttonDestructive: {
-    backgroundColor: '#ef4444',
+    backgroundColor: c.red,
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -798,26 +795,26 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   actionError: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 13,
     marginBottom: 12,
     textAlign: 'center',
   },
   errorContainer: {
     alignItems: 'center',
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
     flex: 1,
     justifyContent: 'center',
     padding: 24,
   },
   errorText: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 14,
     marginBottom: 14,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#C4704F',
+    backgroundColor: c.orange,
     borderRadius: 12,
     justifyContent: 'center',
     minHeight: 44,
@@ -834,42 +831,42 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   headerEditText: {
-    color: '#C4704F',
+    color: c.orange,
     fontSize: 16,
     fontWeight: '600',
   },
   promptOverlay: {
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.36)',
+    backgroundColor: c.overlay,
     flex: 1,
     justifyContent: 'center',
     padding: 16,
   },
   promptCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     maxWidth: 420,
     padding: 16,
     width: '100%',
   },
   promptTitle: {
-    color: '#383432',
+    color: c.text1,
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 8,
   },
   promptMessage: {
-    color: '#B07868',
+    color: c.amber,
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 12,
   },
   promptInput: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E8DDD6',
+    backgroundColor: c.inputBg,
+    borderColor: c.inputBorder,
     borderRadius: 12,
     borderWidth: 1,
-    color: '#383432',
+    color: c.text1,
     fontSize: 15,
     minHeight: 104,
     paddingHorizontal: 12,
@@ -890,11 +887,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   promptButtonPrimary: {
-    backgroundColor: '#C4704F',
+    backgroundColor: c.orange,
   },
   promptButtonSecondary: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#C4704F',
+    backgroundColor: c.bgPanel,
+    borderColor: c.orange,
     borderWidth: 1,
   },
   promptButtonPrimaryText: {
@@ -903,7 +900,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   promptButtonSecondaryText: {
-    color: '#C4704F',
+    color: c.orange,
     fontSize: 14,
     fontWeight: '600',
   },

@@ -8,12 +8,16 @@ import { useTranslation } from 'react-i18next';
 import { Lock, Mail, Eye, EyeOff, ShieldCheck } from 'lucide-react-native';
 import { Stack } from 'expo-router';
 import { useUserStore } from '../store/userStore';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeColors } from '../theme';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function SetPasswordScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const { user, changePassword, setCredentials } = useUserStore();
 
   const needsEmail = user?.must_change_email === true;
@@ -82,11 +86,11 @@ export default function SetPasswordScreen() {
         <View style={styles.card}>
           {needsEmail && (
             <View style={styles.fieldWrapper}>
-              <Mail size={18} color="#CFADA3" />
+              <Mail size={18} color={colors.textMuted} />
               <TextInput
                 style={[styles.input, styles.inputFlex]}
                 placeholder={t('auth.emailPlaceholder')}
-                placeholderTextColor="#CFADA3"
+                placeholderTextColor={colors.placeholder}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="email-address"
@@ -98,32 +102,32 @@ export default function SetPasswordScreen() {
           )}
 
           <View style={styles.fieldWrapper}>
-            <Lock size={18} color="#CFADA3" />
+            <Lock size={18} color={colors.textMuted} />
             <TextInput
               style={[styles.input, styles.inputFlex]}
               placeholder={t('auth.newPassword')}
-              placeholderTextColor="#CFADA3"
+              placeholderTextColor={colors.placeholder}
               secureTextEntry={!showNew}
               value={newPassword}
               onChangeText={setNewPassword}
             />
             <TouchableOpacity onPress={() => setShowNew(p => !p)} style={styles.eyeButton} accessibilityRole="button">
-              {showNew ? <EyeOff size={18} color="#CFADA3" /> : <Eye size={18} color="#CFADA3" />}
+              {showNew ? <EyeOff size={18} color={colors.textMuted} /> : <Eye size={18} color={colors.textMuted} />}
             </TouchableOpacity>
           </View>
 
           <View style={styles.fieldWrapper}>
-            <Lock size={18} color="#CFADA3" />
+            <Lock size={18} color={colors.textMuted} />
             <TextInput
               style={[styles.input, styles.inputFlex]}
               placeholder={t('auth.confirmPassword')}
-              placeholderTextColor="#CFADA3"
+              placeholderTextColor={colors.placeholder}
               secureTextEntry={!showConfirm}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
             />
             <TouchableOpacity onPress={() => setShowConfirm(p => !p)} style={styles.eyeButton} accessibilityRole="button">
-              {showConfirm ? <EyeOff size={18} color="#CFADA3" /> : <Eye size={18} color="#CFADA3" />}
+              {showConfirm ? <EyeOff size={18} color={colors.textMuted} /> : <Eye size={18} color={colors.textMuted} />}
             </TouchableOpacity>
           </View>
 
@@ -148,8 +152,8 @@ export default function SetPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
   circle1: {
     position: 'absolute', width: 350, height: 350, borderRadius: 175,
     backgroundColor: 'rgba(6,95,70,0.04)', top: -80, right: -100,
@@ -165,33 +169,33 @@ const styles = StyleSheet.create({
   logoContainer: { marginBottom: 24 },
   logoSquare: {
     width: 80, height: 80, borderRadius: 20,
-    backgroundColor: '#C45A10', justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#C45A10', shadowOffset: { width: 0, height: 4 },
+    backgroundColor: c.orange, justifyContent: 'center', alignItems: 'center',
+    shadowColor: c.orange, shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
   },
-  title: { fontSize: 26, fontWeight: '700', color: '#383432', textAlign: 'center', marginBottom: 8 },
+  title: { fontSize: 26, fontWeight: '700', color: c.text1, textAlign: 'center', marginBottom: 8 },
   subtitle: {
-    fontSize: 14, color: '#B07868', textAlign: 'center',
+    fontSize: 14, color: c.amber, textAlign: 'center',
     marginBottom: 32, lineHeight: 20, paddingHorizontal: 12,
   },
   card: {
-    width: '100%', maxWidth: 400, backgroundColor: '#ffffff', borderRadius: 16, padding: 24,
+    width: '100%', maxWidth: 400, backgroundColor: c.bgPanel, borderRadius: 16, padding: 24,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
   },
   fieldWrapper: {
     flexDirection: 'row', alignItems: 'center', borderWidth: 1,
-    borderColor: '#E8DDD6', borderRadius: 12, backgroundColor: '#FAF6F3',
+    borderColor: c.border, borderRadius: 12, backgroundColor: c.bg,
     paddingHorizontal: 14, marginBottom: 14, height: 52, gap: 10,
   },
-  input: { flex: 1, fontSize: 15, color: '#383432' },
+  input: { flex: 1, fontSize: 15, color: c.text1 },
   inputFlex: { flex: 1 },
   eyeButton: { padding: 4 },
   button: {
-    height: 52, backgroundColor: '#C45A10', borderRadius: 12,
+    height: 52, backgroundColor: c.orange, borderRadius: 12,
     justifyContent: 'center', alignItems: 'center', marginTop: 4,
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  errorText: { color: '#ef4444', fontSize: 14, textAlign: 'center', marginTop: 12 },
+  errorText: { color: c.red, fontSize: 14, textAlign: 'center', marginTop: 12 },
 });

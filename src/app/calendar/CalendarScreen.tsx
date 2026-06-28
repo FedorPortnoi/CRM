@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ActivityIndicator,
@@ -15,6 +15,8 @@ import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { formatMarketDate, formatMarketTime } from '../../market/profile';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 type CalendarEventStatus = 'scheduled' | 'completed' | 'cancelled';
 
@@ -114,9 +116,9 @@ function contactName(contact: CalendarContact): string {
   return [contact.first_name, contact.last_name].filter(Boolean).join(' ');
 }
 
-function statusColor(status: CalendarEventStatus): string {
-  if (status === 'completed') return '#C45A10';
-  if (status === 'cancelled') return '#CFADA3';
+function statusColor(status: CalendarEventStatus, c: ThemeColors): string {
+  if (status === 'completed') return c.orange;
+  if (status === 'cancelled') return c.textMuted;
   return '#6366f1';
 }
 
@@ -146,6 +148,8 @@ function buildSections(events: CalendarEvent[]): AgendaSection[] {
 }
 
 function SkeletonRows(): JSX.Element {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   return (
     <View style={styles.loadingWrap}>
       {Array.from({ length: 6 }).map((_, index) => (
@@ -162,6 +166,8 @@ interface ErrorStateProps {
 }
 
 function ErrorState({ message, onRetry, retryLabel }: ErrorStateProps): JSX.Element {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   return (
     <View style={styles.centerState}>
       <Text style={styles.errorText}>{message}</Text>
@@ -175,6 +181,8 @@ function ErrorState({ message, onRetry, retryLabel }: ErrorStateProps): JSX.Elem
 export default function CalendarAgendaScreen(): JSX.Element {
   const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [syncStatus, setSyncStatus] = useState<CalendarSyncStatus | null>(null);
   const [isSyncLoading, setIsSyncLoading] = useState<boolean>(true);
@@ -311,8 +319,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={['#C45A10']}
-            tintColor="#C45A10"
+            tintColor={colors.orange}
           />
         }
       >
@@ -360,7 +367,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
           </View>
           {isSyncLoading ? (
             <View style={styles.syncInline}>
-              <ActivityIndicator color="#C45A10" size="small" />
+              <ActivityIndicator color={colors.orange} size="small" />
               <Text style={styles.syncInlineText}>{t('calendar.checkingSync')}</Text>
             </View>
           ) : (
@@ -379,7 +386,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
                     accessibilityRole="button"
                   >
                     {syncAction === 'disconnect' ? (
-                      <ActivityIndicator color="#C45A10" size="small" />
+                      <ActivityIndicator color={colors.orange} size="small" />
                     ) : (
                       <Text style={styles.syncSecondaryText}>{t('calendar.disconnect')}</Text>
                     )}
@@ -452,7 +459,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
                         {event.title}
                       </Text>
                       <View
-                        style={[styles.statusBadge, { backgroundColor: statusColor(event.status) }]}
+                        style={[styles.statusBadge, { backgroundColor: statusColor(event.status, colors) }]}
                       >
                         <Text style={styles.statusText}>{t(`calendar.${event.status}`)}</Text>
                       </View>
@@ -480,7 +487,7 @@ export default function CalendarAgendaScreen(): JSX.Element {
 
         {isRefreshing ? (
           <View style={styles.refreshIndicator}>
-            <ActivityIndicator color="#C45A10" />
+            <ActivityIndicator color={colors.orange} />
           </View>
         ) : null}
       </ScrollView>
@@ -488,10 +495,10 @@ export default function CalendarAgendaScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.bg,
   },
   content: {
     padding: 16,
@@ -510,15 +517,15 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#383432',
+    color: c.text1,
   },
   pageSubtitle: {
     fontSize: 13,
-    color: '#B07868',
+    color: c.amber,
     marginTop: 2,
   },
   newButton: {
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -534,10 +541,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   syncCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     padding: 14,
     marginBottom: 18,
   },
@@ -548,12 +555,12 @@ const styles = StyleSheet.create({
   },
   syncTitle: {
     fontSize: 15,
-    color: '#383432',
+    color: c.text1,
     fontWeight: '700',
   },
   syncSubtitle: {
     fontSize: 12,
-    color: '#B07868',
+    color: c.amber,
     lineHeight: 17,
     marginTop: 3,
   },
@@ -566,17 +573,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0fdf4',
   },
   syncBadgeDisconnected: {
-    backgroundColor: '#FAF6F3',
+    backgroundColor: c.bg,
   },
   syncBadgeText: {
     fontSize: 11,
     fontWeight: '700',
   },
   syncBadgeTextConnected: {
-    color: '#C45A10',
+    color: c.orange,
   },
   syncBadgeTextDisconnected: {
-    color: '#B07868',
+    color: c.amber,
   },
   syncInline: {
     flexDirection: 'row',
@@ -585,22 +592,22 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   syncInlineText: {
-    color: '#B07868',
+    color: c.amber,
     fontSize: 12,
   },
   syncMeta: {
     fontSize: 12,
-    color: '#B07868',
+    color: c.amber,
     marginTop: 10,
   },
   syncSuccess: {
     fontSize: 12,
-    color: '#C45A10',
+    color: c.orange,
     marginTop: 10,
   },
   syncError: {
     fontSize: 12,
-    color: '#ef4444',
+    color: c.red,
     marginTop: 10,
   },
   syncActions: {
@@ -610,7 +617,7 @@ const styles = StyleSheet.create({
   },
   syncPrimaryButton: {
     flex: 1,
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 10,
     minHeight: 42,
     alignItems: 'center',
@@ -623,16 +630,16 @@ const styles = StyleSheet.create({
   },
   syncSecondaryButton: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 10,
     minHeight: 42,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#C45A10',
+    borderColor: c.orange,
   },
   syncSecondaryText: {
-    color: '#C45A10',
+    color: c.orange,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -643,7 +650,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   syncGhostText: {
-    color: '#C45A10',
+    color: c.orange,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -656,7 +663,7 @@ const styles = StyleSheet.create({
   skeletonRow: {
     height: 88,
     borderRadius: 12,
-    backgroundColor: '#FAF6F3',
+    backgroundColor: c.bg,
   },
   centerState: {
     minHeight: 360,
@@ -667,16 +674,16 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#383432',
+    color: c.text1,
     marginBottom: 6,
   },
   emptyText: {
     fontSize: 14,
-    color: '#B07868',
+    color: c.amber,
     textAlign: 'center',
   },
   emptyButton: {
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -690,13 +697,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   errorText: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 14,
   },
   retryButton: {
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     borderRadius: 12,
     paddingHorizontal: 18,
     paddingVertical: 10,
@@ -713,7 +720,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 13,
-    color: '#B07868',
+    color: c.amber,
     fontWeight: '700',
     textTransform: 'uppercase',
     marginBottom: 8,
@@ -729,21 +736,21 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 12,
-    color: '#B07868',
+    color: c.amber,
     fontWeight: '600',
   },
   timeLine: {
     width: 1,
     flex: 1,
-    backgroundColor: '#FAF6F3',
+    backgroundColor: c.bg,
     marginTop: 8,
   },
   eventBody: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     padding: 12,
     minHeight: 92,
   },
@@ -756,17 +763,17 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '700',
-    color: '#383432',
+    color: c.text1,
     lineHeight: 20,
   },
   eventMeta: {
     fontSize: 12,
-    color: '#B07868',
+    color: c.amber,
     marginTop: 4,
   },
   eventSub: {
     fontSize: 12,
-    color: '#B07868',
+    color: c.amber,
     marginTop: 4,
   },
   statusBadge: {
@@ -781,7 +788,7 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   notesPrompt: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 12,
     fontWeight: '600',
     marginTop: 8,

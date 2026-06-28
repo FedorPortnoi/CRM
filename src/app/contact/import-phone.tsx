@@ -283,7 +283,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
     if (isRequestingPermission || !permissionDenied) {
       return (
         <View style={styles.centeredContainer}>
-          <ActivityIndicator size="large" color="#C4704F" />
+          <ActivityIndicator size="large" color="#CC785C" />
         </View>
       );
     }
@@ -313,7 +313,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
   if (phase === 'loading') {
     return (
       <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color="#C4704F" />
+        <ActivityIndicator size="large" color="#CC785C" />
       </View>
     );
   }
@@ -321,7 +321,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
   if (phase === 'importing') {
     return (
       <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color="#C4704F" />
+        <ActivityIndicator size="large" color="#CC785C" />
         <Text style={styles.progressText}>
           Импортируем {progress.done} из {progress.total}...
         </Text>
@@ -337,7 +337,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
           value={search}
           onChangeText={handleSearchChange}
           placeholder={t('contacts.searchImportPhone')}
-          placeholderTextColor="#CFADA3"
+          placeholderTextColor="rgba(232,224,212,0.3)"
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -387,17 +387,17 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
   },
   centeredContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
   },
   errorText: {
-    color: '#ef4444',
+    color: '#CC5247',
     fontSize: 16,
     lineHeight: 22,
     marginBottom: 16,
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
-    backgroundColor: '#C4704F',
+    backgroundColor: '#CC785C',
   },
   settingsButtonText: {
     color: '#FFFFFF',
@@ -418,22 +418,22 @@ const styles = StyleSheet.create({
   },
   progressText: {
     marginTop: 16,
-    color: '#383432',
+    color: '#E8E0D4',
     fontSize: 16,
     fontWeight: '600',
   },
   searchContainer: {
     padding: 16,
-    backgroundColor: '#FEF0E8',
+    backgroundColor: 'rgba(204,120,92,0.08)',
   },
   searchInput: {
     minHeight: 44,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: 'rgba(232,224,212,0.12)',
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    color: '#383432',
+    backgroundColor: '#1A1A18',
+    color: '#E8E0D4',
     fontSize: 16,
   },
   listContent: {
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyStateText: {
-    color: '#B07868',
+    color: '#D4A27F',
     fontSize: 16,
   },
   contactRow: {
@@ -462,9 +462,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: 'rgba(232,224,212,0.08)',
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1A1A18',
   },
   checkboxArea: {
     width: 36,
@@ -477,24 +477,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#C4704F',
+    borderColor: '#CC785C',
     borderRadius: 4,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1A1A18',
   },
   checkboxSelected: {
-    backgroundColor: '#C4704F',
+    backgroundColor: '#CC785C',
   },
   contactTextArea: {
     flex: 1,
   },
   contactName: {
-    color: '#383432',
+    color: '#E8E0D4',
     fontSize: 16,
     fontWeight: '700',
   },
   contactSubtitle: {
     marginTop: 2,
-    color: '#B07868',
+    color: '#D4A27F',
     fontSize: 14,
   },
   actionBar: {
@@ -502,8 +502,8 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E8DDD6',
-    backgroundColor: '#FFFFFF',
+    borderTopColor: 'rgba(232,224,212,0.08)',
+    backgroundColor: '#1A1A18',
   },
   cancelButton: {
     minHeight: 44,
@@ -511,12 +511,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E8DDD6',
+    borderColor: 'rgba(232,224,212,0.08)',
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1A1A18',
   },
   cancelButtonText: {
-    color: '#383432',
+    color: '#E8E0D4',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -526,7 +526,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
-    backgroundColor: '#C4704F',
+    backgroundColor: '#CC785C',
   },
   importButtonDisabled: {
     opacity: 0.5,

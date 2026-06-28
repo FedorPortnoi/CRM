@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, Linking, Alert, ActionSheetIOS, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { MessageCircle } from 'lucide-react-native';
@@ -8,6 +8,8 @@ import { API_URL } from '../../utils/api';
 import { formatMarketDate, formatMoney } from '../../market/profile';
 import AttachmentsSection from '../../components/AttachmentsSection';
 import { useAuditLog } from '../../hooks/useAuditLog';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 interface Attachment {
   id: string;
@@ -62,27 +64,29 @@ function activityIcon(type: 'message' | 'task' | 'meeting'): string {
   return '📅';
 }
 
-function statusBadgeColor(status: string): string {
-  if (status === 'active') return '#C4704F';
+function statusBadgeColor(status: string, c: ThemeColors): string {
+  if (status === 'active') return c.orange;
   if (status === 'inactive') return '#E8A000';
-  return '#CFADA3';
+  return c.textMuted;
 }
 
-function taskBadgeColor(status: 'pending' | 'in_progress' | 'done' | 'cancelled'): string {
-  if (status === 'done') return '#C4704F';
-  if (status === 'in_progress') return '#C4704F';
+function taskBadgeColor(status: 'pending' | 'in_progress' | 'done' | 'cancelled', c: ThemeColors): string {
+  if (status === 'done') return c.orange;
+  if (status === 'in_progress') return c.orange;
   if (status === 'pending') return '#E8A000';
-  return '#CFADA3';
+  return c.textMuted;
 }
 
 interface SkeletonBoxProps { width: number; height: number; borderRadius?: number; marginRight?: number; marginBottom?: number; }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginRight = 0, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: '#FEF0E8', borderRadius, marginRight, marginBottom }} />;
+  return <View style={{ width, height, backgroundColor: 'rgba(204,120,92,0.08)', borderRadius, marginRight, marginBottom }} />;
 }
 
 export default function ContactDetailScreen(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -170,7 +174,7 @@ export default function ContactDetailScreen(): JSX.Element {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.orange} />}
       >
         <View style={styles.card}>
           {isLoading ? (
@@ -197,7 +201,7 @@ export default function ContactDetailScreen(): JSX.Element {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.contactName}>{contactName}</Text>
                   {contact.company ? <Text style={styles.secondaryText}>{contact.company}</Text> : null}
-                  <View style={[styles.statusBadge, { backgroundColor: statusBadgeColor(contact.status) }]}>
+                  <View style={[styles.statusBadge, { backgroundColor: statusBadgeColor(contact.status, colors) }]}>
                     <Text style={styles.badgeText}>{contact.status === 'active' ? t('contacts.statusActive') : contact.status === 'inactive' ? t('contacts.statusInactive') : contact.status}</Text>
                   </View>
                 </View>
@@ -382,7 +386,7 @@ export default function ContactDetailScreen(): JSX.Element {
               >
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <View style={[styles.taskBadge, { backgroundColor: taskBadgeColor(task.status) }]}>
+                  <View style={[styles.taskBadge, { backgroundColor: taskBadgeColor(task.status, colors) }]}>
                     <Text style={styles.badgeText}>{task.status === 'pending' ? t('tasks.pending') : task.status === 'in_progress' ? t('tasks.inProgress') : task.status === 'done' ? t('tasks.completed') : t('tasks.cancelled')}</Text>
                   </View>
                   {task.due_date ? (
@@ -402,8 +406,8 @@ export default function ContactDetailScreen(): JSX.Element {
             <Text style={styles.emptyText}>{t('contacts.noActivity')}</Text>
           ) : auditLog.map((entry) => (
             <View key={entry.id} style={styles.auditRow}>
-              <View style={[styles.auditBadge, { backgroundColor: entry.action === 'created' ? '#FEF0E8' : entry.action === 'updated' ? '#dbeafe' : '#FAF6F3' }]}>
-                <Text style={[styles.auditBadgeText, { color: entry.action === 'created' ? '#C45A10' : entry.action === 'updated' ? '#1d4ed8' : '#383432' }]}>{entry.action === 'created' ? t('contacts.actionCreated') : entry.action === 'updated' ? t('contacts.actionUpdated') : entry.action}</Text>
+              <View style={[styles.auditBadge, { backgroundColor: entry.action === 'created' ? 'rgba(204,120,92,0.08)' : entry.action === 'updated' ? '#dbeafe' : colors.bg }]}>
+                <Text style={[styles.auditBadgeText, { color: entry.action === 'created' ? colors.orange : entry.action === 'updated' ? '#1d4ed8' : colors.text1 }]}>{entry.action === 'created' ? t('contacts.actionCreated') : entry.action === 'updated' ? t('contacts.actionUpdated') : entry.action}</Text>
               </View>
               <Text style={styles.auditDate}>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</Text>
             </View>
@@ -416,54 +420,54 @@ export default function ContactDetailScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FEF0E8' },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: 'rgba(204,120,92,0.08)' },
   content: { padding: 16, paddingBottom: 32 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  card: { backgroundColor: c.bgPanel, borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   section: { marginTop: 20 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#B07868', textTransform: 'uppercase', letterSpacing: 0.5 },
-  sectionAddBtn: { fontSize: 13, fontWeight: '600', color: '#C45A10' },
-  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#C4704F', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  sectionTitle: { fontSize: 14, fontWeight: '600', color: c.amber, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionAddBtn: { fontSize: 13, fontWeight: '600', color: c.orange },
+  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: c.orange, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   avatarText: { color: '#FFFFFF', fontSize: 22, fontWeight: '700' },
-  contactName: { fontSize: 20, fontWeight: '700', color: '#383432', marginBottom: 4 },
-  secondaryText: { fontSize: 14, color: '#B07868', marginBottom: 6 },
+  contactName: { fontSize: 20, fontWeight: '700', color: c.text1, marginBottom: 4 },
+  secondaryText: { fontSize: 14, color: c.amber, marginBottom: 6 },
   statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, marginTop: 4 },
   badgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600', textTransform: 'capitalize' },
-  detailRows: { marginTop: 14, borderTopWidth: 1, borderTopColor: '#F0F0F0', paddingTop: 12 },
+  detailRows: { marginTop: 14, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 12 },
   detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  detailLabel: { fontSize: 13, color: '#CFADA3', width: 64 },
-  detailValue: { fontSize: 13, color: '#383432', flex: 1 },
+  detailLabel: { fontSize: 13, color: c.textMuted, width: 64 },
+  detailValue: { fontSize: 13, color: c.text1, flex: 1 },
   conversationButton: {
     marginTop: 14,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: '#C4704F',
+    backgroundColor: c.orange,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   conversationButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  activitySummary: { fontSize: 14, color: '#383432', marginBottom: 2 },
-  activityDate: { fontSize: 12, color: '#CFADA3' },
-  dealTitle: { fontSize: 15, fontWeight: '600', color: '#383432', marginBottom: 8 },
-  stageBadge: { backgroundColor: '#C4704F', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
+  activitySummary: { fontSize: 14, color: c.text1, marginBottom: 2 },
+  activityDate: { fontSize: 12, color: c.textMuted },
+  dealTitle: { fontSize: 15, fontWeight: '600', color: c.text1, marginBottom: 8 },
+  stageBadge: { backgroundColor: c.orange, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
   stageBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
-  dealValue: { fontSize: 13, color: '#B07868' },
-  taskTitle: { fontSize: 15, fontWeight: '500', color: '#383432', marginBottom: 8 },
+  dealValue: { fontSize: 13, color: c.amber },
+  taskTitle: { fontSize: 15, fontWeight: '500', color: c.text1, marginBottom: 8 },
   taskBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
-  taskDueDate: { fontSize: 12, color: '#B07868' },
-  overdueText: { color: '#ef4444', fontWeight: '500' },
-  errorText: { fontSize: 14, color: '#ef4444', marginBottom: 8 },
-  retryButton: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#C4704F', borderRadius: 6 },
+  taskDueDate: { fontSize: 12, color: c.amber },
+  overdueText: { color: c.red, fontWeight: '500' },
+  errorText: { fontSize: 14, color: c.red, marginBottom: 8 },
+  retryButton: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: c.orange, borderRadius: 6 },
   retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
-  emptyText: { fontSize: 14, color: '#CFADA3', textAlign: 'center', paddingVertical: 8 },
+  emptyText: { fontSize: 14, color: c.textMuted, textAlign: 'center', paddingVertical: 8 },
   headerEditButton: { paddingHorizontal: 8, paddingVertical: 4 },
-  headerEditText: { color: '#C4704F', fontSize: 16, fontWeight: '600' },
+  headerEditText: { color: c.orange, fontSize: 16, fontWeight: '600' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  addLink: { color: '#C45A10', fontSize: 14, fontWeight: '600' },
+  addLink: { color: c.orange, fontSize: 14, fontWeight: '600' },
   auditRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
   auditBadge: { borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2 },
   auditBadgeText: { fontSize: 12, fontWeight: '600' },
-  auditDate: { fontSize: 12, color: '#CFADA3' },
+  auditDate: { fontSize: 12, color: c.textMuted },
 });

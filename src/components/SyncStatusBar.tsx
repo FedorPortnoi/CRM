@@ -3,16 +3,8 @@ import { Animated, StyleSheet, Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSyncStore, SyncStatus } from '../store/syncStore';
-
-type Config = {
-  bg: string;
-  autoHide: boolean;
-};
-
-const STYLE_CONFIG: Record<SyncStatus, Config> = {
-  syncing: { bg: '#F9AB00', autoHide: false },
-  synced: { bg: '#C4704F', autoHide: true },
-};
+import { useTheme } from '../hooks/useTheme';
+import { ThemeColors } from '../theme';
 
 export default function SyncStatusBar(): JSX.Element | null {
   const { t } = useTranslation();
@@ -20,10 +12,17 @@ export default function SyncStatusBar(): JSX.Element | null {
   const status = useSyncStore((s) => s.status);
   const opacity = useRef(new Animated.Value(0)).current;
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
 
   const TEXT: Record<SyncStatus, string> = {
     syncing: t('sync.syncing'),
     synced: t('sync.synced'),
+  };
+
+  const syncBg: Record<SyncStatus, string> = {
+    syncing: '#F9AB00',
+    synced: colors.orange,
   };
 
   useEffect(() => {
@@ -43,16 +42,15 @@ export default function SyncStatusBar(): JSX.Element | null {
     };
   }, [status, opacity]);
 
-  const config = STYLE_CONFIG[status];
-
   return (
-    <Animated.View style={[styles.bar, { top: insets.top, backgroundColor: config.bg, opacity }]}>
+    <Animated.View style={[styles.bar, { top: insets.top, backgroundColor: syncBg[status], opacity }]}>
       <Text style={styles.text}>{TEXT[status]}</Text>
     </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const makeStyles = (_c: ThemeColors) => StyleSheet.create({
   bar: {
     position: 'absolute',
     left: 0,

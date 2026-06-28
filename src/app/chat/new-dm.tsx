@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+﻿import React, { useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, ListRenderItemInfo,
@@ -60,7 +60,7 @@ export default function NewDmScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ title: t('chat.newDmTitle') }} />
       {isLoading
-        ? <ActivityIndicator style={{ marginTop: 40 }} color="#C45A10" />
+        ? <ActivityIndicator style={{ marginTop: 40 }} color="#CC785C" />
         : (
           <FlatList
             data={members}
@@ -75,20 +75,20 @@ export default function NewDmScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAF6F3' },
+  container: { flex: 1, backgroundColor: '#0E0E0D' },
   list: { paddingVertical: 8 },
-  header: { fontSize: 13, color: '#B07868', paddingHorizontal: 16, paddingVertical: 8 },
+  header: { fontSize: 13, color: '#D4A27F', paddingHorizontal: 16, paddingVertical: 8 },
   row: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: '#1A1A18', paddingHorizontal: 16, paddingVertical: 14,
     borderBottomWidth: 1, borderBottomColor: '#F5EDE8', gap: 12,
   },
   avatar: {
     width: 42, height: 42, borderRadius: 21,
-    backgroundColor: '#B07868', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#D4A27F', alignItems: 'center', justifyContent: 'center',
   },
   avatarText: { color: '#fff', fontSize: 17, fontWeight: '700' },
   info: { flex: 1 },
-  name: { fontSize: 15, fontWeight: '600', color: '#383432' },
-  email: { fontSize: 13, color: '#B07868', marginTop: 2 },
+  name: { fontSize: 15, fontWeight: '600', color: '#E8E0D4' },
+  email: { fontSize: 13, color: '#D4A27F', marginTop: 2 },
 });

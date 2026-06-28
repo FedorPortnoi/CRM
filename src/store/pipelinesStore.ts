@@ -37,29 +37,50 @@ type ApiListResponse = {
   data: Pipeline[];
 };
 
-export const usePipelinesStore = create<PipelinesState>()((set) => ({
+export const usePipelinesStore = create<PipelinesState>()((set, get) => ({
   pipelines: [],
   isLoading: false,
   error: null,
 
   fetchPipelines: async (): Promise<void> => {
+    if (get().isLoading) return;
     set({ isLoading: true, error: null });
 
-    try {
-      const response: Response = await fetch(`${API_URL}/deals/pipelines`, {
-        method: 'GET',
-        headers: await authHeaders(),
-      });
+    // Delay before XHR: React Native's networking layer corrupts responseText
+    // when multiple XHRs fire concurrently (dashboard polling + this request).
+    await new Promise<void>((r) => setTimeout(r, 350));
 
-      if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
+    let lastError = '';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await new Promise<void>((r) => setTimeout(r, 400));
       }
+      try {
+        const headers = await authHeaders();
+        const text = await new Promise<string>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('GET', `${API_URL}/deals/pipelines`, true);
+          xhr.setRequestHeader('Authorization', headers['Authorization']);
+          xhr.responseType = 'text';
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(String(xhr.responseText ?? xhr.response ?? ''));
+            } else {
+              reject(new Error(`Request failed with status ${xhr.status}`));
+            }
+          };
+          xhr.onerror = () => reject(new Error('Network request failed'));
+          xhr.ontimeout = () => reject(new Error('Network request timed out'));
+          xhr.send(null);
+        });
 
-      const body: ApiListResponse = (await response.json()) as ApiListResponse;
-      set({ pipelines: body.data, isLoading: false });
-    } catch (e: unknown) {
-      const msg: string = e instanceof Error ? e.message : 'Unknown error';
-      set({ error: msg, isLoading: false });
+        const body: ApiListResponse = JSON.parse(text) as ApiListResponse;
+        set({ pipelines: body.data, isLoading: false });
+        return;
+      } catch (e: unknown) {
+        lastError = e instanceof Error ? e.message : 'Unknown error';
+      }
     }
+    set({ error: lastError, isLoading: false });
   },
 }));

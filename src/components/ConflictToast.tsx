@@ -3,12 +3,16 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSyncStore } from '../store/syncStore';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeColors } from '../theme';
 
 export function ConflictToast(): JSX.Element | null {
   const conflicts = useSyncStore((s) => s.conflicts);
   const clearConflicts = useSyncStore((s) => s.clearConflicts);
   const opacity = useRef(new Animated.Value(0)).current;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
 
   useEffect(() => {
     if (conflicts.length === 0) {
@@ -50,7 +54,8 @@ export function ConflictToast(): JSX.Element | null {
   );
 }
 
-const styles = StyleSheet.create({
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const makeStyles = (_c: ThemeColors) => StyleSheet.create({
   container: {
     position: 'absolute',
     bottom: 90,

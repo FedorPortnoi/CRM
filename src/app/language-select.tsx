@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -11,10 +11,14 @@ import { Check } from 'lucide-react-native';
 import { initI18n, Language } from '../i18n';
 import { setStoredLanguage } from '../i18n/storage';
 import { useUserStore } from '../store/userStore';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeColors } from '../theme';
 
 export default function LanguageSelectScreen() {
   const token = useUserStore((s) => s.token);
   const user = useUserStore((s) => s.user);
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [loading, setLoading] = useState<Language | null>(null);
 
   const selectLanguage = async (language: Language) => {
@@ -58,7 +62,7 @@ export default function LanguageSelectScreen() {
             accessibilityRole="button"
           >
             {loading === 'en' ? (
-              <ActivityIndicator color="#C45A10" />
+              <ActivityIndicator color={colors.orange} />
             ) : (
               <>
                 <Text style={styles.langFlag}>EN</Text>
@@ -82,7 +86,7 @@ export default function LanguageSelectScreen() {
             accessibilityRole="button"
           >
             {loading === 'ru' ? (
-              <ActivityIndicator color="#C45A10" />
+              <ActivityIndicator color={colors.orange} />
             ) : (
               <>
                 <Text style={styles.langFlag}>RU</Text>
@@ -100,10 +104,10 @@ export default function LanguageSelectScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.bg,
   },
   circle1: {
     position: 'absolute',
@@ -145,10 +149,10 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 20,
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#C45A10',
+    shadowColor: c.orange,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -157,14 +161,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#383432',
+    color: c.text1,
     textAlign: 'center',
     marginBottom: 10,
     lineHeight: 34,
   },
   subtitle: {
     fontSize: 14,
-    color: '#B07868',
+    color: c.amber,
     textAlign: 'center',
     marginBottom: 40,
     lineHeight: 20,
@@ -177,9 +181,9 @@ const styles = StyleSheet.create({
   langCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: c.bgPanel,
     borderWidth: 1.5,
-    borderColor: '#E8DDD6',
+    borderColor: c.border,
     borderRadius: 16,
     padding: 18,
     gap: 14,
@@ -191,17 +195,17 @@ const styles = StyleSheet.create({
   },
   langCardPressed: {
     backgroundColor: 'rgba(6,95,70,0.04)',
-    borderColor: '#C45A10',
+    borderColor: c.orange,
   },
   langCardActive: {
     backgroundColor: 'rgba(6,95,70,0.06)',
-    borderColor: '#C45A10',
+    borderColor: c.orange,
     justifyContent: 'center',
   },
   langFlag: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#C45A10',
+    color: c.orange,
     width: 44,
   },
   langTextBlock: {
@@ -210,11 +214,11 @@ const styles = StyleSheet.create({
   langName: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#383432',
+    color: c.text1,
   },
   langNative: {
     fontSize: 13,
-    color: '#B07868',
+    color: c.amber,
     marginTop: 2,
   },
   langArrow: {
@@ -227,7 +231,7 @@ const styles = StyleSheet.create({
   },
   langArrowText: {
     fontSize: 18,
-    color: '#C45A10',
+    color: c.orange,
     fontWeight: '600',
     lineHeight: 22,
   },

@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUserStore } from '../../store/userStore';
 import { useTaskScopeStore } from '../../store/taskScopeStore';
 import { API_URL } from '../../utils/api';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 type TaskStatus = 'pending' | 'in_progress' | 'done' | 'cancelled';
 
@@ -46,21 +48,23 @@ function formatDue(due: string | null): string {
   return new Date(due).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' });
 }
 
-function badgeColor(status: TaskStatus): string {
+function badgeColor(status: TaskStatus, colors: ReturnType<typeof import('../../hooks/useTheme').useTheme>['colors']): string {
   switch (status) {
     case 'done':
-      return '#C45A10';
+      return colors.orange;
     case 'in_progress':
-      return '#f59e0b';
+      return colors.amber;
     case 'pending':
       return '#E8A000';
     default:
-      return '#CFADA3';
+      return colors.textMuted;
   }
 }
 
 export default function TasksScreen(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const token = useUserStore((s) => s.token);
   const role = useUserStore((s) => s.user?.role);
   const queryClient = useQueryClient();
@@ -80,10 +84,6 @@ export default function TasksScreen(): JSX.Element {
     void hydrateScope();
   }, [hydrateScope]);
 
-  // Depth toggle is for managers only. Owner/admin already see the whole org
-  // (the server ignores scope for them), and a leaf member has no reports — so
-  // we show it only when the scope-aware assignee list contains people besides
-  // the user themselves.
   const { data: assignees = [] } = useQuery({
     queryKey: ['task-assignees', token],
     queryFn: async (): Promise<Array<{ id: string }>> => {
@@ -154,7 +154,7 @@ export default function TasksScreen(): JSX.Element {
               </Text>
             ) : null}
             <View
-              style={[styles.badge, { backgroundColor: badgeColor(item.status) }]}
+              style={[styles.badge, { backgroundColor: badgeColor(item.status, colors) }]}
             >
               <Text style={styles.badgeText}>
                 {item.status === 'in_progress'
@@ -170,7 +170,7 @@ export default function TasksScreen(): JSX.Element {
         </View>
       </TouchableOpacity>
     );
-  }, [t]);
+  }, [t, styles, colors]);
 
   if (isLoading) {
     return (
@@ -253,8 +253,8 @@ export default function TasksScreen(): JSX.Element {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={['#C45A10']}
-            tintColor="#C45A10"
+            colors={[colors.orange]}
+            tintColor={colors.orange}
           />
         }
         ListEmptyComponent={
@@ -272,10 +272,10 @@ export default function TasksScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.bg,
   },
   circle1: {
     position: 'absolute',
@@ -306,13 +306,13 @@ const styles = StyleSheet.create({
   },
   skeletonContainer: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.bgPanel,
     padding: 12,
     paddingTop: 16,
   },
   skeletonRow: {
     height: 64,
-    backgroundColor: '#FAF6F3',
+    backgroundColor: c.bg,
     borderRadius: 12,
     marginBottom: 8,
   },
@@ -321,16 +321,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.bgPanel,
   },
   errorText: {
-    color: '#ef4444',
+    color: c.red,
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: '#C45A10',
+    backgroundColor: c.orange,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
@@ -344,9 +344,9 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     borderBottomWidth: 1,
-    borderBottomColor: '#FAF6F3',
+    borderBottomColor: c.bg,
   },
   tab: {
     flex: 1,
@@ -356,15 +356,15 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabActive: {
-    borderBottomColor: '#C45A10',
+    borderBottomColor: c.orange,
   },
   tabText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#CFADA3',
+    color: c.textMuted,
   },
   tabTextActive: {
-    color: '#C45A10',
+    color: c.orange,
     fontWeight: '600',
   },
   scopeBar: {
@@ -379,18 +379,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#EADFD9',
-    backgroundColor: '#FAF6F3',
+    borderColor: c.border,
+    backgroundColor: c.bg,
     alignItems: 'center',
   },
   scopePillActive: {
-    backgroundColor: '#C45A10',
-    borderColor: '#C45A10',
+    backgroundColor: c.orange,
+    borderColor: c.orange,
   },
   scopeText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#B07868',
+    color: c.amber,
   },
   scopeTextActive: {
     color: '#FFFFFF',
@@ -409,10 +409,10 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#CFADA3',
+    color: c.textMuted,
   },
   row: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.bgPanel,
     marginHorizontal: 12,
     marginTop: 8,
     borderRadius: 12,
@@ -429,11 +429,11 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#383432',
+    color: c.text1,
     marginBottom: 6,
   },
   rowTitleOverdue: {
-    color: '#ef4444',
+    color: c.red,
   },
   rowMeta: {
     flexDirection: 'row',
@@ -442,10 +442,10 @@ const styles = StyleSheet.create({
   },
   rowDate: {
     fontSize: 12,
-    color: '#B07868',
+    color: c.amber,
   },
   rowDateOverdue: {
-    color: '#ef4444',
+    color: c.red,
   },
   badge: {
     paddingHorizontal: 8,

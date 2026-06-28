@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ActivityIndicator, FlatList, ListRenderItemInfo,
@@ -257,25 +257,25 @@ export default function FileImportScreen<T>({
 // ─── Shared styles ────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: '#FAF6F3' },
-  center:     { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: '#FAF6F3', gap: 14 },
-  title:      { fontSize: 26, fontWeight: '800', color: '#383432' },
-  sub:        { fontSize: 14, color: '#B07868', lineHeight: 21, textAlign: 'center' },
+  container:  { flex: 1, backgroundColor: '#0E0E0D' },
+  center:     { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: '#0E0E0D', gap: 14 },
+  title:      { fontSize: 26, fontWeight: '800', color: '#E8E0D4' },
+  sub:        { fontSize: 14, color: '#D4A27F', lineHeight: 21, textAlign: 'center' },
   btn:        { height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
   btnOff:     { opacity: 0.45 },
   btnText:    { color: '#fff', fontSize: 16, fontWeight: '700' },
-  error:      { color: '#ef4444', fontSize: 13 },
+  error:      { color: '#CC5247', fontSize: 13 },
   doneEmoji:  { fontSize: 52, fontWeight: '700' },
-  doneTitle:  { fontSize: 20, fontWeight: '800', color: '#383432' },
-  bar:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F5EDE8' },
-  barTitle:   { fontSize: 14, fontWeight: '600', color: '#383432' },
+  doneTitle:  { fontSize: 20, fontWeight: '800', color: '#E8E0D4' },
+  bar:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#1A1A18', borderBottomWidth: 1, borderBottomColor: '#F5EDE8' },
+  barTitle:   { fontSize: 14, fontWeight: '600', color: '#E8E0D4' },
   selAll:     { fontSize: 13, fontWeight: '600' },
-  row:        { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8, gap: 12, borderWidth: 1, borderColor: '#F5EDE8' },
+  row:        { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A18', borderRadius: 10, padding: 12, marginBottom: 8, gap: 12, borderWidth: 1, borderColor: '#F5EDE8' },
   check:      { width: 22, height: 22, borderRadius: 4, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   checkMark:  { color: '#fff', fontSize: 13, fontWeight: '700' },
-  rowName:    { fontSize: 15, fontWeight: '600', color: '#383432' },
-  rowSub:     { fontSize: 12, color: '#B07868', marginTop: 2 },
-  footer:     { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: 32, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#F5EDE8' },
+  rowName:    { fontSize: 15, fontWeight: '600', color: '#E8E0D4' },
+  rowSub:     { fontSize: 12, color: '#D4A27F', marginTop: 2 },
+  footer:     { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: 32, backgroundColor: '#1A1A18', borderTopWidth: 1, borderTopColor: '#F5EDE8' },
 });
 
 // ─── Re-export row text styles so callers can match the design system ─────────
