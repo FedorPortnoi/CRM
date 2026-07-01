@@ -73,3 +73,7 @@ expo-env.d.ts
 /certs/
 /android/
 /releases/
+.auth-state.json
+
+# Claude Code local scratch / worktrees (~85MB, never commit)
+.claude/
