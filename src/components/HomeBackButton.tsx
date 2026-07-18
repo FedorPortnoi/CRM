@@ -17,7 +17,7 @@ export default function HomeBackButton(): JSX.Element {
       accessibilityLabel={t('common.back')}
       hitSlop={8}
     >
-      <ArrowLeft size={26} color={colors.bgDark} strokeWidth={2.4} />
+      <ArrowLeft size={26} color={colors.text1} strokeWidth={2.4} />
     </TouchableOpacity>
   );
 }

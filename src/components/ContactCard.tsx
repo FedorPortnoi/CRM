@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { MoreVertical, ChevronRight, Check, Phone } from 'lucide-react-native';
+import { CheckSquare, ChevronRight, Check, Phone, Square } from 'lucide-react-native';
 import { useTheme } from '../hooks/useTheme';
 import { ThemeColors } from '../theme';
 
@@ -33,7 +33,8 @@ type ContactCardProps = {
   contact: ContactCardData;
   onPress: () => void;
   onLongPress: () => void;
-  onMenuPress: () => void;
+  onSelectPress: () => void;
+  selectAccessibilityLabel: string;
   selectionMode: boolean;
   selected: boolean;
   disabled?: boolean;
@@ -81,7 +82,8 @@ function ContactCardComponent({
   contact,
   onPress,
   onLongPress,
-  onMenuPress,
+  onSelectPress,
+  selectAccessibilityLabel,
   selectionMode,
   selected,
   disabled,
@@ -197,13 +199,19 @@ function ContactCardComponent({
 
       <View style={styles.actions}>
         <Pressable
-          accessibilityRole="button"
+          accessibilityRole="checkbox"
+          accessibilityLabel={selectAccessibilityLabel}
+          accessibilityState={{ checked: selected, disabled }}
           hitSlop={10}
-          onPress={onMenuPress}
+          onPress={onSelectPress}
           disabled={disabled}
-          style={({ pressed }) => [styles.moreButton, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.selectButton, pressed && styles.pressed]}
         >
-          <MoreVertical size={20} color={colors.textMuted} />
+          {selected ? (
+            <CheckSquare size={20} color={colors.orange} />
+          ) : (
+            <Square size={20} color={colors.textMuted} />
+          )}
         </Pressable>
         <ChevronRight size={26} color={colors.textMuted} />
       </View>
@@ -405,7 +413,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingVertical: 16,
     marginRight: 10,
   },
-  moreButton: {
+  selectButton: {
     width: 28,
     height: 28,
     alignItems: 'center',

@@ -29,11 +29,14 @@ export default function NavHeader({ title, headerRight }: NavHeaderProps): JSX.E
   const styles = makeStyles(colors);
 
   const isTabScreen = TAB_PATHS.has(pathname);
+  const isChatTab = pathname === '/chat';
 
   return (
     <View style={[styles.headerWrap, { paddingTop: insets.top }]}>
       <View style={styles.headerRow}>
-        {isTabScreen ? (
+        {isChatTab ? (
+          <View style={styles.leftSlot} />
+        ) : isTabScreen ? (
           <TouchableOpacity
             onPress={() => setSheetOpen(true)}
             style={styles.leftBtn}
@@ -78,6 +81,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 8,
   },
   leftBtn: { padding: 8 },
+  leftSlot: { width: 42, height: 42 },
   title: { fontSize: 18, fontWeight: '700', color: c.text1, marginLeft: 4, flex: 1 },
   right: { flexDirection: 'row', alignItems: 'center' },
 });

@@ -13,6 +13,7 @@ import {
   Modal,
   RefreshControl,
   StatusBar,
+  Keyboard,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +27,7 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import ContactCard, { ContactCardData, ContactCardType } from '../../components/ContactCard';
+import ActionMenuSheet from '../../components/ActionMenuSheet';
 import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors } from '../../theme';
 
@@ -114,7 +116,17 @@ export default function ContactsScreen(): JSX.Element {
   const [assignError, setAssignError] = useState<string | null>(null);
   const [showNoContact30d, setShowNoContact30d] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
+  const [addMenuVisible, setAddMenuVisible] = useState(false);
   const typeParam = segment === 'all' ? undefined : segment;
+
+  const resetSelection = useCallback((): void => {
+    setSelectedContactIds([]);
+    setArchiveError(null);
+    setAssignError(null);
+    setUsersError(null);
+    setSelectedUserId(null);
+    setIsAssignModalVisible(false);
+  }, []);
 
   const contactsQuery = useQuery<ContactsResponse, Error>({
     queryKey: ['contacts', page, search, showNoContact30d, typeParam, sortKey, token],
@@ -228,12 +240,7 @@ export default function ContactsScreen(): JSX.Element {
       );
       void queryClient.invalidateQueries({ queryKey: ['contacts'] });
       void queryClient.invalidateQueries({ queryKey: ['contacts-counts'] });
-      setSelectedContactIds([]);
-      setArchiveError(null);
-      setAssignError(null);
-      setUsersError(null);
-      setSelectedUserId(null);
-      setIsAssignModalVisible(false);
+      resetSelection();
     },
     onError: (e) => {
       setArchiveError(e.message);
@@ -262,12 +269,7 @@ export default function ContactsScreen(): JSX.Element {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      setSelectedContactIds([]);
-      setIsAssignModalVisible(false);
-      setSelectedUserId(null);
-      setArchiveError(null);
-      setAssignError(null);
-      setUsersError(null);
+      resetSelection();
     },
     onError: (e) => {
       setAssignError(e.message);
@@ -324,33 +326,41 @@ export default function ContactsScreen(): JSX.Element {
 
   const handleRefresh = useCallback((): void => {
     setPage(1);
-    setSelectedContactIds([]);
+    resetSelection();
     void queryClient.invalidateQueries({ queryKey: ['contacts'] });
     void queryClient.invalidateQueries({ queryKey: ['contacts-counts'] });
-  }, [queryClient]);
+  }, [queryClient, resetSelection]);
 
   const handleSearchChange = useCallback((text: string): void => {
     setSearch(text);
     setPage(1);
-    setSelectedContactIds([]);
-  }, []);
+    resetSelection();
+  }, [resetSelection]);
+
+  const closeSearchMode = useCallback((): void => {
+    setSearchOpen(false);
+    Keyboard.dismiss();
+    if (search.length > 0) {
+      setSearch('');
+      setPage(1);
+    }
+  }, [search.length]);
 
   const handleToggleSearch = useCallback((): void => {
-    setSearchOpen((open) => {
-      const next = !open;
-      if (!next && search.length > 0) {
-        setSearch('');
-        setPage(1);
-      }
-      return next;
-    });
-  }, [search.length]);
+    if (searchOpen) {
+      closeSearchMode();
+      return;
+    }
+
+    resetSelection();
+    setSearchOpen(true);
+  }, [closeSearchMode, resetSelection, searchOpen]);
 
   const handleSelectSegment = useCallback((next: SegmentKey): void => {
     setSegment(next);
     setPage(1);
-    setSelectedContactIds([]);
-  }, []);
+    resetSelection();
+  }, [resetSelection]);
 
   const handleSelectSort = useCallback((next: SortKey): void => {
     setSortKey(next);
@@ -359,36 +369,19 @@ export default function ContactsScreen(): JSX.Element {
   }, [queryClient]);
 
   const handleAddPress = useCallback((): void => {
-    Alert.alert(t('contacts.add'), undefined, [
-      { text: t('contacts.new'), onPress: () => { router.push('/contact/new'); } },
-      { text: t('contacts.scanCard'), onPress: () => { router.push('/contact/scan-card'); } },
-      { text: '📲 Импорт из приложений', onPress: () => { router.push('/import-hub' as never); } },
-      { text: t('contacts.importPhone'), onPress: () => { router.push('/contact/import-phone'); } },
-      { text: t('common.cancel'), style: 'cancel' },
-    ]);
-  }, [t]);
+    setAddMenuVisible(true);
+  }, []);
 
   const handleToggleNoContactFilter = useCallback((): void => {
     setShowNoContact30d((current) => !current);
     setPage(1);
-    setSelectedContactIds([]);
-  }, []);
+    resetSelection();
+  }, [resetSelection]);
 
-  const handleLongPressContact = useCallback(
+  const handleToggleContactSelection = useCallback(
     (contactId: string): void => {
       if (isBulkActionRunning) return;
-      setArchiveError(null);
-      setAssignError(null);
-      setSelectedContactIds((prev) =>
-        prev.includes(contactId) ? prev : [...prev, contactId],
-      );
-    },
-    [isBulkActionRunning],
-  );
-
-  const handleToggleSelection = useCallback(
-    (contactId: string): void => {
-      if (isBulkActionRunning) return;
+      if (searchOpen) closeSearchMode();
       setArchiveError(null);
       setAssignError(null);
       setSelectedContactIds((prev) =>
@@ -397,18 +390,13 @@ export default function ContactsScreen(): JSX.Element {
           : [...prev, contactId],
       );
     },
-    [isBulkActionRunning],
+    [closeSearchMode, isBulkActionRunning, searchOpen],
   );
 
   const handleCancelSelection = useCallback((): void => {
     if (isBulkActionRunning) return;
-    setSelectedContactIds([]);
-    setArchiveError(null);
-    setAssignError(null);
-    setUsersError(null);
-    setSelectedUserId(null);
-    setIsAssignModalVisible(false);
-  }, [isBulkActionRunning]);
+    resetSelection();
+  }, [isBulkActionRunning, resetSelection]);
 
   const fetchOrgUsers = useCallback(async (): Promise<void> => {
     if (!token) {
@@ -581,21 +569,21 @@ export default function ContactsScreen(): JSX.Element {
           activityCaption={activityCaption}
           onPress={() => {
             if (isSelectionMode) {
-              handleToggleSelection(item.id);
+              handleToggleContactSelection(item.id);
               return;
             }
             router.push({ pathname: '/contact/[id]', params: { id: item.id } });
           }}
-          onLongPress={() => handleLongPressContact(item.id)}
-          onMenuPress={() => handleLongPressContact(item.id)}
+          onLongPress={() => handleToggleContactSelection(item.id)}
+          onSelectPress={() => handleToggleContactSelection(item.id)}
+          selectAccessibilityLabel={t('contacts.selectContact')}
         />
       );
     },
     [
       activityCaption,
       dateLocale,
-      handleLongPressContact,
-      handleToggleSelection,
+      handleToggleContactSelection,
       isBulkActionRunning,
       isSelectionMode,
       selectedContactIdSet,
@@ -664,6 +652,13 @@ export default function ContactsScreen(): JSX.Element {
     { key: 'first_name', label: 'По имени' },
     { key: 'created_at', label: 'По дате' },
     { key: 'updated_at', label: 'По активности' },
+  ];
+
+  const addMenuOptions = [
+    { label: t('contacts.new'), onPress: () => { router.push('/contact/new'); } },
+    { label: t('contacts.scanCard'), onPress: () => { router.push('/contact/scan-card'); } },
+    { label: '📲 Импорт из приложений', onPress: () => { router.push('/import-hub' as never); } },
+    { label: t('contacts.importPhone'), onPress: () => { router.push('/contact/import-phone'); } },
   ];
 
   const renderHeader = (): JSX.Element => (
@@ -1036,6 +1031,13 @@ export default function ContactsScreen(): JSX.Element {
           </View>
         </View>
       </Modal>
+
+      <ActionMenuSheet
+        visible={addMenuVisible}
+        onClose={() => setAddMenuVisible(false)}
+        title={t('contacts.add')}
+        options={addMenuOptions}
+      />
     </View>
   );
 }

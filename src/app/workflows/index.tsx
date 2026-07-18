@@ -2,7 +2,6 @@
 import {
   FlatList,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Switch,
   Text,
@@ -10,6 +9,7 @@ import {
   View,
 }  from 'react-native';
 import type { DimensionValue } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Plus, Workflow as WorkflowIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';

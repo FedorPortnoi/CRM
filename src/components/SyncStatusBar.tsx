@@ -43,7 +43,7 @@ export default function SyncStatusBar(): JSX.Element | null {
   }, [status, opacity]);
 
   return (
-    <Animated.View style={[styles.bar, { top: insets.top, backgroundColor: syncBg[status], opacity }]}>
+    <Animated.View pointerEvents="none" style={[styles.bar, { top: insets.top, backgroundColor: syncBg[status], opacity }]}>
       <Text style={styles.text}>{TEXT[status]}</Text>
     </Animated.View>
   );

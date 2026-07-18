@@ -18,6 +18,7 @@ import { useUserStore } from '../store/userStore';
 import { API_URL } from '../utils/api';
 import { useTheme } from '../hooks/useTheme';
 import { ThemeColors } from '../theme';
+import ActionMenuSheet from './ActionMenuSheet';
 
 type EntityType = 'contact' | 'deal' | 'task' | 'calendar_event';
 
@@ -51,6 +52,7 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
   const { token } = useUserStore();
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
   const { colors } = useTheme();
   const styles = makeStyles(colors);
 
@@ -170,12 +172,7 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
         },
       );
     } else {
-      Alert.alert(t('attachments.addTitle'), undefined, [
-        { text: t('attachments.fromGallery'), onPress: () => void pickFromGallery() },
-        { text: t('attachments.takePhoto'), onPress: () => void pickFromCamera() },
-        { text: t('attachments.document'), onPress: () => void pickDocument() },
-        { text: t('attachments.cancel'), style: 'cancel' },
-      ]);
+      setPickerVisible(true);
     }
   };
 
@@ -249,6 +246,17 @@ export default function AttachmentsSection({ entityType, entityId }: Props) {
           <Text style={styles.uploadingText}>{t('attachments.uploading')}</Text>
         </View>
       )}
+
+      <ActionMenuSheet
+        visible={pickerVisible}
+        onClose={() => setPickerVisible(false)}
+        title={t('attachments.addTitle')}
+        options={[
+          { label: t('attachments.fromGallery'), onPress: () => void pickFromGallery() },
+          { label: t('attachments.takePhoto'), onPress: () => void pickFromCamera() },
+          { label: t('attachments.document'), onPress: () => void pickDocument() },
+        ]}
+      />
     </View>
   );
 }
