@@ -80,6 +80,26 @@ export async function contactBelongsToOrg(contactId: string, orgId: string): Pro
   return row !== null;
 }
 
+/**
+ * Whether the requester may LINK this contact to a deal: it must belong to the
+ * org AND fall inside the requester's visibility cone. Linking an out-of-cone
+ * contact would otherwise leak its name back through the deal's `contact`
+ * include. `accessibleIds === null` means owner/admin — unrestricted.
+ */
+async function contactVisibleToRequester(
+  contactId: string,
+  orgId: string,
+  accessibleIds: string[] | null,
+): Promise<boolean> {
+  const contact = await db.contact.findFirst({
+    where: { id: contactId, organization_id: orgId },
+    select: { assigned_to: true, created_by: true },
+  });
+  if (!contact) return false;
+  if (accessibleIds === null) return true;
+  return canSeeUser(accessibleIds, contact.assigned_to) || canSeeUser(accessibleIds, contact.created_by);
+}
+
 export async function pipelineBelongsToOrg(pipelineId: string, orgId: string): Promise<boolean> {
   const row = await db.pipeline.findFirst({
     where: { id: pipelineId, organization_id: orgId },
@@ -227,7 +247,7 @@ export async function createDealForUser(
   const accessibleIds = await getAccessibleUserIds(requester);
 
   const [ownsContact, ownsPipeline, stageMatches, ownsAssignee] = await Promise.all([
-    contactBelongsToOrg(body.contact_id, orgId),
+    contactVisibleToRequester(body.contact_id, orgId, accessibleIds),
     pipelineBelongsToOrg(body.pipeline_id, orgId),
     stageBelongsToPipeline(body.stage_id, body.pipeline_id, orgId),
     body.assigned_to !== undefined && body.assigned_to !== requestingUserId
@@ -360,7 +380,7 @@ export async function updateDealForUser(
 
   const [ownsContact, ownsPipeline, ownsAssignee, stageMatches] = await Promise.all([
     patch.contact_id !== undefined
-      ? contactBelongsToOrg(patch.contact_id, orgId)
+      ? contactVisibleToRequester(patch.contact_id, orgId, accessibleIds)
       : Promise.resolve(true),
     patch.pipeline_id !== undefined
       ? pipelineBelongsToOrg(patch.pipeline_id, orgId)

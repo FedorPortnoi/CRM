@@ -17,6 +17,7 @@ import {
 } from '../../services/yandex-calendar';
 import { auditLog } from '../../services/audit';
 import { db } from '../../services/db';
+import { getVisibleUserIds, getAccessibleUserIds } from '../../services/visibility';
 
 // ─── Local request types ──────────────────────────────────────────────────────
 
@@ -95,8 +96,14 @@ async function list(
   const { start, end, contact_id, deal_id, attendee_id, status, page, per_page } =
     request.query as ListQuery;
 
+  // Restrict members/viewers to events created within their org-chart cone
+  // (consistent with the delta-sync scoping in sync.ts). Owner/admin => null =>
+  // unrestricted.
+  const visibleIds = await getVisibleUserIds(request.user, 'subtree');
+
   const where: Prisma.CalendarEventWhereInput = {
     organization_id: request.user.org_id,
+    ...(visibleIds !== null && { created_by: { in: visibleIds } }),
     ...(status ? { status } : { status: { not: CalendarEventStatus.cancelled } }),
     ...(contact_id && { contact_id }),
     ...(deal_id && { deal_id }),
@@ -189,8 +196,16 @@ async function getById(
 ): Promise<void> {
   const { id } = request.params as IdParams;
 
+  // Single-record access uses the caller's full accessible cone; out-of-cone
+  // events read as not found. Owner/admin => null => unrestricted.
+  const visibleIds = await getAccessibleUserIds(request.user);
+
   const event = await db.calendarEvent.findFirst({
-    where: { id, organization_id: request.user.org_id },
+    where: {
+      id,
+      organization_id: request.user.org_id,
+      ...(visibleIds !== null && { created_by: { in: visibleIds } }),
+    },
     include: {
       contact: { select: { id: true, first_name: true, last_name: true } },
       deal: { select: { id: true, title: true } },
@@ -431,6 +446,12 @@ async function getAvailability(
 ): Promise<void> {
   const { date, user_ids } = request.query as AvailabilityQuery;
 
+  // A member/viewer may only probe availability for users inside their cone;
+  // drop any requested id outside it. Owner/admin => null => all ids allowed.
+  const visibleIds = await getAccessibleUserIds(request.user);
+  const scopedUserIds =
+    visibleIds === null ? user_ids : user_ids.filter((uid) => visibleIds.includes(uid));
+
   const startOfDay = new Date(date);
   startOfDay.setUTCHours(0, 0, 0, 0);
   const endOfDay = new Date(startOfDay);
@@ -440,7 +461,7 @@ async function getAvailability(
     where: {
       organization_id: request.user.org_id,
       status: { not: CalendarEventStatus.cancelled },
-      created_by: { in: user_ids },
+      created_by: { in: scopedUserIds },
       start_time: { gte: startOfDay, lt: endOfDay },
     },
     select: {

@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { db } from '../../services/db';
 import { paginate } from '../../services/db-paginate';
 import { generateUploadUrl, deleteFile, deriveOrgScopedKey, isAllowedUploadMimeType } from '../../services/storage';
+import { getContactForUser, ContactNotFoundError } from '../../services/contact-domain';
+import { getDealForUser, DealDomainError } from '../../services/deal-domain';
+import { getTaskForUser } from '../../services/task-domain';
+import { getAccessibleUserIds } from '../../services/visibility';
 
 // --- Validation --------------------------------------------------------------
 
@@ -45,6 +49,59 @@ type ListQuery = {
 };
 
 type IdParams = { id: string };
+
+const ATTACHMENT_ENTITY_TYPES = ['contact', 'deal', 'task', 'calendar_event'] as const;
+
+// --- Visibility --------------------------------------------------------------
+
+/**
+ * Whether the caller may see the parent entity an attachment hangs off of.
+ * Resolves each entity through its cone-enforcing accessor so a member/viewer
+ * cannot list, attach, or detach files on an entity outside their org-chart
+ * cone (org membership alone is not enough). Owner/admin are unrestricted.
+ */
+async function canSeeEntity(
+  request: FastifyRequest,
+  entityType: string,
+  entityId: string,
+): Promise<boolean> {
+  const orgId = request.user.org_id;
+
+  switch (entityType) {
+    case 'contact':
+      try {
+        await getContactForUser(entityId, orgId, request.user);
+        return true;
+      } catch (err) {
+        if (err instanceof ContactNotFoundError) return false;
+        throw err;
+      }
+    case 'deal':
+      try {
+        await getDealForUser(entityId, orgId, request.user);
+        return true;
+      } catch (err) {
+        if (err instanceof DealDomainError) return false;
+        throw err;
+      }
+    case 'task':
+      return (await getTaskForUser(entityId, orgId, request.user)) !== null;
+    case 'calendar_event': {
+      const visibleIds = await getAccessibleUserIds(request.user);
+      const event = await db.calendarEvent.findFirst({
+        where: {
+          id: entityId,
+          organization_id: orgId,
+          ...(visibleIds !== null && { created_by: { in: visibleIds } }),
+        },
+        select: { id: true },
+      });
+      return event !== null;
+    }
+    default:
+      return false;
+  }
+}
 
 // --- Handlers ----------------------------------------------------------------
 
@@ -105,10 +162,33 @@ export async function listAttachments(
 ): Promise<void> {
   const { entity_type, entity_id } = request.query as ListQuery;
 
+  // A bare org-wide listing would leak attachments across the visibility cone,
+  // so a specific parent entity is required.
+  if (!entity_type || !entity_id) {
+    reply.status(400).send({
+      error: { code: 'VALIDATION_ERROR', message: 'entity_type and entity_id are required' },
+    });
+    return;
+  }
+
+  if (!(ATTACHMENT_ENTITY_TYPES as readonly string[]).includes(entity_type)) {
+    reply.status(400).send({
+      error: { code: 'INVALID_ENTITY_TYPE', message: 'Unsupported entity type' },
+    });
+    return;
+  }
+
+  if (!(await canSeeEntity(request, entity_type, entity_id))) {
+    reply.status(404).send({
+      error: { code: 'ENTITY_NOT_FOUND', message: 'Entity not found' },
+    });
+    return;
+  }
+
   const where = {
     organization_id: request.user.org_id,
-    ...(entity_type && { entity_type }),
-    ...(entity_id && { entity_id }),
+    entity_type,
+    entity_id,
   };
 
   const { data: attachments, total } = await paginate(
@@ -116,6 +196,7 @@ export async function listAttachments(
     () => db.attachment.findMany({
       where,
       orderBy: { created_at: 'desc' },
+      take: 200,
     }),
   );
 
@@ -147,21 +228,9 @@ export async function createAttachment(
     return;
   }
 
-  const entityLookup: Record<string, () => Promise<{ id: string } | null>> = {
-    contact: () => db.contact.findFirst({ where: { id: body.entity_id, organization_id: request.user.org_id }, select: { id: true } }),
-    deal: () => db.deal.findFirst({ where: { id: body.entity_id, organization_id: request.user.org_id }, select: { id: true } }),
-    task: () => db.task.findFirst({ where: { id: body.entity_id, organization_id: request.user.org_id }, select: { id: true } }),
-    calendar_event: () => db.calendarEvent.findFirst({ where: { id: body.entity_id, organization_id: request.user.org_id }, select: { id: true } }),
-  };
-
-  const lookup = entityLookup[body.entity_type];
-  if (!lookup) {
-    reply.status(400).send({ error: { code: 'INVALID_ENTITY_TYPE', message: 'Unsupported entity type' } });
-    return;
-  }
-
-  const entityExists = await lookup();
-  if (!entityExists) {
+  // The caller must be able to SEE the parent entity (org + visibility cone) to
+  // attach a file to it — not merely share its organization.
+  if (!(await canSeeEntity(request, body.entity_type, body.entity_id))) {
     reply.status(403).send({ error: { code: 'ENTITY_NOT_FOUND', message: 'Entity not found in your organization' } });
     return;
   }
@@ -193,6 +262,16 @@ export async function deleteAttachment(
   });
 
   if (!attachment) {
+    reply.status(404).send({
+      error: { code: 'NOT_FOUND', message: 'Attachment not found' },
+    });
+    return;
+  }
+
+  // A member must be able to see the parent entity to detach its files. Return
+  // the same NOT_FOUND so an out-of-cone attachment is indistinguishable from a
+  // nonexistent one.
+  if (!(await canSeeEntity(request, attachment.entity_type, attachment.entity_id))) {
     reply.status(404).send({
       error: { code: 'NOT_FOUND', message: 'Attachment not found' },
     });
