@@ -1,23 +1,46 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../services/db';
-import { broadcastToOrg } from '../../services/wsRooms';
+import {
+  authorizeChatChannel,
+  ChatChannelError,
+  type AuthorizedChatChannel,
+} from '../../services/chatChannel';
+import { broadcastToOrg, broadcastToUsers } from '../../services/wsRooms';
 import { sendPush } from '../../services/push';
+
+async function authorizeRequestedChannel(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  channel: string,
+): Promise<AuthorizedChatChannel | null> {
+  try {
+    return await authorizeChatChannel(channel, request.user.sub, request.user.org_id);
+  } catch (error) {
+    if (error instanceof ChatChannelError) {
+      reply.status(error.statusCode).send({
+        error: { code: error.code, message: error.message },
+      });
+      return null;
+    }
+    throw error;
+  }
+}
 
 async function pushChatNotification(
   orgId: string,
   senderId: string,
-  channel: string,
+  channel: AuthorizedChatChannel,
   senderName: string,
   body: string,
 ): Promise<void> {
-  const isGeneral = channel === 'general';
+  const isGeneral = channel.type === 'general';
   const title = isGeneral ? 'Общий чат' : senderName;
   const pushBody = isGeneral ? `${senderName}: ${body}` : body;
 
   const recipients = await db.user.findMany({
     where: {
       organization_id: orgId,
-      id: { not: senderId },
+      id: isGeneral ? { not: senderId } : channel.otherUserId,
       is_active: true,
       push_token: { not: null },
     },
@@ -28,7 +51,7 @@ async function pushChatNotification(
     recipients.map(async (u) => {
       const result = await sendPush(u.push_token!, title, pushBody.slice(0, 200), {
         type: 'chat:message',
-        channel,
+        channel: channel.channel,
         channel_name: title,
       });
       if (!result.ok && result.code === 'DEVICE_NOT_REGISTERED') {
@@ -136,12 +159,14 @@ export const ChatController = {
       before?: string;
       limit?: string;
     };
+    const authorizedChannel = await authorizeRequestedChannel(request, reply, channel);
+    if (!authorizedChannel) return;
     const limit = Math.min(parseInt(rawLimit ?? '50', 10) || 50, 100);
 
     const messages = await db.chatMessage.findMany({
       where: {
         organization_id: org_id,
-        channel,
+        channel: authorizedChannel.channel,
         ...(before ? { created_at: { lt: new Date(before) } } : {}),
       },
       orderBy: { created_at: 'desc' },
@@ -166,6 +191,8 @@ export const ChatController = {
   sendMessage: async (request: FastifyRequest, reply: FastifyReply) => {
     const { org_id, sub: senderId } = request.user;
     const { channel, body } = request.body as { channel: string; body: string };
+    const authorizedChannel = await authorizeRequestedChannel(request, reply, channel);
+    if (!authorizedChannel) return;
 
     const sender = await db.user.findUnique({
       where: { id: senderId },
@@ -173,7 +200,12 @@ export const ChatController = {
     });
 
     const message = await db.chatMessage.create({
-      data: { organization_id: org_id, sender_id: senderId, channel, body: body.trim() },
+      data: {
+        organization_id: org_id,
+        sender_id: senderId,
+        channel: authorizedChannel.channel,
+        body: body.trim(),
+      },
     });
 
     const payload = {
@@ -187,8 +219,20 @@ export const ChatController = {
       },
     };
 
-    broadcastToOrg(org_id, payload);
-    void pushChatNotification(org_id, senderId, channel, sender?.name ?? '', body.trim());
+    if (authorizedChannel.type === 'general') {
+      broadcastToOrg(org_id, payload);
+    } else {
+      broadcastToUsers(org_id, authorizedChannel.participantIds, payload);
+    }
+    void pushChatNotification(
+      org_id,
+      senderId,
+      authorizedChannel,
+      sender?.name ?? '',
+      body.trim(),
+    ).catch((error) => {
+      request.log.error({ err: error }, 'Failed to send chat push notification');
+    });
 
     return reply.status(201).send({ data: payload.message, meta: {} });
   },
@@ -196,11 +240,18 @@ export const ChatController = {
   markRead: async (request: FastifyRequest, reply: FastifyReply) => {
     const { org_id, sub: userId } = request.user;
     const { channel } = request.body as { channel: string };
+    const authorizedChannel = await authorizeRequestedChannel(request, reply, channel);
+    if (!authorizedChannel) return;
 
     await db.chatReadReceipt.upsert({
-      where: { user_id_channel: { user_id: userId, channel } },
+      where: { user_id_channel: { user_id: userId, channel: authorizedChannel.channel } },
       update: { last_read_at: new Date(), updated_at: new Date() },
-      create: { organization_id: org_id, user_id: userId, channel, last_read_at: new Date() },
+      create: {
+        organization_id: org_id,
+        user_id: userId,
+        channel: authorizedChannel.channel,
+        last_read_at: new Date(),
+      },
     });
 
     return reply.send({ data: { ok: true }, meta: {} });

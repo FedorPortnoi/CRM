@@ -40,7 +40,7 @@ export async function wsRoutes(fastify: FastifyInstance): Promise<void> {
       return;
     }
 
-    joinRoom(user.org_id, socket);
+    joinRoom(user.org_id, user.sub, socket);
     socket.on('close', () => { leaveRoom(user.org_id, socket); });
   });
 }
