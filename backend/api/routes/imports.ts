@@ -16,6 +16,7 @@ const importsRoutes: FastifyPluginAsyncZod = async (fastify: import('fastify').F
     '/telegram/send-code',
     {
       preHandler: [authenticate],
+      config: { rateLimit: { max: 3, timeWindow: '10 minutes' } },
       schema: { body: z.object({ phone: z.string().min(7).max(20) }) },
     },
     ImportsController.telegramSendCode,
@@ -25,6 +26,7 @@ const importsRoutes: FastifyPluginAsyncZod = async (fastify: import('fastify').F
     '/telegram/verify',
     {
       preHandler: [authenticate],
+      config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
       schema: {
         body: z.object({
           phone: z.string().min(7).max(20),
@@ -40,6 +42,7 @@ const importsRoutes: FastifyPluginAsyncZod = async (fastify: import('fastify').F
     '/bitrix24',
     {
       preHandler: [authenticate],
+      config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
       schema: {
         body: z.object({
           webhook_url: z.string().url(),
@@ -54,6 +57,7 @@ const importsRoutes: FastifyPluginAsyncZod = async (fastify: import('fastify').F
     '/vcard',
     {
       preHandler: [authenticate],
+      config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
       schema: { body: z.object({ contacts: z.array(VCardContactSchema).min(1).max(5000) }) },
     },
     ImportsController.vcardImport,
@@ -63,6 +67,7 @@ const importsRoutes: FastifyPluginAsyncZod = async (fastify: import('fastify').F
     '/whatsapp',
     {
       preHandler: [authenticate],
+      config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
       schema: {
         body: z.object({
           contacts: z.array(z.object({

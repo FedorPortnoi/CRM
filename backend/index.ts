@@ -87,10 +87,16 @@ async function start() {
   validateProductionConfig();
 
   const useMcp = process.env.ENABLE_MCP === 'true';
+  // TRUSTED_PROXY: set this to the trusted reverse proxy's IP/CIDR (or a hop-count
+  // integer string) when the app runs behind a proxy/load balancer that sets
+  // X-Forwarded-For. Fastify then only honors XFF from that trusted hop. Left unset,
+  // trustProxy is false and request.ip is the real socket IP, so a client can't spoof
+  // X-Forwarded-For to bypass IP-based rate limits.
+  const trustProxy = process.env.TRUSTED_PROXY ? process.env.TRUSTED_PROXY : false;
   const server = Fastify({
     bodyLimit: readPositiveIntEnv('REQUEST_BODY_LIMIT_BYTES', 16 * 1024 * 1024),
     logger: useMcp ? { stream: process.stderr } : true,
-    trustProxy: true,
+    trustProxy,
   });
 
   server.setValidatorCompiler(validatorCompiler);
