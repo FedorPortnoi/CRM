@@ -33,20 +33,28 @@ export function decryptField(value: string | null | undefined): string | null | 
     return value;
   }
 
-  const [ivValue, tagValue, encryptedValue] = value.slice(ENCRYPTED_FIELD_PREFIX.length).split('.');
-  if (!ivValue || !tagValue || !encryptedValue) {
-    throw new Error('Invalid encrypted field payload');
+  try {
+    const [ivValue, tagValue, encryptedValue] = value.slice(ENCRYPTED_FIELD_PREFIX.length).split('.');
+    if (!ivValue || !tagValue || !encryptedValue) {
+      throw new Error('Invalid encrypted field payload');
+    }
+
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      getFieldEncryptionKey(),
+      Buffer.from(ivValue, 'base64url'),
+    );
+    decipher.setAuthTag(Buffer.from(tagValue, 'base64url'));
+
+    return Buffer.concat([
+      decipher.update(Buffer.from(encryptedValue, 'base64url')),
+      decipher.final(),
+    ]).toString('utf8');
+  } catch {
+    // The prefix is attacker-influenced (e.g. a contact field literally starting with
+    // "enc:v1:…", or a bad import) or the encryption key rotated/mismatched. Decryption
+    // failure here (bad auth tag, malformed payload, wrong key) must not throw and 500
+    // the whole read path — fall back to returning the raw stored value unchanged.
+    return value;
   }
-
-  const decipher = crypto.createDecipheriv(
-    'aes-256-gcm',
-    getFieldEncryptionKey(),
-    Buffer.from(ivValue, 'base64url'),
-  );
-  decipher.setAuthTag(Buffer.from(tagValue, 'base64url'));
-
-  return Buffer.concat([
-    decipher.update(Buffer.from(encryptedValue, 'base64url')),
-    decipher.final(),
-  ]).toString('utf8');
 }
