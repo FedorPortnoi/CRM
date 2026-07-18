@@ -20,10 +20,22 @@ const saltRounds = process.env.NODE_ENV === 'test' ? 4 : 12;
 const MAX_FAILED_ATTEMPTS = 10;
 const LOCKOUT_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
-// Pre-computed dummy hash — always run bcrypt to prevent timing-based email enumeration.
-const DUMMY_HASH = '$2b$12$invalidhashfortimingprotectio.AAAAAAAAAAAAAAAAAAAAAAAA';
+// Compute a valid dummy hash once so absent-user checks still perform a full bcrypt comparison.
+const DUMMY_HASH = bcrypt.hashSync('a-non-secret-placeholder', saltRounds);
 
 type AuthRole = 'owner' | 'admin' | 'member' | 'viewer';
+
+type PasswordAttemptUser = {
+  id: string;
+  password_hash: string;
+  failed_login_count: number;
+  locked_until: Date | null;
+  is_active: boolean;
+  is_verified: boolean;
+};
+
+type PasswordAttemptOutcome = 'success' | 'failure' | 'non_counted_failure';
+type PasswordAttemptResult = PasswordAttemptOutcome | 'locked';
 
 type AuthUserListItem = {
   id: string;
@@ -134,6 +146,43 @@ function invalidCredentials(reply: FastifyReply) {
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+async function verifyPasswordWithLockout(
+  user: PasswordAttemptUser | null,
+  password: string,
+  classify: (candidate: PasswordAttemptUser, passwordMatches: boolean) => PasswordAttemptOutcome,
+): Promise<PasswordAttemptResult> {
+  if (user?.locked_until && user.locked_until > new Date()) {
+    return 'locked';
+  }
+
+  const passwordMatches = await bcrypt.compare(password, user?.password_hash ?? DUMMY_HASH);
+  if (!user) {
+    return 'failure';
+  }
+
+  const outcome = classify(user, passwordMatches);
+  if (outcome === 'failure') {
+    const failedAttempt = await db.user.update({
+      where: { id: user.id },
+      data: { failed_login_count: { increment: 1 } },
+      select: { failed_login_count: true },
+    });
+    if (failedAttempt.failed_login_count >= MAX_FAILED_ATTEMPTS) {
+      await db.user.update({
+        where: { id: user.id },
+        data: { locked_until: new Date(Date.now() + LOCKOUT_DURATION_MS) },
+      });
+    }
+  } else if (outcome === 'success') {
+    await db.user.update({
+      where: { id: user.id },
+      data: { failed_login_count: 0, locked_until: null },
+    });
+  }
+
+  return outcome;
 }
 
 async function signSessionToken(
@@ -283,12 +332,18 @@ export const AuthController = {
 
     const user = await db.user.findUnique({ where: { email } });
 
-    // Always run bcrypt regardless of whether user exists — prevents timing-based email enumeration.
-    const hashToCompare = user?.password_hash ?? DUMMY_HASH;
-    const passwordMatches = await bcrypt.compare(password, hashToCompare);
+    const credentialStatus = await verifyPasswordWithLockout(user, password, (candidate, passwordMatches) => {
+      if (candidate.is_active && candidate.is_verified && passwordMatches) {
+        return 'success';
+      }
+      if (candidate.is_active && !candidate.is_verified && passwordMatches) {
+        return 'non_counted_failure';
+      }
+      return 'failure';
+    });
 
     // Check account lockout before revealing any other reason for failure.
-    if (user && user.locked_until && user.locked_until > new Date()) {
+    if (credentialStatus === 'locked' && user) {
       await auditLog({
         action: 'auth.login',
         outcome: 'failure',
@@ -300,28 +355,14 @@ export const AuthController = {
       return invalidCredentials(reply);
     }
 
-    const isValidLogin = user !== null && user.is_active && user.is_verified && passwordMatches;
-
-    if (user && !user.is_verified && passwordMatches && user.is_active) {
+    if (credentialStatus === 'non_counted_failure') {
       return reply.code(403).send({
         error: { code: 'ACCOUNT_NOT_VERIFIED', message: 'Please verify your account via the code sent to your phone and email.' },
       });
     }
 
-    if (!isValidLogin) {
+    if (credentialStatus !== 'success' || !user) {
       const reason = !user ? 'unknown_email' : !user.is_active ? 'inactive_user' : 'invalid_password';
-
-      if (user) {
-        const newCount = user.failed_login_count + 1;
-        const shouldLock = newCount >= MAX_FAILED_ATTEMPTS;
-        await db.user.update({
-          where: { id: user.id },
-          data: {
-            failed_login_count: newCount,
-            ...(shouldLock ? { locked_until: new Date(Date.now() + LOCKOUT_DURATION_MS) } : {}),
-          },
-        });
-      }
 
       await auditLog({
         action: 'auth.login',
@@ -333,12 +374,6 @@ export const AuthController = {
       });
       return invalidCredentials(reply);
     }
-
-    // Reset lockout state on successful login.
-    await db.user.update({
-      where: { id: user.id },
-      data: { failed_login_count: 0, locked_until: null },
-    });
 
     const token = await signSessionToken(request, reply, { ...user, role: user.role as AuthRole });
 
@@ -564,10 +599,16 @@ export const AuthController = {
       where: { organization_id: org.id, username: username.trim() },
     });
 
-    const hashToCompare = user?.password_hash ?? DUMMY_HASH;
-    const passwordMatches = await bcrypt.compare(password, hashToCompare);
+    const credentialStatus = await verifyPasswordWithLockout(user, password, (candidate, passwordMatches) => (
+      candidate.is_active && passwordMatches ? 'success' : 'failure'
+    ));
 
-    if (!user || !user.is_active || !passwordMatches) {
+    if (credentialStatus === 'locked') {
+      await auditLog({ action: 'auth.join', outcome: 'failure', request, organizationId: org.id, userId: user?.id, metadata: { reason: 'account_locked' } });
+      return reply.code(401).send({ error: { code: 'INVALID_JOIN', message: 'Invalid company code, username, or password' } });
+    }
+
+    if (credentialStatus !== 'success' || !user) {
       await auditLog({ action: 'auth.join', outcome: 'failure', request, organizationId: org.id, userId: user?.id, metadata: { reason: 'invalid_credentials' } });
       return reply.code(401).send({ error: { code: 'INVALID_JOIN', message: 'Invalid company code, username, or password' } });
     }
@@ -637,6 +678,8 @@ export const AuthController = {
       data: { email, password_hash: newHash, email_verified: true, must_change_password: false, must_change_email: false },
     });
 
+    await revokeAllUserSessions(request.user.sub, request.user.org_id, 'credentials_changed');
+
     await auditLog({ action: 'auth.set_credentials', outcome: 'success', request, organizationId: request.user.org_id, userId: request.user.sub, metadata: { email } });
 
     return reply.send({ data: { user: publicUser(user) }, meta: {} });
@@ -694,6 +737,7 @@ export const AuthController = {
     }
 
     const updated = await db.user.update({ where: { id }, data: { role }, select: { id: true, role: true } });
+    await revokeAllUserSessions(id, request.user.org_id, 'role_changed');
     return reply.send({ data: updated, meta: {} });
   },
 
@@ -815,13 +859,26 @@ export const AuthController = {
   },
 
   changePassword: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { new_password } = request.body as { new_password: string };
+    const { current_password, new_password } = request.body as { current_password: string; new_password: string };
+
+    const user = await db.user.findFirst({
+      where: { id: request.user.sub, organization_id: request.user.org_id },
+      select: { password_hash: true },
+    });
+    const currentPasswordMatches = await bcrypt.compare(current_password, user?.password_hash ?? DUMMY_HASH);
+    if (!user || !currentPasswordMatches) {
+      return reply.code(401).send({
+        error: { code: 'INVALID_CURRENT_PASSWORD', message: 'Current password is incorrect' },
+      });
+    }
 
     const newHash = await bcrypt.hash(new_password, saltRounds);
     await db.user.update({
       where: { id: request.user.sub },
       data: { password_hash: newHash, must_change_password: false },
     });
+
+    await revokeAllUserSessions(request.user.sub, request.user.org_id, 'password_changed');
 
     await auditLog({
       action: 'auth.change_password',

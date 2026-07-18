@@ -84,6 +84,10 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
     return { action: 'contacts.bulk_admin', reason: 'bulk contact operations require owner or admin' };
   }
 
+  if (path.startsWith('/api/v1/import/')) {
+    return { action: 'contacts.bulk_admin', reason: 'contact imports require owner or admin' };
+  }
+
   if (
     path.startsWith('/api/v1/deals/pipelines') &&
     (method === 'POST' || method === 'PATCH' || method === 'DELETE')
