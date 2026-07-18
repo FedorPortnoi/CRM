@@ -2,6 +2,7 @@
 import { Prisma } from '@prisma/client';
 import { db } from '../../services/db';
 import { paginate } from '../../services/db-paginate';
+import { getVisibleUserIds } from '../../services/visibility';
 
 // --- Types -------------------------------------------------------------------
 
@@ -37,11 +38,13 @@ export async function listActivities(
   const pageNum = Number(page);
   const perPageNum = Number(per_page);
   const skip = (pageNum - 1) * perPageNum;
+  const visibleIds = await getVisibleUserIds(request.user, 'subtree');
 
-  const where = {
+  const where: Prisma.ActivityLogWhereInput = {
     organization_id: request.user.org_id,
     entity_type,
     entity_id,
+    ...(visibleIds !== null && { user_id: { in: visibleIds } }),
   };
 
   const { data: logs, total } = await paginate(
@@ -78,4 +81,3 @@ export async function logActivity(params: {
     },
   });
 }
-

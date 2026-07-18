@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../services/db';
+import { getVisibleUserIds, ownerVisibilityWhere } from '../../services/visibility';
 
 type DeltaQuery = {
   since?: string;
@@ -11,28 +12,54 @@ async function delta(
 ): Promise<void> {
   const { since } = request.query as DeltaQuery;
 
-  const sinceDate = since
+  const now = Date.now();
+  const maxLookbackDate = new Date(now - 365 * 24 * 60 * 60 * 1000);
+  const requestedSinceDate = since
     ? new Date(since)
-    : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    : new Date(now - 30 * 24 * 60 * 60 * 1000);
+  const sinceDate = Number.isNaN(requestedSinceDate.getTime()) || requestedSinceDate < maxLookbackDate
+    ? maxLookbackDate
+    : requestedSinceDate;
 
   const orgId = request.user.org_id;
+  const visibleIds = await getVisibleUserIds(request.user, 'subtree');
 
   const [contacts, deals, tasks, events] = await Promise.all([
     db.contact.findMany({
-      where: { organization_id: orgId, updated_at: { gt: sinceDate } },
+      where: {
+        organization_id: orgId,
+        updated_at: { gt: sinceDate },
+        ...ownerVisibilityWhere(visibleIds),
+      },
       orderBy: { updated_at: 'asc' },
+      take: 1000,
     }),
     db.deal.findMany({
-      where: { organization_id: orgId, updated_at: { gt: sinceDate } },
+      where: {
+        organization_id: orgId,
+        updated_at: { gt: sinceDate },
+        ...ownerVisibilityWhere(visibleIds),
+      },
       orderBy: { updated_at: 'asc' },
+      take: 1000,
     }),
     db.task.findMany({
-      where: { organization_id: orgId, updated_at: { gt: sinceDate } },
+      where: {
+        organization_id: orgId,
+        updated_at: { gt: sinceDate },
+        ...(visibleIds !== null && { assigned_to: { in: visibleIds } }),
+      },
       orderBy: { updated_at: 'asc' },
+      take: 1000,
     }),
     db.calendarEvent.findMany({
-      where: { organization_id: orgId, updated_at: { gt: sinceDate } },
+      where: {
+        organization_id: orgId,
+        updated_at: { gt: sinceDate },
+        ...(visibleIds !== null && { created_by: { in: visibleIds } }),
+      },
       orderBy: { updated_at: 'asc' },
+      take: 1000,
     }),
   ]);
 

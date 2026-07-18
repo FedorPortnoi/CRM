@@ -277,11 +277,13 @@ export const ContactsController = {
   getActivity: async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
 
-    const contact = await db.contact.findFirst({
-      where: { id, organization_id: request.user.org_id },
-    });
-    if (!contact) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    try {
+      await getContactForUser(id, request.user.org_id, request.user);
+    } catch (err) {
+      if (err instanceof ContactNotFoundError) {
+        return reply.code(404).send({ error: { code: err.code, message: err.message } });
+      }
+      throw err;
     }
 
     const timeline = await getContactTimeline(request.user.org_id, id);
@@ -291,11 +293,13 @@ export const ContactsController = {
   getDeals: async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
 
-    const contact = await db.contact.findFirst({
-      where: { id, organization_id: request.user.org_id },
-    });
-    if (!contact) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    try {
+      await getContactForUser(id, request.user.org_id, request.user);
+    } catch (err) {
+      if (err instanceof ContactNotFoundError) {
+        return reply.code(404).send({ error: { code: err.code, message: err.message } });
+      }
+      throw err;
     }
 
     const deals = await db.deal.findMany({
@@ -312,11 +316,13 @@ export const ContactsController = {
   getTasks: async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
 
-    const contact = await db.contact.findFirst({
-      where: { id, organization_id: request.user.org_id },
-    });
-    if (!contact) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    try {
+      await getContactForUser(id, request.user.org_id, request.user);
+    } catch (err) {
+      if (err instanceof ContactNotFoundError) {
+        return reply.code(404).send({ error: { code: err.code, message: err.message } });
+      }
+      throw err;
     }
 
     const tasks = await db.task.findMany({

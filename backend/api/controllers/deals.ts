@@ -4,7 +4,13 @@ import { db } from '../../services/db';
 import { evaluateWorkflows } from '../../services/workflows';
 import { logActivity } from './activities';
 import { dispatchNotification, dealCtx } from '../../services/notificationEngine';
-import { type VisibilityScope } from '../../services/visibility';
+import {
+  getVisibleUserIds,
+  getAccessibleUserIds,
+  canSeeUser,
+  ownerVisibilityWhere,
+  type VisibilityScope,
+} from '../../services/visibility';
 import {
   listDealsForUser,
   getDealForUser,
@@ -99,12 +105,14 @@ async function evaluateStale(
   });
   const thresholdDays = threshold_days ?? org?.stalled_threshold_days ?? 14;
   const cutoff = new Date(now.getTime() - thresholdDays * MS_PER_DAY);
+  const visibleIds = await getVisibleUserIds(request.user, 'subtree');
 
   const staleDeals = await db.deal.findMany({
     where: {
       organization_id: request.user.org_id,
       status: DealStatus.open,
       stage_entered_at: { lte: cutoff },
+      ...ownerVisibilityWhere(visibleIds),
     },
     orderBy: { stage_entered_at: 'asc' },
     include: dealInclude,
@@ -137,7 +145,7 @@ async function create(
   const body = request.body as CreateBody;
 
   try {
-    const deal = await createDealForUser(request.user.org_id, request.user.sub, body);
+    const deal = await createDealForUser(request.user.org_id, request.user, body);
     reply.status(201).send({ data: deal, meta: {} });
   } catch (err) {
     if (err instanceof DealDomainError) {
@@ -207,6 +215,12 @@ async function moveStage(
     return;
   }
 
+  const accessibleIds = await getAccessibleUserIds(request.user);
+  if (!canSeeUser(accessibleIds, deal.assigned_to) && !canSeeUser(accessibleIds, deal.created_by)) {
+    reply.status(404).send({ error: { code: 'DEAL_NOT_FOUND', message: 'Deal not found' } });
+    return;
+  }
+
   if (deal.status !== DealStatus.open) {
     reply.status(422).send({ error: { code: 'DEAL_NOT_OPEN', message: 'Only open deals can be moved between stages' } });
     return;
@@ -265,6 +279,12 @@ async function markWon(
     return;
   }
 
+  const accessibleIds = await getAccessibleUserIds(request.user);
+  if (!canSeeUser(accessibleIds, deal.assigned_to) && !canSeeUser(accessibleIds, deal.created_by)) {
+    reply.status(404).send({ error: { code: 'DEAL_NOT_FOUND', message: 'Deal not found' } });
+    return;
+  }
+
   if (deal.status !== DealStatus.open) {
     reply.status(422).send({ error: { code: 'DEAL_NOT_OPEN', message: 'Only open deals can be marked as won' } });
     return;
@@ -308,6 +328,12 @@ async function markLost(
   });
 
   if (!deal) {
+    reply.status(404).send({ error: { code: 'DEAL_NOT_FOUND', message: 'Deal not found' } });
+    return;
+  }
+
+  const accessibleIds = await getAccessibleUserIds(request.user);
+  if (!canSeeUser(accessibleIds, deal.assigned_to) && !canSeeUser(accessibleIds, deal.created_by)) {
     reply.status(404).send({ error: { code: 'DEAL_NOT_FOUND', message: 'Deal not found' } });
     return;
   }

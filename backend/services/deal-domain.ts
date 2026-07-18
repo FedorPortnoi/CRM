@@ -115,6 +115,30 @@ export class DealDomainError extends Error {
   }
 }
 
+async function resolveRequester(
+  orgId: string,
+  requestingUser: Requester | string,
+): Promise<Requester> {
+  if (typeof requestingUser !== 'string') {
+    return requestingUser;
+  }
+
+  const user = await db.user.findFirst({
+    where: { id: requestingUser, organization_id: orgId },
+    select: { id: true, organization_id: true, role: true },
+  });
+
+  if (!user) {
+    throw new DealDomainError({
+      httpStatus: 403,
+      code: 'FORBIDDEN',
+      message: 'Requesting user does not belong to your organization',
+    });
+  }
+
+  return { sub: user.id, org_id: user.organization_id, role: user.role };
+}
+
 // ─── listDealsForUser ─────────────────────────────────────────────────────────
 
 export async function listDealsForUser(
@@ -195,15 +219,21 @@ export type CreateDealResult = Awaited<ReturnType<typeof db.deal.create>>;
 
 export async function createDealForUser(
   orgId: string,
-  requestingUserId: string,
+  requestingUser: Requester | string,
   body: CreateDealInput,
 ): Promise<CreateDealResult> {
+  const requester = await resolveRequester(orgId, requestingUser);
+  const requestingUserId = requester.sub;
+  const accessibleIds = await getAccessibleUserIds(requester);
+
   const [ownsContact, ownsPipeline, stageMatches, ownsAssignee] = await Promise.all([
     contactBelongsToOrg(body.contact_id, orgId),
     pipelineBelongsToOrg(body.pipeline_id, orgId),
     stageBelongsToPipeline(body.stage_id, body.pipeline_id, orgId),
     body.assigned_to !== undefined && body.assigned_to !== requestingUserId
-      ? userBelongsToOrg(body.assigned_to, orgId)
+      ? canSeeUser(accessibleIds, body.assigned_to)
+        ? userBelongsToOrg(body.assigned_to, orgId)
+        : Promise.resolve(false)
       : Promise.resolve(true),
   ]);
 
@@ -235,7 +265,7 @@ export async function createDealForUser(
     throw new DealDomainError({
       httpStatus: 403,
       code: 'FORBIDDEN',
-      message: 'Assigned user does not belong to your organization',
+      message: 'Assigned user is outside your team',
     });
   }
 
@@ -336,7 +366,9 @@ export async function updateDealForUser(
       ? pipelineBelongsToOrg(patch.pipeline_id, orgId)
       : Promise.resolve(true),
     patch.assigned_to !== undefined && patch.assigned_to !== requestingUserId
-      ? userBelongsToOrg(patch.assigned_to, orgId)
+      ? canSeeUser(accessibleIds, patch.assigned_to)
+        ? userBelongsToOrg(patch.assigned_to, orgId)
+        : Promise.resolve(false)
       : Promise.resolve(true),
     stageMatchesPromise,
   ]);
@@ -361,7 +393,7 @@ export async function updateDealForUser(
     throw new DealDomainError({
       httpStatus: 403,
       code: 'FORBIDDEN',
-      message: 'Assigned user does not belong to your organization',
+      message: 'Assigned user is outside your team',
     });
   }
 
