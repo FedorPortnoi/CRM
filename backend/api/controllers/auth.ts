@@ -13,6 +13,7 @@ import {
 import { issueCode, verifyCode } from '../../services/verification';
 import { sendOtp, isSmsSendingEnabled } from '../../services/sms';
 import { sendEmail, isEmailSendingEnabled } from '../../services/email';
+import { DEFAULT_PIPELINE_NAME, DEFAULT_PIPELINE_STAGE_NAMES } from '../../config/market';
 
 const saltRounds = process.env.NODE_ENV === 'test' ? 4 : 12;
 
@@ -198,7 +199,7 @@ export const AuthController = {
           ),
           pipeline_cte AS (
             INSERT INTO "Pipeline" (organization_id, name, is_default, created_by, updated_at)
-            SELECT org_cte.id, 'Sales Pipeline', true, user_cte.id, NOW()
+            SELECT org_cte.id, ${DEFAULT_PIPELINE_NAME}, true, user_cte.id, NOW()
             FROM org_cte, user_cte
             RETURNING id
           ),
@@ -206,7 +207,7 @@ export const AuthController = {
             INSERT INTO "PipelineStage" (pipeline_id, name, position, is_won_stage, updated_at)
             SELECT
               (SELECT id FROM pipeline_cte),
-              unnest(ARRAY['Lead','Qualified','Proposal','Closed Won']),
+              unnest(ARRAY[${Prisma.join(DEFAULT_PIPELINE_STAGE_NAMES)}]::text[]),
               unnest(ARRAY[0,1,2,3]),
               unnest(ARRAY[false,false,false,true]),
               NOW()

@@ -20,7 +20,7 @@ test('GET /api/v1/deals/pipelines returns default pipeline', async ({ request })
   expect(body.data.length).toBeGreaterThanOrEqual(1);
   const defaultPipeline = body.data.find((p) => p.is_default);
   if (!defaultPipeline) throw new Error('Default pipeline not found');
-  expect(defaultPipeline.name).toBe('Sales Pipeline');
+  expect(defaultPipeline.name).toBe('Воронка продаж');
 });
 
 test('Default pipeline has exactly 4 stages in correct order', async ({ request }) => {
@@ -38,10 +38,10 @@ test('Default pipeline has exactly 4 stages in correct order', async ({ request 
   expect(res.status()).toBe(200);
   const body = await res.json();
   expect(body.data).toHaveLength(4);
-  expect(body.data[0].name).toBe('Lead');
-  expect(body.data[1].name).toBe('Qualified');
-  expect(body.data[2].name).toBe('Proposal');
-  expect(body.data[3].name).toBe('Closed Won');
+  expect(body.data[0].name).toBe('Новый лид');
+  expect(body.data[1].name).toBe('Квалификация');
+  expect(body.data[2].name).toBe('Предложение');
+  expect(body.data[3].name).toBe('Сделка выиграна');
   expect(body.data[3].is_won_stage).toBe(true);
 });
 

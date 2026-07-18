@@ -627,7 +627,7 @@ test('brand-new org has exactly one pipeline after registration', async ({ reque
   expect(body.data).toHaveLength(1);
 });
 
-test('GET /api/v1/deals/pipelines for brand-new org returns is_default=true pipeline named Sales Pipeline', async ({ request }) => {
+test('GET /api/v1/deals/pipelines for brand-new org returns is_default=true pipeline named Воронка продаж', async ({ request }) => {
   const regRes = await request.post('/api/v1/auth/', {
     data: {
       email: `screens-pipe-default-${Date.now()}@test.com`,
@@ -646,7 +646,7 @@ test('GET /api/v1/deals/pipelines for brand-new org returns is_default=true pipe
   const body: ListBody<Pipeline> = await res.json();
   const pipeline = body.data[0];
   expect(pipeline.is_default).toBe(true);
-  expect(pipeline.name).toBe('Sales Pipeline');
+  expect(pipeline.name).toBe('Воронка продаж');
   expect(Array.isArray(pipeline.stages)).toBe(true);
 });
 
