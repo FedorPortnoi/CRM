@@ -35,6 +35,7 @@
         "backgroundColor": "#0A0A0A"
       },
       "edgeToEdgeEnabled": true,
+      "allowBackup": false,
       "package": "com.fedorportnoi.crm",
       "versionCode": 7,
       "googleServicesFile": "./google-services.json",

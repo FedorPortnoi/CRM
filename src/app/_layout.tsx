@@ -7,7 +7,7 @@ import * as Notifications from 'expo-notifications';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useUserStore } from '../store/userStore';
 import { registerDevicePushToken } from '../utils/notifications';
-import { queryClient, asyncStoragePersister } from '../utils/queryClient';
+import { queryClient, persistOptions } from '../utils/queryClient';
 import SyncStatusBar from '../components/SyncStatusBar';
 import { ConflictToast } from '../components/ConflictToast';
 import { OnboardingWalkthrough } from '../components/OnboardingWalkthrough';
@@ -138,7 +138,7 @@ export default function RootLayout() {
 
   if (isRestoring) {
     return (
-      <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: asyncStoragePersister }}>
+      <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
             <ActivityIndicator size="large" />
@@ -149,7 +149,7 @@ export default function RootLayout() {
   }
 
   return (
-    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: asyncStoragePersister }}>
+    <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <StatusBar style="light" />
         <SyncStatusBar />
