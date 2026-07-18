@@ -2,7 +2,7 @@
 import { z } from 'zod';
 import { db } from '../../services/db';
 import { paginate } from '../../services/db-paginate';
-import { generateUploadUrl, deleteFile } from '../../services/storage';
+import { generateUploadUrl, deleteFile, deriveOrgScopedKey, isAllowedUploadMimeType } from '../../services/storage';
 
 // --- Validation --------------------------------------------------------------
 
@@ -61,6 +61,14 @@ export async function getUploadUrl(
   }
 
   const { entity_type, entity_id, filename, mime_type, size } = parsed.data;
+
+  if (!isAllowedUploadMimeType(mime_type)) {
+    reply.status(400).send({
+      error: { code: 'UNSUPPORTED_FILE_TYPE', message: 'File type is not allowed' },
+    });
+    return;
+  }
+
   const maxBytes = parseInt(process.env.MAX_UPLOAD_SIZE_MB ?? '10', 10) * 1024 * 1024;
 
   if (size > maxBytes) {
@@ -128,6 +136,17 @@ export async function createAttachment(
 
   const body = parsed.data;
 
+  // file_url must point at THIS org's own uploaded object. Rejects URLs that
+  // reference another tenant's object or an arbitrary external host (stored
+  // phishing/malware link + fabricated metadata). isSafePublicUrl (schema
+  // refine) still guards SSRF; this binds the object to the caller's org.
+  if (deriveOrgScopedKey(body.file_url, request.user.org_id) === null) {
+    reply.status(400).send({
+      error: { code: 'INVALID_FILE_URL', message: 'file_url must reference an object uploaded by your organization' },
+    });
+    return;
+  }
+
   const entityLookup: Record<string, () => Promise<{ id: string } | null>> = {
     contact: () => db.contact.findFirst({ where: { id: body.entity_id, organization_id: request.user.org_id }, select: { id: true } }),
     deal: () => db.deal.findFirst({ where: { id: body.entity_id, organization_id: request.user.org_id }, select: { id: true } }),
@@ -182,13 +201,13 @@ export async function deleteAttachment(
 
   await db.attachment.delete({ where: { id } });
 
-  // Best-effort S3 cleanup — extract key from file_url
+  // Best-effort S3 cleanup — only delete the object when the stored file_url
+  // resolves to an object under THIS org's prefix. Belt-and-suspenders against
+  // deleting another tenant's object; if the key is not org-scoped we simply
+  // skip the S3 delete (treat the object as not ours).
   try {
-    const endpoint = process.env.S3_ENDPOINT ?? 'https://storage.yandexcloud.net';
-    const bucket = process.env.S3_BUCKET ?? 'crm-uploads-users';
-    const prefix = `${endpoint}/${bucket}/`;
-    if (attachment.file_url.startsWith(prefix)) {
-      const key = attachment.file_url.slice(prefix.length);
+    const key = deriveOrgScopedKey(attachment.file_url, request.user.org_id);
+    if (key !== null) {
       await deleteFile(key);
     }
   } catch {
