@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../services/db';
 import { tgSendCode, tgVerifyAndPull } from '../../services/importTelegram';
 import { importFromBitrix24 } from '../../services/importBitrix24';
+import { encryptField } from '../../services/encryption';
 
 // ── Telegram ─────────────────────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ async function telegramVerify(request: FastifyRequest, reply: FastifyReply): Pro
             created_by: request.user.sub,
             first_name: c.first_name || 'Telegram',
             last_name: c.last_name || undefined,
-            phone: c.phone || undefined,
+            phone: c.phone ? encryptField(c.phone) : undefined,
             source: 'telegram',
             notes: c.username ? `Telegram: @${c.username}` : undefined,
           },
@@ -112,8 +113,8 @@ async function vcardImport(request: FastifyRequest, reply: FastifyReply): Promis
           created_by: request.user.sub,
           first_name: c.first_name,
           last_name: c.last_name || undefined,
-          phone: c.phone || undefined,
-          email: c.email || undefined,
+          phone: c.phone ? encryptField(c.phone) : undefined,
+          email: c.email ? encryptField(c.email) : undefined,
           company: c.company || undefined,
           source: 'vcard',
         },
@@ -150,7 +151,7 @@ async function whatsappImport(request: FastifyRequest, reply: FastifyReply): Pro
           created_by: request.user.sub,
           first_name: parts[0] ?? c.name,
           last_name: parts.slice(1).join(' ') || undefined,
-          phone: c.phone || undefined,
+          phone: c.phone ? encryptField(c.phone) : undefined,
           source: 'whatsapp',
           notes: c.message_count ? `${c.message_count} сообщений в WhatsApp` : undefined,
         },

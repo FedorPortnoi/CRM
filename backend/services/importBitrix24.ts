@@ -1,5 +1,7 @@
 import { db } from './db';
 import { paginateBitrix } from './bitrix-paginator';
+import { assertAllowedBitrixWebhookUrl } from '../config/security';
+import { encryptField } from './encryption';
 
 export interface Bx24ImportResult {
   contacts_imported: number;
@@ -30,6 +32,9 @@ interface Bx24Deal {
 }
 
 async function bx24Get<T>(webhookUrl: string, method: string, params: Record<string, unknown> = {}): Promise<{ result: T; next?: number; total?: number }> {
+  // SSRF guard: only allow https Bitrix24 cloud portals, never private/reserved hosts.
+  assertAllowedBitrixWebhookUrl(webhookUrl);
+
   const url = new URL(`${webhookUrl.replace(/\/$/, '')}/${method}.json`);
   Object.entries(params).forEach(([k, v]) => {
     if (Array.isArray(v)) {
@@ -39,9 +44,15 @@ async function bx24Get<T>(webhookUrl: string, method: string, params: Record<str
     }
   });
 
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`Bitrix24 API error: ${res.status}`);
-  return res.json() as Promise<{ result: T; next?: number; total?: number }>;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch(url.toString(), { redirect: 'error', signal: controller.signal });
+    if (!res.ok) throw new Error(`Bitrix24 API error: ${res.status}`);
+    return await res.json() as { result: T; next?: number; total?: number };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function importFromBitrix24(
@@ -81,8 +92,8 @@ export async function importFromBitrix24(
             created_by: userId,
             first_name: firstName,
             last_name: c.LAST_NAME?.trim() || undefined,
-            phone,
-            email,
+            phone: phone ? encryptField(phone) : undefined,
+            email: email ? encryptField(email) : undefined,
             company: c.COMPANY_TITLE?.trim() || undefined,
             source: c.SOURCE ? `bitrix24_${c.SOURCE.toLowerCase()}` : 'bitrix24',
             notes: c.COMMENTS?.trim() || undefined,
