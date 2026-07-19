@@ -1,5 +1,10 @@
 # CRM Platform — Developer Notes for Claude Code
 
+> 📖 **Canonical knowledge base:** [`PROJECT_KNOWLEDGE.md`](./PROJECT_KNOWLEDGE.md) is the single
+> source of truth for what this app is and its current state (product, architecture, API, data model,
+> integrations, security posture, release status). Read it first; keep it updated as the app evolves.
+> This file (`CLAUDE.md`) covers dev conventions and critical build rules.
+
 ## Project Structure
 
 ```
