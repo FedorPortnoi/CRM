@@ -4,7 +4,7 @@
 > the scattered `SESSION_LOG_*.md` files as the go-to reference for what the app is, how it's built,
 > and its current state. Keep it updated as the app evolves.
 >
-> **Last updated:** 2026-07-19
+> **Last updated:** 2026-07-25
 
 ---
 
@@ -16,8 +16,9 @@
 | **iOS (App Store)** | ✅ **Submitted for review** 2026-07-19 (build 22). Awaiting Apple (~48h). App Store Connect app id `6776447873`. |
 | **Android (RuStore)** | 📦 APK built and downloaded to `C:\Users\fedor\Downloads\4kub-1.0.5-rustore-vc8.apk` (versionCode 8) — **pending manual upload to RuStore** by the owner. |
 | **Previous release** | 1.0.4 (iOS build 20 / Android versionCode 7) |
-| **Source branch** | `fix/dm-security-ru-i18n-ui` — all 1.0.5 code is committed here **locally**; not yet pushed to remote or merged to `main`. |
+| **Source branch** | `fix/dm-security-ru-i18n-ui` — pushed to `origin` 2026-07-25; **not yet merged to `main`**. |
 | **Production API** | `https://4kub.ru/api/v1` (WebSocket `wss://4kub.ru`) |
+| **Database** | Yandex Cloud Managed PostgreSQL (`ru-central1`) — verified 2026-07-25. Supabase is gone. |
 | **Bundle id** | `com.fedorportnoi.crm` (iOS + Android) |
 
 **What 1.0.5 is:** a security-hardening + Russian-localization release. It closes **24 security findings**
@@ -71,7 +72,7 @@ Additional niceties include push notifications and PDF export of contacts and de
 
 ### Backend
 
-A **Fastify v5** (`fastify ^5.0.0`) API server written in **TypeScript** and run as **CommonJS** — the root `package.json` deliberately omits `"type": "module"` because Expo's Metro bundler requires CJS, so all server startup lives inside an `async function start()` (no top-level `await`). Data access is through **Prisma 5** (`@prisma/client ^5.13.0`, `prisma ^5.13.0`) against **PostgreSQL hosted on Supabase**. Request/response validation uses **Zod** (`zod ^3.22.4`) wired into Fastify via `fastify-type-provider-zod ^4.0.2` (registered as the global validator/serializer compiler).
+A **Fastify v5** (`fastify ^5.0.0`) API server written in **TypeScript** and run as **CommonJS** — the root `package.json` deliberately omits `"type": "module"` because Expo's Metro bundler requires CJS, so all server startup lives inside an `async function start()` (no top-level `await`). Data access is through **Prisma 5** (`@prisma/client ^5.13.0`, `prisma ^5.13.0`) against **Yandex Cloud Managed PostgreSQL** (`*.mdb.yandexcloud.net`, `ru-central1`). Request/response validation uses **Zod** (`zod ^3.22.4`) wired into Fastify via `fastify-type-provider-zod ^4.0.2` (registered as the global validator/serializer compiler).
 
 Registered `@fastify` plugins, at their actual `package.json` versions:
 
@@ -93,7 +94,7 @@ A **React Native `0.81.5`** app (**React `19.1.0`**) on the **Expo SDK 54** (`ex
 
 ### Authentication
 
-Auth is owned by the Fastify API, not Supabase Auth. Passwords are hashed with **bcryptjs `^2.4.3`** (12 rounds); sessions are stateless **JWTs** signed by **@fastify/jwt `^10.1.0`** with payload `{ sub, org_id, role, sid }`.
+Auth is owned by the Fastify API — there is no third-party auth service. Passwords are hashed with **bcryptjs `^2.4.3`** (12 rounds); sessions are stateless **JWTs** signed by **@fastify/jwt `^10.1.0`** with payload `{ sub, org_id, role, sid }`.
 
 A single **global `preHandler` (`enforceAuthenticatedApiRequest`)** guards every `/api/v1/*` route except an explicit public allowlist (register, login, join, email verify, the WS upgrade, and the Yandex calendar callback/webhook). On each request it:
 
@@ -104,7 +105,7 @@ A single **global `preHandler` (`enforceAuthenticatedApiRequest`)** guards every
 
 ### Multi-tenancy
 
-Every tenant-scoped table carries an `organization_id`. Prisma connects as the database superuser and **bypasses Supabase RLS**, so tenant isolation is enforced at the application layer: every org-scoped query must include `where: { organization_id: request.user.org_id }`. RLS is not relied upon for Prisma access.
+Every tenant-scoped table carries an `organization_id`. Prisma connects as the database superuser and **bypasses Postgres RLS**, so tenant isolation is enforced at the application layer: every org-scoped query must include `where: { organization_id: request.user.org_id }`. RLS is not relied upon for Prisma access.
 
 ### Manager visibility cone
 
@@ -321,7 +322,7 @@ All paths below are relative to the `/api/v1` prefix. `(admin)` marks routes gat
 
 ## Data Model (Prisma / PostgreSQL)
 
-The schema (`backend/prisma/schema.prisma`, Prisma 5.13 on Supabase PostgreSQL) defines 22 models. All primary keys are UUID v4 (`gen_random_uuid()`). **Multi-tenancy:** every tenant-scoped table carries an `organization_id` (FK to `Org`); `PendingCapture` uses `org_id`. App-level query scoping enforces isolation (Prisma bypasses RLS as superuser).
+The schema (`backend/prisma/schema.prisma`, Prisma 5.13 on Yandex Cloud Managed PostgreSQL) defines 22 models. All primary keys are UUID v4 (`gen_random_uuid()`). **Multi-tenancy:** every tenant-scoped table carries an `organization_id` (FK to `Org`); `PendingCapture` uses `org_id`. App-level query scoping enforces isolation (Prisma bypasses RLS as superuser).
 
 ### Identity & Tenancy
 
@@ -424,7 +425,7 @@ All production profiles point the app at the same backend:
 `backend/config/env.ts` loads a local `.env` (skippable via `CRM_SKIP_LOCAL_ENV=true`) without overwriting already-set vars. `backend/config/security.ts` (`validateProductionConfig`) hard-validates the security-critical vars at boot when `NODE_ENV=production`.
 
 **Core / required (enforced in production):**
-- `DATABASE_URL` — Supabase/Postgres connection string; must be `postgresql:`/`postgres:`, non-private host, and carry a non-weak password.
+- `DATABASE_URL` — Yandex Cloud Managed PostgreSQL connection string; must be `postgresql:`/`postgres:`, non-private host, and carry a non-weak password.
 - `JWT_SECRET` — JWT signing secret, min 32 chars, rejected if weak.
 - `TOKEN_ENCRYPTION_KEY` — encrypts stored OAuth tokens; min 32 chars, required in production, and **must differ from `JWT_SECRET`** (falls back to `JWT_SECRET` only in non-prod).
 - `YANDEX_WEBHOOK_SECRET` — validates inbound Yandex calendar webhooks; min 32 chars, required in production.
@@ -530,7 +531,8 @@ so the fresh DB role survives on *all* routes (completing the stale-role fix); `
 
 ## Follow-up Backlog
 
-- **Push `fix/dm-security-ru-i18n-ui` to remote + merge to `main`** — the shipped 1.0.5 code is only local.
+- **Merge `fix/dm-security-ru-i18n-ui` to `main`** — the branch is on `origin` as of 2026-07-25, but
+  `main` still sits at the pre-1.0.5 commit.
 - Upload the RuStore APK; after Apple approval, release the iOS version (manual release recommended).
 - The **security deferred items** above (S3 download authz is the top one for 1.0.6).
 - Smaller known items from QA: `npm run db:seed` points to a missing file; confirm the offline-flush
@@ -552,14 +554,68 @@ so the fresh DB role survives on *all* routes (completing the stale-role fix); `
 
 ## Developer Quick Reference
 
+> This section absorbed the old `CLAUDE.md`, which was deleted on 2026-07-25. There is no separate
+> conventions file — repo rules live here.
+
+### Hard constraints (read before writing code)
+
+1. **Russian providers only.** No US services anywhere in the stack — not Supabase, Resend, Stripe,
+   Twilio, or a US-hosted data path. FZ-242 requires personal data of Russian citizens to sit on
+   servers in Russia, and the product is Russia-first by positioning. Reach for the Russian
+   equivalent (Yandex Cloud, Yandex Object Storage, SMS.ru, Yandex Calendar/Vision/SpeechKit,
+   RuStore Push, YooMoney/SBP) before wiring anything new.
+2. **Market/provider changes go through a boundary, never into feature code.** Backend defaults live
+   in `backend/config/market.ts`, mobile display defaults in `src/market/profile.ts`; provider logic
+   belongs in a named adapter. No hardcoded `$`, `USD`, `en-US`, or US phone formats in screens or
+   controllers. Customer-specific process variation belongs in pipelines, stages, workflows, and
+   `custom_fields`. See `docs/architecture/adaptability.md`.
+3. **Org scoping is the golden rule.** Every org-scoped Prisma query must include
+   `where: { organization_id: request.user.org_id }`. Prisma connects as superuser and bypasses RLS,
+   so this is the *only* thing standing between tenants.
+4. **Respect the visibility cone.** Org scoping alone is not enough on `member`/`viewer` reads — go
+   through `backend/services/visibility.ts` (`getVisibleUserIds` / `getAccessibleUserIds`). Two
+   security audits found endpoints that skipped it.
+
+### Repo layout
+
+```
+crm/
+├── backend/             # Fastify v5 API (CommonJS TypeScript)
+│   ├── index.ts         # entry point — npm run backend:dev
+│   ├── api/routes/      # one Fastify route plugin per resource
+│   ├── api/controllers/ # one handler module per resource
+│   ├── config/          # env, security, market profile
+│   ├── prisma/          # schema.prisma + migrations
+│   └── services/db.ts   # the Prisma singleton
+├── src/                 # React Native / Expo app (expo-router in src/app)
+├── tests/               # unit (vitest) + smoke (playwright)
+├── docs/                # architecture, feature specs, store listings, privacy policies
+└── scripts/             # release tooling (rustore-publish.js)
+```
+
+Deeper design history lives in the Obsidian vault at
+`C:\Users\fedor\Obsidian\Brain\Projects\CRM\` — note that it was last verified 2026-05-31 and this
+file supersedes it wherever they disagree.
+
+### Commands and build rules
+
 - **Install:** `npm install --legacy-peer-deps` (MANDATORY — `@testing-library/react-native` has an
   unresolved `react@19` peer conflict; do **not** use `--force`).
+- **After a fresh install, run `npm run db:generate` before anything else.** Without the generated
+  client both typechecks fail with misleading errors (`Module '@prisma/client' has no exported member
+  'WorkflowTrigger'`, `Prisma has no exported member 'OrgWhereInput'`) and one unit test fails.
 - **Backend dev server:** `npm run backend:dev` (tsx watch). Requires `.env` with `DATABASE_URL`,
   `JWT_SECRET`, `TOKEN_ENCRYPTION_KEY` (must differ from `JWT_SECRET` in prod).
 - **Prisma:** `npm run db:generate` (after any schema change), `db:migrate`, `db:studio`. Import the
   singleton `import { db } from 'backend/services/db.ts'` — never `new PrismaClient()` elsewhere.
-- **Golden rule:** every org-scoped Prisma query must include `where: { organization_id: request.user.org_id }`.
-- **Backend startup:** all init lives in `async function start()` — no top-level `await` (CJS).
+- **Backend startup:** all init lives in `async function start()` — no top-level `await`. The root
+  `package.json` deliberately omits `"type": "module"` because Expo's Metro bundler requires CJS.
+- **Do not downgrade the Fastify v5 plugin set** (`@fastify/cors ^11`, `@fastify/jwt ^10`,
+  `@fastify/multipart ^10`, `@fastify/rate-limit ^10`, `fastify-type-provider-zod ^4`). The v4-era
+  equivalents are incompatible with Fastify v5.
+- **Before closing any session that touched `src/` or `backend/`:** `npx tsc --noEmit`,
+  `npx tsc --noEmit -p backend/tsconfig.json`, and `npx vitest run tests/unit`. The 2026-06-18
+  dead-code audit skipped this and left the suite broken for two weeks.
 - **Builds:** `eas build -p ios --profile production` (App Store), `eas build -p android --profile rustore`
   (RuStore APK). iOS submit: `eas submit -p ios --profile production` (uses the stored ASC API key).
 - **Knowledge base:** deeper design docs live in the Obsidian vault at
