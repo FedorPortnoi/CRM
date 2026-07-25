@@ -67,6 +67,7 @@ vi.mock('react-native', () => ({
 function notificationModuleMock() {
   const notificationModule = {
     AndroidImportance: { DEFAULT: 3 },
+    SchedulableTriggerInputTypes: { DATE: 'date' },
     setNotificationChannelAsync: mocks.setNotificationChannelAsync,
     getPermissionsAsync: mocks.getPermissionsAsync,
     requestPermissionsAsync: mocks.requestPermissionsAsync,
@@ -237,14 +238,14 @@ describe('notifications utilities', () => {
     expect(mocks.scheduleNotificationAsync).toHaveBeenCalledWith({
       identifier: 'task-due-task-3',
       content: {
-        title: 'Task Due Today',
+        title: 'Напоминание о задаче',
         body: 'Future task',
         data: { taskId: 'task-3' },
         sound: 'default',
       },
       trigger: {
+        type: 'date',
         date: new Date('2026-05-22T09:00:00'),
-        channelId: 'default',
       },
     });
   });
@@ -276,8 +277,8 @@ describe('notifications utilities', () => {
 
     expect(mocks.scheduleNotificationAsync).toHaveBeenCalledWith({
       content: {
-        title: 'Unknown call',
-        body: 'Unknown caller +15551234567 - add to CRM?',
+        title: 'Неизвестный звонок',
+        body: 'Звонок с номера +15551234567 — добавить в CRM?',
         data: { type: 'call_capture', phone: '+15551234567' },
         sound: 'default',
       },

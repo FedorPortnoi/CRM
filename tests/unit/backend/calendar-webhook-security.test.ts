@@ -59,13 +59,15 @@ describe('CalendarController.yandexWebhook security', () => {
     restoreEnv('YANDEX_WEBHOOK_SECRET');
   });
 
-  it('keeps local and test webhooks open when no secret is configured', async () => {
+  it('rejects webhooks when no secret is configured outside production', async () => {
     const reply = createReply();
 
     await CalendarController.yandexWebhook({ headers: {} } as never, reply as never);
 
-    expect(reply.statusCode).toBe(200);
-    expect(reply.payload).toEqual({ data: { received: true }, meta: {} });
+    expect(reply.statusCode).toBe(401);
+    expect(reply.payload).toEqual({
+      error: { code: 'YANDEX_WEBHOOK_UNAUTHORIZED', message: 'Yandex webhook secret is not configured on this server' },
+    });
   });
 
   it('rejects production webhooks when the shared secret is missing', async () => {

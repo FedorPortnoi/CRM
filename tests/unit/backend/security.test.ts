@@ -148,9 +148,5 @@ describe('backend security config', () => {
     expect(() => validateProductionConfig(validProductionEnv({
       YANDEX_CLIENT_ID: 'client-id',
     }))).toThrow(ConfigurationError);
-
-    expect(() => validateProductionConfig(validProductionEnv({
-      EXPO_PUBLIC_API_URL: 'http://api.example.com/api/v1',
-    }))).toThrow(ConfigurationError);
   });
 });

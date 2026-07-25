@@ -19,7 +19,16 @@ const routeMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../backend/api/controllers/auth', () => ({
-  AuthController: routeMocks,
+  // Any handler not explicitly mocked above gets a plain vi.fn(), so newly
+  // added routes don't break registration in this test.
+  AuthController: new Proxy(routeMocks as Record<PropertyKey, unknown>, {
+    get(target, prop) {
+      if (!(prop in target)) {
+        target[prop] = vi.fn();
+      }
+      return target[prop];
+    },
+  }),
 }));
 
 import authRoutes from '../../../backend/api/routes/auth';
@@ -72,6 +81,7 @@ describe('auth routes security validation', () => {
         password: 'Password123!',
         name: 'Owner',
         org_name: 'Example',
+        phone: '+15551234567',
       }),
     });
 

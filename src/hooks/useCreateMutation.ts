@@ -4,7 +4,7 @@ import { useUserStore } from '../store/userStore';
 
 interface CreateMutationOptions<TPayload, TData> {
   endpoint: string;
-  method?: 'POST' | 'PATCH' | 'PUT';
+  method?: 'POST' | 'PATCH';
   token: string;
   validate: () => boolean;
   buildPayload: () => TPayload;
@@ -17,11 +17,6 @@ interface CreateMutationResult {
   apiError: string | null;
   clearError: () => void;
   submit: () => Promise<void>;
-}
-
-interface ErrorApiResponse {
-  error?: { code?: string; message?: string };
-  message?: string;
 }
 
 function extractErrorMessage(body: unknown, status: number): string {

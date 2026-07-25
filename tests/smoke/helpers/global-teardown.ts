@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { AUTH_STATE_PATH } from "./auth";
+import { getSmokeDatabaseUrl } from "./database";
 
 type AuthState = {
   orgId?: string;
@@ -8,49 +9,6 @@ type AuthState = {
 };
 
 const TEST_EMAIL_DOMAINS = ["@test.com", "@example.com", "@x.com"];
-
-function isLocalDatabaseHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  return (
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host === "::1" ||
-    host.startsWith("10.") ||
-    host.startsWith("192.168.") ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
-  );
-}
-
-function getSafeCleanupDatabaseUrl(): string | null {
-  const databaseUrl =
-    process.env.SMOKE_DATABASE_URL ??
-    process.env.TEST_DATABASE_URL ??
-    process.env.DATABASE_URL;
-  if (!databaseUrl) return null;
-
-  let parsed: URL;
-  try {
-    parsed = new URL(databaseUrl);
-  } catch {
-    console.warn("Skipping smoke org cleanup: DATABASE_URL is invalid.");
-    return null;
-  }
-
-  const databaseName = parsed.pathname.replace(/^\/+/, "");
-  const isSafeDatabase =
-    /(test|smoke)/i.test(databaseName) || isLocalDatabaseHost(parsed.hostname);
-  if (
-    isSafeDatabase ||
-    process.env.SMOKE_CLEANUP_ALLOW_NON_TEST_DB === "true"
-  ) {
-    return databaseUrl;
-  }
-
-  console.warn(
-    "Skipping smoke org cleanup: database is not local or named like a test DB.",
-  );
-  return null;
-}
 
 function readAuthState(): AuthState | null {
   try {
@@ -130,11 +88,9 @@ async function deleteSmokeOrgs(
 }
 
 async function cleanupSmokeOrgs(authState: AuthState | null): Promise<void> {
-  const databaseUrl = getSafeCleanupDatabaseUrl();
-  if (!databaseUrl) return;
+  const databaseUrl = getSmokeDatabaseUrl();
 
-  process.env.DATABASE_URL = databaseUrl;
-  const db = new PrismaClient();
+  const db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
 
   try {
     const runStartedAt = authState?.runStartedAt

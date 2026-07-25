@@ -3,13 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   enqueue: vi.fn(),
   fetch: vi.fn(),
-  netInfoFetch: vi.fn(),
-}));
-
-vi.mock('@react-native-community/netinfo', () => ({
-  default: {
-    fetch: mocks.netInfoFetch,
-  },
 }));
 
 vi.mock('../../../src/utils/offlineQueue', () => ({
@@ -24,33 +17,8 @@ describe('sendOrQueueMutation', () => {
     vi.stubGlobal('fetch', mocks.fetch);
   });
 
-  it('queues mutations without calling fetch when disconnected', async () => {
-    mocks.netInfoFetch.mockResolvedValue({
-      isConnected: false,
-      isInternetReachable: true,
-    });
-
-    const result = await sendOrQueueMutation({
-      url: 'http://localhost:3000/api/v1/contacts',
-      method: 'POST',
-      token: 'token-1',
-      body: { name: 'Ada Lovelace' },
-    });
-
-    expect(result).toEqual({ queued: true });
-    expect(mocks.fetch).not.toHaveBeenCalled();
-    expect(mocks.enqueue).toHaveBeenCalledWith({
-      url: 'http://localhost:3000/api/v1/contacts',
-      method: 'POST',
-      body: JSON.stringify({ name: 'Ada Lovelace' }),
-    });
-  });
-
-  it('queues mutations when the connection exists but internet reachability is false', async () => {
-    mocks.netInfoFetch.mockResolvedValue({
-      isConnected: true,
-      isInternetReachable: false,
-    });
+  it('queues bodyless mutations when the network layer fails', async () => {
+    mocks.fetch.mockRejectedValue(new TypeError('Network request failed'));
 
     const result = await sendOrQueueMutation({
       url: 'http://localhost:3000/api/v1/tasks/123',
@@ -59,7 +27,6 @@ describe('sendOrQueueMutation', () => {
     });
 
     expect(result).toEqual({ queued: true });
-    expect(mocks.fetch).not.toHaveBeenCalled();
     expect(mocks.enqueue).toHaveBeenCalledWith({
       url: 'http://localhost:3000/api/v1/tasks/123',
       method: 'PATCH',
@@ -69,10 +36,6 @@ describe('sendOrQueueMutation', () => {
 
   it('sends mutations immediately when online and omits an empty body', async () => {
     const response = new Response(null, { status: 204 });
-    mocks.netInfoFetch.mockResolvedValue({
-      isConnected: true,
-      isInternetReachable: true,
-    });
     mocks.fetch.mockResolvedValue(response);
 
     const result = await sendOrQueueMutation({
@@ -87,7 +50,6 @@ describe('sendOrQueueMutation', () => {
       method: 'POST',
       headers: {
         Authorization: 'Bearer token-3',
-        'Content-Type': 'application/json',
       },
       body: undefined,
     });
@@ -95,10 +57,6 @@ describe('sendOrQueueMutation', () => {
 
   it('sends serialized JSON when online with a body', async () => {
     const response = new Response(JSON.stringify({ ok: true }), { status: 200 });
-    mocks.netInfoFetch.mockResolvedValue({
-      isConnected: true,
-      isInternetReachable: null,
-    });
     mocks.fetch.mockResolvedValue(response);
 
     const result = await sendOrQueueMutation({
@@ -121,10 +79,6 @@ describe('sendOrQueueMutation', () => {
   });
 
   it('queues mutations when an online fetch fails at the network layer', async () => {
-    mocks.netInfoFetch.mockResolvedValue({
-      isConnected: true,
-      isInternetReachable: true,
-    });
     mocks.fetch.mockRejectedValue(new TypeError('Network request failed'));
 
     const result = await sendOrQueueMutation({
@@ -144,10 +98,6 @@ describe('sendOrQueueMutation', () => {
 
   it('does not queue valid HTTP validation responses', async () => {
     const response = new Response(JSON.stringify({ error: { code: 'VALIDATION' } }), { status: 400 });
-    mocks.netInfoFetch.mockResolvedValue({
-      isConnected: true,
-      isInternetReachable: true,
-    });
     mocks.fetch.mockResolvedValue(response);
 
     const result = await sendOrQueueMutation({

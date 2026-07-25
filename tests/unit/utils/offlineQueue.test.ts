@@ -25,6 +25,14 @@ vi.mock('expo-secure-store', () => ({
   deleteItemAsync: mocks.deleteItemAsync,
 }));
 
+vi.mock('expo-constants', () => ({
+  default: {
+    expoConfig: {
+      extra: {},
+    },
+  },
+}));
+
 vi.mock('../../../src/store/syncStore', () => ({
   useSyncStore: {
     getState: () => ({
@@ -84,8 +92,8 @@ describe('offlineQueue', () => {
     expect(queued).toHaveLength(2);
     expect(queued.every((item) => item.body === undefined)).toBe(true);
     expect(queued.map((item) => item.bodyKey)).toEqual([
-      expect.stringMatching(/^crm-offline-queue-body:queue-/),
-      expect.stringMatching(/^crm-offline-queue-body:queue-/),
+      expect.stringMatching(/^crm-offline-queue-body-queue-/),
+      expect.stringMatching(/^crm-offline-queue-body-queue-/),
     ]);
     expect([...secureStorage.values()].sort()).toEqual([
       JSON.stringify({ first_name: 'Ada' }),
@@ -189,12 +197,12 @@ describe('offlineQueue', () => {
         id: 'q-create-follow-up',
         url: 'https://api.example.com/api/v1/captures/capture-1/match',
         method: 'POST',
-        bodyKey: 'crm-offline-queue-body:q-create-follow-up',
+        bodyKey: 'crm-offline-queue-body-q-create-follow-up',
         enqueuedAt: expect.any(Number),
       },
     ]);
     expect(mocks.setItemAsync).toHaveBeenLastCalledWith(
-      'crm-offline-queue-body:q-create-follow-up',
+      'crm-offline-queue-body-q-create-follow-up',
       JSON.stringify({ contact_id: 'contact-1' }),
     );
   });

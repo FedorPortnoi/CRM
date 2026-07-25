@@ -1,9 +1,24 @@
 import { request } from "@playwright/test";
 import * as fs from "fs";
-import { AUTH_STATE_PATH } from "./auth";
+import { AUTH_STATE_PATH, verifyRegisteredSmokeUser } from "./auth";
 
-process.env.SMSRU_API_ID = process.env.SMSRU_API_ID ?? "test-smsru-api-id";
-process.env.SMSRU_SEND_ENABLED = process.env.SMSRU_SEND_ENABLED ?? "false";
+type RegisterResponse = {
+  data?: {
+    user_id?: string;
+    email?: string;
+    needs_verification?: boolean;
+  };
+};
+
+type LoginResponse = {
+  data?: {
+    token?: string;
+    user?: {
+      id?: string;
+      org_id?: string;
+    };
+  };
+};
 
 export default async function globalSetup() {
   fs.rmSync(AUTH_STATE_PATH, { force: true });
@@ -27,15 +42,35 @@ export default async function globalSetup() {
       throw new Error(`Register failed (${res.status()}): ${body}`);
     }
 
-    const body = await res.json();
-    const { token, user } = body.data;
+    const registerBody = await res.json() as RegisterResponse;
+    const userId = registerBody.data?.user_id;
+    if (!userId || registerBody.data?.email !== email || registerBody.data.needs_verification !== true) {
+      throw new Error("Register response did not match the OTP verification contract.");
+    }
+
+    const { orgId } = await verifyRegisteredSmokeUser({ userId, email, runStartedAt });
+
+    const loginRes = await api.post("/api/v1/auth/login", {
+      data: { email, password },
+    });
+    if (!loginRes.ok()) {
+      const body = await loginRes.text();
+      throw new Error(`Login after smoke verification failed (${loginRes.status()}): ${body}`);
+    }
+
+    const loginBody = await loginRes.json() as LoginResponse;
+    const token = loginBody.data?.token;
+    const user = loginBody.data?.user;
+    if (!token || user?.id !== userId || user.org_id !== orgId) {
+      throw new Error("Login response did not match the newly verified smoke user.");
+    }
 
     fs.writeFileSync(
       AUTH_STATE_PATH,
       JSON.stringify({
         token,
-        userId: user.id,
-        orgId: user.org_id,
+        userId,
+        orgId,
         email,
         runStartedAt,
       }),

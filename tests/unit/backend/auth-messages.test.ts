@@ -6,6 +6,7 @@ const dbMock = vi.hoisted(() => ({
   $queryRaw: vi.fn(),
   user: {
     findUnique: vi.fn(),
+    update: vi.fn(),
   },
   contact: {
     findFirst: vi.fn(),
@@ -67,6 +68,7 @@ describe('AuthController.login', () => {
     vi.clearAllMocks();
     dbMock.$executeRaw.mockResolvedValue(1);
     dbMock.$queryRaw.mockResolvedValue([]);
+    dbMock.user.update.mockResolvedValue({});
   });
 
   it('rejects inactive users with the generic invalid credentials envelope', async () => {
@@ -79,6 +81,9 @@ describe('AuthController.login', () => {
       role: 'owner',
       organization_id: orgId,
       is_active: false,
+      is_verified: true,
+      failed_login_count: 0,
+      locked_until: null,
       onboarding_state: null,
     });
     const reply = createReply();
@@ -120,6 +125,9 @@ describe('AuthController.login', () => {
       role: 'owner',
       organization_id: orgId,
       is_active: true,
+      is_verified: true,
+      failed_login_count: 0,
+      locked_until: null,
       onboarding_state: null,
     });
     const reply = createReply();

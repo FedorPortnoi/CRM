@@ -3,7 +3,6 @@ import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
 import { queryClient } from './queryClient';
 import * as offlineQueue from './offlineQueue';
-import { useSyncStore } from '../store/syncStore';
 import { API_URL, authHeaders } from './api';
 
 export const BACKGROUND_SYNC_TASK_NAME = 'crm-background-sync';

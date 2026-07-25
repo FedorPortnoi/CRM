@@ -8,6 +8,12 @@ vi.mock('expo-constants', () => ({
   },
 }));
 
+vi.mock('expo-secure-store', () => ({
+  getItemAsync: vi.fn(),
+  setItemAsync: vi.fn(),
+  deleteItemAsync: vi.fn(),
+}));
+
 import { DEFAULT_API_URL, resolveApiUrl } from '../../../src/utils/api';
 
 describe('resolveApiUrl', () => {
