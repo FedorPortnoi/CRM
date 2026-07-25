@@ -236,11 +236,6 @@
         <td><code>YANDEX_CLIENT_ID</code>, <code>YANDEX_CLIENT_SECRET</code>, <code>YANDEX_REDIRECT_URI</code></td>
       </tr>
       <tr>
-        <td>SMS.ru</td>
-        <td>Отправка SMS клиентам и прием ответов.</td>
-        <td><code>SMSRU_API_ID</code>, <code>SMSRU_SENDER</code></td>
-      </tr>
-      <tr>
         <td>Yandex Cloud: Vision и SpeechKit</td>
         <td>Распознавание визиток и голосовых заметок.</td>
         <td><code>YANDEX_API_KEY</code>, <code>YANDEX_FOLDER_ID</code></td>
@@ -280,19 +275,16 @@ YANDEX_CLIENT_ID = ...
 YANDEX_CLIENT_SECRET = ...
 YANDEX_REDIRECT_URI = ...
 
-2. SMS.ru
-SMSRU_API_ID = ...
-SMSRU_SENDER = ...
 
-3. Yandex Cloud
+2. Yandex Cloud
 YANDEX_API_KEY = ...
 YANDEX_FOLDER_ID = ...
 
-4. База данных Yandex PostgreSQL
+3. База данных Yandex PostgreSQL
 DATABASE_URL = ...
 DIRECT_URL = ...
 
-5. Yandex Object Storage
+4. Yandex Object Storage
 S3_BUCKET = ...
 S3_ENDPOINT = ...
 S3_REGION = ...
@@ -371,71 +363,7 @@ AWS_SECRET_ACCESS_KEY = ...</pre>
     <li><code>YANDEX_CLIENT_SECRET</code> сохранен.</li>
   </ul>
 
-  <h2 class="page-break"><span class="big-number">2</span>SMS.ru</h2>
-  <p>
-    Это российский сервис для SMS. Он нужен, чтобы CRM отправляла SMS клиентам и принимала ответы.
-    В старых материалах может встречаться Twilio. Для России сейчас нужен SMS.ru, не Twilio.
-  </p>
-
-  <h3>Куда зайти</h3>
-  <p>
-    Откройте: <a href="https://sms.ru/">https://sms.ru/</a>
-  </p>
-
-  <h3>Что нажимать</h3>
-  <ol>
-    <li>Зарегистрируйтесь или войдите в SMS.ru.</li>
-    <li>Подтвердите телефон и email, если сервис попросит.</li>
-    <li>Откройте личный кабинет.</li>
-    <li>Найдите раздел <strong>API</strong>, <strong>Настройки API</strong>, <strong>Программистам</strong> или <strong>Интеграция</strong>.</li>
-    <li>Найдите значение <strong>api_id</strong>. Это главный код для CRM.</li>
-    <li>Скопируйте <strong>api_id</strong>.</li>
-    <li>Пополните баланс на небольшую сумму для тестовых SMS.</li>
-    <li>Если нужна отправка от имени бренда, найдите раздел с именем отправителя и подайте имя на согласование.</li>
-  </ol>
-
-  <h3>Что скопировать</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Как называется на сайте</th>
-        <th>Как подписать для Федора</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>api_id</td>
-        <td><code>SMSRU_API_ID</code></td>
-      </tr>
-      <tr>
-        <td>Имя отправителя, если согласовано</td>
-        <td><code>SMSRU_SENDER</code></td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>Если имя отправителя еще не готово</h3>
-  <p>
-    Это не блокирует начало работы. Для тестов можно оставить:
-  </p>
-  <pre>SMSRU_SENDER=CRM</pre>
-
-  <h3>Про входящие SMS</h3>
-  <p>
-    Когда CRM будет размещена на настоящем сервере, в SMS.ru нужно будет указать адрес,
-    куда отправлять входящие SMS. Сейчас, на этапе получения доступов, достаточно сохранить <code>SMSRU_API_ID</code>.
-  </p>
-
-  <h3>Чек-лист</h3>
-  <ul class="checklist">
-    <li>Аккаунт SMS.ru создан.</li>
-    <li>Телефон/email подтверждены.</li>
-    <li><code>SMSRU_API_ID</code> сохранен.</li>
-    <li>Баланс пополнен для теста.</li>
-    <li>Если нужно брендированное имя отправителя, заявка отправлена.</li>
-  </ul>
-
-  <h2 class="page-break"><span class="big-number">3</span>Yandex Cloud: визитки и голос</h2>
+  <h2 class="page-break"><span class="big-number">2</span>Yandex Cloud: визитки и голос</h2>
   <p>
     Этот пункт нужен для двух функций CRM:
     загрузить фото визитки и получить текст, а также записать голосовую заметку и получить текст.
@@ -513,7 +441,7 @@ AWS_SECRET_ACCESS_KEY = ...</pre>
     <li><code>YANDEX_API_KEY</code> сохранен.</li>
   </ul>
 
-  <h2 class="page-break"><span class="big-number">4</span>Yandex Cloud: база данных</h2>
+  <h2 class="page-break"><span class="big-number">3</span>Yandex Cloud: база данных</h2>
   <p>
     База данных - это место, где CRM хранит всю рабочую информацию:
     контакты, сделки, задачи, встречи и сообщения. Для русской версии база должна быть в российской инфраструктуре.
@@ -596,7 +524,7 @@ DIRECT_URL="postgresql://crm_user:ПАРОЛЬ@АДРЕС:ПОРТ/crm?sslmode=r
     </p>
   </div>
 
-  <h2 class="page-break"><span class="big-number">5</span>Yandex Object Storage</h2>
+  <h2 class="page-break"><span class="big-number">4</span>Yandex Object Storage</h2>
   <p>
     Это хранилище файлов. В CRM туда можно складывать вложения, выгрузки, аудио и другие файлы.
     В настройках проекта названия полей похожи на Amazon, но использовать будем Яндекс.
@@ -686,7 +614,7 @@ DIRECT_URL="postgresql://crm_user:ПАРОЛЬ@АДРЕС:ПОРТ/crm?sslmode=r
       </tr>
       <tr>
         <td>Twilio</td>
-        <td>Заменен на SMS.ru для России.</td>
+        <td>Не используется: SMS в продукте нет.</td>
       </tr>
       <tr>
         <td>Sentry</td>
@@ -720,8 +648,6 @@ DIRECT_URL="postgresql://crm_user:ПАРОЛЬ@АДРЕС:ПОРТ/crm?sslmode=r
 YANDEX_CLIENT_SECRET=
 YANDEX_REDIRECT_URI=http://localhost:3000/api/v1/calendar/sync/yandex/callback
 
-SMSRU_API_ID=
-SMSRU_SENDER=
 
 YANDEX_API_KEY=
 YANDEX_FOLDER_ID=
@@ -738,7 +664,7 @@ AWS_SECRET_ACCESS_KEY=</pre>
   <div class="box green">
     <h3>Когда писать Федору</h3>
     <p>
-      После каждого раздела можно написать: "Готово: Яндекс Календарь", "Готово: SMS.ru" и так далее.
+      После каждого раздела можно написать: "Готово: Яндекс Календарь", "Готово: Yandex Cloud" и так далее.
       Сами секретные значения лучше не отправлять обычным сообщением.
     </p>
   </div>
@@ -751,7 +677,6 @@ AWS_SECRET_ACCESS_KEY=</pre>
   <ul class="small">
     <li>Яндекс OAuth: <a href="https://oauth.yandex.ru/">https://oauth.yandex.ru/</a></li>
     <li>Яндекс OAuth кабинет: <a href="https://yandex.ru/dev/id/doc/en/oauth-cabinet">https://yandex.ru/dev/id/doc/en/oauth-cabinet</a></li>
-    <li>SMS.ru API: <a href="https://sms.ru/docs/api">https://sms.ru/docs/api</a></li>
     <li>Yandex Cloud: ID папки: <a href="https://yandex.cloud/docs/resource-manager/operations/folder/get-id">https://yandex.cloud/docs/resource-manager/operations/folder/get-id</a></li>
     <li>Yandex Cloud: API-ключи: <a href="https://yandex.cloud/ru/docs/iam/concepts/authorization/api-key">https://yandex.cloud/ru/docs/iam/concepts/authorization/api-key</a></li>
     <li>Yandex Cloud: сервисный аккаунт: <a href="https://yandex.cloud/ru/docs/iam/operations/sa/create">https://yandex.cloud/ru/docs/iam/operations/sa/create</a></li>

@@ -17,7 +17,7 @@ const CaptureIdParamsSchema = z.object({
 });
 
 const CreateCaptureSchema = z.object({
-  type: z.enum(['call', 'sms', 'email']),
+  type: z.enum(['call', 'email']),
   raw_data: z.record(z.unknown()),
   phone_number: z.string().optional(),
 });

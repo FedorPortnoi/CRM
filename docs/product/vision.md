@@ -24,7 +24,7 @@ Between these two extremes is a vast underserved market: the 500 million small a
 
 **Visual** means: Kanban boards instead of data tables, charts instead of raw numbers, timeline views instead of logs. Information is understood at a glance, not decoded. The UI makes complex business data obvious to anyone, not just analysts.
 
-**Powerful** means: full pipeline management, cross-team visibility, real analytics, automation rules, offline capability, and integrations with the tools businesses already use (calendar, SMS, email). This is not a toy app — it can run a real business.
+**Powerful** means: full pipeline management, cross-team visibility, real analytics, automation rules, offline capability, and integrations with the tools businesses already use (calendar, email). This is not a toy app — it can run a real business.
 
 ## What Success Looks Like
 

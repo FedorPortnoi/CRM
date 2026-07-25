@@ -21,7 +21,7 @@ type ContactRecord = {
   first_name: string;
 };
 
-type MessageChannel = 'sms' | 'in_app' | 'email';
+type MessageChannel = 'in_app' | 'email' | 'call';
 type MessageDirection = 'inbound' | 'outbound';
 type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 
@@ -410,7 +410,7 @@ test('mobile messaging: GET /messages?channel=in_app returns only in_app channel
   });
   expect(inAppRes.status()).toBe(201);
 
-  // also log a call so there is at least one non-sms message of a different subtype
+  // also log a call so there is at least one message on a different channel
   const callRes = await request.post('/api/v1/messages/call', {
     headers: authHeaders(org.token),
     data: { contact_id: contact.id, direction: 'inbound', duration_seconds: 60, notes: 'quick check' },

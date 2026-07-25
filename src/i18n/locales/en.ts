@@ -443,7 +443,6 @@ const en = {
     createContact: 'New Contact',
     unknown: 'Unknown',
     call: 'Call',
-    sms: 'SMS',
     selectContact: 'Select',
     matchTitle: 'Match to Contact',
     searchPlaceholder: 'Search by name or phone...',

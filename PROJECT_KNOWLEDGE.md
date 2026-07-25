@@ -52,7 +52,7 @@ The **Ещё** sheet groups the secondary sections:
 Unread chat and notification counts surface as a badge on the "Ещё" tab.
 
 ### Core features
-- **Contacts / clients** — typed as lead, customer, or partner; a company text field; per-contact deals and tasks, plus an activity log and conversation history (in-app notes, logged calls, SMS/iMessage).
+- **Contacts / clients** — typed as lead, customer, or partner; a company text field; per-contact deals and tasks, plus an activity log and conversation history (in-app notes, logged calls).
 - **Deals with a kanban pipeline** — configurable pipelines and stages, board and list views, moving deals between stages, won/lost outcomes with a loss reason, a "next action" field, and stale-deal detection (RUB values).
 - **Tasks** — statuses (pending, in progress, done, cancelled), due dates, reminders, recurrence (daily/weekly/monthly/etc.), and assignee.
 - **Calendar** — scheduled events, contact-linked, with a "today's schedule" view.
@@ -61,7 +61,7 @@ Unread chat and notification counts surface as a badge on the "Ещё" tab.
 - **Offline mode** — queued mutations and background sync so work continues without connectivity.
 - **Contact imports** — from Telegram, WhatsApp (chat export), Bitrix24 (webhook), vCard (.vcf), the device phone book, and Excel/CSV.
 - **Attachments** — files and photos on records, from the gallery, camera, or documents.
-- **Business-card scan & captures** — camera OCR to create a contact from a business card, plus a "captures" inbox of unidentified call/SMS activity to match or dismiss against contacts.
+- **Business-card scan & captures** — camera OCR to create a contact from a business card, plus a "captures" inbox of unidentified call/email activity to match or dismiss against contacts.
 - **Workflows / automation** — trigger-based rules (contact created, deal stage changed, deal won, deal stale, task completed, etc.) with conditions and actions (create task, add note, move stage).
 - **Dark / light theme** — persistent user-toggled appearance.
 - **RU / EN localization** — full Russian and English interface.
@@ -141,7 +141,7 @@ All paths below are relative to the `/api/v1` prefix. `(admin)` marks routes gat
 | POST | `/auth` | Register: create org + owner user, sign JWT (rate limit 5/15min) — (public) |
 | POST | `/auth/login` | Login by email/password (rate limit 5/15min, keyed by ip+email) — (public) |
 | POST | `/auth/join` | Join an existing org via company code (rate limit 5/15min) — (public) |
-| POST | `/auth/verify` | Verify SMS/email OTP (rate limit 10/15min) — (public) |
+| POST | `/auth/verify` | Verify the email OTP (rate limit 10/15min) — (public) |
 | POST | `/auth/verify/resend` | Resend OTP (rate limit 3/5min) — (public) |
 | POST | `/auth/logout` | Revoke the current session |
 | POST | `/auth/logout-all` | Revoke all of the user's sessions |
@@ -255,7 +255,7 @@ All paths below are relative to the `/api/v1` prefix. `(admin)` marks routes gat
 ### captures — `/api/v1/captures`
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/captures` | Create a capture (call/sms/email event with raw data) |
+| POST | `/captures` | Create a capture (call/email event with raw data) |
 | GET | `/captures` | List captures (by status) |
 | POST | `/captures/:id/match` | Match a capture to a contact |
 | POST | `/captures/:id/dismiss` | Dismiss a capture |
@@ -340,7 +340,7 @@ The schema (`backend/prisma/schema.prisma`, Prisma 5.13 on Yandex Cloud Managed 
   - **Pipeline** — `name`, `description`, `is_default`, `created_by`; has many `stages` and `deals`.
   - **PipelineStage** — `pipeline_id`, `name`, `position` (ordering Int), `color`, `is_won_stage`, `is_lost_stage`; referenced by Deals via `stage_id`.
 - **Task** — `title`, `description`, optional `contact_id`/`deal_id`, required `assigned_to` (assignee) + `created_by`/`completed_by`, `due_date`, `priority` (`TaskPriority`: low/medium/high/urgent), `status` (`TaskStatus`: pending/in_progress/done/cancelled), `is_recurring`+`recurrence_rule`, `reminder_at`, `completed_at`, `is_example_data`.
-- **Message** — contact communication log. `contact_id`, optional `user_id`, `direction` (`MessageDirection`: inbound/outbound), `channel` (`MessageChannel`: sms/in_app/email/call), `body`, `status` (`MessageStatus`: pending/sent/delivered/read/failed), `error_message`, `twilio_sid`, `read_at`/`delivered_at`.
+- **Message** — contact communication log. `contact_id`, optional `user_id`, `direction` (`MessageDirection`: inbound/outbound), `channel` (`MessageChannel`: in_app/email/call), `body`, `status` (`MessageStatus`: pending/sent/delivered/read/failed), `error_message`, `twilio_sid`, `read_at`/`delivered_at`.
 - **CalendarEvent** — `title`, `description`, optional `contact_id`/`deal_id`, `created_by`, `attendee_ids` (JSON), `start_time`/`end_time`, `location`, `meeting_url`, `reminder_minutes` (default 30), `status` (`CalendarEventStatus`: scheduled/completed/cancelled), `notes`, `completed_at`, `post_meeting_prompted`, external sync ids (`ext_event_uid`/`ext_calendar_uid`), `is_example_data`.
 - **UserCalendarSync** — per-user external calendar credentials (`@@unique([user_id, provider])`). `provider`, `access_token`, `refresh_token`, `expires_at`, `ext_calendar_uid`, Yandex fields (`yandex_username`, `yandex_calendar_slug`).
 
@@ -351,7 +351,7 @@ The schema (`backend/prisma/schema.prisma`, Prisma 5.13 on Yandex Cloud Managed 
 
 ### Capture / Import
 
-- **PendingCapture** — inbound call/SMS/email awaiting contact matching. `org_id`, `type` (`PendingCaptureType`: call/sms/email), `raw_data` (JSON), `phone_number`, `status` (`PendingCaptureStatus`: pending/matched/dismissed), optional `contact_id`.
+- **PendingCapture** — inbound call/email awaiting contact matching. `org_id`, `type` (`PendingCaptureType`: call/email), `raw_data` (JSON), `phone_number`, `status` (`PendingCaptureStatus`: pending/matched/dismissed), optional `contact_id`.
 
 ### Collaboration & Cross-cutting
 
@@ -369,9 +369,6 @@ The schema (`backend/prisma/schema.prisma`, Prisma 5.13 on Yandex Cloud Managed 
 
 ### Contact imports (Bitrix24, Telegram, vCard, WhatsApp)
 Four import sources feed `db.contact`, all encrypting phone/email at rest via `encryptField`. Bitrix24 (`backend/services/importBitrix24.ts` + `bitrix-paginator.ts`) pulls contacts and deals from a user-supplied inbound-webhook URL by calling `crm.contact.list`/`crm.deal.list`; every request is SSRF-guarded by `assertAllowedBitrixWebhookUrl` (config/security.ts), which permits only `https` URLs whose host matches `*.bitrix24.(ru|com|by|kz|eu|de)` and rejects private/reserved IP literals, and the fetch itself uses `redirect: 'error'` with a 10s abort timeout plus safety caps (1000 contacts, 500 deals). Telegram (`backend/services/importTelegram.ts`) uses MTProto through the `telegram` (GramJS) client: it sends a login code, signs in with the SMS/app code, saves a `StringSession`, and pulls the user's contacts via `contacts.GetContacts`; needs `TELEGRAM_API_ID` and `TELEGRAM_API_HASH`. vCard and WhatsApp imports are parsed client-side and bulk-created server-side in `backend/api/controllers/imports.ts` (sources `vcard`/`whatsapp`), requiring no external service or credentials.
-
-### SMS (sms.ru — OTP verification)
-`backend/services/sms.ts` sends transactional SMS through sms.ru, POSTing to `https://sms.ru/sms/send` with `json=1`; its primary use is delivering one-time verification codes (`sendOtp` sends a Russian-language 10-minute code). Sending is gated by `isSmsSendingEnabled`, which defaults on except in tests. Config: `SMSRU_API_ID` (required, else `SERVICE_NOT_CONFIGURED`), `SMSRU_SENDER` (sender name, default `CRM`), `SMSRU_SEND_ENABLED` (`1/true/yes/on` to force-enable), and `SMSRU_TIMEOUT_MS` (request timeout, default 5000ms). In production, if `SMSRU_SEND_ENABLED=true`, `SMSRU_API_ID` must be at least 16 chars.
 
 ### Transactional email (Resend)
 `backend/services/email.ts` sends plain-text transactional email via the Resend SDK (`client.emails.send`). It is a no-op returning `SERVICE_NOT_CONFIGURED` when unconfigured. Config: `RESEND_API_KEY` (required to enable sending) and `RESEND_FROM_EMAIL` (the From address, defaulting to `CRM <onboarding@resend.dev>`).
@@ -440,9 +437,6 @@ All production profiles point the app at the same backend:
 **Yandex calendar OAuth + Vision:**
 - `YANDEX_CLIENT_ID` + `YANDEX_CLIENT_SECRET` (must be set together), `YANDEX_REDIRECT_URI` (https, required in prod when Yandex is configured), `YANDEX_CALENDAR_SUCCESS_URL` (https or `crm:` deep link), plus `YANDEX_WEBHOOK_SECRET` above.
 - `YANDEX_API_KEY` + `YANDEX_FOLDER_ID` — Yandex Vision OCR for business-card / contact recognition.
-
-**SMS (sms.ru — `backend/services/sms.ts`):**
-- `SMSRU_SEND_ENABLED` (gate), `SMSRU_API_ID` (required min 16 chars when sending enabled), `SMSRU_SENDER` (default `CRM`), `SMSRU_TIMEOUT_MS`.
 
 **Email (Resend — `backend/services/email.ts`):**
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (default `CRM <onboarding@resend.dev>`).
@@ -522,7 +516,7 @@ so the fresh DB role survives on *all* routes (completing the stale-role fix); `
 - **Isolated on-device QA rig** (never point at production — not `4kub.ru`, not the Yandex prod cluster):
   - Embedded PostgreSQL 18.4 on **:5433**, db `crm_smoke` — **must be UTF8 + citext** (WIN1252 crashes on
     Cyrillic writes; `adb input text` can't type Cyrillic, so seed Russian data via the API).
-  - Backend on **:3001** with `NODE_ENV=test CRM_SKIP_LOCAL_ENV=true SMSRU_SEND_ENABLED=false` and
+  - Backend on **:3001** with `NODE_ENV=test CRM_SKIP_LOCAL_ENV=true` and
     `DATABASE_URL=postgresql://postgres:crm_qa_password@127.0.0.1:5433/crm_smoke`.
   - Metro on **:8081** with `EXPO_PUBLIC_API_URL=http://127.0.0.1:3001/api/v1`; `adb reverse tcp:8081` + `tcp:3001`.
   - Pixel_8 AVD + the dev-client APK. QA account: **qa@test.com / QaTest123!** (verify via a DB flip of `is_verified`).
@@ -562,8 +556,9 @@ so the fresh DB role survives on *all* routes (completing the stale-role fix); `
 1. **Russian providers only.** No US services anywhere in the stack — not Supabase, Resend, Stripe,
    Twilio, or a US-hosted data path. FZ-242 requires personal data of Russian citizens to sit on
    servers in Russia, and the product is Russia-first by positioning. Reach for the Russian
-   equivalent (Yandex Cloud, Yandex Object Storage, SMS.ru, Yandex Calendar/Vision/SpeechKit,
-   RuStore Push, YooMoney/SBP) before wiring anything new.
+   equivalent (Yandex Cloud, Yandex Object Storage, Yandex Calendar/Vision/SpeechKit,
+   RuStore Push, YooMoney/SBP) before wiring anything new. **SMS is out of the product
+   entirely** — no SMS provider, no SMS channel, no SMS OTP. Do not reintroduce one.
 2. **Market/provider changes go through a boundary, never into feature code.** Backend defaults live
    in `backend/config/market.ts`, mobile display defaults in `src/market/profile.ts`; provider logic
    belongs in a named adapter. No hardcoded `$`, `USD`, `en-US`, or US phone formats in screens or

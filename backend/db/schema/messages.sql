@@ -1,15 +1,14 @@
--- Messages (SMS, in-app, email channel)
+-- Messages (in-app, email, call channel)
 CREATE TABLE messages (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     contact_id      UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
     user_id         UUID REFERENCES users(id) ON DELETE SET NULL, -- who sent or received
     direction       TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
-    channel         TEXT NOT NULL CHECK (channel IN ('sms', 'in_app', 'email')),
+    channel         TEXT NOT NULL CHECK (channel IN ('in_app', 'email', 'call')),
     body            TEXT NOT NULL,
     status          TEXT NOT NULL DEFAULT 'sent' CHECK (status IN ('pending', 'sent', 'delivered', 'read', 'failed')),
     error_message   TEXT,
-    smsru_id        TEXT UNIQUE, -- for SMS tracking and idempotency
     google_msg_id   TEXT, -- for email thread tracking
     read_at         TIMESTAMPTZ,
     delivered_at    TIMESTAMPTZ,
@@ -38,7 +37,7 @@ CREATE UNIQUE INDEX ON mv_unread_counts(organization_id, user_id);
 -- Inbound message queue (for webhook idempotency before processing)
 CREATE TABLE inbound_webhook_queue (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source          TEXT NOT NULL CHECK (source IN ('smsru', 'yandex', 'internal')),
+    source          TEXT NOT NULL CHECK (source IN ('yandex', 'internal')),
     payload         JSONB NOT NULL,
     processed       BOOLEAN NOT NULL DEFAULT FALSE,
     processed_at    TIMESTAMPTZ,

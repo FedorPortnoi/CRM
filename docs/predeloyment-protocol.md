@@ -42,8 +42,6 @@ npm run backend:start
 
 - API env vars are present for enabled integrations:
   - `JWT_SECRET`
-  - `SMSRU_API_ID`
-  - `SMSRU_SENDER`
   - `YANDEX_CLIENT_ID`
   - `YANDEX_CLIENT_SECRET`
   - `YANDEX_CALENDAR_SUCCESS_URL`
@@ -156,18 +154,13 @@ Run on at least one iOS device and one Android device:
 - Camera denied path.
 - Camera capture path.
 - Image library business card scan path.
-- SMS/call capture flows available in the current platform limits.
+- Call capture flows available in the current platform limits.
 
 Every failed validation must be linked to an issue before release approval.
 
 ## 8. External Provider Checks
 
 Before enabling provider-backed production features:
-
-- SMS.ru:
-  - `SMSRU_API_ID` is set.
-  - `SMSRU_SENDER` is approved or falls back safely.
-  - Test SMS send succeeds in production-like environment.
 
 - Yandex Calendar:
   - OAuth app redirect URI matches `/api/v1/calendar/sync/yandex/callback`.

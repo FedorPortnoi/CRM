@@ -1,7 +1,7 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 
 type Auth = { token: string; userId: string };
-type CaptureType = 'call' | 'sms' | 'email';
+type CaptureType = 'call' | 'email';
 type CaptureStatus = 'pending' | 'matched' | 'dismissed';
 type CaptureStatusQuery = CaptureStatus | 'all';
 type Envelope<T, M extends Record<string, unknown> = Record<string, unknown>> = { data: T; meta: M };
@@ -73,24 +73,6 @@ async function makeTask(request: APIRequestContext, token: string, userId: strin
   return ((await res.json()) as { data: { id: string } }).data;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
-}
-
-function decodeOrgId(token: string): string {
-  const payloadPart = token.split('.')[1];
-  expect(payloadPart).toBeTruthy();
-  const base64 = payloadPart!
-    .replace(/-/g, '+')
-    .replace(/_/g, '/')
-    .padEnd(Math.ceil(payloadPart!.length / 4) * 4, '=');
-  const decoded = JSON.parse(Buffer.from(base64, 'base64').toString('utf8')) as unknown;
-  expect(isRecord(decoded)).toBe(true);
-  const orgId = (decoded as Record<string, unknown>).org_id;
-  expect(typeof orgId).toBe('string');
-  return orgId as string;
-}
-
 function uniqueDigits(length: number): string {
   let digits = `${Date.now()}${Math.floor(Math.random() * 1_000_000_000)}`;
   while (digits.length < length) {
@@ -109,18 +91,6 @@ function uniqueNationalPhone(): string {
 
 function formatPhoneVariant(digits: string): string {
   return `+7 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 8)}-${digits.slice(8)}`;
-}
-
-function formBody(fields: Record<string, string>): string {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(fields)) {
-    params.set(key, value);
-  }
-  return params.toString();
-}
-
-function smsRuApiId(): string {
-  return process.env.SMSRU_API_ID ?? 'test-smsru-api-id';
 }
 
 async function createCapture(
@@ -167,7 +137,7 @@ async function seedCaptureStates(
 ): Promise<{ pending: Capture; matched: Capture; dismissed: Capture }> {
   const contact = await makeContact(request, token, `Capture ${suffix}`, { phone: uniquePhone() });
   const pending = await createCapture(request, token, 'call', { phone: uniquePhone(), notes: `${suffix} pending` });
-  const matched = await createCapture(request, token, 'sms', { from: uniquePhone(), Body: `${suffix} matched` });
+  const matched = await createCapture(request, token, 'email', { from: uniquePhone(), Body: `${suffix} matched` });
   const dismissed = await createCapture(request, token, 'email', { from: uniquePhone(), subject: `${suffix} dismissed` });
 
   const matchRes = await request.post(`/api/v1/captures/${matched.id}/match`, {
@@ -311,59 +281,7 @@ test.describe('export pdf', () => {
   });
 });
 
-// ── 3. TWILIO WEBHOOKS ────────────────────────────────────────────────────────
-
-test.describe('sms.ru webhooks', () => {
-  test('sms.ru: inbound webhook returns 200 for unknown phone', async ({ request }) => {
-    // When phone doesn't match any contact, webhook still returns 200
-    const r = await request.post('/api/v1/messages/webhooks/sms/inbound', {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: formBody({ api_id: smsRuApiId(), From: '+15559999999', Body: 'Hello from unknown', SmsId: 'SMtest001' }),
-    });
-    expect(r.status()).toBe(200);
-  });
-
-  test('sms.ru: inbound webhook creates message when phone matches contact', async ({ request }) => {
-    const { token } = await registerOrg(request, 'smsru-inbound');
-    const orgId = decodeOrgId(token);
-    const phone = `+1555${Math.floor(1000000 + Math.random() * 9000000)}`;
-    // Create contact with that phone
-    const c = await makeContact(request, token, 'SmsRuContact', { phone });
-
-    // Simulate SMS.ru sending an inbound SMS
-    const smsSid = `SM${Date.now()}test`;
-    const r = await request.post('/api/v1/messages/webhooks/sms/inbound', {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: formBody({ api_id: smsRuApiId(), From: phone, Body: 'Hello from SMS.ru', SmsId: smsSid, org_id: orgId }),
-    });
-    expect(r.status()).toBe(200);
-
-    // Verify message was created — check conversation
-    const conv = await request.get(`/api/v1/messages/conversation/${c.id}`, { headers: authHeaders(token) });
-    expect(conv.status()).toBe(200);
-    const convBody = await conv.json() as { data: Array<{ body: string; channel: string; direction: string }> };
-    const found = convBody.data.find(m => m.body === 'Hello from SMS.ru' && m.channel === 'sms' && m.direction === 'inbound');
-    expect(found).toBeDefined();
-  });
-
-  test('sms.ru: status webhook accepts delivery status for unknown SmsId', async ({ request }) => {
-    const r = await request.post('/api/v1/messages/webhooks/sms/status', {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: formBody({ api_id: smsRuApiId(), SmsId: 'SMunknown999', Status: 'delivered' }),
-    });
-    expect(r.status()).toBe(200);
-  });
-
-  test('sms.ru: status webhook requires SmsId and Status', async ({ request }) => {
-    const r = await request.post('/api/v1/messages/webhooks/sms/status', {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: formBody({ api_id: smsRuApiId(), SmsId: `SMstatus${Date.now()}` }),
-    });
-    expect(r.status()).toBe(400);
-  });
-});
-
-// ── 4. NEW WORKFLOW TRIGGERS ──────────────────────────────────────────────────
+// ── 3. NEW WORKFLOW TRIGGERS ──────────────────────────────────────────────────
 // These tests require the workflow migration (deal_won, deal_created, task_created) to be deployed.
 
 test.describe('workflow triggers extended', () => {
@@ -457,7 +375,7 @@ test.describe('workflow triggers extended', () => {
   });
 });
 
-// ── 5. ONBOARDING FLOW ────────────────────────────────────────────────────────
+// ── 4. ONBOARDING FLOW ────────────────────────────────────────────────────────
 
 test.describe('onboarding', () => {
   test('onboarding: GET /auth/onboarding returns current state', async ({ request }) => {
@@ -540,9 +458,9 @@ test.describe('auto-capture', () => {
     const fromValue = uniquePhone();
     const upperFromValue = uniquePhone();
 
-    const fromPhone = await createCapture(request, token, 'sms', { phone: phoneValue, Body: 'phone field' });
-    const fromLower = await createCapture(request, token, 'sms', { from: fromValue, Body: 'from field' });
-    const fromUpper = await createCapture(request, token, 'sms', { From: upperFromValue, Body: 'From field' });
+    const fromPhone = await createCapture(request, token, 'email', { phone: phoneValue, Body: 'phone field' });
+    const fromLower = await createCapture(request, token, 'email', { from: fromValue, Body: 'from field' });
+    const fromUpper = await createCapture(request, token, 'email', { From: upperFromValue, Body: 'From field' });
 
     expect(fromPhone.phone_number).toBe(phoneValue);
     expect(fromLower.phone_number).toBe(fromValue);
@@ -624,7 +542,7 @@ test.describe('auto-capture', () => {
   test('captures: match rejects a contact from another org and leaves capture pending', async ({ request }) => {
     const orgA = await registerOrg(request, 'cap-cross-contact-a');
     const orgB = await registerOrg(request, 'cap-cross-contact-b');
-    const capture = await createCapture(request, orgA.token, 'sms', { from: uniquePhone(), Body: 'Cross org candidate' });
+    const capture = await createCapture(request, orgA.token, 'email', { from: uniquePhone(), Body: 'Cross org candidate' });
     const otherContact = await makeContact(request, orgB.token, 'OtherOrgContact', { phone: uniquePhone() });
 
     const matchRes = await request.post(`/api/v1/captures/${capture.id}/match`, {
@@ -693,7 +611,7 @@ test.describe('auto-capture', () => {
   test('captures: create-contact creates a contact, matches the capture, and creates a message', async ({ request }) => {
     const { token } = await registerOrg(request, 'cap-create-contact');
     const phone = uniquePhone();
-    const capture = await createCapture(request, token, 'sms', {
+    const capture = await createCapture(request, token, 'email', {
       first_name: 'Captured',
       phone,
       Body: 'Imported from pending capture',
@@ -714,13 +632,13 @@ test.describe('auto-capture', () => {
     expect(matched?.contact_id).toBe(created.data.id);
 
     const messages = await conversation(request, token, created.data.id);
-    expect(messages.find(m => m.channel === 'sms' && m.body === 'Imported from pending capture')).toBeDefined();
+    expect(messages.find(m => m.channel === 'email' && m.body === 'Imported from pending capture')).toBeDefined();
   });
 
   test('captures: create-contact falls back to Unknown and uses the raw phone', async ({ request }) => {
     const { token } = await registerOrg(request, 'cap-create-contact-fallback');
     const phone = uniquePhone();
-    const capture = await createCapture(request, token, 'sms', {
+    const capture = await createCapture(request, token, 'email', {
       From: phone,
       Body: 'Nameless capture body',
     });
@@ -734,7 +652,7 @@ test.describe('auto-capture', () => {
     expect(created.data.phone).toBe(phone);
 
     const messages = await conversation(request, token, created.data.id);
-    expect(messages.find(m => m.channel === 'sms' && m.body === 'Nameless capture body')).toBeDefined();
+    expect(messages.find(m => m.channel === 'email' && m.body === 'Nameless capture body')).toBeDefined();
   });
 
   test('captures: unauthenticated GET is rejected', async ({ request }) => {
@@ -755,57 +673,6 @@ test.describe('auto-capture', () => {
       data: { type: 'fax', raw_data: { phone: uniquePhone() } },
     });
     expect(r.status()).toBe(400);
-  });
-
-  test('sms.ru: unmatched inbound with valid org_id creates a pending sms capture', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-sms-unmatched');
-    const orgId = decodeOrgId(token);
-    const phone = uniquePhone();
-    const text = 'Unmatched SMS capture';
-    const smsId = `SMcap${Date.now()}${uniqueDigits(4)}`;
-
-    const webhook = await request.post('/api/v1/messages/webhooks/sms/inbound', {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: formBody({ api_id: smsRuApiId(), From: phone, Body: text, SmsId: smsId, org_id: orgId }),
-    });
-    expect(webhook.status()).toBe(200);
-
-    const captures = await listCaptures(request, token, 'all');
-    const capture = captures.data.find(c => c.type === 'sms' && c.phone_number === phone);
-    expect(capture).toBeDefined();
-    expect(capture?.status).toBe('pending');
-    expect(capture?.raw_data.Body).toBe(text);
-    expect(capture?.raw_data.text).toBe(text);
-    expect(capture?.raw_data.SmsId).toBe(smsId);
-    expect(capture?.raw_data.org_id).toBe(orgId);
-  });
-
-  test('sms.ru: matched inbound with valid org_id creates message and no pending capture', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-sms-matched');
-    const orgId = decodeOrgId(token);
-    const phone = uniquePhone();
-    const text = 'Matched SMS message';
-    const contact = await makeContact(request, token, 'SmsMatchedContact', { phone });
-
-    const webhook = await request.post('/api/v1/messages/webhooks/sms/inbound', {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: formBody({
-        api_id: smsRuApiId(),
-        From: phone,
-        Body: text,
-        SmsId: `SMcap${Date.now()}${uniqueDigits(4)}`,
-        org_id: orgId,
-      }),
-    });
-    expect(webhook.status()).toBe(200);
-
-    const messages = await conversation(request, token, contact.id);
-    const message = messages.find(m => m.body === text && m.channel === 'sms' && m.direction === 'inbound');
-    expect(message).toBeDefined();
-    expect(message?.status).toBe('delivered');
-
-    const captures = await listCaptures(request, token, 'all');
-    expect(captures.data.find(c => c.phone_number === phone && c.status === 'pending')).toBeUndefined();
   });
 
   test('contacts: phone filter matches normalized phone and mobile variants only', async ({ request }) => {

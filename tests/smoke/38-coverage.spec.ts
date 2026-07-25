@@ -51,7 +51,7 @@ async function createTask(request: APIRequestContext, token: string, userId: str
 async function createCapture(request: APIRequestContext, token: string): Promise<{ id: string }> {
   const res = await request.post('/api/v1/captures', {
     headers: authHeaders(token),
-    data: { type: 'sms', raw_data: { body: 'test sms', from: '+79001234567' }, phone_number: '+79001234567' },
+    data: { type: 'email', raw_data: { body: 'test capture', from: '+79001234567' }, phone_number: '+79001234567' },
   });
   expect(res.status()).toBe(201);
   return ((await res.json()) as { data: { id: string } }).data;
@@ -184,29 +184,16 @@ test('coverage 38: POST /tasks/:id/complete toggles done→pending (no workflow 
 
 // ─── Group 3: Messages ────────────────────────────────────────────────────────
 
-test('coverage 38: POST /messages/sms without SMSRU config queues message (201 with delivery meta)', async ({ request }) => {
-  const org = await registerOrg(request, '38-no-smsru');
-  const c = await createContact(request, org.token, 'NoPhone');
-
-  const res = await request.post('/api/v1/messages/sms', {
-    headers: authHeaders(org.token),
-    data: { contact_id: c.id, body: 'Hello queued' },
-  });
-  expect(res.status()).toBe(201);
-  const body = await res.json() as { data: { id: string }; meta: { delivery: string } };
-  expect(body.meta.delivery).toBe('queued_without_smsru_config');
-  expect(body.data.id).toBeTruthy();
-});
-
 test('coverage 38: GET /messages with cross-org contact_id returns empty (isolation)', async ({ request }) => {
   const orgA = await registerOrg(request, '38-msg-iso-a');
   const orgB = await registerOrg(request, '38-msg-iso-b');
 
   const cA = await createContact(request, orgA.token, 'OrgAContact', { phone: '+79991110001' });
-  await request.post('/api/v1/messages/sms', {
+  const seeded = await request.post('/api/v1/messages/in-app', {
     headers: authHeaders(orgA.token),
     data: { contact_id: cA.id, body: 'OrgA message' },
   });
+  expect(seeded.status()).toBe(201);
 
   const res = await request.get(`/api/v1/messages?contact_id=${cA.id}`, { headers: authHeaders(orgB.token) });
   expect(res.status()).toBe(200);
@@ -215,13 +202,13 @@ test('coverage 38: GET /messages with cross-org contact_id returns empty (isolat
   expect(body.data).toHaveLength(0);
 });
 
-test('coverage 38: POST /messages with sms channel returns message id and status', async ({ request }) => {
-  const org = await registerOrg(request, '38-msg-generic-sms');
-  const c = await createContact(request, org.token, 'GenericSms');
+test('coverage 38: POST /messages with email channel returns message id and status', async ({ request }) => {
+  const org = await registerOrg(request, '38-msg-generic-email');
+  const c = await createContact(request, org.token, 'GenericEmail');
 
   const res = await request.post('/api/v1/messages', {
     headers: authHeaders(org.token),
-    data: { contact_id: c.id, channel: 'sms', body: 'Generic SMS message' },
+    data: { contact_id: c.id, channel: 'email', body: 'Generic email message' },
   });
   expect(res.status()).toBe(201);
   const body = await res.json() as { data: { id: string; status: string } };
@@ -234,7 +221,7 @@ test('coverage 38: GET /messages/:id returns created message', async ({ request 
   const c = await createContact(request, org.token, 'GetMessage');
   const createRes = await request.post('/api/v1/messages', {
     headers: authHeaders(org.token),
-    data: { contact_id: c.id, channel: 'sms', body: 'Fetch me' },
+    data: { contact_id: c.id, channel: 'email', body: 'Fetch me' },
   });
   expect(createRes.status()).toBe(201);
   const created = await createRes.json() as { data: { id: string } };
@@ -249,7 +236,7 @@ test('coverage 38: POST /messages without auth returns 401', async ({ request })
   const res = await request.post('/api/v1/messages', {
     data: {
       contact_id: '00000000-0000-0000-0000-000000000000',
-      channel: 'sms',
+      channel: 'email',
       body: 'No auth',
     },
   });

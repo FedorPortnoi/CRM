@@ -152,7 +152,7 @@ INDEXES: organization_id, assigned_to, due_date, status, contact_id, deal_id
 ```
 
 ### Message
-An SMS or in-app message sent or received.
+An in-app, email, or call message sent or received.
 
 ```
 messages
@@ -161,10 +161,9 @@ messages
   contact_id      UUID FK → contacts.id
   user_id         UUID FK → users.id        -- who sent/received
   direction       ENUM(inbound, outbound)
-  channel         ENUM(sms, in_app, email)
+  channel         ENUM(in_app, email, call)
   body            TEXT NOT NULL
   status          ENUM(sent, delivered, read, failed)
-  twilio_sid      TEXT                       -- for SMS tracking
   read_at         TIMESTAMPTZ
   created_at      TIMESTAMPTZ
 

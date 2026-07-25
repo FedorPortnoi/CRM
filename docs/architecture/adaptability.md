@@ -27,7 +27,7 @@ Current defaults:
 - phone country code: `+7`
 - company identifiers: `inn`, `kpp`, `ogrn`
 - payments: `sbp`, `mir_acquiring`, `bank_invoice`
-- integrations: SMS.ru, Yandex services, 1C
+- integrations: Yandex services, 1C
 
 ## Code Rules
 

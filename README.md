@@ -25,7 +25,7 @@ Existing CRM tools fail SMBs in five concrete ways:
 | 1 | **Contact Management** | Centralized database of all contacts — customers, leads, partners. Full profiles, custom fields, search, and import. |
 | 2 | **Sales Pipeline & Deal Tracking** | Visual Kanban pipeline boards. Drag-and-drop deals between stages. Revenue forecasting and deal history. |
 | 3 | **Task Management & Reminders** | Create, assign, and track tasks for any contact or deal. Automated push reminders. Recurring task support. |
-| 4 | **Call & Messaging** | One-tap call from a contact profile. Built-in SMS and in-app messaging. Automatic call logging. |
+| 4 | **Call & Messaging** | One-tap call from a contact profile. Built-in in-app messaging. Automatic call logging. |
 | 5 | **Interaction History** | Full chronological timeline of every call, message, meeting, and note for every contact. Automatic capture. |
 | 6 | **Appointment Scheduling** | Built-in calendar with meeting invites, automated reminders, and sync with Google/Apple Calendar. |
 | 7 | **Sales Funnel Analytics** | Full-funnel visualization, conversion rates per stage, lead source tracking, and win/loss analysis. |
@@ -33,7 +33,7 @@ Existing CRM tools fail SMBs in five concrete ways:
 | 9 | **Mobile Field Access** | Full offline capability with background sync. Location tagging for field visits. Touch-optimized UI. |
 | 10 | **Visual Kanban Boards** | Trello-inspired boards for pipeline and tasks. Color-coded cards, drag-and-drop, filter by member/priority. |
 | 11 | **Smart Data Entry** | Pre-filled defaults, flexible entry (voice notes, business card photos, text). No mandatory fields upfront. |
-| 12 | **Auto Information Capture** | Calls, SMS, emails, and meeting notes captured automatically — no manual entry where avoidable. |
+| 12 | **Auto Information Capture** | Calls, emails, and meeting notes captured automatically — no manual entry where avoidable. |
 | 13 | **Custom Workflows & Stages** | Fully customizable pipeline stages, custom fields, automation rules, and reusable templates. |
 | 14 | **Built-In Learning** | Contextual tooltips, embedded tutorials, ready-to-use templates, and progressive feature disclosure. |
 

@@ -68,7 +68,6 @@ enum MessageDirection {
 }
 
 enum MessageChannel {
-  sms
   in_app
   email
   call
@@ -111,7 +110,6 @@ enum WorkflowRunStatus {
 
 enum PendingCaptureType {
   call
-  sms
   email
 }
 

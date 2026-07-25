@@ -20,12 +20,10 @@ const RegisterSchema = z.object({
 const VerifyOtpSchema = z.object({
   user_id: z.string().uuid(),
   code: z.string().length(6).regex(/^\d{6}$/),
-  channel: z.enum(['sms', 'email']),
 });
 
 const ResendVerificationSchema = z.object({
   user_id: z.string().uuid(),
-  channel: z.enum(['sms', 'email']),
 });
 
 const LoginSchema = z.object({

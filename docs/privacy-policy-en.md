@@ -43,7 +43,7 @@ Personal data is processed exclusively for the following purposes:
 - Providing CRM features: managing contacts, deals, tasks, and calendar
 - User authentication and authorization
 - Data synchronization across devices
-- Sending SMS notifications via SMS.ru (only at your request)
+- Sending account verification codes by email
 
 ---
 
@@ -61,7 +61,8 @@ We do not sell or transfer your personal data to third parties, except:
 
 | Recipient | Data | Purpose |
 |---|---|---|
-| SMS.RU LLC | Recipient phone number | Sending SMS from the Application |
+| Resend (email delivery) | Your email address | Sending account verification codes |
+| Apple (APNS) / Google (FCM) | Device push token | Delivering push notifications |
 
 No other third parties have access to your data.
 

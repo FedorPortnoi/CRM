@@ -12,8 +12,6 @@ const webServerEnv: Record<string, string> = {
   DATABASE_URL: smokeDatabaseUrl,
   DIRECT_URL: smokeDirectUrl,
   JWT_SECRET: process.env.SMOKE_JWT_SECRET ?? 'smoke-test-secret-for-local-ci-only-xxxxxx',
-  SMSRU_API_ID: 'test-smsru-api-id',
-  SMSRU_SEND_ENABLED: 'false',
   RESEND_API_KEY: '',
 };
 

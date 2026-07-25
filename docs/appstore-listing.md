@@ -39,20 +39,17 @@ Stay on top of follow-ups: create tasks, set priorities and deadlines. Notificat
 **Calendar & Meetings**
 Schedule calls and meetings directly in the app. Link events to contacts and deals for full context at a glance.
 
-**SMS Notifications**
-Send SMS messages to clients straight from CRM via SMS.ru — no app-switching required.
-
 **Offline First**
 The app works without an internet connection. All changes sync automatically when connectivity is restored — no manual action needed.
 
 **Privacy by Design**
-Your data is protected with strong encryption. We use no third-party analytics SDKs and share no data with advertisers. The only external service is SMS.ru, used exclusively for SMS delivery at your explicit request.
+Your data is protected with strong encryption and stored on servers in Russia. We use no third-party analytics SDKs and share no data with advertisers.
 
 ---
 
 ## What's New (Version 1.0.0)
 
-First public release. Core CRM features: contacts, deals, tasks, calendar, SMS campaigns, and offline mode.
+First public release. Core CRM features: contacts, deals, tasks, calendar, and offline mode.
 
 ---
 
@@ -102,7 +99,7 @@ Configure in App Store Connect → App Privacy:
 |---|---|---|---|
 | Name | Yes | Yes | No |
 | Email address | Yes | Yes | No |
-| Phone number | Yes (contact's phone for SMS) | Yes | No |
+| Phone number | Yes (contact's phone) | Yes | No |
 | Precise location | Yes (optional, field visits) | Yes | No |
 | User content (notes/deals) | Yes | Yes | No |
 | Identifiers (user ID) | Yes | Yes | No |

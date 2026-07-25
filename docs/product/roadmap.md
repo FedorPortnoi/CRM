@@ -12,7 +12,7 @@
 | Sprint 2 (Weeks 3–4) | Contacts | Contact CRUD, search, import (phone + CSV), activity log foundation |
 | Sprint 3 (Weeks 5–6) | Pipeline | Pipeline + stage management, deal CRUD, Kanban board, drag-and-drop |
 | Sprint 4 (Weeks 7–8) | Tasks | Task CRUD, reminders, recurring tasks, notification delivery |
-| Sprint 5 (Weeks 9–10) | Communication | Call logging, SMS via Twilio, in-app messaging, message history |
+| Sprint 5 (Weeks 9–10) | Communication | Call logging, in-app messaging, message history |
 | Sprint 6 (Weeks 11–12) | Calendar | Appointment creation, Google Calendar sync, meeting reminders |
 | Sprint 7 (Weeks 13–14) | Analytics | Funnel visualization, conversion rates, revenue reports, dashboard |
 | Sprint 8 (Weeks 15–16) | Smart Entry | Business card OCR, voice notes, auto-capture engine |

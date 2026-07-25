@@ -20,7 +20,7 @@ The history is largely automatic — calls, messages, and meetings are captured 
 ## Acceptance Criteria
 
 - Activity timeline displayed on every contact profile, sorted newest-first by default (toggle to oldest-first)
-- Auto-logged event types: call (with duration and notes), outbound SMS, inbound SMS, in-app message, meeting/appointment, task created, task completed, deal created, deal stage changed, deal won, deal lost, contact field updated, file attached
+- Auto-logged event types: call (with duration and notes), in-app message, meeting/appointment, task created, task completed, deal created, deal stage changed, deal won, deal lost, contact field updated, file attached
 - Manually created types: note (free text), file attachment
 - Filter history by type (one or multiple): calls, messages, meetings, notes, tasks, deals, files
 - Filter by date range: today, this week, this month, custom range

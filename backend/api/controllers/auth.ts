@@ -11,7 +11,6 @@ import {
   revokeAuthSession,
 } from '../../services/sessions';
 import { issueCode, verifyCode } from '../../services/verification';
-import { sendOtp, isSmsSendingEnabled } from '../../services/sms';
 import { sendEmail, isEmailSendingEnabled } from '../../services/email';
 import { DEFAULT_PIPELINE_NAME, DEFAULT_PIPELINE_STAGE_NAMES } from '../../config/market';
 
@@ -279,20 +278,14 @@ export const AuthController = {
         metadata: { email },
       });
 
-      // Issue OTPs — delivery failure must not crash registration; account was already committed.
-      // Client should call POST /auth/verify/resend if sms_sent and email_sent are both false.
-      let smsDelivered = false;
+      // Issue the OTP — delivery failure must not crash registration; account was already committed.
+      // Client should call POST /auth/verify/resend if email_sent is false.
       let emailDelivered = false;
       try {
-        const [smsCode, emailCode] = await Promise.all([
-          issueCode(user_id, 'sms'),
-          issueCode(user_id, 'email'),
-        ]);
-        const [smsResult, emailResult] = await Promise.all([
-          isSmsSendingEnabled() ? sendOtp(phone, smsCode) : Promise.resolve({ success: false }),
-          isEmailSendingEnabled() ? sendEmail(email, 'Код подтверждения', `Ваш код: ${emailCode}. Действителен 10 минут.`) : Promise.resolve({ success: false }),
-        ]);
-        smsDelivered = smsResult.success;
+        const emailCode = await issueCode(user_id, 'email');
+        const emailResult = isEmailSendingEnabled()
+          ? await sendEmail(email, 'Код подтверждения', `Ваш код: ${emailCode}. Действителен 10 минут.`)
+          : { success: false };
         emailDelivered = emailResult.success;
       } catch {
         // silent — user can resend
@@ -300,7 +293,7 @@ export const AuthController = {
 
       return reply.code(201).send({
         data: { user_id, email, needs_verification: true },
-        meta: { sms_sent: smsDelivered, email_sent: emailDelivered },
+        meta: { email_sent: emailDelivered },
       });
     } catch (err: unknown) {
       const errCode = (err as { code?: string })?.code;
@@ -799,7 +792,8 @@ export const AuthController = {
   },
 
   verifyOtp: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { user_id, code, channel } = request.body as { user_id: string; code: string; channel: 'sms' | 'email' };
+    const { user_id, code } = request.body as { user_id: string; code: string };
+    const channel = 'email' as const;
 
     const user = await db.user.findUnique({
       where: { id: user_id },
@@ -827,12 +821,10 @@ export const AuthController = {
       return reply.code(400).send({ error: { code: 'INVALID_CODE', message: 'Code is invalid or has expired' } });
     }
 
-    const verificationUpdate =
-      channel === 'sms'
-        ? { phone_verified: true, is_verified: true }
-        : { email_verified: true, is_verified: true };
-
-    await db.user.update({ where: { id: user_id }, data: verificationUpdate });
+    await db.user.update({
+      where: { id: user_id },
+      data: { email_verified: true, is_verified: true },
+    });
 
     await auditLog({
       action: 'auth.verify_otp',
@@ -893,11 +885,11 @@ export const AuthController = {
   },
 
   resendVerification: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { user_id, channel } = request.body as { user_id: string; channel: 'sms' | 'email' };
+    const { user_id } = request.body as { user_id: string };
 
     const user = await db.user.findUnique({
       where: { id: user_id },
-      select: { id: true, email: true, phone: true, is_verified: true, is_active: true },
+      select: { id: true, email: true, is_verified: true, is_active: true },
     });
 
     if (!user || !user.is_active) {
@@ -908,19 +900,12 @@ export const AuthController = {
       return reply.code(409).send({ error: { code: 'ALREADY_VERIFIED', message: 'Account is already verified' } });
     }
 
-    const code = await issueCode(user_id, channel);
-
-    if (channel === 'sms') {
-      if (!user.phone) {
-        return reply.code(400).send({ error: { code: 'PHONE_MISSING', message: 'No phone number on file' } });
-      }
-      await sendOtp(user.phone, code);
-    } else {
-      if (!user.email) {
-        return reply.code(400).send({ error: { code: 'EMAIL_MISSING', message: 'No email on file' } });
-      }
-      await sendEmail(user.email, 'Код подтверждения', `Ваш код: ${code}. Действителен 10 минут.`);
+    if (!user.email) {
+      return reply.code(400).send({ error: { code: 'EMAIL_MISSING', message: 'No email on file' } });
     }
+
+    const code = await issueCode(user_id, 'email');
+    await sendEmail(user.email, 'Код подтверждения', `Ваш код: ${code}. Действителен 10 минут.`);
 
     return reply.code(200).send({ data: { sent: true }, meta: {} });
   },

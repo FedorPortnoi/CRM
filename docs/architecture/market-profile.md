@@ -26,7 +26,7 @@ The default profile is `RU`:
 | Phone country code | `+7` |
 | Company identifiers | `inn`, `kpp`, `ogrn` |
 | Payments | `sbp`, `mir_acquiring`, `bank_invoice` |
-| Local integrations | `sms_ru`, `yandex_calendar`, `yandex_vision`, `yandex_speechkit`, `yandex_object_storage`, `one_c` |
+| Local integrations | `yandex_calendar`, `yandex_vision`, `yandex_speechkit`, `yandex_object_storage`, `one_c` |
 
 ## Rules
 

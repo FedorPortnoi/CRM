@@ -51,7 +51,7 @@ The core principle: **the app must work without an internet connection.** A sale
 └────────────────────────────────────────────────────────────┘
 ┌──────────────────────────────────────────────────────────┐
 │                  Third-Party Integrations                   │
-│  SMS.ru (SMS)  │  Yandex CalDAV  │  Apple Calendar      │
+│  Yandex CalDAV  │  Apple Calendar                      │
 │  Yandex Object Storage (file storage)  │  Yandex Vision (OCR)            │
 └────────────────────────────────────────────────────────────┘
 ```
@@ -83,7 +83,6 @@ A dedicated sync service on the client reconciles local mutations with the serve
 | PostgreSQL | Yandex Managed PostgreSQL (`ru-central1`, FZ-242 compliant) | Primary data store, audit logs |
 | Redis | Redis 7 | Caching, job queues, rate limit counters |
 | Push Delivery | FCM + APNS + Expo | Cross-platform push notifications |
-| SMS | SMS.ru | Outbound SMS from contact profiles |
 | Calendar Sync | Yandex CalDAV | Appointment sync via CalDAV |
 | File Storage | Yandex Object Storage | Attachments, business card photos |
 

@@ -219,22 +219,6 @@ test('POST /messages/call direction=inbound: direction stored as inbound', async
   expect(json.data.direction).toBe('inbound');
 });
 
-test('POST /messages/sms: body stored correctly in GET /conversation', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-sms-conv');
-  const cid = await createContact(request, token, 'SmsConv');
-  const smsBody = 'sms body stored check';
-  const res = await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, body: smsBody },
-  });
-  expect(res.status()).toBe(201);
-  const convRes = await request.get(`/api/v1/messages/conversation/${cid}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const conv = (await convRes.json()) as ConversationResponse;
-  expect(conv.data.some((m) => m.body === smsBody && m.channel === 'sms')).toBe(true);
-});
-
 test('POST /messages/email returns 404 because email route is not implemented', async ({ request }) => {
   const { token } = await registerOrg(request, 'r4-email-stored');
   const cid = await createContact(request, token, 'EmailStored');
@@ -243,23 +227,6 @@ test('POST /messages/email returns 404 because email route is not implemented', 
     data: { contact_id: cid, subject: 'Test Subject', body: 'Test email body' },
   });
   expect(res.status()).toBe(404);
-});
-
-test('GET /messages?channel=sms returns only sms messages', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-filter-sms');
-  const cid = await createContact(request, token, 'FilterSms');
-  await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, body: 'sms filter test' },
-  });
-  await sendInApp(request, token, cid, 'in-app to exclude');
-  const res = await request.get('/api/v1/messages?channel=sms', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  expect(res.status()).toBe(200);
-  const json = (await res.json()) as MessageListResponse;
-  expect(json.data.every((m) => m.channel === 'sms')).toBe(true);
-  expect(json.data.length).toBeGreaterThan(0);
 });
 
 test('GET /messages?channel=email returns empty list when no email messages exist', async ({ request }) => {
@@ -273,23 +240,6 @@ test('GET /messages?channel=email returns empty list when no email messages exis
   const json = (await res.json()) as MessageListResponse;
   expect(json.data.every((m) => m.channel === 'email')).toBe(true);
   expect(json.data.length).toBe(0);
-});
-
-test('GET /messages?channel=in_app returns only in_app messages', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-filter-inapp');
-  const cid = await createContact(request, token, 'FilterInApp');
-  await sendInApp(request, token, cid, 'in-app channel filter test');
-  await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, body: 'sms to exclude' },
-  });
-  const res = await request.get('/api/v1/messages?channel=in_app', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  expect(res.status()).toBe(200);
-  const json = (await res.json()) as MessageListResponse;
-  expect(json.data.every((m) => m.channel === 'in_app')).toBe(true);
-  expect(json.data.length).toBeGreaterThan(0);
 });
 
 test('GET /messages?status=delivered returns only delivered messages', async ({ request }) => {
@@ -308,22 +258,6 @@ test('GET /messages?status=delivered returns only delivered messages', async ({ 
   expect(json.data.every((m) => m.status === 'delivered')).toBe(true);
   expect(json.data.some((m) => m.status === 'delivered')).toBe(true);
   expect(json.data.some((m) => m.status === 'sent')).toBe(false);
-});
-
-test('GET /messages?status=pending returns pending messages (sms/email)', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-filter-pending');
-  const cid = await createContact(request, token, 'FilterPending');
-  await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, body: 'pending status test' },
-  });
-  const res = await request.get('/api/v1/messages?status=pending', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  expect(res.status()).toBe(200);
-  const json = (await res.json()) as MessageListResponse;
-  expect(json.data.every((m) => m.status === 'pending')).toBe(true);
-  expect(json.data.length).toBeGreaterThan(0);
 });
 
 test('GET /messages?status=read returns read messages after marking one', async ({ request }) => {
@@ -578,81 +512,6 @@ test('POST /messages/call direction=inbound stored as inbound in response', asyn
   expect(json.data.direction).toBe('inbound');
 });
 
-test('POST /messages/sms alternate read path: status becomes read', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-sms-read');
-  const cid = await createContact(request, token, 'SmsRead');
-  const smsRes = await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, body: 'read this sms' },
-  });
-  expect(smsRes.status()).toBe(201);
-  const smsJson = (await smsRes.json()) as MessageResponse;
-  const readRes = await request.post(`/api/v1/messages/${smsJson.data.id}/read`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  expect(readRes.status()).toBe(200);
-  const readJson = (await readRes.json()) as MessageResponse;
-  expect(readJson.data.status).toBe('read');
-});
-
-test('POST /messages/sms then POST /:id/read: status becomes read', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-sms-read-2');
-  const cid = await createContact(request, token, 'SmsRead2');
-  const smsRes = await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, body: 'read this sms too' },
-  });
-  expect(smsRes.status()).toBe(201);
-  const smsJson = (await smsRes.json()) as MessageResponse;
-  const readRes = await request.post(`/api/v1/messages/${smsJson.data.id}/read`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  expect(readRes.status()).toBe(200);
-  const readJson = (await readRes.json()) as MessageResponse;
-  expect(readJson.data.status).toBe('read');
-});
-
-test('GET /messages/conversation returns messages from all supported send endpoints for one contact', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-conv-all-channels');
-  const cid = await createContact(request, token, 'ConvAllChannels');
-  await sendInApp(request, token, cid, 'in-app for multi-channel');
-  await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, body: 'sms for multi-channel' },
-  });
-  await request.post('/api/v1/messages/call', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, direction: 'outbound', notes: 'call for multi-endpoint' },
-  });
-  const res = await request.get(`/api/v1/messages/conversation/${cid}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const json = (await res.json()) as ConversationResponse;
-  expect(json.data.length).toBeGreaterThanOrEqual(3);
-  const channels = new Set(json.data.map((m) => m.channel));
-  expect(channels.has('in_app')).toBe(true);
-  expect(channels.has('sms')).toBe(true);
-});
-
-test('3 messages (in-app, sms, call) to contact: conversation returns all 3', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-conv-3msg');
-  const cid = await createContact(request, token, 'Conv3Msg');
-  await sendInApp(request, token, cid, '3msg in-app');
-  await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, body: '3msg sms' },
-  });
-  await request.post('/api/v1/messages/call', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, direction: 'outbound', notes: '3msg call' },
-  });
-  const res = await request.get(`/api/v1/messages/conversation/${cid}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const json = (await res.json()) as ConversationResponse;
-  expect(json.data.length).toBeGreaterThanOrEqual(3);
-});
-
 test('GET /messages/conversation order is asc by created_at for multiple messages', async ({ request }) => {
   const { token } = await registerOrg(request, 'r4-conv-order');
   const cid = await createContact(request, token, 'ConvOrder');
@@ -687,23 +546,6 @@ test('POST /messages/in-app for non-existent contact returns 404', async ({ requ
   expect(res.status()).toBe(404);
   const json = await res.json();
   expect(json.error.code).toBe('CONTACT_NOT_FOUND');
-});
-
-test('GET /messages?contact_id + channel combined filter returns matching only', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-combined-filter');
-  const cid = await createContact(request, token, 'CombinedFilter');
-  await sendInApp(request, token, cid, 'combined filter in-app');
-  await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, body: 'combined filter sms' },
-  });
-  const res = await request.get(`/api/v1/messages?contact_id=${cid}&channel=sms`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  expect(res.status()).toBe(200);
-  const json = (await res.json()) as MessageListResponse;
-  expect(json.data.every((m) => m.channel === 'sms' && m.contact_id === cid)).toBe(true);
-  expect(json.data.length).toBeGreaterThan(0);
 });
 
 test('5 messages to contact: GET /conversation returns exactly 5', async ({ request }) => {
@@ -754,23 +596,6 @@ test('Read a message: GET /messages?status=delivered excludes read messages', as
   expect(json.data.some((m) => m.id === msg.id)).toBe(false);
 });
 
-test('GET /messages?status=pending excludes sent messages', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-pending-channels');
-  const cid = await createContact(request, token, 'PendingChannels');
-  await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, body: 'pending sms' },
-  });
-  await sendInApp(request, token, cid, 'sent in-app');
-  const res = await request.get('/api/v1/messages?status=pending', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const json = (await res.json()) as MessageListResponse;
-  expect(json.data.every((m) => m.status === 'pending')).toBe(true);
-  expect(json.data.some((m) => m.status === 'pending')).toBe(true);
-  expect(json.data.some((m) => m.status === 'sent')).toBe(false);
-});
-
 test('POST /messages/call duration_seconds=60: body stores seconds prefix', async ({ request }) => {
   const { token } = await registerOrg(request, 'r4-call-60');
   const cid = await createContact(request, token, 'Call60');
@@ -809,25 +634,6 @@ test('GET /messages returns messages ordered by created_at desc (newest first)',
   }
 });
 
-test('GET /messages with no filters returns all org messages from supported endpoints', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-no-filter');
-  const cid = await createContact(request, token, 'NoFilter');
-  await sendInApp(request, token, cid, 'no filter in-app');
-  await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, body: 'no filter sms' },
-  });
-  await request.post('/api/v1/messages/call', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, direction: 'outbound', notes: 'no filter call' },
-  });
-  const res = await request.get('/api/v1/messages', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const json = (await res.json()) as MessageListResponse;
-  expect(json.meta.total).toBeGreaterThanOrEqual(3);
-});
-
 // ── Rung 5 tests ─────────────────────────────────────────────────────────────
 
 test('R5: POST /messages/in-app missing contact_id returns 400', async ({ request }) => {
@@ -862,16 +668,6 @@ test('R5: POST /messages/call missing direction returns 400', async ({ request }
   const { token } = await registerOrg(request, 'r5-call-no-dir');
   const cid = await createContact(request, token, 'CallNoDir');
   const res = await request.post('/api/v1/messages/call', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid },
-  });
-  expect(res.status()).toBe(400);
-});
-
-test('R5: POST /messages/sms missing body returns 400', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-sms-no-body');
-  const cid = await createContact(request, token, 'SmsNoBody');
-  const res = await request.post('/api/v1/messages/sms', {
     headers: { Authorization: `Bearer ${token}` },
     data: { contact_id: cid },
   });
@@ -946,28 +742,6 @@ test('R5: POST /messages/in-app returns status=sent', async ({ request }) => {
   const cid = await createContact(request, token, 'InAppStatus');
   const msg = await sendInApp(request, token, cid, 'status check');
   expect(msg.status).toBe('sent');
-});
-
-test('R5: POST /messages/sms returns direction=outbound', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-sms-direction');
-  const cid = await createContact(request, token, 'SmsDirection');
-  const res = await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, body: 'sms direction check' },
-  });
-  const json = (await res.json()) as MessageResponse;
-  expect(json.data.direction).toBe('outbound');
-});
-
-test('R5: POST /messages/sms returns status=pending', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-sms-status');
-  const cid = await createContact(request, token, 'SmsStatus');
-  const res = await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: cid, body: 'sms status check' },
-  });
-  const json = (await res.json()) as MessageResponse;
-  expect(json.data.status).toBe('pending');
 });
 
 test('R5: POST /messages/email returns 404 because email route is not implemented', async ({ request }) => {

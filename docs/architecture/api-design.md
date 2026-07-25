@@ -117,7 +117,6 @@ GET    /tasks/overdue          Overdue tasks for current user
 
 ```
 GET    /messages               List messages for org (filterable by contact)
-POST   /messages/sms           Send SMS to a contact (via SMS.ru)
 POST   /messages/in-app        Send in-app message to contact
 GET    /messages/:contact_id   Conversation history with a contact
 POST   /messages/:id/read      Mark message as read
@@ -221,5 +220,4 @@ DELETE /attachments/:id        Delete attachment
 
 - Default: 100 requests / minute per user
 - Bulk import endpoints: 10 requests / minute per org
-- SMS send: 60 per hour per org, subject to SMS.ru account limits
 - Analytics: 30 requests / minute (queries are expensive)

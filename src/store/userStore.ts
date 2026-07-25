@@ -33,8 +33,8 @@ interface UserState {
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
   join: (companyCode: string, username: string, password: string) => Promise<void>;
-  verifyOtp: (userId: string, code: string, channel: 'sms' | 'email') => Promise<void>;
-  resendVerification: (userId: string, channel: 'sms' | 'email') => Promise<void>;
+  verifyOtp: (userId: string, code: string, channel: 'email') => Promise<void>;
+  resendVerification: (userId: string, channel: 'email') => Promise<void>;
   changePassword: (newPassword: string) => Promise<void>;
   setCredentials: (email: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -114,7 +114,7 @@ export const useUserStore = create<UserState>()((set) => ({
     }
   },
 
-  verifyOtp: async (userId: string, code: string, channel: 'sms' | 'email'): Promise<void> => {
+  verifyOtp: async (userId: string, code: string, channel: 'email'): Promise<void> => {
     set({ isLoading: true, error: null });
     try {
       const response = await fetch(`${API_URL}/auth/verify`, {
@@ -137,7 +137,7 @@ export const useUserStore = create<UserState>()((set) => ({
     }
   },
 
-  resendVerification: async (userId: string, channel: 'sms' | 'email'): Promise<void> => {
+  resendVerification: async (userId: string, channel: 'email'): Promise<void> => {
     try {
       await fetch(`${API_URL}/auth/verify/resend`, {
         method: 'POST',

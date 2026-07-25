@@ -18,7 +18,6 @@ type RegisterBody = {
     needs_verification: boolean;
   };
   meta: {
-    sms_sent: boolean;
     email_sent: boolean;
   };
 };
@@ -133,7 +132,6 @@ test('POST /api/v1/auth/ returns an OTP challenge without a session token', asyn
   expect(body.data.needs_verification).toBe(true);
   expect(body.data).not.toHaveProperty('token');
   expect(body.data).not.toHaveProperty('user');
-  expect(typeof body.meta.sms_sent).toBe('boolean');
   expect(typeof body.meta.email_sent).toBe('boolean');
 });
 

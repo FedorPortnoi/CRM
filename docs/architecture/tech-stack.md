@@ -43,7 +43,6 @@ Every technology was evaluated against:
 | **Fastify** | REST API framework — faster than Express, built-in schema validation hooks, WebSocket-compatible |
 | **Zod** | Runtime validation + TypeScript schema inference; schemas shared between mobile client and backend |
 | **Prisma ORM** | Type-safe DB queries + migrations against Yandex Managed PostgreSQL |
-| **SMS.ru HTTP API** | Outbound SMS for Call & Messaging in the Russian market |
 
 ### Key Backend Decisions
 
@@ -80,7 +79,6 @@ The database runs on Yandex Managed Service for PostgreSQL in `ru-central1`, sat
 | Technology | Purpose |
 |-----------|---------|
 | **Expo Push Notifications** | Native push to iOS (APNS) and Android (FCM) via a single Expo API — no separate FCM/APNS credentials needed during development |
-| **SMS.ru** | Outbound SMS for Call & Messaging; send operations stay server-side behind the Fastify API |
 
 ---
 

@@ -16,5 +16,5 @@ At the same time, scattering Russia-specific assumptions through every screen an
 - Default locale is `ru-RU`.
 - Phone handling assumes `+7` and national `8` variants.
 - Payment work should start behind provider adapters for SBP, acquiring, and invoices.
-- Yandex, SMS.ru, object storage, and 1C integrations stay behind adapter modules.
+- Yandex, object storage, and 1C integrations stay behind adapter modules.
 - Personal-data localization and consent/audit work are platform concerns, not one-off feature checks.

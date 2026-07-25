@@ -116,8 +116,8 @@ test('completion: create-contact from pending capture logs activity and creates 
   const captureRes = await request.post('/api/v1/captures', {
     headers: authHeaders(org.token),
     data: {
-      type: 'sms',
-      raw_data: { from: phone, body: 'Captured SMS body', first_name: 'CapturedLead' },
+      type: 'email',
+      raw_data: { from: phone, body: 'Captured email body', first_name: 'CapturedLead' },
       phone_number: phone,
     },
   });
@@ -137,7 +137,7 @@ test('completion: create-contact from pending capture logs activity and creates 
   });
   expect(messagesRes.status()).toBe(200);
   const messages = await messagesRes.json() as { data: Array<{ body: string; channel: string }> };
-  expect(messages.data.some((message) => message.channel === 'sms' && message.body === 'Captured SMS body')).toBe(true);
+  expect(messages.data.some((message) => message.channel === 'email' && message.body === 'Captured email body')).toBe(true);
 
   const tasksRes = await request.get(`/api/v1/tasks?contact_id=${created.data.id}`, { headers: authHeaders(org.token) });
   expect(tasksRes.status()).toBe(200);

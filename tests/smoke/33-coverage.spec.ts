@@ -133,7 +133,7 @@ test('workflow 33: POST with invalid action type returns 400', async ({ request 
   const org = await registerOrg(request, 'wf33-inv-act');
   const r = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
-    data: { name: 'BadAction', trigger: 'contact_created', actions: [{ type: 'send_sms', config: {} }] },
+    data: { name: 'BadAction', trigger: 'contact_created', actions: [{ type: 'send_carrier_pigeon', config: {} }] },
   });
   expect(r.status()).toBe(400);
 });

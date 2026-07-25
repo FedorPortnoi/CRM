@@ -453,7 +453,4 @@ export function validateProductionConfig(env: NodeJS.ProcessEnv = process.env): 
     }, env);
   }
 
-  if (env.SMSRU_SEND_ENABLED === 'true') {
-    getRequiredSecret('SMSRU_API_ID', { minLength: 16 }, env);
-  }
 }

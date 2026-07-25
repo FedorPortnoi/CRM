@@ -205,30 +205,6 @@ test('POST /messages/call with no duration_seconds but with notes sets body to t
   expect(callBody.data.body).toBe('Follow up on proposal');
 });
 
-test('POST /messages/sms returns 201 with channel sms, direction outbound, and status pending', async ({ request }) => {
-  const { token } = getAuth();
-  const contactRes = await request.post('/api/v1/contacts', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { first_name: 'SmsContact' },
-  });
-  expect(contactRes.status()).toBe(201);
-  const contactBody = (await contactRes.json()) as { data: { id: string } };
-  const contactId = contactBody.data.id;
-
-  const smsRes = await request.post('/api/v1/messages/sms', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { contact_id: contactId, body: 'SMS smoke test' },
-  });
-  expect(smsRes.status()).toBe(201);
-  const smsBody = (await smsRes.json()) as {
-    data: { channel: string; direction: string; status: string; contact_id: string };
-  };
-  expect(smsBody.data.channel).toBe('sms');
-  expect(smsBody.data.direction).toBe('outbound');
-  expect(smsBody.data.status).toBe('pending');
-  expect(smsBody.data.contact_id).toBe(contactId);
-});
-
 // Deals tests
 
 test('PATCH /deals/:id with value -1 returns 400 (Zod rejects non-positive numbers)', async ({ request }) => {

@@ -21,7 +21,7 @@ import { ThemeColors } from '../../theme';
 
 type PendingCapture = {
   id: string;
-  type: 'call' | 'sms' | 'email';
+  type: 'call' | 'email';
   phone_number: string | null;
   status: 'pending' | 'matched' | 'dismissed';
   contact_id: string | null;
@@ -199,8 +199,6 @@ export default function CapturesScreen(): JSX.Element {
     switch (type) {
       case 'call':
         return t('captures.call');
-      case 'sms':
-        return t('captures.sms');
       default:
         return type.toUpperCase();
     }

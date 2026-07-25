@@ -21,7 +21,7 @@ For field sales teams, having an integrated schedule means the day is visible in
 
 - Calendar view: month, week, and day views on mobile (react-native-calendars)
 - Create appointment: title (required), contact link (required), start/end time (required), location (optional), description (optional), attendees (from team), reminder setting (default 30 min)
-- Send invite to contact: generates an iCal (.ics) file, sends via email or SMS to contact
+- Send invite to contact: generates an iCal (.ics) file, sends via email to contact
 - Automated reminder: push notification to all attendee users at configured interval before meeting
 - Post-meeting note prompt: when a meeting's end time passes, prompt user to add meeting notes; notes auto-appended to contact activity history with type=meeting
 - Google Calendar sync: OAuth2 authorization → bidirectional sync (CRM events appear in Google Calendar, Google Calendar events appear in CRM with contact matching attempted)
@@ -34,7 +34,7 @@ For field sales teams, having an integrated schedule means the day is visible in
 
 - Meeting with no Google Calendar sync: appointment exists only in CRM; user sees it only in CRM calendar
 - Two users accept the same time slot from Google Calendar and CRM creates duplicate events: detected by Google event ID; second webhook is a no-op (idempotent)
-- Contact has no email (can't send iCal): offer SMS with meeting details as plain text fallback
+- Contact has no email (can't send iCal): show the meeting details in-app as plain text so the rep can relay them to the contact manually
 - Meeting reminder fires when phone is on Do Not Disturb: iOS/Android handle this — high-priority notifications can bypass DND; make this configurable per user preference
 - Meeting cancelled after notes were added: notes remain in history as "(Meeting cancelled) + notes"; they're part of the history
 - Appointment at midnight spanning two days: display correctly in both the day it starts and the day it ends on day view
@@ -42,7 +42,7 @@ For field sales teams, having an integrated schedule means the day is visible in
 
 ## Open Questions
 
-1. Should meeting invites to contacts be sent via email, SMS, or a custom "join link"? For MVP: email only (SMS as fallback if no email).
+1. Should meeting invites to contacts be sent via email or a custom "join link"? For MVP: email only.
 2. Should there be a public-facing booking link (like Calendly) so contacts can self-schedule? High value but significant scope — defer to v2.
 3. Should we support video meeting links (Zoom, Google Meet) embedded in appointments? Yes — as a free text "Meeting URL" field for MVP; deep integration in v2.
 4. What happens to meetings when a team member is deleted? Transfer to org owner.

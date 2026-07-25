@@ -20,7 +20,6 @@ Includes:
 - All 14 MVP features
 - Up to 2,500 contacts
 - Up to 3 pipelines
-- 100 SMS messages/month
 - 5GB file storage
 - Email support
 
@@ -31,7 +30,6 @@ Includes:
 Everything in Starter, plus:
 - Unlimited contacts
 - Unlimited pipelines
-- 500 SMS/month (additional at $0.05/SMS)
 - 25GB file storage
 - Custom automation rules (up to 20)
 - Team analytics and reports
@@ -43,7 +41,6 @@ Everything in Starter, plus:
 **For:** Small and medium businesses (50–500 users)
 
 Everything in Growth, plus:
-- 2,000 SMS/month included
 - 100GB file storage
 - Advanced analytics and custom reports
 - API access + webhooks
@@ -102,7 +99,6 @@ Everything in Growth, plus:
 ## Open Questions
 
 1. Should we offer a free individual tier (solo entrepreneurs, no team features) to maximize top-of-funnel? Risk: reduces conversion to paid; benefit: organic growth and brand awareness.
-2. What is the right SMS bundle? Include 100/500/2000 per org/month, or per-user? Per-org is simpler and less punishing for teams.
-3. Should API access be gated to Business tier, or available to all paid plans? Keeping API on Business protects support costs (API users generate more tickets).
-4. Should we offer monthly billing at all, or push everyone to annual? Monthly reduces commitment barrier; annual improves retention. Offer both.
-5. At what org size should we switch to custom/enterprise pricing? Proposed: 100+ users gets a call; 200+ users gets custom contract.
+2. Should API access be gated to Business tier, or available to all paid plans? Keeping API on Business protects support costs (API users generate more tickets).
+3. Should we offer monthly billing at all, or push everyone to annual? Monthly reduces commitment barrier; annual improves retention. Offer both.
+4. At what org size should we switch to custom/enterprise pricing? Proposed: 100+ users gets a call; 200+ users gets custom contract.

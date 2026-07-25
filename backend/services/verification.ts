@@ -26,7 +26,7 @@ function parseStoredCodeHash(value: string): { digest: string; failedAttempts: n
   return { digest: value.slice(0, separatorIndex), failedAttempts };
 }
 
-export async function issueCode(userId: string, channel: 'sms' | 'email'): Promise<string> {
+export async function issueCode(userId: string, channel: 'email'): Promise<string> {
   const code = generateOtp();
 
   await db.verificationCode.deleteMany({
@@ -45,7 +45,7 @@ export async function issueCode(userId: string, channel: 'sms' | 'email'): Promi
   return code;
 }
 
-export async function verifyCode(userId: string, code: string, channel: 'sms' | 'email'): Promise<boolean> {
+export async function verifyCode(userId: string, code: string, channel: 'email'): Promise<boolean> {
   const candidateDigest = hashCode(code);
 
   for (let retry = 0; retry <= MAX_FAILED_OTP_ATTEMPTS; retry++) {

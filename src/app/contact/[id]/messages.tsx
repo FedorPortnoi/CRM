@@ -24,7 +24,7 @@ import { useTheme } from '../../../hooks/useTheme';
 import { ThemeColors } from '../../../theme';
 
 type MessageDirection = 'inbound' | 'outbound';
-type MessageChannel = 'sms' | 'in_app' | 'email';
+type MessageChannel = 'in_app' | 'email';
 type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 type ComposerMode = 'note' | 'call';
 

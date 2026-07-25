@@ -101,7 +101,6 @@ function resolveDirection(rawData: RawCaptureData): MessageDirection {
 
 function resolveChannel(type: PendingCaptureType): MessageChannel {
   if (type === PendingCaptureType.call) return MessageChannel.call;
-  if (type === PendingCaptureType.sms) return MessageChannel.sms;
   return MessageChannel.email;
 }
 
@@ -170,8 +169,7 @@ function resolveMessageBody(type: PendingCaptureType, rawData: RawCaptureData, p
     return body;
   }
 
-  const label = type === PendingCaptureType.sms ? 'SMS' : 'email';
-  return phoneNumber ? `Captured ${label} touchpoint from ${phoneNumber}` : `Captured ${label} touchpoint`;
+  return phoneNumber ? `Captured email touchpoint from ${phoneNumber}` : 'Captured email touchpoint';
 }
 
 function buildMessageData(

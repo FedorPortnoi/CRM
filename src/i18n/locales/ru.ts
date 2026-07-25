@@ -443,7 +443,6 @@ const ru = {
     createContact: 'Новый контакт',
     unknown: 'Неизвестно',
     call: 'Звонок',
-    sms: 'SMS',
     selectContact: 'Выбрать',
     matchTitle: 'Привязать к контакту',
     searchPlaceholder: 'Поиск по имени или телефону...',

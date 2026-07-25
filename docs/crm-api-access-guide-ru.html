@@ -216,11 +216,6 @@
         <td>Чтобы пользователь мог подключить свой Яндекс Календарь к CRM.</td>
       </tr>
       <tr>
-        <td><code>SMSRU_API_ID</code><br><code>SMSRU_SENDER</code></td>
-        <td>Личный кабинет SMS.ru</td>
-        <td>Чтобы CRM могла отправлять SMS и принимать ответы клиентов.</td>
-      </tr>
-      <tr>
         <td><code>YANDEX_API_KEY</code><br><code>YANDEX_FOLDER_ID</code></td>
         <td>Yandex Cloud</td>
         <td>Чтобы CRM могла читать текст с визиток и расшифровывать голосовые заметки.</td>
@@ -252,7 +247,7 @@
     <h3>Что пока не получать</h3>
     <p>
       В старых заметках встречаются Google Calendar и Twilio. Для текущей русской версии CRM они заменены:
-      календарь - на Яндекс Календарь, SMS - на SMS.ru. Их сейчас не нужно оформлять.
+      календарь - на Яндекс Календарь. Twilio и любые SMS-сервисы не нужны: SMS в продукте нет.
     </p>
   </div>
 
@@ -271,8 +266,6 @@ YANDEX_CLIENT_ID=
 YANDEX_CLIENT_SECRET=
 YANDEX_REDIRECT_URI=http://localhost:3000/api/v1/calendar/sync/yandex/callback
 
-SMSRU_API_ID=
-SMSRU_SENDER=CRM
 
 YANDEX_API_KEY=
 YANDEX_FOLDER_ID=
@@ -349,61 +342,7 @@ YANDEX_REDIRECT_URI=http://localhost:3000/api/v1/calendar/sync/yandex/callback</
     </p>
   </div>
 
-  <h2 class="page-break">2. SMS.ru</h2>
-  <p>
-    Это нужно, чтобы CRM могла отправлять SMS клиентам и принимать ответы. Для России выбран SMS.ru.
-    В старых файлах может встречаться Twilio, но для текущей версии CRM его получать не нужно.
-  </p>
-
-  <h3>Что нужно получить</h3>
-  <ul>
-    <li><code>SMSRU_API_ID</code> - секретный код из личного кабинета SMS.ru.</li>
-    <li><code>SMSRU_SENDER</code> - имя отправителя, которое видит клиент. Для тестов можно оставить <code>CRM</code>, для реальных брендированных SMS имя нужно согласовать в SMS.ru.</li>
-  </ul>
-
-  <h3>Куда зайти</h3>
-  <p>
-    Сайт: <a href="https://sms.ru/">https://sms.ru/</a><br>
-    Документация: <a href="https://sms.ru/docs/api">https://sms.ru/docs/api</a>
-  </p>
-
-  <h3>Пошагово</h3>
-  <ol>
-    <li>Зарегистрируйтесь или войдите в SMS.ru.</li>
-    <li>Подтвердите телефон и email, если сервис попросит.</li>
-    <li>Откройте личный кабинет.</li>
-    <li>Найдите раздел с настройками API. Обычно он называется <strong>API</strong>, <strong>Программистам</strong>, <strong>Настройки API</strong> или похожим образом.</li>
-    <li>Найдите значение <strong>api_id</strong>. Это главный код для отправки SMS.</li>
-    <li>Скопируйте <strong>api_id</strong> и вставьте его в <code>SMSRU_API_ID</code>.</li>
-    <li>Если вы хотите, чтобы SMS приходили от имени компании, найдите раздел с отправителями. Там можно подать имя отправителя на согласование.</li>
-    <li>Если отправитель еще не согласован, временно оставьте <code>SMSRU_SENDER=CRM</code>.</li>
-    <li>Пополните баланс на небольшую сумму для тестов.</li>
-  </ol>
-
-  <h3>Что записать в .env</h3>
-  <pre>SMSRU_API_ID=сюда_вставить_api_id
-SMSRU_SENDER=CRM</pre>
-
-  <h3>Входящие SMS</h3>
-  <p>
-    Для входящих сообщений SMS.ru должен отправлять данные в CRM. В личном кабинете SMS.ru найдите раздел
-    <strong>Callback</strong>, <strong>Webhook</strong>, <strong>Обработчики</strong> или <strong>Уведомления</strong>.
-    Для локальной разработки постоянный внешний адрес обычно не готов, поэтому этот пункт можно настроить позже,
-    когда CRM будет размещена на сервере.
-  </p>
-
-  <p>Будущий адрес будет выглядеть примерно так:</p>
-  <pre>https://ваш-домен/api/v1/messages/webhooks/smsru/inbound</pre>
-
-  <h3>Как понять, что все сделано правильно</h3>
-  <ul class="checklist">
-    <li><code>SMSRU_API_ID</code> заполнен.</li>
-    <li>На балансе SMS.ru есть деньги для тестовой отправки.</li>
-    <li>Имя отправителя либо оставлено <code>CRM</code>, либо уже согласовано в SMS.ru.</li>
-    <li>Для реального сервера позже добавлен адрес для входящих SMS.</li>
-  </ul>
-
-  <h2 class="page-break">3. Yandex Cloud для текста с визиток и голоса</h2>
+  <h2 class="page-break">2. Yandex Cloud для текста с визиток и голоса</h2>
   <p>
     CRM использует один ключ Яндекс Облака для двух задач:
     прочитать текст на фотографии визитки и превратить голосовую заметку в текст.
@@ -472,7 +411,7 @@ YANDEX_FOLDER_ID=сюда_вставить_ID_папки</pre>
     </p>
   </div>
 
-  <h2 class="page-break">4. Yandex Cloud PostgreSQL</h2>
+  <h2 class="page-break">3. Yandex Cloud PostgreSQL</h2>
   <p>
     Это база данных. В ней CRM хранит контакты, сделки, задачи, сообщения и встречи.
     База работает в Яндекс Облаке (Managed Service for PostgreSQL, регион ru-central1), поэтому данные хранятся в России.
@@ -533,7 +472,7 @@ DIRECT_URL="postgresql://crm_user:ВАШ_ПАРОЛЬ@АДРЕС_БАЗЫ:6432/c
     </p>
   </div>
 
-  <h2 class="page-break">5. Yandex Object Storage</h2>
+  <h2 class="page-break">4. Yandex Object Storage</h2>
   <p>
     Это место для файлов: документы, экспорт отчетов, аудио, изображения. В коде CRM для таких сервисов используются названия,
     похожие на Amazon S3, потому что Яндекс поддерживает такой же способ подключения.
@@ -589,7 +528,7 @@ AWS_SECRET_ACCESS_KEY=сюда_вставить_секретную_часть_к
     <li>Ключ создан для сервисного аккаунта, а не для личного аккаунта.</li>
   </ul>
 
-  <h2 class="page-break">6. Sentry</h2>
+  <h2 class="page-break">5. Sentry</h2>
   <p>
     Sentry нужен, чтобы видеть ошибки приложения. Например, если у пользователя что-то сломалось,
     ошибка появится в панели Sentry, и ее можно будет найти быстрее.
@@ -634,7 +573,7 @@ SENTRY_ENVIRONMENT=development</pre>
     </p>
   </div>
 
-  <h2 class="page-break">7. Почта для отправки писем</h2>
+  <h2 class="page-break">6. Почта для отправки писем</h2>
   <p>
     Почта нужна для приглашений, уведомлений и служебных писем. В CRM уже есть места в <code>.env.example</code> для SMTP.
     Простыми словами, это способ отправлять письма от имени выбранного почтового ящика.
@@ -685,7 +624,7 @@ SMTP_PASSWORD=пароль_приложения</pre>
     <li>Порт и адрес сервера взяты из настроек вашего почтового сервиса.</li>
   </ul>
 
-  <h2 class="page-break">8. Что отложено на потом</h2>
+  <h2 class="page-break">7. Что отложено на потом</h2>
   <p>
     Эти интеграции важны, но по CRM vault они не являются текущим первым шагом. Их не нужно получать сейчас,
     если отдельно не принято решение начинать их внедрение.
@@ -723,7 +662,7 @@ SMTP_PASSWORD=пароль_приложения</pre>
       <tr>
         <td>Twilio</td>
         <td>Не нужен для русской версии</td>
-        <td>Заменен на SMS.ru.</td>
+        <td>Не используется: SMS в продукте нет.</td>
       </tr>
     </tbody>
   </table>
@@ -738,8 +677,6 @@ SMTP_PASSWORD=пароль_приложения</pre>
 YANDEX_CLIENT_SECRET=
 YANDEX_REDIRECT_URI=http://localhost:3000/api/v1/calendar/sync/yandex/callback
 
-SMSRU_API_ID=
-SMSRU_SENDER=CRM
 
 YANDEX_API_KEY=
 YANDEX_FOLDER_ID=
@@ -770,8 +707,6 @@ SMTP_PASSWORD=</pre>
   <ul class="small">
     <li>Яндекс OAuth: <a href="https://oauth.yandex.ru/">https://oauth.yandex.ru/</a></li>
     <li>Справка Яндекс OAuth про Client ID, Client secret и Redirect URI: <a href="https://yandex.ru/dev/id/doc/en/oauth-cabinet">https://yandex.ru/dev/id/doc/en/oauth-cabinet</a></li>
-    <li>SMS.ru API: <a href="https://sms.ru/docs/api">https://sms.ru/docs/api</a></li>
-    <li>SMS.ru отправка сообщений: <a href="https://sms.ru/docs/api/api_group_sms/send">https://sms.ru/docs/api/api_group_sms/send</a></li>
     <li>Yandex Cloud API-ключи: <a href="https://yandex.cloud/ru/docs/iam/concepts/authorization/api-key">https://yandex.cloud/ru/docs/iam/concepts/authorization/api-key</a></li>
     <li>Yandex Cloud ID папки: <a href="https://yandex.cloud/en/docs/resource-manager/operations/folder/get-id">https://yandex.cloud/en/docs/resource-manager/operations/folder/get-id</a></li>
     <li>Yandex SpeechKit: <a href="https://aistudio.yandex.ru/docs/ru/speechkit/concepts/auth.html">https://aistudio.yandex.ru/docs/ru/speechkit/concepts/auth.html</a></li>
