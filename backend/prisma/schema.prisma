@@ -1,5 +1,5 @@
 // Prisma schema for Mobile CRM Platform
-// Prisma 5.13.0 | PostgreSQL (Supabase)
+// Prisma 5.13.0 | Yandex Managed PostgreSQL (ru-central1)
 
 datasource db {
   provider  = "postgresql"

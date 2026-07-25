@@ -80,7 +80,7 @@ A dedicated sync service on the client reconciles local mutations with the serve
 | Mobile App | React Native + Expo | UI, local cache, offline ops, push receipt |
 | API Gateway | Fastify + TypeScript | Auth, validation, routing, rate limiting |
 | Business Services | Node.js services | CRM logic, automation rules, notifications |
-| PostgreSQL | PostgreSQL 16 (Supabase, migrating to Yandex Managed PostgreSQL for FZ-242) | Primary data store, audit logs |
+| PostgreSQL | Yandex Managed PostgreSQL (`ru-central1`, FZ-242 compliant) | Primary data store, audit logs |
 | Redis | Redis 7 | Caching, job queues, rate limit counters |
 | Push Delivery | FCM + APNS + Expo | Cross-platform push notifications |
 | SMS | SMS.ru | Outbound SMS from contact profiles |

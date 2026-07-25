@@ -18,7 +18,7 @@
 | **Previous release** | 1.0.4 (iOS build 20 / Android versionCode 7) |
 | **Source branch** | `fix/dm-security-ru-i18n-ui` — pushed to `origin` 2026-07-25; **not yet merged to `main`**. |
 | **Production API** | `https://4kub.ru/api/v1` (WebSocket `wss://4kub.ru`) |
-| **Database** | Yandex Cloud Managed PostgreSQL (`ru-central1`) — verified 2026-07-25. Supabase is gone. |
+| **Database** | Yandex Cloud Managed PostgreSQL (`ru-central1`) — verified 2026-07-25 |
 | **Bundle id** | `com.fedorportnoi.crm` (iOS + Android) |
 
 **What 1.0.5 is:** a security-hardening + Russian-localization release. It closes **24 security findings**

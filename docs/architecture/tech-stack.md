@@ -42,14 +42,14 @@ Every technology was evaluated against:
 | **Node.js + TypeScript** | Same language as frontend — shared types and Zod schemas |
 | **Fastify** | REST API framework — faster than Express, built-in schema validation hooks, WebSocket-compatible |
 | **Zod** | Runtime validation + TypeScript schema inference; schemas shared between mobile client and backend |
-| **Prisma ORM** | Type-safe DB queries + migrations; strong Supabase PostgreSQL integration |
+| **Prisma ORM** | Type-safe DB queries + migrations against Yandex Managed PostgreSQL |
 | **SMS.ru HTTP API** | Outbound SMS for Call & Messaging in the Russian market |
 
 ### Key Backend Decisions
 
 **Fastify over Express:** Fastify is 2–3x faster than Express in benchmarks, has built-in JSON schema validation hooks, and is fully compatible with WebSockets via `@fastify/websocket`. Required for persistent server hosting on Yandex Cloud.
 
-**Prisma over Drizzle ORM:** Prisma's Supabase integration is mature, its migration system (`prisma migrate`) is more ergonomic than Drizzle's, and its generated client provides excellent autocomplete and type safety.
+**Prisma over Drizzle ORM:** Prisma's migration system (`prisma migrate`) is more ergonomic than Drizzle's, and its generated client provides excellent autocomplete and type safety.
 
 **Shared Zod schemas:** The same Zod schema definitions are imported by both the Fastify API (for request validation) and the React Native app (for response parsing and form validation). One source of truth, zero frontend/backend contract bugs.
 
@@ -59,17 +59,15 @@ Every technology was evaluated against:
 
 | Technology | Purpose |
 |-----------|---------|
-| **Supabase (hosted PostgreSQL)** | Primary data store — managed Postgres with built-in connection pooling (pgBouncer), backups, and dashboard |
+| **Yandex Managed PostgreSQL** | Primary data store — managed Postgres in `ru-central1` with connection pooling, backups, and console management |
 | **@fastify/websocket** | WebSocket support for real-time features (planned, not yet live) |
 | **bcrypt + @fastify/jwt (custom auth)** | JWT issuance, password hashing, and refresh token management; handles session lifecycle |
 
-### Database: Supabase (Current) → Yandex Managed PostgreSQL (Planned)
+### Database: Yandex Managed PostgreSQL
 
-Supabase is used as the current PostgreSQL host. It provides managed Postgres with built-in connection pooling (pgBouncer), backups, and a web dashboard.
+The database runs on Yandex Managed Service for PostgreSQL in `ru-central1`, satisfying FZ-242 (Russian data residency). It provides connection pooling, automated backups, and console management. Connections require `sslmode=require` against the Yandex root CA.
 
-**Authentication** is handled entirely by the backend: bcrypt for password hashing and `@fastify/jwt` for JWT issuance and refresh token management. The Supabase Auth SDK is not used.
-
-**Planned migration:** Supabase PostgreSQL will be migrated to Yandex Managed PostgreSQL for FZ-242 (Russian data residency) compliance.
+**Authentication** is handled entirely by the backend: bcrypt for password hashing and `@fastify/jwt` for JWT issuance and session lifecycle. No third-party auth service is used.
 
 **Multi-tenancy** is enforced at the application layer — every Prisma query includes an `organization_id` filter derived from the verified JWT. Row-Level Security (RLS) is not used.
 
@@ -91,7 +89,7 @@ Supabase is used as the current PostgreSQL host. It provides managed Postgres wi
 | Component | Technology | Monthly Cost (MVP) |
 |-----------|-----------|-------------------|
 | **API Server** | Yandex Cloud (Node.js/Fastify) | ~$5/month |
-| **Database + Auth + Real-time** | Supabase free tier | $0 |
+| **Database** | Yandex Managed PostgreSQL (`ru-central1`) | ~$15/month |
 | **Mobile Builds + OTA** | Expo EAS | Free tier for MVP |
 | **CI/CD** | GitHub Actions | Free for private repos |
 | **Error tracking** | Sentry | Free tier |
@@ -116,19 +114,19 @@ Supabase is used as the current PostgreSQL host. It provides managed Postgres wi
 | **AWS / GCP (hosting)** | Overkill for MVP; requires DevOps expertise; revisit at scale (~$50K MRR) |
 | **Firebase** | Firestore is document-based and poorly suited for relational CRM data (contacts → deals → pipeline stages → tasks). PostgreSQL's relational model is the right fit; multi-tenancy is enforced at the application layer via organization_id in every Prisma query. |
 | **Express** | Replaced by Fastify — 2–3x faster, better schema validation hooks, WebSocket-compatible |
-| **Drizzle ORM** | Replaced by Prisma — better Supabase integration, more ergonomic migrations |
+| **Drizzle ORM** | Replaced by Prisma — more ergonomic migrations, better generated client |
 | **Socket.io** | Replaced by @fastify/websocket — eliminates a separate WebSocket server entirely |
-| **Redis (standalone)** | No longer needed — Supabase replaces the session cache, pub/sub, and real-time use cases |
+| **Redis (standalone)** | No longer needed — `@fastify/websocket` covers pub/sub and real-time; sessions live in Postgres |
 | **Redux Toolkit** | Replaced by Zustand — simpler, less boilerplate for the amount of local state needed |
 | **React Navigation** | Replaced by Expo Router — file-based navigation, typed routes, deep linking for free |
 | **GraphQL** | Overkill for MVP; REST + @fastify/websocket covers all use cases |
 | **NestJS** | Decorator/DI complexity unnecessary at MVP scale |
-| **Self-managed PostgreSQL** | Replaced by Supabase — eliminates ops burden of managing DB, backups, connections |
+| **Self-managed PostgreSQL** | Replaced by Yandex Managed PostgreSQL — eliminates ops burden of managing DB, backups, connections |
 
 ---
 
 ## Related Files
 
 - `docs/architecture/system-overview.md` — how these technologies fit together as a system
-- `docs/architecture/api-design.md` — Fastify + Zod + Supabase Auth design
+- `docs/architecture/api-design.md` — Fastify + Zod + custom JWT auth design
 - `docs/architecture/data-models.md` — PostgreSQL schema; multi-tenancy via organization_id

@@ -69,9 +69,9 @@ No other third parties have access to your data.
 
 ## 6. Data Storage
 
-Data is stored on Supabase servers (region: Western Europe, Ireland).
+Data is stored on Yandex Cloud infrastructure located in the Russian Federation — Managed Service for PostgreSQL in the `ru-central1` region. Files you upload (attachments, photos) are stored in Yandex Object Storage in the same region.
 
-**Note:** Under Federal Law No. 242-FZ, personal data of Russian Federation citizens must be primarily processed on Russian territory. We plan to migrate data storage to Russian hosting before the Application reaches mass adoption. Until that migration occurs, you use the Application with awareness of this circumstance.
+Under Federal Law No. 242-FZ, personal data of Russian Federation citizens is primarily processed on Russian territory.
 
 ---
 
