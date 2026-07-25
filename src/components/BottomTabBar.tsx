@@ -10,7 +10,9 @@ import MoreSheet from './MoreSheet';
 import { useTheme } from '../hooks/useTheme';
 import { ThemeColors } from '../theme';
 
-const MORE_PATHS = new Set(['/tasks', '/chat', '/notifications', '/calendar', '/settings']);
+const MORE_PATHS = new Set([
+  '/tasks', '/chat', '/notifications', '/calendar', '/settings', '/reports', '/nearby',
+]);
 
 export default function BottomTabBar(): JSX.Element {
   const { t } = useTranslation();

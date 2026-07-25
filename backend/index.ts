@@ -29,6 +29,9 @@ import { attachmentsRoutes } from './api/routes/attachments';
 import chatRoutes from './api/routes/chat';
 import importsRoutes from './api/routes/imports';
 import orgRoutes from './api/routes/org';
+import reportingRoutes from './api/routes/reporting';
+import webhooksRoutes from './api/routes/webhooks';
+import publicApiRoutes, { apiKeysRoutes } from './api/routes/public-api';
 import { wsRoutes } from './api/routes/ws';
 import { startScheduler } from './services/scheduler';
 
@@ -175,6 +178,21 @@ async function start() {
   await server.register(websocket);
   await server.register(wsRoutes, { prefix: '/api/v1' });
 
+  // NOTE ON ORDERING: a preHandler added to the root instance applies to EVERY route,
+  // including plugins registered before this line — Fastify resolves route hooks at
+  // preReady, not at registration time. Registration order therefore grants no
+  // exemption. What decides whether a route is enforced is entirely inside
+  // enforceAuthenticatedApiRequest: it returns early unless the URL starts with
+  // '/api/v1/', and then again for the paths listed in isPublicApiRoute().
+  //   GET /api/v1/ws         -> listed in isPublicApiRoute, exempt; the socket handler
+  //                             authenticates the ticket/JWT itself.
+  //   GET /api/v1/ws/ticket  -> NOT listed, so it gets the full check (JWT + active user
+  //                             + live session + role refresh). Being a GET, the
+  //                             viewer read-only rule lets viewers mint tickets.
+  //   /public/v1/*           -> not under /api/v1, so the hook returns on its first line
+  //                             and the API-key preHandlers in the plugin are the only
+  //                             auth. Never move the public API under /api/v1: that would
+  //                             demand a JWT session an API key cannot have.
   server.addHook('preHandler', enforceAuthenticatedApiRequest);
 
   await server.register(authRoutes, { prefix: '/api/v1/auth' });
@@ -195,6 +213,18 @@ async function start() {
   await server.register(chatRoutes, { prefix: '/api/v1/chat' });
   await server.register(importsRoutes, { prefix: '/api/v1/import' });
   await server.register(orgRoutes, { prefix: '/api/v1/org' });
+  await server.register(reportingRoutes, { prefix: '/api/v1/reports' });
+  await server.register(webhooksRoutes, { prefix: '/api/v1/webhooks' });
+  // Session-authenticated console for minting/revoking API keys. Must stay under
+  // /api/v1 so the global preHandler refreshes request.user.role from the DB before
+  // the plugin's own owner/admin check reads it.
+  await server.register(apiKeysRoutes, { prefix: '/api/v1/api-keys' });
+
+  // Machine-facing REST API, authenticated by `Authorization: Bearer kub_live_…`.
+  // Deliberately mounted outside /api/v1 — see the note on enforceAuthenticatedApiRequest
+  // above. The plugin installs its own error/not-found handlers and Cache-Control hook
+  // because the ones on this instance only fire for /api/ URLs.
+  await server.register(publicApiRoutes, { prefix: '/public/v1' });
 
   server.get('/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() };

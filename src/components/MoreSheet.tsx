@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { CheckSquare, MessageSquare, Bell, Calendar, Settings } from 'lucide-react-native';
+import { CheckSquare, MessageSquare, Bell, Calendar, Settings, BarChart3, MapPin } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
 import { ThemeColors } from '../theme';
@@ -20,17 +20,25 @@ export default function MoreSheet({ visible, onClose, chatUnread, notifUnread }:
   const { colors } = useTheme();
   const styles = makeStyles(colors);
 
-  const navigate = (path: string): void => {
+  // Tab screens swap the active tab (replace); sections that live outside the tab
+  // navigator are pushed so the header's back arrow returns to where you were.
+  const navigate = (path: string, push: boolean): void => {
     onClose();
+    if (push) {
+      router.push(path as never);
+      return;
+    }
     router.replace(path as never);
   };
 
   const items = [
-    { label: t('tabs.tasks'), Icon: CheckSquare, path: '/tasks', badge: 0 },
-    { label: t('tabs.chat'), Icon: MessageSquare, path: '/chat', badge: chatUnread },
-    { label: t('tabs.notifications'), Icon: Bell, path: '/notifications', badge: notifUnread },
-    { label: t('tabs.calendar'), Icon: Calendar, path: '/calendar', badge: 0 },
-    { label: t('tabs.settings'), Icon: Settings, path: '/settings', badge: 0 },
+    { label: t('tabs.tasks'), Icon: CheckSquare, path: '/tasks', badge: 0, push: false },
+    { label: t('tabs.chat'), Icon: MessageSquare, path: '/chat', badge: chatUnread, push: false },
+    { label: t('tabs.notifications'), Icon: Bell, path: '/notifications', badge: notifUnread, push: false },
+    { label: t('tabs.calendar'), Icon: Calendar, path: '/calendar', badge: 0, push: false },
+    { label: t('tabs.reports'), Icon: BarChart3, path: '/reports', badge: 0, push: true },
+    { label: t('tabs.nearby'), Icon: MapPin, path: '/nearby', badge: 0, push: true },
+    { label: t('tabs.settings'), Icon: Settings, path: '/settings', badge: 0, push: false },
   ];
 
   return (
@@ -44,11 +52,11 @@ export default function MoreSheet({ visible, onClose, chatUnread, notifUnread }:
       <Pressable style={styles.backdrop} onPress={onClose}>
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.handle} />
-          {items.map(({ label, Icon, path, badge }) => (
+          {items.map(({ label, Icon, path, badge, push }) => (
             <TouchableOpacity
               key={path}
               style={styles.option}
-              onPress={() => navigate(path)}
+              onPress={() => navigate(path, push)}
               activeOpacity={0.7}
             >
               <View style={styles.optionIcon}>

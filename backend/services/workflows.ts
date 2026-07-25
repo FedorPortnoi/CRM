@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import { db } from './db';
 import { userBelongsToOrg } from './db-guards';
+import { fireWebhookEventForWorkflowTrigger } from './webhooks';
 
 type WorkflowContext = {
   organizationId: string;
@@ -336,6 +337,16 @@ async function executeAction(
 }
 
 export async function evaluateWorkflows(context: WorkflowContext): Promise<void> {
+  // Outbound webhooks ride the same domain-event seam as workflows rather than
+  // scattering emit calls through controllers. Fire-and-forget: a webhook can never
+  // slow down or fail the write that produced the event.
+  fireWebhookEventForWorkflowTrigger({
+    organizationId: context.organizationId,
+    trigger: context.trigger,
+    record: context.record,
+    userId: context.userId,
+  });
+
   const workflows = await getActiveWorkflows(context.organizationId, context.trigger);
 
   for (const workflow of workflows) {

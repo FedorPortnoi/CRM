@@ -4,6 +4,8 @@ import { DealStatus, TaskStatus } from '@prisma/client';
 import { db } from './db';
 import { sendPush } from './push';
 import { dispatchNotification, taskCtx, dealCtx } from './notificationEngine';
+import { runWebhookDeliveryTick } from './webhooks';
+import { reapIdempotencyKeys } from './idempotency';
 
 const JOIN_CODE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -252,17 +254,23 @@ async function rotateExpiredJoinCodes(): Promise<void> {
 }
 
 export function startScheduler(): void {
+  // Outbound webhook retries share this loop rather than adding a second timer.
+  void runWebhookDeliveryTick().catch(console.error);
   setInterval(() => {
     void runReminders().catch(console.error);
     void runRecurrence().catch(console.error);
     void runDeadlineNotifications().catch(console.error);
+    void runWebhookDeliveryTick().catch(console.error);
   }, 60_000);
 
   // Hourly cleanup of orgs whose owner never verified within 24 h, plus join-code rotation
+  // and the public-API idempotency TTL sweep.
   void cleanupStaleUnverifiedAccounts().catch(console.error);
   void rotateExpiredJoinCodes().catch(console.error);
+  void reapIdempotencyKeys().catch(console.error);
   setInterval(() => {
     void cleanupStaleUnverifiedAccounts().catch(console.error);
     void rotateExpiredJoinCodes().catch(console.error);
+    void reapIdempotencyKeys().catch(console.error);
   }, 60 * 60_000);
 }

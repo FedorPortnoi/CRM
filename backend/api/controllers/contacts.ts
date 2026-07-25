@@ -9,6 +9,8 @@ import {
   ownerVisibilityWhere,
   type VisibilityScope,
 } from '../../services/visibility';
+import { contactBlindIndexClauses, buildContactPhoneSearchWhere } from '../../services/contact-search';
+import { findNearbyContacts } from '../../services/nearby';
 import { importCsvRows, type ContactImportRow } from '../../services/contact-import';
 import { userBelongsToOrg, bulkAssignContacts, bulkArchiveContacts } from '../../services/contact-bulk';
 import { getContactTimeline } from '../../services/contact-timeline';
@@ -39,13 +41,24 @@ type BulkAssignBody = BulkArchiveBody & {
 // Shared helpers (controller-private)
 // ---------------------------------------------------------------------------
 
+// Blind-index columns are internal search keys — keyed hashes of the contact's
+// PII — and have no business in an API response, so they are dropped on the way
+// out alongside the decryption of the fields they index.
+const BLIND_INDEX_COLUMNS = ['email_bidx', 'phone_bidx', 'mobile_bidx'] as const;
+
 function decryptContact<T extends { email?: string | null; phone?: string | null; mobile?: string | null }>(c: T): T {
-  return {
+  const out: Record<string, unknown> = {
     ...c,
     email: decryptField(c.email ?? undefined) ?? null,
     phone: decryptField(c.phone ?? undefined) ?? null,
     mobile: decryptField(c.mobile ?? undefined) ?? null,
   };
+
+  for (const column of BLIND_INDEX_COLUMNS) {
+    delete out[column];
+  }
+
+  return out as T;
 }
 
 function phoneMatchKeys(value: string | null | undefined): Set<string> {
@@ -82,7 +95,11 @@ function intersectIds(idSets: string[][]): string[] {
   return Array.from(firstSet).filter((id) => remainingSets.every((set) => set.has(id)));
 }
 
-async function findContactIdsByPhone(orgId: string, searchKeys: Set<string>): Promise<string[]> {
+// Legacy fallback: a digit-normalized scan over the raw phone/mobile columns.
+// It only ever matches rows stored before field encryption was introduced —
+// against ciphertext the regexp_replace produces meaningless digits. Kept so
+// those rows remain findable; the blind-index lookup below is the real path.
+async function findContactIdsByPlaintextPhone(orgId: string, searchKeys: Set<string>): Promise<string[]> {
   if (searchKeys.size === 0) {
     return [];
   }
@@ -97,6 +114,21 @@ async function findContactIdsByPhone(orgId: string, searchKeys: Set<string>): Pr
         OR regexp_replace(coalesce(mobile, ''), '[^0-9]', '', 'g') IN (${Prisma.join(keys)})
       )
   `);
+
+  return rows.map((row) => row.id);
+}
+
+// Blind-index lookup for encrypted phone/mobile. Org-scoped here as well as in
+// the caller's where-clause: blind indexes are deterministic deployment-wide, so
+// organization_id is the only thing keeping one tenant out of another's rows.
+async function findContactIdsByBlindIndex(
+  orgId: string,
+  indexWhere: Prisma.ContactWhereInput,
+): Promise<string[]> {
+  const rows = await db.contact.findMany({
+    where: { organization_id: orgId, ...indexWhere },
+    select: { id: true },
+  });
 
   return rows.map((row) => row.id);
 }
@@ -145,9 +177,15 @@ export const ContactsController = {
         OR: [
           { first_name: { contains: q, mode: 'insensitive' } },
           { last_name: { contains: q, mode: 'insensitive' } },
+          // email/phone are ciphertext, so `contains` only ever matches rows that
+          // predate field encryption. Kept so those legacy rows stay findable.
           { email: { contains: q, mode: 'insensitive' } },
           { phone: { contains: q, mode: 'insensitive' } },
           { company: { contains: q, mode: 'insensitive' } },
+          // A term shaped like an email or a phone number is also matched exactly
+          // through the blind indexes; name/company keep the text search above.
+          // Empty for every other term.
+          ...contactBlindIndexClauses(q),
         ],
       });
     }
@@ -171,10 +209,20 @@ export const ContactsController = {
 
     if (phone !== undefined) {
       const searchKeys = phoneMatchKeys(phone);
-      if (searchKeys.size === 0) {
+      const phoneIndexWhere = buildContactPhoneSearchWhere(phone);
+      if (searchKeys.size === 0 && !phoneIndexWhere) {
         return reply.send({ data: [], meta: { total: 0, page, per_page } });
       }
-      idFilters.push(await findContactIdsByPhone(request.user.org_id, searchKeys));
+
+      // Union of the two lookups: encrypted rows come back from the blind index,
+      // pre-encryption rows from the legacy digit scan.
+      const [indexedIds, legacyIds] = await Promise.all([
+        phoneIndexWhere
+          ? findContactIdsByBlindIndex(request.user.org_id, phoneIndexWhere)
+          : Promise.resolve<string[]>([]),
+        findContactIdsByPlaintextPhone(request.user.org_id, searchKeys),
+      ]);
+      idFilters.push(Array.from(new Set([...indexedIds, ...legacyIds])));
     }
 
     if (lastContactedBefore !== null) {
@@ -216,6 +264,76 @@ export const ContactsController = {
     });
 
     return reply.send({ data: contactsWithActivity, meta: { total, page, per_page } });
+  },
+
+  // Field-visit lookup: contacts around the rep's current position, nearest first.
+  // Coordinates come from the contact's own `address` JSON — nothing is geocoded.
+  nearby: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { latitude, longitude, radius_m, limit, type, status, scope } = request.query as {
+      latitude: number;
+      longitude: number;
+      radius_m: number;
+      limit: number;
+      type?: 'lead' | 'customer' | 'partner' | 'other';
+      status?: 'active' | 'inactive' | 'archived';
+      scope?: VisibilityScope;
+    };
+
+    const origin = { latitude, longitude };
+    const visibleIds = await getVisibleUserIds(request.user, scope ?? 'direct');
+
+    const hits = await findNearbyContacts({
+      orgId: request.user.org_id,
+      origin,
+      radiusMeters: radius_m,
+      limit,
+      visibleIds,
+      status,
+      type,
+    });
+
+    const meta = { total: 0, radius_m, limit, origin };
+
+    if (hits.length === 0) {
+      return reply.send({ data: [], meta });
+    }
+
+    const contacts = await db.contact.findMany({
+      where: {
+        organization_id: request.user.org_id,
+        id: { in: hits.map((hit) => hit.contact_id) },
+      },
+      include: {
+        _count: { select: { deals: { where: { status: DealStatus.open } } } },
+      },
+    });
+
+    const contactsById = new Map(contacts.map((c) => [c.id, c]));
+    const lastContactedMap = await getLastContactedMap(
+      request.user.org_id,
+      contacts.map((c) => c.id),
+    );
+
+    // Driven by `hits`, so the nearest-first ordering from the distance pass survives.
+    const data = hits.flatMap((hit) => {
+      const contact = contactsById.get(hit.contact_id);
+      if (!contact) {
+        return [];
+      }
+
+      const { _count, ...rest } = contact;
+      return [decryptContact({
+        ...rest,
+        last_contacted_at: lastContactedMap.get(contact.id) ?? null,
+        active_deals_count: _count.deals,
+        latitude: hit.latitude,
+        longitude: hit.longitude,
+        distance_meters: Math.round(hit.distance_meters),
+        bearing_degrees: Math.round(hit.bearing_degrees * 10) / 10,
+      })];
+    });
+
+    return reply.send({ data, meta: { ...meta, total: data.length } });
   },
 
   create: async (request: FastifyRequest, reply: FastifyReply) => {

@@ -306,6 +306,39 @@ export default function SettingsScreen(): JSX.Element {
         </>
       )}
 
+      {(user?.role === 'owner' || user?.role === 'admin') && (
+        <>
+          <Text style={styles.sectionHeader}>{t('settings.integrations')}</Text>
+          <View style={styles.card}>
+            <TouchableOpacity
+              onPress={() => router.push('/settings/api-keys' as never)}
+              accessibilityRole="button"
+            >
+              <View style={styles.row}>
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowLabel}>{t('settings.apiKeys')}</Text>
+                  <Text style={styles.comingSoon}>{t('settings.apiKeysDesc')}</Text>
+                </View>
+                <Text style={styles.chevron}>{'>'}</Text>
+              </View>
+            </TouchableOpacity>
+            <View style={styles.divider} />
+            <TouchableOpacity
+              onPress={() => router.push('/settings/webhooks' as never)}
+              accessibilityRole="button"
+            >
+              <View style={styles.row}>
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowLabel}>{t('settings.webhooks')}</Text>
+                  <Text style={styles.comingSoon}>{t('settings.webhooksDesc')}</Text>
+                </View>
+                <Text style={styles.chevron}>{'>'}</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
       <Text style={styles.sectionHeader}>{t('settings.language')}</Text>
       <TouchableOpacity
         style={styles.card}

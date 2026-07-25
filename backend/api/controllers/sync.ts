@@ -63,8 +63,14 @@ async function delta(
     }),
   ]);
 
+  // The blind-index columns are derived HMACs used only for server-side lookup of encrypted
+  // PII — they have no business in an API response, the same rule the contacts list and
+  // contact-domain serializers already follow. Stripped here rather than via `select` so a
+  // future Contact column is included by default instead of being silently dropped.
+  const syncContacts = contacts.map(({ email_bidx: _e, phone_bidx: _p, mobile_bidx: _m, ...rest }) => rest);
+
   reply.send({
-    data: { contacts, deals, tasks, events },
+    data: { contacts: syncContacts, deals, tasks, events },
     meta: {
       since: sinceDate.toISOString(),
       server_time: new Date().toISOString(),

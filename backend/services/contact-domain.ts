@@ -10,8 +10,10 @@
 import { ContactStatus, DealStatus, Prisma, WorkflowTrigger } from '@prisma/client';
 import { db } from './db';
 import { paginate } from './db-paginate';
-import { encryptField, decryptField } from './encryption';
+import { encryptField, decryptField, blindIndex } from './encryption';
+import { contactBlindIndexClauses } from './contact-search';
 import { evaluateWorkflows } from './workflows';
+import { fireWebhookEvent } from './webhooks';
 import { logActivity } from '../api/controllers/activities';
 import { dispatchNotification, contactCtx } from './notificationEngine';
 import { getVisibleUserIds, getAccessibleUserIds, canSeeUser, ownerVisibilityWhere } from './visibility';
@@ -70,15 +72,26 @@ export class ContactForbiddenError extends Error {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+// Blind-index columns are internal search keys — keyed hashes of the contact's
+// PII — and have no business in an API response, so they are dropped on the way
+// out alongside the decryption of the fields they index.
+const BLIND_INDEX_COLUMNS = ['email_bidx', 'phone_bidx', 'mobile_bidx'] as const;
+
 function decryptContact<
   T extends { email?: string | null; phone?: string | null; mobile?: string | null },
 >(c: T): T {
-  return {
+  const out: Record<string, unknown> = {
     ...c,
     email: decryptField(c.email ?? undefined) ?? null,
     phone: decryptField(c.phone ?? undefined) ?? null,
     mobile: decryptField(c.mobile ?? undefined) ?? null,
   };
+
+  for (const column of BLIND_INDEX_COLUMNS) {
+    delete out[column];
+  }
+
+  return out as T;
 }
 
 // ---------------------------------------------------------------------------
@@ -128,9 +141,14 @@ export async function listContactsForUser(
       OR: [
         { first_name: { contains: q, mode: 'insensitive' } },
         { last_name: { contains: q, mode: 'insensitive' } },
+        // email/phone are ciphertext, so `contains` only ever matches rows that
+        // predate field encryption. Kept so those legacy rows stay findable.
         { email: { contains: q, mode: 'insensitive' } },
         { phone: { contains: q, mode: 'insensitive' } },
         { company: { contains: q, mode: 'insensitive' } },
+        // Exact email/phone lookups against the encrypted columns go through the
+        // blind indexes instead. Empty unless the term looks like one of those.
+        ...contactBlindIndexClauses(q),
       ],
     });
   }
@@ -237,6 +255,11 @@ export async function createContactForUser(
     email: body.email ? encryptField(body.email) : undefined,
     phone: body.phone ? encryptField(body.phone) : undefined,
     mobile: body.mobile ? encryptField(body.mobile) : undefined,
+    // Blind indexes are written from the plaintext, alongside the ciphertext, so
+    // the encrypted columns stay searchable by exact value. See contact-search.ts.
+    email_bidx: body.email ? blindIndex(body.email, 'email') : undefined,
+    phone_bidx: body.phone ? blindIndex(body.phone, 'phone') : undefined,
+    mobile_bidx: body.mobile ? blindIndex(body.mobile, 'mobile') : undefined,
     tags: body.tags,
     source: body.source,
     notes: body.notes,
@@ -319,9 +342,21 @@ export async function updateContactForUser(
   if (patch.first_name !== undefined) updateData.first_name = patch.first_name;
   if (patch.last_name !== undefined) updateData.last_name = patch.last_name;
   if (patch.company !== undefined) updateData.company = patch.company;
-  if (patch.email !== undefined) updateData.email = patch.email ? encryptField(patch.email) : patch.email;
-  if (patch.phone !== undefined) updateData.phone = patch.phone ? encryptField(patch.phone) : patch.phone;
-  if (patch.mobile !== undefined) updateData.mobile = patch.mobile ? encryptField(patch.mobile) : patch.mobile;
+  // Each PII field carries its blind index along: setting a value re-indexes it,
+  // clearing it ('' or null) clears the index too, so a cleared field can never
+  // be found through a stale hash.
+  if (patch.email !== undefined) {
+    updateData.email = patch.email ? encryptField(patch.email) : patch.email;
+    updateData.email_bidx = patch.email ? blindIndex(patch.email, 'email') : null;
+  }
+  if (patch.phone !== undefined) {
+    updateData.phone = patch.phone ? encryptField(patch.phone) : patch.phone;
+    updateData.phone_bidx = patch.phone ? blindIndex(patch.phone, 'phone') : null;
+  }
+  if (patch.mobile !== undefined) {
+    updateData.mobile = patch.mobile ? encryptField(patch.mobile) : patch.mobile;
+    updateData.mobile_bidx = patch.mobile ? blindIndex(patch.mobile, 'mobile') : null;
+  }
   if (patch.tags !== undefined) updateData.tags = patch.tags;
   if (patch.source !== undefined) updateData.source = patch.source;
   if (patch.notes !== undefined) updateData.notes = patch.notes;
@@ -347,8 +382,15 @@ export async function updateContactForUser(
   }
 
   const PII_FIELDS = new Set(['email', 'phone', 'mobile']);
+  // Derived from the PII fields above and always written together with them.
+  // They are not a user-visible change and their values are keyed hashes of the
+  // plaintext, so they stay out of the audit trail entirely.
+  const DERIVED_INDEX_FIELDS = new Set(['email_bidx', 'phone_bidx', 'mobile_bidx']);
   const changes: Record<string, unknown> = {};
   for (const key of Object.keys(updateData) as (keyof typeof updateData)[]) {
+    if (DERIVED_INDEX_FIELDS.has(key as string)) {
+      continue;
+    }
     if (PII_FIELDS.has(key as string)) {
       changes[key as string] = '[changed]';
     } else {
@@ -365,6 +407,16 @@ export async function updateContactForUser(
     entityId: contactId,
     action: 'updated',
     changes,
+  });
+
+  // contact.updated has no WorkflowTrigger, so the outbound webhook is emitted at the
+  // write site instead of via evaluateWorkflows. Fire-and-forget — it cannot fail the update.
+  fireWebhookEvent({
+    organizationId: orgId,
+    event: 'contact.updated',
+    entityId: contactId,
+    actorUserId: requestingUserId,
+    record: contact as unknown as Record<string, unknown>,
   });
 
   if (patch.assigned_to !== undefined && patch.assigned_to !== existing.assigned_to && patch.assigned_to !== requestingUserId) {

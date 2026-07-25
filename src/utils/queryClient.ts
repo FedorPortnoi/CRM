@@ -45,10 +45,13 @@ const JWT_SHAPE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 // First query-key segments whose data is org PII or contains the company/join code.
 const SENSITIVE_KEY_PREFIXES = new Set<string>([
   'company-code',
+  'api-keys',
   'org-users',
   'audit-log',
   'contacts',
   'contacts-counts',
+  // Contact PII plus a live GPS fix for the device — never write this to disk.
+  'contacts-nearby',
   'deals',
   'tasks-today',
   'tasks-all',

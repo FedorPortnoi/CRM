@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { DealStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
 import { evaluateWorkflows } from '../../services/workflows';
+import { fireWebhookEvent } from '../../services/webhooks';
 import { logActivity } from './activities';
 import { dispatchNotification, dealCtx } from '../../services/notificationEngine';
 import {
@@ -357,6 +358,16 @@ async function markLost(
 
   void dealCtx(updated.id, undefined, request.user.sub).then((ctx) => {
     if (ctx) void dispatchNotification({ eventType: 'deal.lost', orgId: request.user.org_id, deal: ctx });
+  });
+
+  // deal.lost has no WorkflowTrigger, so the outbound webhook is emitted at the write
+  // site instead of via evaluateWorkflows. Fire-and-forget — it cannot fail the request.
+  fireWebhookEvent({
+    organizationId: request.user.org_id,
+    event: 'deal.lost',
+    entityId: updated.id,
+    actorUserId: request.user.sub,
+    record: updated as unknown as Record<string, unknown>,
   });
 
   reply.send({ data: updated, meta: {} });

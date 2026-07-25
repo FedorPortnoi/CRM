@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { ContactsController } from '../controllers/contacts';
+import { DEFAULT_RADIUS_METERS, MAX_RADIUS_METERS } from '../../services/nearby';
 import { authenticate } from '../preHandlers';
 
 const CreateContactSchema = z.object({
@@ -69,6 +70,29 @@ const ContactFilterSchema = z.object({
   order: z.enum(['asc', 'desc']).default('desc'),
 });
 
+// `z.coerce.number()` turns an empty query value into 0, which for a coordinate is
+// a real point on the globe (the equator) rather than a missing one. Parse by hand
+// so a blank or unparsable value fails instead of silently relocating the rep.
+function numericQueryParam<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((value) => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+    const trimmed = value.trim();
+    return trimmed === '' ? Number.NaN : Number(trimmed);
+  }, schema);
+}
+
+const NearbyContactsSchema = z.object({
+  latitude: numericQueryParam(z.number().min(-90).max(90)),
+  longitude: numericQueryParam(z.number().min(-180).max(180)),
+  radius_m: numericQueryParam(z.number().min(1).max(MAX_RADIUS_METERS)).default(DEFAULT_RADIUS_METERS),
+  limit: numericQueryParam(z.number().int().min(1).max(100)).default(50),
+  type: z.enum(['lead', 'customer', 'partner', 'other']).optional(),
+  status: z.enum(['active', 'inactive', 'archived']).optional(),
+  scope: z.enum(['direct', 'subtree']).optional(),
+});
+
 export default async function contactsRoutes(fastify: FastifyInstance) {
   for (const contentType of ['application/octet-stream', 'audio/l16', 'audio/wav', 'audio/x-wav']) {
     if (!fastify.hasContentTypeParser(contentType)) {
@@ -84,6 +108,13 @@ export default async function contactsRoutes(fastify: FastifyInstance) {
     preHandler: [authenticate],
     schema: { querystring: ContactFilterSchema },
   }, ContactsController.list);
+
+  // Registered ahead of '/:id' for readability — Fastify prefers static segments
+  // over parametric ones regardless of order.
+  f.get('/nearby', {
+    preHandler: [authenticate],
+    schema: { querystring: NearbyContactsSchema },
+  }, ContactsController.nearby);
 
   f.post('/', {
     preHandler: [authenticate],

@@ -119,6 +119,17 @@ enum PendingCaptureStatus {
   dismissed
 }
 
+enum WebhookStatus {
+  active
+  paused
+}
+
+enum WebhookDeliveryStatus {
+  pending
+  success
+  failed
+}
+
 // ---------------------------------------------------------------------------
 // Models
 // ---------------------------------------------------------------------------
@@ -177,6 +188,8 @@ model User {
   chatMessages          ChatMessage[]      @relation("ChatMessageSender")
   chatReadReceipts      ChatReadReceipt[]  @relation("ChatReadReceiptUser")
   notifications         Notification[]     @relation("NotificationRecipient")
+  createdApiKeys        ApiKey[]           @relation("ApiKeyCreatedBy")
+  createdWebhookEndpoints WebhookEndpoint[] @relation("WebhookEndpointCreatedBy")
 
   // Employees log in by username, which only needs to be unique inside their org.
   @@unique([organization_id, username])
@@ -215,6 +228,10 @@ model Org {
   attachments     Attachment[]
   chatMessages    ChatMessage[]  @relation("ChatMessageOrg")
   notifications   Notification[] @relation("NotificationOrg")
+  apiKeys          ApiKey[]
+  webhookEndpoints WebhookEndpoint[]
+  webhookDeliveries WebhookDelivery[]
+  idempotencyKeys  IdempotencyKey[]
 
   @@map("organizations")
 }
@@ -268,8 +285,14 @@ model Contact {
   last_name       String?
   company         String?
   email           String?
+  /// HMAC-SHA256 hex of the normalized email — lets encrypted PII stay searchable
+  email_bidx      String?       @db.Text
   phone           String?
+  /// HMAC-SHA256 hex of the normalized phone — lets encrypted PII stay searchable
+  phone_bidx      String?       @db.Text
   mobile          String?
+  /// HMAC-SHA256 hex of the normalized mobile — lets encrypted PII stay searchable
+  mobile_bidx     String?       @db.Text
   address         Json?
   /// Stored as a JSON array (mirrors PostgreSQL text[] column)
   tags            Json?
@@ -297,6 +320,12 @@ model Contact {
 
   @@index([organization_id, status])
   @@index([organization_id, created_at])
+  @@index([organization_id, email_bidx])
+  @@index([organization_id, phone_bidx])
+  @@index([organization_id, mobile_bidx])
+  @@index([email_bidx])
+  @@index([phone_bidx])
+  @@index([mobile_bidx])
 }
 
 model Deal {
@@ -642,4 +671,89 @@ model NotificationSent {
 
   @@unique([event_type, entity_id, recipient_id])
   @@index([created_at])
+}
+
+model ApiKey {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String    @db.Uuid
+  name            String
+  key_prefix      String
+  key_hash        String    @unique
+  /// Stored as a JSON array of scope strings (mirrors PostgreSQL text[] usage elsewhere)
+  scopes          Json?
+  created_by      String?   @db.Uuid
+  last_used_at    DateTime?
+  revoked_at      DateTime?
+  expires_at      DateTime?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  organization Org   @relation(fields: [organization_id], references: [id])
+  creator      User? @relation("ApiKeyCreatedBy", fields: [created_by], references: [id])
+
+  @@index([organization_id, revoked_at])
+  @@index([organization_id, created_at])
+  @@index([key_prefix])
+}
+
+model WebhookEndpoint {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String        @db.Uuid
+  url              String
+  secret           String
+  /// Stored as a JSON array of subscribed event types
+  events           Json
+  status           WebhookStatus @default(active)
+  created_by       String?       @db.Uuid
+  last_delivery_at DateTime?
+  failure_count    Int           @default(0)
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
+
+  organization Org               @relation(fields: [organization_id], references: [id])
+  creator      User?             @relation("WebhookEndpointCreatedBy", fields: [created_by], references: [id])
+  deliveries   WebhookDelivery[]
+
+  @@index([organization_id, status])
+  @@index([organization_id, created_at])
+}
+
+model WebhookDelivery {
+  id              String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String                @db.Uuid
+  endpoint_id     String                @db.Uuid
+  event_type      String
+  payload         Json
+  status          WebhookDeliveryStatus @default(pending)
+  response_status Int?
+  attempts        Int                   @default(0)
+  error_message   String?
+  next_attempt_at DateTime?
+  delivered_at    DateTime?
+  created_at      DateTime              @default(now())
+  updated_at      DateTime              @updatedAt
+
+  organization Org             @relation(fields: [organization_id], references: [id])
+  endpoint     WebhookEndpoint @relation(fields: [endpoint_id], references: [id])
+
+  @@index([organization_id, status, created_at])
+  @@index([organization_id, endpoint_id, created_at(sort: Desc)])
+  @@index([status, next_attempt_at])
+}
+
+model IdempotencyKey {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String   @db.Uuid
+  key             String
+  endpoint        String
+  request_hash    String
+  response_body   Json?
+  status_code     Int?
+  created_at      DateTime @default(now())
+  expires_at      DateTime
+
+  organization Org @relation(fields: [organization_id], references: [id])
+
+  @@unique([organization_id, key])
+  @@index([expires_at])
 }
