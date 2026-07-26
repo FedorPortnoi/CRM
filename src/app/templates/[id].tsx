@@ -247,7 +247,7 @@ export default function TemplateEditorScreen(): JSX.Element {
   return (
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <Stack.Screen options={{ title: screenTitle }} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">

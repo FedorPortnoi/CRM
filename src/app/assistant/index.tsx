@@ -350,7 +350,13 @@ export default function AssistantScreen(): JSX.Element {
   };
 
   return (
-    <View style={styles.screen}>
+    // Root, not nested: behavior="height" measures against the window, so wrapping
+    // this in another full-height View leaves the composer under the keyboard.
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 96 : 0}
+    >
       <Stack.Screen
         options={{
           title: t('assistant.title'),
@@ -381,11 +387,6 @@ export default function AssistantScreen(): JSX.Element {
         }}
       />
 
-      <KeyboardAvoidingView
-        style={styles.screen}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 96 : 0}
-      >
         {notConfigured && bubbles.length > 0 ? (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>{t('assistant.notConfigured')}</Text>
@@ -466,7 +467,6 @@ export default function AssistantScreen(): JSX.Element {
             <Text style={styles.bannerText}>{t('assistant.readOnlyRole')}</Text>
           </View>
         )}
-      </KeyboardAvoidingView>
 
       <Modal
         visible={historyOpen}
@@ -535,7 +535,7 @@ export default function AssistantScreen(): JSX.Element {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

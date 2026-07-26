@@ -424,7 +424,7 @@ export default function ContactMessagesScreen(): JSX.Element {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={88}
     >
       <Stack.Screen options={{ title: contactTitle, headerBackTitle: t('contacts.title') }} />
