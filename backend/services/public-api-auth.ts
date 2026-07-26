@@ -159,11 +159,17 @@ export function extractBearerToken(request: FastifyRequest): string | null {
   return match[1];
 }
 
-function unauthorized(reply: FastifyReply): void {
+function unauthorized(reply: FastifyReply): FastifyReply {
   // One message for every failure mode (absent / malformed / unknown / revoked /
   // expired) so probing cannot distinguish "no such key" from "revoked key".
+  //
+  // MUST be returned by the caller, not just called. A Fastify preHandler that
+  // sends a reply but resolves to undefined does not halt the hook chain — the
+  // route handler then runs and sends a second response, which throws
+  // ERR_HTTP_HEADERS_SENT off the reply lifecycle and takes the process down.
+  // An unauthenticated request could therefore kill the server.
   reply.header('WWW-Authenticate', 'Bearer realm="4kub-public-api"');
-  reply.status(401).send({
+  return reply.status(401).send({
     error: { code: 'UNAUTHORIZED', message: 'Invalid, revoked, or expired API key' },
   });
 }
@@ -213,11 +219,10 @@ async function resolveActorUserId(orgId: string, createdBy: string | null): Prom
 export async function authenticatePublicApiKey(
   request: FastifyRequest,
   reply: FastifyReply,
-): Promise<void> {
+): Promise<FastifyReply | void> {
   const token = extractBearerToken(request);
   if (!token) {
-    unauthorized(reply);
-    return;
+    return unauthorized(reply);
   }
 
   // Authentication bootstrap — see the file header. The credential is what
@@ -235,14 +240,13 @@ export async function authenticatePublicApiKey(
   });
 
   if (!apiKey || !isApiKeyUsable(apiKey)) {
-    unauthorized(reply);
-    return;
+    return unauthorized(reply);
   }
 
   const rate = consumePublicApiRateLimit(apiKey.id);
   if (!rate.allowed) {
     reply.header('Retry-After', String(Math.ceil(rate.retry_after_ms / 1000)));
-    reply.status(429).send({
+    return reply.status(429).send({
       error: { code: 'RATE_LIMITED', message: 'Public API rate limit exceeded' },
     });
     return;
@@ -255,8 +259,7 @@ export async function authenticatePublicApiKey(
 
   // A revocation racing this request between the lookup and the touch must win.
   if (touched.count !== 1) {
-    unauthorized(reply);
-    return;
+    return unauthorized(reply);
   }
 
   request.publicApi = {
@@ -272,15 +275,14 @@ export async function authenticatePublicApiKey(
  * Always chained after `authenticatePublicApiKey`.
  */
 export function requirePublicApiScope(scope: ApiKeyScope) {
-  return async function enforceScope(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  return async function enforceScope(request: FastifyRequest, reply: FastifyReply): Promise<FastifyReply | void> {
     const context = request.publicApi;
     if (!context) {
-      unauthorized(reply);
-      return;
+      return unauthorized(reply);
     }
 
     if (!context.scopes.includes(scope)) {
-      reply.status(403).send({
+      return reply.status(403).send({
         error: {
           code: 'INSUFFICIENT_SCOPE',
           message: `This API key is missing the "${scope}" scope`,

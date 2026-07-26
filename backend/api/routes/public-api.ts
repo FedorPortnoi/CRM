@@ -320,7 +320,10 @@ const CreateApiKeySchema = z.object({
  * is not in it, so the check is enforced here instead of extending a file this
  * change does not own.
  */
-async function requireApiKeyAdmin(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+async function requireApiKeyAdmin(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<FastifyReply | void> {
   if (request.user.role === 'owner' || request.user.role === 'admin') {
     return;
   }
@@ -339,7 +342,10 @@ async function requireApiKeyAdmin(request: FastifyRequest, reply: FastifyReply):
     },
   });
 
-  reply.status(403).send({
+  // Returned, not just sent: a preHandler that resolves to undefined does not halt
+  // the hook chain, so the route handler would run and send a second response —
+  // ERR_HTTP_HEADERS_SENT, which crashes the process.
+  return reply.status(403).send({
     error: { code: 'FORBIDDEN', message: 'API key administration requires owner or admin' },
   });
 }
