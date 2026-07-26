@@ -228,9 +228,19 @@ async function update(
   const { attendees, start_time, end_time, send_invite: _send_invite, ...rest } =
     request.body as UpdateBody;
   const orgId = request.user.org_id;
-
+
+  const visibleIds = await getAccessibleUserIds(request.user);
   const event = await db.calendarEvent.findFirst({
-    where: { id, organization_id: orgId },
+    where: {
+      id,
+      organization_id: orgId,
+      // The reads in this file already cone (list, getById, availability); these write
+      // paths did not, so a member could PATCH, cancel or complete any colleague’s
+      // meeting over plain HTTP. Out-of-cone now resolves to null and returns the same
+      // EVENT_NOT_FOUND a bad id returns, so the response cannot confirm the row exists
+      // in another branch.
+      ...(visibleIds !== null && { created_by: { in: visibleIds } }),
+    },
   });
 
   if (!event) {
@@ -311,9 +321,19 @@ async function cancel(
 ): Promise<void> {
   const { id } = request.params as IdParams;
   const orgId = request.user.org_id;
-
+
+  const visibleIds = await getAccessibleUserIds(request.user);
   const event = await db.calendarEvent.findFirst({
-    where: { id, organization_id: orgId },
+    where: {
+      id,
+      organization_id: orgId,
+      // The reads in this file already cone (list, getById, availability); these write
+      // paths did not, so a member could PATCH, cancel or complete any colleague’s
+      // meeting over plain HTTP. Out-of-cone now resolves to null and returns the same
+      // EVENT_NOT_FOUND a bad id returns, so the response cannot confirm the row exists
+      // in another branch.
+      ...(visibleIds !== null && { created_by: { in: visibleIds } }),
+    },
   });
 
   if (!event) {
@@ -357,9 +377,19 @@ async function addPostMeetingNotes(
   const { id } = request.params as IdParams;
   const { notes } = request.body as PostMeetingNotesBody;
   const orgId = request.user.org_id;
-
+
+  const visibleIds = await getAccessibleUserIds(request.user);
   const event = await db.calendarEvent.findFirst({
-    where: { id, organization_id: orgId },
+    where: {
+      id,
+      organization_id: orgId,
+      // The reads in this file already cone (list, getById, availability); these write
+      // paths did not, so a member could PATCH, cancel or complete any colleague’s
+      // meeting over plain HTTP. Out-of-cone now resolves to null and returns the same
+      // EVENT_NOT_FOUND a bad id returns, so the response cannot confirm the row exists
+      // in another branch.
+      ...(visibleIds !== null && { created_by: { in: visibleIds } }),
+    },
   });
 
   if (!event) {
@@ -400,9 +430,19 @@ async function markCompleted(
 ): Promise<void> {
   const { id } = request.params as IdParams;
   const orgId = request.user.org_id;
-
+
+  const visibleIds = await getAccessibleUserIds(request.user);
   const event = await db.calendarEvent.findFirst({
-    where: { id, organization_id: orgId },
+    where: {
+      id,
+      organization_id: orgId,
+      // The reads in this file already cone (list, getById, availability); these write
+      // paths did not, so a member could PATCH, cancel or complete any colleague’s
+      // meeting over plain HTTP. Out-of-cone now resolves to null and returns the same
+      // EVENT_NOT_FOUND a bad id returns, so the response cannot confirm the row exists
+      // in another branch.
+      ...(visibleIds !== null && { created_by: { in: visibleIds } }),
+    },
   });
 
   if (!event) {

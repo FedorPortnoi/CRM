@@ -1,10 +1,39 @@
 import { DealStatus, TaskStatus, Prisma } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
+import { canSeeUser, getAccessibleUserIds } from '../../services/visibility';
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from '../../config/market';
 
 type PeriodValue = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
 type GroupByValue = 'day' | 'week' | 'month' | 'quarter';
+
+/**
+ * The acting user's visibility cone, exactly as the REST analytics controller
+ * resolves it.  `null` means owner/admin — no per-user restriction — so every
+ * `...(visibleIds && …)` spread below is a no-op for them and no role is
+ * special-cased here.
+ *
+ * McpUser.role is a plain string from the JWT; cast to the Requester shape the
+ * visibility service expects, the same cast the deal tools use.
+ */
+function visibilityCone(user: McpUser): Promise<string[] | null> {
+  const requester = user as { sub: string; org_id: string; role: 'owner' | 'admin' | 'member' | 'viewer' };
+  return getAccessibleUserIds(requester);
+}
+
+/**
+ * The assignee filter a caller asked for, intersected with their cone.  For
+ * owner/admin (`visibleIds === null`) the caller's own filter passes through
+ * untouched; for everyone else the requested assignee can only narrow *within*
+ * the cone, never widen past it — asking about somebody outside it yields an
+ * empty id set (no rows) instead of org-wide numbers.
+ */
+function assigneeWhere(visibleIds: string[] | null, assigned_to?: string): Prisma.DealWhereInput {
+  if (visibleIds === null) return assigned_to ? { assigned_to } : {};
+  return {
+    assigned_to: { in: assigned_to ? visibleIds.filter((id) => id === assigned_to) : visibleIds },
+  };
+}
 
 function isPeriod(v: unknown): v is PeriodValue {
   return v === 'today' || v === 'week' || v === 'month' || v === 'quarter' || v === 'year' || v === 'custom';
@@ -70,6 +99,7 @@ registerTool(
   },
   async (_args: Record<string, unknown>, user: McpUser) => {
     const orgId = user.org_id;
+    const visibleIds = await visibilityCone(user);
 
     const org = await db.org.findUniqueOrThrow({
       where: { id: orgId },
@@ -87,6 +117,7 @@ registerTool(
         where: {
           organization_id: orgId,
           status: { in: [DealStatus.open, DealStatus.won, DealStatus.lost] },
+          ...(visibleIds && { assigned_to: { in: visibleIds } }),
         },
         _count: { _all: true },
         _sum: { value: true },
@@ -96,22 +127,32 @@ registerTool(
           organization_id: orgId,
           status: { notIn: [TaskStatus.cancelled, TaskStatus.done] },
           due_date: { gte: todayUTC, lt: tomorrowUTC },
+          ...(visibleIds && { assigned_to: { in: visibleIds } }),
         },
       }),
       db.message.findMany({
-        where: { organization_id: orgId },
+        where: {
+          organization_id: orgId,
+          ...(visibleIds && { user_id: { in: visibleIds } }),
+        },
         orderBy: { created_at: 'desc' },
         take: 3,
         select: { id: true, body: true, created_at: true },
       }),
       db.task.findMany({
-        where: { organization_id: orgId },
+        where: {
+          organization_id: orgId,
+          ...(visibleIds && { assigned_to: { in: visibleIds } }),
+        },
         orderBy: { created_at: 'desc' },
         take: 3,
         select: { id: true, title: true, created_at: true },
       }),
       db.calendarEvent.findMany({
-        where: { organization_id: orgId },
+        where: {
+          organization_id: orgId,
+          ...(visibleIds && { created_by: { in: visibleIds } }),
+        },
         orderBy: { created_at: 'desc' },
         take: 3,
         select: { id: true, title: true, created_at: true },
@@ -121,6 +162,7 @@ registerTool(
           organization_id: orgId,
           status: DealStatus.open,
           updated_at: { lt: stalledThreshold },
+          ...(visibleIds && { assigned_to: { in: visibleIds } }),
         },
       }),
     ]);
@@ -169,6 +211,7 @@ registerTool(
   async (args: Record<string, unknown>, user: McpUser) => {
     const pipeline_id = typeof args.pipeline_id === 'string' ? args.pipeline_id : undefined;
     const orgId = user.org_id;
+    const visibleIds = await visibilityCone(user);
 
     const pipelines = await db.pipeline.findMany({
       where: {
@@ -185,6 +228,7 @@ registerTool(
             organization_id: orgId,
             pipeline_id: pipeline.id,
             status: { not: DealStatus.archived },
+            ...(visibleIds && { assigned_to: { in: visibleIds } }),
           },
           select: {
             status: true,
@@ -252,12 +296,13 @@ registerTool(
     const assigned_to = typeof args.assigned_to === 'string' ? args.assigned_to : undefined;
 
     const { startDate, endDate } = resolveDateRange(period, start, end);
+    const visibleIds = await visibilityCone(user);
 
     const where: Prisma.DealWhereInput = {
       organization_id: user.org_id,
       created_at: { gte: startDate, lte: endDate },
       ...(pipeline_id && { pipeline_id }),
-      ...(assigned_to && { assigned_to }),
+      ...assigneeWhere(visibleIds, assigned_to),
     };
 
     const groups = await db.deal.groupBy({
@@ -346,6 +391,7 @@ registerTool(
     const assigned_to = typeof args.assigned_to === 'string' ? args.assigned_to : undefined;
 
     const { startDate, endDate } = resolveDateRange(period, start, end);
+    const visibleIds = await visibilityCone(user);
 
     const deals = await db.deal.findMany({
       where: {
@@ -354,7 +400,7 @@ registerTool(
         currency,
         actual_close: { gte: startDate, lte: endDate },
         ...(pipeline_id && { pipeline_id }),
-        ...(assigned_to && { assigned_to }),
+        ...assigneeWhere(visibleIds, assigned_to),
       },
       select: { actual_close: true, value: true },
       orderBy: { actual_close: 'asc' },
@@ -416,11 +462,15 @@ registerTool(
 
     const { startDate, endDate } = resolveDateRange(period, start, end);
     const orgId = user.org_id;
+    const visibleIds = await visibilityCone(user);
 
+    // This tool enumerates people, so the cone bounds the rep set itself: a
+    // member sees only themselves and their reports, never the whole org.
     const baseWhere: Prisma.DealWhereInput = {
       organization_id: orgId,
       assigned_to: { not: null },
       created_at: { gte: startDate, lte: endDate },
+      ...(visibleIds && { assigned_to: { in: visibleIds } }),
     };
 
     const [allGroups, wonGroups, lostGroups] = await Promise.all([
@@ -429,7 +479,9 @@ registerTool(
       db.deal.groupBy({ by: ['assigned_to'], where: { ...baseWhere, status: DealStatus.lost }, _count: { _all: true } }),
     ]);
 
-    const userIds = allGroups.flatMap((r) => (r.assigned_to ? [r.assigned_to] : []));
+    const userIds = allGroups.flatMap((r) =>
+      r.assigned_to && canSeeUser(visibleIds, r.assigned_to) ? [r.assigned_to] : [],
+    );
     const users = await db.user.findMany({
       where: { id: { in: userIds }, organization_id: orgId },
       select: { id: true, name: true },
@@ -444,7 +496,7 @@ registerTool(
     );
 
     const data = allGroups.flatMap((r) => {
-      if (!r.assigned_to) return [];
+      if (!r.assigned_to || !canSeeUser(visibleIds, r.assigned_to)) return [];
       const uid = r.assigned_to;
       const deals_total = r._count._all;
       const deals_won = wonMap.get(uid) ?? 0;
@@ -479,6 +531,7 @@ registerTool(
     const assigned_to = typeof args.assigned_to === 'string' ? args.assigned_to : undefined;
 
     const { startDate, endDate } = resolveDateRange(period, start, end);
+    const visibleIds = await visibilityCone(user);
 
     const groups = await db.deal.groupBy({
       by: ['source'],
@@ -486,7 +539,7 @@ registerTool(
         organization_id: user.org_id,
         created_at: { gte: startDate, lte: endDate },
         ...(pipeline_id && { pipeline_id }),
-        ...(assigned_to && { assigned_to }),
+        ...assigneeWhere(visibleIds, assigned_to),
       },
       _count: { _all: true },
       _sum: { value: true },

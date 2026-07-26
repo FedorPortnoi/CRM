@@ -308,6 +308,39 @@ export default function SettingsScreen(): JSX.Element {
 
       {(user?.role === 'owner' || user?.role === 'admin') && (
         <>
+          <Text style={styles.sectionHeader}>{t('settings.marketing')}</Text>
+          <View style={styles.card}>
+            <TouchableOpacity
+              onPress={() => router.push('/sequences' as never)}
+              accessibilityRole="button"
+            >
+              <View style={styles.row}>
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowLabel}>{t('sequences.title')}</Text>
+                  <Text style={styles.comingSoon}>{t('sequences.subtitle')}</Text>
+                </View>
+                <Text style={styles.chevron}>{'>'}</Text>
+              </View>
+            </TouchableOpacity>
+            <View style={styles.divider} />
+            <TouchableOpacity
+              onPress={() => router.push('/templates' as never)}
+              accessibilityRole="button"
+            >
+              <View style={styles.row}>
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowLabel}>{t('templates.title')}</Text>
+                  <Text style={styles.comingSoon}>{t('templates.subtitle')}</Text>
+                </View>
+                <Text style={styles.chevron}>{'>'}</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+      {(user?.role === 'owner' || user?.role === 'admin') && (
+        <>
           <Text style={styles.sectionHeader}>{t('settings.integrations')}</Text>
           <View style={styles.card}>
             <TouchableOpacity

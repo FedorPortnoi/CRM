@@ -7,6 +7,7 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { formatMarketDate, formatMoney } from '../../market/profile';
 import AttachmentsSection from '../../components/AttachmentsSection';
+import ContactConsentCard from '../../components/ContactConsentCard';
 import { useAuditLog } from '../../hooks/useAuditLog';
 import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors } from '../../theme';
@@ -263,6 +264,12 @@ export default function ContactDetailScreen(): JSX.Element {
             </View>
           ) : null}
         </View>
+
+        {/* Consent sits directly under the contact's own details: it is a fact about this
+            person, and the ФЗ-38 evidence has to be as visible as their phone number.
+            Rendered only once the contact has loaded so `email` is known rather than
+            momentarily absent. */}
+        {contact ? <ContactConsentCard contactId={contact.id} contactEmail={contact.email} /> : null}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('contacts.activity')}</Text>

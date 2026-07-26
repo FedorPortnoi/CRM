@@ -139,14 +139,110 @@ export function registerTool(
   });
 }
 
+let toolModulesLoading: Promise<void> | null = null;
+
+// Dynamic imports prevent circular-init: tool files call registerTool() at
+// module scope, so they must load after tools[] and registerTool are ready.
+// Memoised because the in-process callers below may hit it on every request.
+export function loadMcpTools(): Promise<void> {
+  if (!toolModulesLoading) {
+    toolModulesLoading = (async () => {
+      await import('./tools/contacts');
+      await import('./tools/deals');
+      await import('./tools/tasks');
+      await import('./tools/calendar');
+      await import('./tools/analytics');
+    })();
+  }
+
+  return toolModulesLoading;
+}
+
 export async function startMcp(): Promise<void> {
-  // Dynamic imports prevent circular-init: tool files call registerTool() at
-  // module scope, so they must load after tools[] and registerTool are ready.
-  await import('./tools/contacts');
-  await import('./tools/deals');
-  await import('./tools/tasks');
-  await import('./tools/calendar');
-  await import('./tools/analytics');
+  await loadMcpTools();
   const transport = new StdioServerTransport();
   await mcpServer.connect(transport);
+}
+
+// ─── In-process invocation ───────────────────────────────────────────────────
+// The AI assistant runs inside the Fastify process and must reuse these exact
+// handlers so org scoping, the visibility cone and the viewer write-block stay
+// in one place. It cannot reach them over the stdio transport, so the two
+// exports below expose the same registry the CallTool handler uses, with the
+// same principal validation and audit trail.
+
+export type McpToolDefinition = {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+};
+
+export type McpInvocationResult =
+  | { ok: true; result: unknown }
+  | { ok: false; error: { code: string; message: string } };
+
+export async function listMcpTools(): Promise<McpToolDefinition[]> {
+  await loadMcpTools();
+  return tools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    inputSchema: t.inputSchema,
+  }));
+}
+
+export async function invokeMcpTool(
+  name: string,
+  args: Record<string, unknown>,
+  user: McpUser,
+): Promise<McpInvocationResult> {
+  await loadMcpTools();
+
+  const entry = tools.find((t) => t.name === name);
+  if (!entry) {
+    return { ok: false, error: { code: 'TOOL_NOT_FOUND', message: `Unknown tool: ${name}` } };
+  }
+
+  const principalError = await validateMcpPrincipal(user);
+  if (principalError) {
+    await auditLog({
+      action: `mcp.tool.${name}`,
+      outcome: 'denied',
+      organizationId: user.org_id,
+      userId: user.sub,
+      metadata: { reason: principalError.error.code, via: 'in_process' },
+    });
+    return { ok: false, error: principalError.error };
+  }
+
+  // jwt_token is a transport concern of the stdio server. Never let an
+  // in-process caller — least of all a language model — smuggle one through.
+  const { jwt_token: _stripped, ...safeArgs } = args;
+  void _stripped;
+
+  try {
+    const result = await entry.handler(safeArgs, user);
+    await auditLog({
+      action: `mcp.tool.${name}`,
+      outcome: 'success',
+      organizationId: user.org_id,
+      userId: user.sub,
+      metadata: { via: 'in_process' },
+    });
+    return { ok: true, result };
+  } catch (err) {
+    await auditLog({
+      action: `mcp.tool.${name}`,
+      outcome: 'failure',
+      organizationId: user.org_id,
+      userId: user.sub,
+      metadata: { via: 'in_process', error: err instanceof Error ? err.message : 'UNKNOWN_ERROR' },
+    });
+    return {
+      ok: false,
+      error: {
+        code: 'TOOL_EXECUTION_FAILED',
+        message: err instanceof Error ? err.message : 'Tool execution failed',
+      },
+    };
+  }
 }

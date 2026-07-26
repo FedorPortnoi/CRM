@@ -2,6 +2,13 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { db } from '../services/db';
 import { auditLog } from '../services/audit';
 import { validateAuthSession } from '../services/sessions';
+import { TRACKING_OPEN_PATH_PREFIX } from '../services/open-tracking';
+
+// One-click opt-out from a marketing email. Kept next to the tracking prefix so both
+// public prefixes are visible in one place. The trailing slash is load-bearing: it makes
+// the match cover only `/api/v1/consent/unsubscribe/<token>` and never the authenticated
+// `/api/v1/consent/contacts/:contactId` routes registered by the same plugin.
+const CONSENT_UNSUBSCRIBE_PATH_PREFIX = '/api/v1/consent/unsubscribe/';
 
 type AuthenticatedRole = 'owner' | 'admin' | 'member' | 'viewer';
 type AdminRoutePolicy = {
@@ -44,6 +51,38 @@ function isPublicApiRoute(request: FastifyRequest): boolean {
   }
 
   if (method === 'POST' && path === '/api/v1/calendar/webhooks/yandex') {
+    return true;
+  }
+
+  // Open-tracking pixel. A mail client fetches this image with no cookie, no bearer token
+  // and no session — there is no way for it to carry a JWT — so the hook has to let it
+  // through or every open comes back 401 and nothing is ever recorded.
+  //
+  // Why this cannot over-match: the prefix ends in a slash and `/api/v1/tracking` hosts
+  // exactly one route, GET '/open/:token' (backend/api/routes/tracking.ts). `apiPath()`
+  // has already stripped the query string and any trailing slashes, so a bare
+  // '/api/v1/tracking/open/' does NOT match and stays authenticated; only a path with a
+  // non-empty token segment does. The method check keeps HEAD, POST, PATCH and DELETE on
+  // the authenticated path. The prefix constant is imported from the service that builds
+  // the URL so the allowlist and the route cannot drift apart.
+  if (method === 'GET' && path.startsWith(TRACKING_OPEN_PATH_PREFIX)) {
+    return true;
+  }
+
+  // One-click unsubscribe (ФЗ-38 «О рекламе» ст. 18). The link is clicked from a mail
+  // client, which likewise has no session; without this entry every opt-out click 401s and
+  // the message stops being lawful to send. GET performs the unsubscribe as well as POST
+  // (RFC 8058 List-Unsubscribe-Post) — see the comment on consentRoutes.
+  //
+  // Why this cannot over-match: same shape as above. The prefix ends in a slash, so the
+  // sibling routes on this plugin ('/api/v1/consent/contacts/:contactId', all three
+  // methods) can never match it, and the two methods listed are the only ones the
+  // unsubscribe route registers. The handler reads nothing back except whether the
+  // supplied 256-bit token was already used; an unknown token is a 404.
+  if (
+    (method === 'GET' || method === 'POST') &&
+    path.startsWith(CONSENT_UNSUBSCRIBE_PATH_PREFIX)
+  ) {
     return true;
   }
 
@@ -120,10 +159,22 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
   return null;
 }
 
+/**
+ * EVERY REJECTION PATH BELOW MUST `return reply...`, NOT SEND-THEN-RETURN.
+ *
+ * An async preHandler that resolves to `undefined` does not halt the hook chain: the route
+ * handler runs anyway, sends a second response, and the resulting ERR_HTTP_HEADERS_SENT is
+ * thrown off the reply lifecycle where no error handler catches it — the process exits. One
+ * unauthenticated request to any /api/v1 route is then enough to take the API down for every
+ * tenant. Returning the reply object is what tells Fastify the response is already handled.
+ *
+ * The unit tests assert `resolves.toBe(reply)` on each path for exactly this reason; asserting
+ * only that a 401 was sent passes either way and misses the bug.
+ */
 export async function enforceAuthenticatedApiRequest(
   request: FastifyRequest,
   reply: FastifyReply,
-): Promise<void> {
+): Promise<FastifyReply | void> {
   if (!request.url.startsWith('/api/v1/') || isPublicApiRoute(request)) {
     return;
   }
@@ -132,10 +183,9 @@ export async function enforceAuthenticatedApiRequest(
 
   const tokenUser = request.user;
   if (!tokenUser.sub || !tokenUser.org_id || !tokenUser.sid) {
-    reply.status(401).send({
+    return reply.status(401).send({
       error: { code: 'UNAUTHORIZED', message: 'Invalid authentication token' },
     });
-    return;
   }
 
   const activeUser = await db.user.findFirst({
@@ -148,10 +198,9 @@ export async function enforceAuthenticatedApiRequest(
   });
 
   if (!activeUser) {
-    reply.status(401).send({
+    return reply.status(401).send({
       error: { code: 'UNAUTHORIZED', message: 'User is inactive or no longer belongs to this organization' },
     });
-    return;
   }
 
   const activeSession = await validateAuthSession({
@@ -169,10 +218,9 @@ export async function enforceAuthenticatedApiRequest(
       userId: tokenUser.sub,
       metadata: { reason: 'revoked_or_expired_session' },
     });
-    reply.status(401).send({
+    return reply.status(401).send({
       error: { code: 'SESSION_REVOKED', message: 'Authentication session has expired or was revoked' },
     });
-    return;
   }
 
   request.user = {
@@ -195,16 +243,14 @@ export async function enforceAuthenticatedApiRequest(
         role: activeUser.role,
       },
     });
-    reply.status(403).send({
+    return reply.status(403).send({
       error: { code: 'FORBIDDEN', message: adminPolicy.reason },
     });
-    return;
   }
 
   if (activeUser.role === 'viewer' && !isReadOnlyMethod(request.method.toUpperCase())) {
-    reply.status(403).send({
+    return reply.status(403).send({
       error: { code: 'FORBIDDEN', message: 'Viewer users have read-only access' },
     });
-    return;
   }
 }

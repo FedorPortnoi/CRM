@@ -152,3 +152,149 @@ describe('enforceAuthenticatedApiRequest', () => {
     expect(reply.send).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Every assertion above is satisfied by `reply.status(401).send(...); return;` — which does
+ * NOT halt the hook chain, lets the route handler send a second response, and kills the
+ * process with an uncatchable ERR_HTTP_HEADERS_SENT. The only thing that distinguishes the
+ * two is what the hook RESOLVES TO, so that is what these tests assert.
+ */
+describe('enforceAuthenticatedApiRequest halts the hook chain on rejection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    dbMock.$queryRaw.mockResolvedValue([{ id: '00000000-0000-4000-a000-000000000100' }]);
+    dbMock.$executeRaw.mockResolvedValue(1);
+  });
+
+  it('returns the reply when the token carries no session id', async () => {
+    const request = createRequest('GET');
+    delete (request.user as { sid?: string }).sid;
+    const reply = createReply();
+
+    await expect(enforceAuthenticatedApiRequest(request as never, reply as never)).resolves.toBe(reply);
+  });
+
+  it('returns the reply when the user is inactive or gone', async () => {
+    dbMock.user.findFirst.mockResolvedValue(null);
+    const request = createRequest('GET');
+    const reply = createReply();
+
+    await expect(enforceAuthenticatedApiRequest(request as never, reply as never)).resolves.toBe(reply);
+  });
+
+  it('returns the reply when the session was revoked', async () => {
+    dbMock.user.findFirst.mockResolvedValue({
+      id: '00000000-0000-4000-a000-000000000001',
+      organization_id: '00000000-0000-4000-a000-000000000010',
+      role: 'member',
+    });
+    dbMock.$queryRaw.mockResolvedValue([]);
+    const request = createRequest('GET');
+    const reply = createReply();
+
+    await expect(enforceAuthenticatedApiRequest(request as never, reply as never)).resolves.toBe(reply);
+  });
+
+  it('returns the reply when an admin-only route is denied', async () => {
+    dbMock.user.findFirst.mockResolvedValue({
+      id: '00000000-0000-4000-a000-000000000001',
+      organization_id: '00000000-0000-4000-a000-000000000010',
+      role: 'member',
+    });
+    const request = createRequest('GET', '/api/v1/auth/audit');
+    const reply = createReply();
+
+    await expect(enforceAuthenticatedApiRequest(request as never, reply as never)).resolves.toBe(reply);
+  });
+
+  it('returns the reply when a viewer attempts a write', async () => {
+    dbMock.user.findFirst.mockResolvedValue({
+      id: '00000000-0000-4000-a000-000000000001',
+      organization_id: '00000000-0000-4000-a000-000000000010',
+      role: 'viewer',
+    });
+    const request = createRequest('POST');
+    const reply = createReply();
+
+    await expect(enforceAuthenticatedApiRequest(request as never, reply as never)).resolves.toBe(reply);
+  });
+
+  it('resolves to undefined when the request is allowed through', async () => {
+    dbMock.user.findFirst.mockResolvedValue({
+      id: '00000000-0000-4000-a000-000000000001',
+      organization_id: '00000000-0000-4000-a000-000000000010',
+      role: 'member',
+    });
+    const request = createRequest('GET');
+    const reply = createReply();
+
+    await expect(enforceAuthenticatedApiRequest(request as never, reply as never)).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * The public allowlist. `jwtVerify` is the tell: an exempt route returns before it is ever
+ * called, an enforced one always calls it. The negative cases are the point — they are what
+ * proves the two new prefixes cannot be widened into a hole.
+ */
+describe('isPublicApiRoute exemptions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    dbMock.$queryRaw.mockResolvedValue([{ id: '00000000-0000-4000-a000-000000000100' }]);
+    dbMock.user.findFirst.mockResolvedValue({
+      id: '00000000-0000-4000-a000-000000000001',
+      organization_id: '00000000-0000-4000-a000-000000000010',
+      role: 'member',
+    });
+  });
+
+  const exempt: [string, string][] = [
+    ['GET', '/api/v1/tracking/open/AbC-123_xyz'],
+    ['GET', '/api/v1/tracking/open/AbC-123_xyz.gif'],
+    ['GET', '/api/v1/tracking/open/AbC-123_xyz?utm=mail'],
+    ['GET', '/api/v1/consent/unsubscribe/AbC-123_xyz'],
+    ['POST', '/api/v1/consent/unsubscribe/AbC-123_xyz'],
+  ];
+
+  it.each(exempt)('%s %s is public', async (method, url) => {
+    const request = createRequest(method, url);
+    const reply = createReply();
+
+    await enforceAuthenticatedApiRequest(request as never, reply as never);
+
+    expect(request.jwtVerify).not.toHaveBeenCalled();
+    expect(reply.send).not.toHaveBeenCalled();
+  });
+
+  const enforced: [string, string][] = [
+    // No token segment: apiPath() strips the trailing slash, so the prefix no longer matches.
+    ['GET', '/api/v1/tracking/open/'],
+    ['GET', '/api/v1/tracking/open'],
+    // Only GET is exempt on the pixel; Fastify auto-exposes HEAD, which stays authenticated.
+    ['HEAD', '/api/v1/tracking/open/AbC-123_xyz'],
+    ['POST', '/api/v1/tracking/open/AbC-123_xyz'],
+    // A neighbouring path that merely starts with the same words is not the pixel route.
+    ['GET', '/api/v1/tracking/opens/AbC-123_xyz'],
+    ['GET', '/api/v1/tracking'],
+    // The authenticated consent routes must never be caught by the unsubscribe prefix.
+    ['GET', '/api/v1/consent/contacts/00000000-0000-4000-a000-000000000002'],
+    ['POST', '/api/v1/consent/contacts/00000000-0000-4000-a000-000000000002'],
+    ['DELETE', '/api/v1/consent/unsubscribe/AbC-123_xyz'],
+    ['GET', '/api/v1/consent/unsubscribe'],
+    // The features this wiring registered are authenticated, all of them.
+    ['GET', '/api/v1/assistant/status'],
+    ['POST', '/api/v1/assistant/messages'],
+    ['POST', '/api/v1/ai/contacts/autofill'],
+    ['GET', '/api/v1/sequences'],
+    ['GET', '/api/v1/email-templates'],
+  ];
+
+  it.each(enforced)('%s %s still requires a JWT', async (method, url) => {
+    const request = createRequest(method, url);
+    const reply = createReply();
+
+    await enforceAuthenticatedApiRequest(request as never, reply as never);
+
+    expect(request.jwtVerify).toHaveBeenCalled();
+  });
+});

@@ -31,6 +31,11 @@ import importsRoutes from './api/routes/imports';
 import orgRoutes from './api/routes/org';
 import reportingRoutes from './api/routes/reporting';
 import webhooksRoutes from './api/routes/webhooks';
+import assistantRoutes from './api/routes/assistant';
+import contactAiRoutes from './api/routes/contact-ai';
+import sequencesRoutes, { consentRoutes } from './api/routes/sequences';
+import emailTemplatesRoutes from './api/routes/email-templates';
+import trackingRoutes from './api/routes/tracking';
 import publicApiRoutes, { apiKeysRoutes } from './api/routes/public-api';
 import { wsRoutes } from './api/routes/ws';
 import { startScheduler } from './services/scheduler';
@@ -215,6 +220,15 @@ async function start() {
   await server.register(orgRoutes, { prefix: '/api/v1/org' });
   await server.register(reportingRoutes, { prefix: '/api/v1/reports' });
   await server.register(webhooksRoutes, { prefix: '/api/v1/webhooks' });
+  await server.register(assistantRoutes, { prefix: '/api/v1/assistant' });
+  await server.register(contactAiRoutes, { prefix: '/api/v1/ai' });
+  await server.register(sequencesRoutes, { prefix: '/api/v1/sequences' });
+  await server.register(consentRoutes, { prefix: '/api/v1/consent' });
+  await server.register(emailTemplatesRoutes, { prefix: '/api/v1/email-templates' });
+  // Open-tracking pixel. GET /api/v1/tracking/open/:token is the ONLY route in this
+  // plugin and the only thing exempted from the auth hook — see isPublicApiRoute().
+  // Its own per-IP rate limit is declared on the route, not here.
+  await server.register(trackingRoutes, { prefix: '/api/v1/tracking' });
   // Session-authenticated console for minting/revoking API keys. Must stay under
   // /api/v1 so the global preHandler refreshes request.user.role from the DB before
   // the plugin's own owner/admin check reads it.

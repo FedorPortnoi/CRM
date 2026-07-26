@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { CheckSquare, MessageSquare, Bell, Calendar, Settings, BarChart3, MapPin } from 'lucide-react-native';
+import { CheckSquare, MessageSquare, Bell, Calendar, Settings, BarChart3, MapPin, Sparkles, Mail, FileText } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
 import { ThemeColors } from '../theme';
@@ -32,12 +32,17 @@ export default function MoreSheet({ visible, onClose, chatUnread, notifUnread }:
   };
 
   const items = [
+    // The assistant leads the list: it is the fastest way into every other
+    // section, and it lives outside the tab navigator so it is pushed.
+    { label: t('assistant.title'), Icon: Sparkles, path: '/assistant', badge: 0, push: true },
     { label: t('tabs.tasks'), Icon: CheckSquare, path: '/tasks', badge: 0, push: false },
     { label: t('tabs.chat'), Icon: MessageSquare, path: '/chat', badge: chatUnread, push: false },
     { label: t('tabs.notifications'), Icon: Bell, path: '/notifications', badge: notifUnread, push: false },
     { label: t('tabs.calendar'), Icon: Calendar, path: '/calendar', badge: 0, push: false },
     { label: t('tabs.reports'), Icon: BarChart3, path: '/reports', badge: 0, push: true },
     { label: t('tabs.nearby'), Icon: MapPin, path: '/nearby', badge: 0, push: true },
+    { label: t('sequences.title'), Icon: Mail, path: '/sequences', badge: 0, push: true },
+    { label: t('templates.title'), Icon: FileText, path: '/templates', badge: 0, push: true },
     { label: t('tabs.settings'), Icon: Settings, path: '/settings', badge: 0, push: false },
   ];
 

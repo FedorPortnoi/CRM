@@ -130,6 +130,34 @@ enum WebhookDeliveryStatus {
   failed
 }
 
+enum SequenceStatus {
+  draft
+  active
+  paused
+  archived
+}
+
+enum SequenceEnrollmentStatus {
+  active
+  completed
+  unsubscribed
+  failed
+  cancelled
+}
+
+enum EmailSendStatus {
+  queued
+  sent
+  failed
+  opened
+}
+
+enum AssistantMessageRole {
+  user
+  assistant
+  tool
+}
+
 // ---------------------------------------------------------------------------
 // Models
 // ---------------------------------------------------------------------------
@@ -190,6 +218,10 @@ model User {
   notifications         Notification[]     @relation("NotificationRecipient")
   createdApiKeys        ApiKey[]           @relation("ApiKeyCreatedBy")
   createdWebhookEndpoints WebhookEndpoint[] @relation("WebhookEndpointCreatedBy")
+  createdEmailTemplates   EmailTemplate[]        @relation("EmailTemplateCreatedBy")
+  createdSequences        Sequence[]             @relation("SequenceCreatedBy")
+  sequenceEnrollments     SequenceEnrollment[]   @relation("SequenceEnrollmentEnrolledBy")
+  assistantConversations  AssistantConversation[] @relation("AssistantConversationUser")
 
   // Employees log in by username, which only needs to be unique inside their org.
   @@unique([organization_id, username])
@@ -232,6 +264,13 @@ model Org {
   webhookEndpoints WebhookEndpoint[]
   webhookDeliveries WebhookDelivery[]
   idempotencyKeys  IdempotencyKey[]
+  emailTemplates         EmailTemplate[]
+  sequences              Sequence[]
+  sequenceSteps          SequenceStep[]
+  sequenceEnrollments    SequenceEnrollment[]
+  emailSends             EmailSend[]
+  assistantConversations AssistantConversation[]
+  assistantMessages      AssistantMessage[]
 
   @@map("organizations")
 }
@@ -304,6 +343,16 @@ model Contact {
   status          ContactStatus @default(active)
   custom_fields   Json?
   is_example_data Boolean       @default(false)
+  /// ФЗ-38 «О рекламе» ст. 18 — advertising mailings require PRIOR consent and fines
+  /// are per message, so these five columns ARE the legal evidence. Never send unless
+  /// marketing_consent = true AND unsubscribed_at IS NULL.
+  marketing_consent        Boolean   @default(false)
+  marketing_consent_at     DateTime?
+  /// How consent was obtained: form, import, verbal, contract, ...
+  marketing_consent_source String?
+  unsubscribed_at          DateTime?
+  /// Unguessable token for one-click unsubscribe links (no auth required)
+  unsubscribe_token        String?   @unique
   created_by      String?       @db.Uuid
   created_at      DateTime      @default(now())
   updated_at      DateTime      @updatedAt
@@ -317,6 +366,8 @@ model Contact {
   messages        Message[]
   calendarEvents  CalendarEvent[]
   pendingCaptures PendingCapture[]
+  sequenceEnrollments SequenceEnrollment[]
+  emailSends          EmailSend[]
 
   @@index([organization_id, status])
   @@index([organization_id, created_at])
@@ -326,6 +377,8 @@ model Contact {
   @@index([email_bidx])
   @@index([phone_bidx])
   @@index([mobile_bidx])
+  // The sequence sender filters on exactly this triple before queueing a message.
+  @@index([organization_id, marketing_consent, unsubscribed_at])
 }
 
 model Deal {
@@ -756,4 +809,164 @@ model IdempotencyKey {
 
   @@unique([organization_id, key])
   @@index([expires_at])
+}
+
+// ---------------------------------------------------------------------------
+// Email sequences (wave 2)
+// ---------------------------------------------------------------------------
+
+model EmailTemplate {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String   @db.Uuid
+  name            String
+  subject         String
+  /// Plain-text body; supports {{placeholders}} rendered at send time
+  body            String
+  created_by      String?  @db.Uuid
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Org            @relation(fields: [organization_id], references: [id])
+  creator      User?          @relation("EmailTemplateCreatedBy", fields: [created_by], references: [id])
+  steps        SequenceStep[]
+  sends        EmailSend[]
+
+  @@index([organization_id, created_at])
+  @@index([organization_id, name])
+}
+
+model Sequence {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String         @db.Uuid
+  name            String
+  description     String?
+  status          SequenceStatus @default(draft)
+  created_by      String?        @db.Uuid
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+
+  organization Org                  @relation(fields: [organization_id], references: [id])
+  creator      User?                @relation("SequenceCreatedBy", fields: [created_by], references: [id])
+  steps        SequenceStep[]
+  enrollments  SequenceEnrollment[]
+
+  @@index([organization_id, status])
+  @@index([organization_id, created_at])
+}
+
+model SequenceStep {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sequence_id     String   @db.Uuid
+  organization_id String   @db.Uuid
+  /// 0-based ordering inside the sequence
+  position        Int
+  /// Days to wait after the previous step (0 = send as soon as the step is due)
+  delay_days      Int      @default(0)
+  /// Either template_id OR the inline subject/body pair supplies the content
+  template_id     String?  @db.Uuid
+  subject         String?
+  body            String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Org            @relation(fields: [organization_id], references: [id])
+  sequence     Sequence       @relation(fields: [sequence_id], references: [id])
+  template     EmailTemplate? @relation(fields: [template_id], references: [id])
+  sends        EmailSend[]
+
+  @@index([sequence_id, position])
+  @@index([organization_id, sequence_id])
+}
+
+model SequenceEnrollment {
+  id              String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sequence_id     String                   @db.Uuid
+  contact_id      String                   @db.Uuid
+  organization_id String                   @db.Uuid
+  status          SequenceEnrollmentStatus @default(active)
+  /// Index of the next step to send (0-based, matches SequenceStep.position)
+  current_step    Int                      @default(0)
+  next_send_at    DateTime?
+  enrolled_by     String?                  @db.Uuid
+  enrolled_at     DateTime                 @default(now())
+  completed_at    DateTime?
+  updated_at      DateTime                 @updatedAt
+
+  organization Org         @relation(fields: [organization_id], references: [id])
+  sequence     Sequence    @relation(fields: [sequence_id], references: [id])
+  contact      Contact     @relation(fields: [contact_id], references: [id])
+  enroller     User?       @relation("SequenceEnrollmentEnrolledBy", fields: [enrolled_by], references: [id])
+  sends        EmailSend[]
+
+  // A contact cannot be double-enrolled in the same sequence.
+  @@unique([sequence_id, contact_id])
+  // The scheduler polls on exactly this triple.
+  @@index([organization_id, status, next_send_at])
+  @@index([organization_id, contact_id])
+  @@index([sequence_id, status])
+}
+
+model EmailSend {
+  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id     String          @db.Uuid
+  enrollment_id       String?         @db.Uuid
+  step_id             String?         @db.Uuid
+  contact_id          String          @db.Uuid
+  template_id         String?         @db.Uuid
+  subject             String
+  status              EmailSendStatus @default(queued)
+  provider_message_id String?
+  error_message       String?
+  sent_at             DateTime?
+  opened_at           DateTime?
+  /// Unguessable token embedded in the tracking-pixel URL
+  open_token          String          @unique
+  created_at          DateTime        @default(now())
+  updated_at          DateTime        @updatedAt
+
+  organization Org                 @relation(fields: [organization_id], references: [id])
+  enrollment   SequenceEnrollment? @relation(fields: [enrollment_id], references: [id])
+  step         SequenceStep?       @relation(fields: [step_id], references: [id])
+  contact      Contact             @relation(fields: [contact_id], references: [id])
+  template     EmailTemplate?      @relation(fields: [template_id], references: [id])
+
+  @@index([organization_id, status, created_at])
+  @@index([organization_id, contact_id, created_at])
+  @@index([enrollment_id, created_at])
+}
+
+// ---------------------------------------------------------------------------
+// AI assistant (wave 2)
+// ---------------------------------------------------------------------------
+
+model AssistantConversation {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String   @db.Uuid
+  user_id         String   @db.Uuid
+  title           String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Org                @relation(fields: [organization_id], references: [id])
+  user         User               @relation("AssistantConversationUser", fields: [user_id], references: [id])
+  messages     AssistantMessage[]
+
+  @@index([organization_id, user_id, updated_at(sort: Desc)])
+  @@index([organization_id, created_at])
+}
+
+model AssistantMessage {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String               @db.Uuid
+  conversation_id String               @db.Uuid
+  role            AssistantMessageRole
+  content         String
+  tool_calls      Json?
+  created_at      DateTime             @default(now())
+
+  organization Org                   @relation(fields: [organization_id], references: [id])
+  conversation AssistantConversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+
+  @@index([conversation_id, created_at])
+  @@index([organization_id, created_at])
 }

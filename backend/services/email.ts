@@ -20,7 +20,19 @@ export function getFromEmail(): string {
   return process.env.RESEND_FROM_EMAIL?.trim() ?? 'CRM <onboarding@resend.dev>';
 }
 
-export async function sendEmail(to: string, subject: string, text: string): Promise<SendResult> {
+/**
+ * `text` is the message. `html` is an OPTIONAL alternative part: when it is supplied the
+ * message goes out as multipart/alternative and a text-only client still renders `text`
+ * byte-for-byte, so callers that pass nothing keep the exact behaviour they had before.
+ * Anything that only makes sense as markup — a tracking pixel, a real anchor — belongs in
+ * `html` and must never be pasted into `text`, where the recipient would read the tags.
+ */
+export async function sendEmail(
+  to: string,
+  subject: string,
+  text: string,
+  html?: string,
+): Promise<SendResult> {
   const client = getResendClient();
   if (!client) {
     return { success: false, errorCode: 'SERVICE_NOT_CONFIGURED' };
@@ -32,6 +44,7 @@ export async function sendEmail(to: string, subject: string, text: string): Prom
       to,
       subject,
       text,
+      ...(html ? { html } : {}),
     });
 
     if (error) {

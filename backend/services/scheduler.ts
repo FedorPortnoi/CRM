@@ -6,6 +6,7 @@ import { sendPush } from './push';
 import { dispatchNotification, taskCtx, dealCtx } from './notificationEngine';
 import { runWebhookDeliveryTick } from './webhooks';
 import { reapIdempotencyKeys } from './idempotency';
+import { runSequenceTick } from './sequences';
 
 const JOIN_CODE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -254,13 +255,16 @@ async function rotateExpiredJoinCodes(): Promise<void> {
 }
 
 export function startScheduler(): void {
-  // Outbound webhook retries share this loop rather than adding a second timer.
+  // Outbound webhook retries and email-sequence sends share this loop rather than adding
+  // second and third timers.
   void runWebhookDeliveryTick().catch(console.error);
+  void runSequenceTick().catch(console.error);
   setInterval(() => {
     void runReminders().catch(console.error);
     void runRecurrence().catch(console.error);
     void runDeadlineNotifications().catch(console.error);
     void runWebhookDeliveryTick().catch(console.error);
+    void runSequenceTick().catch(console.error);
   }, 60_000);
 
   // Hourly cleanup of orgs whose owner never verified within 24 h, plus join-code rotation
