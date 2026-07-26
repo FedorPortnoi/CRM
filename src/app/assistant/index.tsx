@@ -42,6 +42,7 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { History, Plus, Send, ServerCog, Sparkles } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { formatMarketDateTime, formatMarketTime } from '../../market/profile';
@@ -88,6 +89,10 @@ export default function AssistantScreen(): JSX.Element {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = makeStyles(colors);
+  // edgeToEdgeEnabled is on, so the app draws under the transparent system navigation
+  // bar. Without padding the composer for that inset, the bar area shows the window
+  // background instead of ours — a white strip under the input on gesture-nav devices.
+  const insets = useSafeAreaInsets();
   const role = useUserStore((s) => s.user?.role);
   const canChat = role !== 'viewer';
 
@@ -428,7 +433,7 @@ export default function AssistantScreen(): JSX.Element {
         ) : null}
 
         {canChat ? (
-          <View style={styles.composer}>
+          <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
             {charsLeft <= CHARS_LEFT_WARNING ? (
               <Text style={styles.charsLeft}>{t('assistant.charsLeft', { count: charsLeft })}</Text>
             ) : null}
