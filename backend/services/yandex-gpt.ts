@@ -11,8 +11,12 @@ import { randomUUID } from 'crypto';
 // crash on it.
 // ---------------------------------------------------------------------------
 
+// The real Yandex Cloud Foundation Models host. `llm.foundationmodels.yandex.net`
+// was used here first and does not exist — DNS returns NXDOMAIN, so every call
+// failed with a bare "fetch failed" that looked exactly like an outage or a
+// missing ai.languageModels.user role.
 export const YANDEX_GPT_ENDPOINT =
-  'https://llm.foundationmodels.yandex.net/foundationModels/v1/completion';
+  'https://llm.api.cloud.yandex.net/foundationModels/v1/completion';
 
 export const DEFAULT_YANDEX_GPT_MODEL = 'yandexgpt/latest';
 export const DEFAULT_YANDEX_GPT_TIMEOUT_MS = 30_000;
