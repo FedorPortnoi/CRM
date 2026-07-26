@@ -428,7 +428,7 @@ export default function ContactDetailScreen(): JSX.Element {
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'rgba(204,120,92,0.08)' },
+  container: { flex: 1, backgroundColor: c.bg },
   content: { padding: 16, paddingBottom: 32 },
   card: { backgroundColor: c.bgPanel, borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   section: { marginTop: 20 },

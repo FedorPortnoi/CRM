@@ -463,7 +463,7 @@ export default function TaskDetailScreen(): JSX.Element {
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'rgba(204,120,92,0.08)' },
+  container: { flex: 1, backgroundColor: c.bg },
   content: { padding: 16, paddingBottom: 40 },
   card: {
     backgroundColor: c.bgPanel,
