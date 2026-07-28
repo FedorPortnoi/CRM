@@ -50,6 +50,7 @@ import {
   PII_PLACEHOLDER,
   buildSystemPrompt,
   historyToAiMessages,
+  identityHandle,
   redactToolResult,
   sendAssistantMessage,
   type AssistantCaller,
@@ -571,13 +572,137 @@ describe('redactToolResult', () => {
 describe('system prompt', () => {
   it('explains the placeholder so the model answers instead of hallucinating a number', () => {
     const prompt = buildSystemPrompt({
-      orgName: 'ООО Ромашка',
-      userName: 'Иван Петров',
-      role: 'member',
+      orgId: CALLER.org_id,
       userId: CALLER.sub,
+      role: 'member',
     });
 
     expect(prompt).toContain(PII_PLACEHOLDER);
     expect(prompt).toContain('карточке контакта');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The system prompt is the widest exposure in this module: it is sent on EVERY
+// turn, including turns that call no tool at all, so redactToolResult() — which
+// only ever runs inside serializeToolResult() — never sees it. It used to
+// interpolate the organisation's real name and the operator's real ФИО, which
+// is personal data crossing the border on 100% of requests while the
+// Roskomnadzor filing is still open (ФЗ-152 ст. 5 ч. 5 и ст. 12).
+//
+// Masking is by opaque one-way handle, not by a reversible vault: nothing here
+// matches names in text, so nothing can fail open on an inflected surname.
+// ---------------------------------------------------------------------------
+
+/** A name no fixture in this file uses, so a hit is always a real leak. */
+const REAL_ORG_NAME = 'ООО «Северная Звезда-77»';
+const REAL_USER_NAME = 'Достоевский Фёдор Михайлович';
+const OTHER_ORG_ID = '00000000-0000-4000-a000-0000000000ff';
+
+function stubModelWithPlainAnswer(): void {
+  fetchMock = vi.fn(async () => jsonResponse(textCompletion('В работе 4 сделки.')));
+  vi.stubGlobal('fetch', fetchMock);
+}
+
+function expectNoRealIdentityNames(): void {
+  for (const sink of [outboundPayload(), persistedPayload()]) {
+    expect(sink).not.toContain(REAL_ORG_NAME);
+    expect(sink).not.toContain(REAL_USER_NAME);
+    // Fragments too: a leak that merely dropped the quotes or the patronymic
+    // would still be a disclosure.
+    expect(sink).not.toContain('Северная Звезда');
+    expect(sink).not.toContain('Достоевский');
+  }
+}
+
+describe('the system prompt carries no real names across the border', () => {
+  beforeEach(() => {
+    // The profile row still exists and still has the real names on it. If any
+    // future edit reads them back into the prompt, these tests fail.
+    dbMock.user.findFirst.mockResolvedValue({
+      name: REAL_USER_NAME,
+      organization: { name: REAL_ORG_NAME },
+    });
+  });
+
+  it('masks both identities on a turn that calls no tool at all', async () => {
+    stubModelWithPlainAnswer();
+
+    const result = await sendAssistantMessage(CALLER, { message: 'Сколько сделок в работе?' });
+
+    expect(result.ok).toBe(true);
+    expect(mcpMock.invokeMcpTool).not.toHaveBeenCalled();
+    expectNoRealIdentityNames();
+    // What crossed instead.
+    expect(outboundPayload()).toContain(identityHandle('org', CALLER.org_id));
+    expect(outboundPayload()).toContain(identityHandle('user', CALLER.sub));
+  });
+
+  it('masks both identities on a turn that runs a tool round', async () => {
+    mcpMock.invokeMcpTool.mockResolvedValue({ ok: true, result: { data: [], meta: { total: 0 } } });
+    stubModelWithOneToolRound();
+
+    await sendAssistantMessage(CALLER, { message: 'Найди контакты' });
+
+    // The prompt is re-sent with every request in the agent loop, so both
+    // request bodies are checked, not just the first.
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    expectNoRealIdentityNames();
+  });
+
+  it('never reads the names out of Postgres in the first place', async () => {
+    stubModelWithPlainAnswer();
+
+    await sendAssistantMessage(CALLER, { message: 'Привет' });
+
+    // Structural, not incidental: with the prompt built from ids there is no
+    // reason to select User.name / Organization.name, so the plaintext never
+    // leaves the database on this path.
+    expect(dbMock.user.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('keeps the organisation id itself out of the prompt', () => {
+    // A distinctive uuid on purpose: CALLER's fixture ids share a long run of
+    // zeroes with the caller uuid that legitimately stays in the prompt.
+    const orgId = 'a1b2c3d4-9e8f-4a7b-8c6d-5e4f3a2b1c09';
+    const prompt = buildSystemPrompt({ orgId, userId: CALLER.sub, role: 'member' });
+
+    // Rule 2 forbids the model from supplying an org id and the MCP layer
+    // strips it anyway, so the handle must not be a fragment of the uuid.
+    expect(prompt).not.toContain(orgId);
+    expect(prompt).not.toContain('a1b2c3d4');
+    expect(prompt).toMatch(/ORG-[0-9a-f]{12}\b/);
+    expect(prompt).toMatch(/USER-[0-9a-f]{12}\b/);
+  });
+
+  it('produces a handle that is stable per identity and distinct across them', () => {
+    // Stable: the model can refer to one organisation across turns without a
+    // vault ever being consulted.
+    expect(identityHandle('org', CALLER.org_id)).toBe(identityHandle('org', CALLER.org_id));
+    // Distinct: another org, and the same uuid read as a user, both differ.
+    expect(identityHandle('org', CALLER.org_id)).not.toBe(identityHandle('org', OTHER_ORG_ID));
+    expect(identityHandle('org', CALLER.org_id)).not.toBe(identityHandle('user', CALLER.org_id));
+  });
+
+  it('leaves the viewer read-only note and the tool rules exactly as they were', () => {
+    const viewer = buildSystemPrompt({
+      orgId: CALLER.org_id,
+      userId: CALLER.sub,
+      role: 'viewer',
+    });
+    const member = buildSystemPrompt({
+      orgId: CALLER.org_id,
+      userId: CALLER.sub,
+      role: 'member',
+    });
+
+    expect(viewer).toContain('наблюдатель');
+    expect(viewer).toContain('только чтение');
+    expect(member).toContain('задай уточняющий вопрос вместо вызова инструмента');
+    for (const prompt of [viewer, member]) {
+      expect(prompt).toContain('ТОЛЬКО через инструменты');
+      // The caller uuid is still there: the tools filter «мои сделки» on it.
+      expect(prompt).toContain(CALLER.sub);
+    }
   });
 });

@@ -40,6 +40,7 @@ import {
   MAX_TOOL_ROUNDS,
   buildSystemPrompt,
   getAssistantConversation,
+  identityHandle,
   sanitizeToolArguments,
   sendAssistantMessage,
   type AssistantCaller,
@@ -566,16 +567,16 @@ describe('exchange persistence', () => {
 describe('system prompt', () => {
   it('is in Russian and frames the model as a CRM assistant for a Russian sales team', () => {
     const prompt = buildSystemPrompt({
-      orgName: 'ООО Ромашка',
-      userName: 'Иван Петров',
-      role: 'member',
+      orgId: CALLER.org_id,
       userId: CALLER.sub,
+      role: 'member',
     });
 
     expect(prompt).toContain('ИИ-ассистент CRM');
     expect(prompt).toContain('российского отдела продаж');
     expect(prompt).toContain('Отвечай всегда на русском языке');
-    expect(prompt).toContain('ООО Ромашка');
+    // The organisation is named by its handle, never by its name.
+    expect(prompt).toContain(identityHandle('org', CALLER.org_id));
     expect(prompt).toContain('RUB');
     // No Latin-only instruction lines slipped in.
     expect(/[а-яё]/i.test(prompt)).toBe(true);
@@ -583,14 +584,24 @@ describe('system prompt', () => {
 
   it('tells a viewer the assistant is read-only for them', () => {
     const prompt = buildSystemPrompt({
-      orgName: 'ООО Ромашка',
-      userName: 'Пётр',
-      role: 'viewer',
+      orgId: CALLER.org_id,
       userId: CALLER.sub,
+      role: 'viewer',
     });
 
     expect(prompt).toContain('наблюдатель');
     expect(prompt).toContain('только чтение');
+  });
+
+  it('still hands the model the caller uuid for «мои сделки» filters', () => {
+    const prompt = buildSystemPrompt({
+      orgId: CALLER.org_id,
+      userId: CALLER.sub,
+      role: 'member',
+    });
+
+    expect(prompt).toContain(CALLER.sub);
+    expect(prompt).toContain('мои сделки');
   });
 });
 
