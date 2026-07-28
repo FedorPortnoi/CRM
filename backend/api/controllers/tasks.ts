@@ -1,7 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { TaskPriority, TaskStatus } from '@prisma/client';
-import Anthropic from '@anthropic-ai/sdk';
 import { db } from '../../services/db';
+import { createCompletion, isYandexGptConfigured } from '../../services/yandex-gpt';
 import {
   getVisibleUserIds,
   getAccessibleUserIds,
@@ -239,61 +239,129 @@ async function dueToday(
   reply.send({ data: tasks, meta: {} });
 }
 
-async function suggestContact(
-  request: FastifyRequest,
-  reply: FastifyReply,
-): Promise<void> {
-  const { title } = request.body as { title: string };
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+// ─── Contact suggestion for a task title ─────────────────────────────────────
 
-  if (!apiKey) {
-    reply.send({ data: { contact: null } });
-    return;
+/** How many candidate contacts are put in front of the model. */
+const SUGGEST_CONTACT_LIMIT = 300;
+
+/** The only useful reply is one UUID or the word "none" — nothing longer. */
+const SUGGEST_CONTACT_MAX_TOKENS = 50;
+
+/** An extraction, not a piece of writing: no reason to sample. */
+const SUGGEST_CONTACT_TEMPERATURE = 0;
+
+/**
+ * Deliberately far below the client's 30s default. The operator is typing a
+ * task title while this runs and every failure is a silent `null`, so waiting
+ * longer buys a suggestion nobody is still looking at.
+ */
+const SUGGEST_CONTACT_TIMEOUT_MS = 10_000;
+
+const SUGGEST_CONTACT_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const SUGGEST_CONTACT_SYSTEM_PROMPT = [
+  'Ты сопоставляешь заголовок задачи в CRM со списком контактов.',
+  'Если в заголовке явно назван один из контактов — ответь РОВНО его UUID из списка.',
+  'Если явного совпадения нет — ответь одним словом none.',
+  'Никакого другого текста, пояснений и знаков препинания.',
+].join('\n');
+
+type SuggestedContact = { id: string; first_name: string; last_name: string | null };
+
+/**
+ * Adapter onto backend/services/yandex-gpt — the same `createCompletion` seam
+ * the assistant and contact-ai.ts use, and the single provider client in the
+ * backend.
+ *
+ * This endpoint previously built its own Anthropic client and posted up to 300
+ * Russian customers' full names to api.anthropic.com on every call: a ст. 12
+ * ФЗ-152 cross-border transfer with no filing behind it.
+ *
+ * Routing it here closes THAT transfer, because Yandex is domestic. It does not
+ * make the exposure disappear. The same 300 names are still in the prompt, and
+ * Wave A repoints yandex-gpt.ts at OpenAI through workers/openai-proxy — at
+ * which point they cross the border again with no change to this file. Whether
+ * contact names may reach a model at all is an open decision the owner has not
+ * made (contact-ai.ts already sends them deliberately); this endpoint is now in
+ * that same bucket rather than outside it.
+ *
+ * Returns `null` for every failure: the client cannot distinguish "no match"
+ * from "no model", and nothing about an unrequested suggestion is worth
+ * surfacing to the operator.
+ */
+async function resolveSuggestedContact(
+  orgId: string,
+  title: string,
+): Promise<SuggestedContact | null> {
+  // Checked before the query: with no provider configured there is nobody to
+  // ask, and reading 300 contacts only to drop them is pure waste.
+  if (!isYandexGptConfigured()) {
+    return null;
   }
 
   const contacts = await db.contact.findMany({
     where: {
-      organization_id: request.user.org_id,
+      organization_id: orgId,
       status: { not: 'archived' },
     },
     select: { id: true, first_name: true, last_name: true },
-    take: 300,
+    take: SUGGEST_CONTACT_LIMIT,
     orderBy: { first_name: 'asc' },
   });
 
   if (contacts.length === 0) {
-    reply.send({ data: { contact: null } });
-    return;
+    return null;
   }
 
   const contactList = contacts
     .map((c) => `${c.id}: ${c.first_name}${c.last_name ? ' ' + c.last_name : ''}`)
     .join('\n');
 
-  try {
-    const anthropic = new Anthropic({ apiKey });
-    const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 50,
-      messages: [{
-        role: 'user',
-        content: `Task: "${title}"\nContacts:\n${contactList}\n\nWhich contact ID is clearly referenced in the task title? Reply with ONLY the UUID, or "none". No other text.`,
-      }],
-    });
+  const result = await createCompletion({
+    messages: [
+      { role: 'system', text: SUGGEST_CONTACT_SYSTEM_PROMPT },
+      { role: 'user', text: `Задача: "${title}"\nКонтакты:\n${contactList}` },
+    ],
+    temperature: SUGGEST_CONTACT_TEMPERATURE,
+    max_tokens: SUGGEST_CONTACT_MAX_TOKENS,
+    timeout_ms: SUGGEST_CONTACT_TIMEOUT_MS,
+  });
 
-    const text = (message.content[0] as { type: 'text'; text: string }).text.trim();
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-    if (!uuidRegex.test(text)) {
-      reply.send({ data: { contact: null } });
-      return;
-    }
-
-    const match = contacts.find((c) => c.id === text);
-    reply.send({ data: { contact: match ?? null } });
-  } catch {
-    reply.send({ data: { contact: null } });
+  if (!result.ok) {
+    return null;
   }
+
+  // Strict on purpose: a bare UUID or nothing. A model that wraps the id in
+  // prose is a model that is guessing, and a wrong contact silently attached to
+  // a task is worse than no suggestion.
+  const text = (result.message.text ?? '').trim();
+  if (!SUGGEST_CONTACT_UUID_RE.test(text)) {
+    return null;
+  }
+
+  return contacts.find((c) => c.id === text) ?? null;
+}
+
+async function suggestContact(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const { title } = request.body as { title: string };
+
+  let contact: SuggestedContact | null = null;
+
+  try {
+    contact = await resolveSuggestedContact(request.user.org_id, title);
+  } catch (err) {
+    // Widened from the Anthropic version, which caught only around the model
+    // call and let a database failure escape as a 500. A convenience the
+    // operator never asked for must not be able to fail their request — but the
+    // failure is logged rather than lost.
+    request.log.warn({ err }, 'suggest-contact failed; returning no suggestion');
+  }
+
+  reply.send({ data: { contact } });
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
