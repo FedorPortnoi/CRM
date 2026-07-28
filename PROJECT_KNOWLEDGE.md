@@ -438,13 +438,18 @@ All production profiles point the app at the same backend:
 - `YANDEX_CLIENT_ID` + `YANDEX_CLIENT_SECRET` (must be set together), `YANDEX_REDIRECT_URI` (https, required in prod when Yandex is configured), `YANDEX_CALENDAR_SUCCESS_URL` (https or `crm:` deep link), plus `YANDEX_WEBHOOK_SECRET` above.
 - `YANDEX_API_KEY` + `YANDEX_FOLDER_ID` — Yandex Vision OCR for business-card / contact recognition.
 
+**YandexGPT (`backend/services/yandex-gpt.ts`) — the only model provider in the backend:**
+- `YANDEX_API_KEY` + `YANDEX_FOLDER_ID` (the same pair as Vision; both required, otherwise `isYandexGptConfigured()` is false and every AI feature degrades quietly).
+- `YANDEX_GPT_MODEL` (default `yandexgpt/latest`), `YANDEX_GPT_TIMEOUT_MS` (default 30000).
+- Every model call in the backend goes through the `createCompletion` seam in this file — the assistant, `contact-ai.ts`, and the tasks `suggest-contact` endpoint. The provider is domestic, so ФЗ-152 ст. 12 (cross-border transfer) does not apply today; what applies is the ч. 5 ст. 5 minimisation duty. The planned Wave A swap to OpenAI via `workers/openai-proxy/` repoints this one file, and ст. 12 begins to apply at that moment.
+
 **Email (Resend — `backend/services/email.ts`):**
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (default `CRM <onboarding@resend.dev>`).
 
 **Push notifications (`backend/services/push.ts`):**
 - Expo push via `expo-server-sdk` for Expo tokens; `FCM_PROJECT_ID` and `FCM_SERVICE_ACCOUNT_PATH` (default `firebase-service-account.json`) for raw FCM tokens.
 
-**Other:** `JWT_EXPIRES_IN` (default `7d`), `PORT` (default 3000), `ENABLE_MCP`, `ANTHROPIC_API_KEY` (task AI features), `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` (Telegram import), `APP_VERSION` / `APP_VERSION_CODE`.
+**Other:** `JWT_EXPIRES_IN` (default `7d`), `PORT` (default 3000), `ENABLE_MCP`, `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` (Telegram import), `APP_VERSION` / `APP_VERSION_CODE`.
 
 ### Market configuration (`backend/config/market.ts`)
 
