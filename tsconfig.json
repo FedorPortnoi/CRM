@@ -19,6 +19,7 @@
   "exclude": [
     "node_modules",
     "dist",
-    "backend/prisma"
+    "backend/prisma",
+    "workers"
   ]
 }
