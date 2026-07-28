@@ -268,11 +268,32 @@ registerTool(
       });
     });
 
+    // No `include: { assignee: … }` here. That relation was read for exactly one
+    // field — the assignee's `User.name`, an OPERATOR's ФИО. That is a second
+    // data subject riding along in the result of an operation about a customer,
+    // and it bought the caller nothing: `assigned_to` is already on the row
+    // below and holds the same uuid as `assignee.id` would, so the identifier
+    // the model chains on is still here. Only the name is gone.
+    //
+    // Removed structurally rather than masked, the same way c456e0f took the
+    // ФИО off the contact-summary prompt: the query does not read `name` at
+    // all, so it never leaves Postgres on this path and cannot be printed by
+    // accident further down.
+    //
+    // This is not belt-and-braces — there is no braces. The result leaves
+    // through backend/services/assistant.ts → redactToolResult(), whose
+    // REDACTED_KEYS and PII_KEY_FRAGMENTS match email/phone/mobile only, and a
+    // bare `name` key CANNOT be added to that set because `stage.name` and
+    // `pipeline.name` are legitimate values the model needs. Absent at the
+    // source is the only place this can be fixed. From Wave A onward the same
+    // payload also crosses the border, with no code change in this file.
     const updated = await db.contact.findFirst({
       where: { id: target_id, organization_id: user.org_id },
-      include: { assignee: { select: { id: true, name: true } } },
     });
 
+    // Both branches now return the same shape: `target` above was fetched
+    // without the relation too, so the fallback no longer quietly drops a field
+    // the success path had.
     return { data: updated ?? target };
   },
 );
