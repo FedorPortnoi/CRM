@@ -23,6 +23,9 @@
  *   - the Prisma `select` below simply does not read `email`, `phone`, `mobile`
  *     or their blind-index columns, so the ciphertext never leaves Postgres and
  *     `decryptField` is never called on this path;
+ *   - nor does it read the assignee's `name`. That is an OPERATOR's ФИО, not a
+ *     customer's, and see THE OPERATOR'S NAME below for why it is gone entirely
+ *     rather than masked;
  *   - every free-text field that a human could have typed a contact detail into
  *     (notes, message bodies, task and meeting titles, and the caller-supplied
  *     autofill text) goes through `redactContactDetails()` first, which masks
@@ -35,6 +38,36 @@
  * prohibits, and masking them actually helps the model find the field
  * boundaries. Address/phone capture already has a local, deterministic path in
  * contact-recognition.ts and does not need a language model.
+ *
+ * ---------------------------------------------------------------------------
+ * THE OPERATOR'S NAME (ФЗ-152 ст. 5 ч. 5, and ст. 12 from the moment Wave A
+ * lands)
+ * ---------------------------------------------------------------------------
+ * The summary prompt used to carry «Ответственный менеджер: <ФИО>», filled from
+ * the assignee's `User.name`. That is a second data subject — the operator —
+ * riding along in a prompt about a customer, and it bought the model nothing:
+ * the prompt asks for a read on the RELATIONSHIP and one next step, both of
+ * which follow from the deals, tasks and activity below. The model never
+ * addresses the manager, and the answer is read BY that manager.
+ *
+ * It is deleted, not masked. An opaque handle of the identityHandle('user', …)
+ * kind that backend/services/assistant.ts puts in its SYSTEM prompt works there
+ * because the model chains on the handle across turns and the answer is
+ * conversational. Here the model's output is a block of Russian prose rendered
+ * straight to the operator, and nothing on the way out substitutes a handle
+ * back into a name — so «USER-1a2b3c пора связаться с клиентом» is exactly what
+ * the user would read. Minimisation is the better instrument when the field is
+ * not load-bearing: no name, no handle, no substitution step, shorter prompt.
+ *
+ * Deliberately NOT extended to the contact's own first/last name or company.
+ * Those are the subject of the summary and the model cannot write one without
+ * them; that is a separate, deliberate decision recorded above.
+ *
+ * This matters beyond minimisation because `generateWithYandexGpt` below is an
+ * adapter onto ./yandex-gpt — the SAME `createCompletion` the assistant uses,
+ * and the single provider client in the backend. When Wave A repoints that
+ * module at OpenAI through workers/openai-proxy, everything in this prompt
+ * becomes a cross-border transfer under ст. 12 with no code change here.
  *
  * ---------------------------------------------------------------------------
  * DEGRADATION
@@ -147,7 +180,6 @@ export type ContactAiContext = {
   status: string;
   source: string | null;
   tags: string[];
-  owner_name: string | null;
   created_at: string | null;
   notes: string | null;
   deals: ContactAiDealContext[];
@@ -287,9 +319,11 @@ export type ContactAiRow = {
   tags: unknown;
   notes: string | null;
   created_at: Date | string | null;
+  // Ids only. `assigned_to` is a uuid used for the visibility check below and
+  // never reaches a prompt; the assignee's NAME is not on this type, so it
+  // cannot be interpolated into one by accident.
   assigned_to: string | null;
   created_by: string | null;
-  assignee?: { name: string | null } | null;
 };
 
 /**
@@ -308,6 +342,8 @@ async function loadVisibleContact(
     where: { id: contactId, organization_id: requester.org_id },
     // No email / phone / mobile / *_bidx. The ciphertext is not read at all, so
     // there is nothing on this path that could be decrypted into a prompt.
+    // No `assignee` either: the operator's ФИО is not read, so it cannot reach
+    // the prompt even if someone re-adds a line that tries to print it.
     select: {
       id: true,
       first_name: true,
@@ -321,7 +357,6 @@ async function loadVisibleContact(
       created_at: true,
       assigned_to: true,
       created_by: true,
-      assignee: { select: { name: true } },
     },
   })) as ContactAiRow | null;
 
@@ -423,7 +458,6 @@ export async function buildContactContext(
     status: contact.status,
     source: clean(contact.source, 100),
     tags: stringTags(contact.tags).slice(0, 20),
-    owner_name: clean(contact.assignee?.name ?? null, 100),
     created_at: isoDate(contact.created_at),
     notes: clean(contact.notes, MAX_NOTES_CHARS),
     deals: (deals ?? []).map((d) => ({
@@ -471,7 +505,9 @@ export function buildSummaryPrompt(context: ContactAiContext): string {
   lines.push(`Тип: ${context.type}; статус: ${context.status}`);
   if (context.source) lines.push(`Источник: ${context.source}`);
   if (context.tags.length > 0) lines.push(`Теги: ${context.tags.join(', ')}`);
-  if (context.owner_name) lines.push(`Ответственный менеджер: ${context.owner_name}`);
+  // No «Ответственный менеджер» line: the assignee's ФИО is a second data
+  // subject's personal data and contributes nothing to a summary of the
+  // customer. See THE OPERATOR'S NAME at the top of this file.
   if (context.created_at) lines.push(`В базе с: ${context.created_at}`);
   if (context.notes) lines.push(`Заметки: ${context.notes}`);
 

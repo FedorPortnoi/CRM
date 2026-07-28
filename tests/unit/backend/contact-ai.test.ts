@@ -55,6 +55,14 @@ const CIPHERTEXT_PHONE = 'v1:41bb07::UEhPTkUgQ0lQSEVSVEVYVA==';
 const PLAINTEXT_EMAIL = 'ivan.petrov@romashka.ru';
 const PLAINTEXT_PHONE = '+7 495 123 45 67';
 
+// The assignee's ФИО — an OPERATOR's personal data, a `User.name`, not a
+// customer's. It must not reach the model in any form. Deliberately unlike
+// every other name in this file (and unlike the contact's own «Иван Петров»)
+// so that a hit inside a prompt is unambiguous and cannot be a coincidence.
+const OPERATOR_FIO = 'Аглая Криворучко-Замятина';
+/** The surname stem alone, to catch an inflected or truncated leak. */
+const OPERATOR_SURNAME_STEM = 'Криворучко';
+
 type ContactRowOverrides = Partial<Record<string, unknown>>;
 
 function contactRow(overrides: ContactRowOverrides = {}) {
@@ -72,10 +80,13 @@ function contactRow(overrides: ContactRowOverrides = {}) {
     created_at: new Date('2026-01-15T10:00:00.000Z'),
     assigned_to: MANAGER_ID,
     created_by: MANAGER_ID,
-    assignee: { name: 'Мария' },
     // Deliberately present on the mocked row even though the production `select`
     // never asks for them: if the context builder ever spreads the row instead
-    // of projecting it field by field, these leak and the PII tests fail.
+    // of projecting it field by field, these leak and the PII tests fail. The
+    // same trick arms the operator-name tests — Prisma is mocked, so dropping
+    // `assignee` from the real `select` does not stop a re-added
+    // `contact.assignee?.name` from finding this value and failing the suite.
+    assignee: { name: OPERATOR_FIO },
     email: CIPHERTEXT_EMAIL,
     phone: CIPHERTEXT_PHONE,
     mobile: CIPHERTEXT_PHONE,
@@ -314,6 +325,100 @@ describe('summarizeContact — encrypted PII never reaches the model', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// The operator's own ФИО (a User.name — a SECOND data subject in a prompt about
+// a customer). ФЗ-152 ст. 5 ч. 5; and ст. 12 the moment Wave A repoints
+// ./yandex-gpt at OpenAI, since this service shares that provider client.
+// ---------------------------------------------------------------------------
+
+describe('summarizeContact — the assignee ФИО never reaches the model', () => {
+  it('does not read the assignee name out of Postgres at all', async () => {
+    const { generateText } = recorder(OK_SUMMARY);
+
+    await summarizeContact({ contactId: CONTACT_ID, requester: owner, deps: { generateText } });
+
+    const select = dbMock.contact.findFirst.mock.calls[0][0].select as Record<string, unknown>;
+    expect(select.assignee).toBeUndefined();
+    // The uuid is still read — the visibility cone needs it, and an id is not a
+    // name. It is what makes the *name* unnecessary.
+    expect(select.assigned_to).toBe(true);
+  });
+
+  it('keeps the assignee ФИО out of the built prompt', async () => {
+    const { prompts, generateText } = recorder(OK_SUMMARY);
+
+    await summarizeContact({ contactId: CONTACT_ID, requester: owner, deps: { generateText } });
+
+    expect(prompts).toHaveLength(1);
+    const [prompt] = prompts;
+
+    expect(prompt).not.toContain(OPERATOR_FIO);
+    expect(prompt).not.toContain(OPERATOR_SURNAME_STEM);
+    expect(prompt).not.toContain('Аглая');
+    // The label goes too, not just the value: an empty «Ответственный менеджер:»
+    // would mean the interpolation is still there and merely happened to be null.
+    expect(prompt).not.toContain('Ответственный менеджер');
+  });
+
+  it('drops the name rather than substituting a handle that could surface in the prose', async () => {
+    const { prompts, generateText } = recorder(OK_SUMMARY);
+
+    await summarizeContact({ contactId: CONTACT_ID, requester: owner, deps: { generateText } });
+
+    const [prompt] = prompts;
+    // buildSystemPrompt in assistant.ts can afford USER-… because the model
+    // chains on it conversationally. This output is prose rendered straight to
+    // the operator and nothing substitutes a handle back, so there must be no
+    // handle — and no raw uuid standing in for one either.
+    expect(prompt).not.toContain('USER-');
+    expect(prompt).not.toContain(MANAGER_ID);
+  });
+
+  it('still sends everything the summary actually needs', async () => {
+    dbMock.deal.findMany.mockResolvedValue([
+      {
+        title: 'Поставка станков',
+        value: '1200000',
+        currency: 'RUB',
+        status: 'open',
+        expected_close: new Date('2026-08-01T00:00:00.000Z'),
+        next_action: 'Отправить КП',
+        stage: { name: 'Квалификация' },
+      },
+    ]);
+    const { prompts, generateText } = recorder(OK_SUMMARY);
+
+    await summarizeContact({ contactId: CONTACT_ID, requester: owner, deps: { generateText } });
+
+    const [prompt] = prompts;
+    // Guards against over-deletion: the contact's own identity and the relation
+    // history are a separate, deliberate decision and must survive untouched.
+    expect(prompt).toContain('Иван Петров');
+    expect(prompt).toContain('ООО «Ромашка»');
+    expect(prompt).toContain('Поставка станков');
+    expect(prompt).toContain('Просил перезвонить в июле');
+  });
+
+  it('leaks nothing even when the ФИО also appears in a free-text field', async () => {
+    // A note a human typed the manager's name into is not this fix's job —
+    // redaction of arbitrary inflected Russian names is the design three
+    // reviewers rejected. What is asserted here is narrower and real: the
+    // STRUCTURED interpolation is gone, so the only way the name can appear is
+    // if a user typed it, and the count proves the field is not adding one.
+    dbMock.contact.findFirst.mockResolvedValue(
+      contactRow({ notes: `Клиента ведёт ${OPERATOR_FIO}, просил перезвонить.` }),
+    );
+    const { prompts, generateText } = recorder(OK_SUMMARY);
+
+    await summarizeContact({ contactId: CONTACT_ID, requester: owner, deps: { generateText } });
+
+    const [prompt] = prompts;
+    const occurrences = prompt.split(OPERATOR_SURNAME_STEM).length - 1;
+    expect(occurrences).toBe(1);
+    expect(prompt).not.toContain('Ответственный менеджер');
+  });
+});
+
 describe('redactContactDetails', () => {
   it('masks emails and phone-shaped runs', () => {
     expect(redactContactDetails('пишите ivan@example.ru')).toBe(`пишите ${EMAIL_MASK}`);
@@ -533,7 +638,6 @@ describe('summarizeContact — result', () => {
       status: 'active',
       source: null,
       tags: [],
-      owner_name: null,
       created_at: null,
       notes: null,
       deals: [],
