@@ -1,15 +1,11 @@
 import { test, expect } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
 import { randomUUID } from 'crypto';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
 // -- Interfaces ----------------------------------------------------------------
-
-interface RegisterResponse {
-  data: { token: string; user: { id: string } };
-}
 
 interface AuthOrg {
   token: string;
@@ -100,21 +96,6 @@ function yesterdayNoonUTC(): string {
   d.setUTCDate(d.getUTCDate() - 1);
   d.setUTCHours(12, 0, 0, 0);
   return d.toISOString();
-}
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<AuthOrg> {
-  const unique = `${suffix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = (await res.json()) as RegisterResponse;
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 async function createContact(
@@ -327,7 +308,7 @@ test('GET /api/v1/tasks/overdue returns list', async ({ request }) => {
 
 // Test 8: POST task with ALL optional fields, GET /:id verifies every field persists
 test('POST /api/v1/tasks with all fields — GET /:id returns all fields verbatim', async ({ request }) => {
-  const org = await registerOrg(request, 't08-allfields');
+  const org = await registerVerifiedOrg(request, 't08-allfields');
   const contact = await createContact(request, org.token);
   const pipeline = await getDefaultPipeline(request, org.token);
   const deal = await createDeal(request, org.token, contact.id, pipeline.id, pipeline.stages[0].id);
@@ -360,7 +341,7 @@ test('POST /api/v1/tasks with all fields — GET /:id returns all fields verbati
 
 // Test 9: Full lifecycle pending → in_progress → done → pending (toggle)
 test('Task lifecycle: pending → start → in_progress → complete → done → complete again → pending', async ({ request }) => {
-  const org = await registerOrg(request, 't09-lifecycle');
+  const org = await registerVerifiedOrg(request, 't09-lifecycle');
   const task = await createTask(request, org, 'Lifecycle Task');
   expect(task.status).toBe('pending');
 
@@ -377,7 +358,7 @@ test('Task lifecycle: pending → start → in_progress → complete → done �
 
 // Test 10: pending → complete → done → start returns 422 INVALID_STATUS_TRANSITION
 test('Task lifecycle: done task cannot be started — returns 422 INVALID_STATUS_TRANSITION', async ({ request }) => {
-  const org = await registerOrg(request, 't10-done-no-start');
+  const org = await registerVerifiedOrg(request, 't10-done-no-start');
   const task = await createTask(request, org, 'Done No Start Task');
 
   await completeTask(request, org.token, task.id);
@@ -392,7 +373,7 @@ test('Task lifecycle: done task cannot be started — returns 422 INVALID_STATUS
 
 // Test 11: pending → start → in_progress → complete → done, then PATCH title — status stays done
 test('PATCH a done task updates title and status remains done', async ({ request }) => {
-  const org = await registerOrg(request, 't11-patch-done');
+  const org = await registerVerifiedOrg(request, 't11-patch-done');
   const task = await createTask(request, org, 'Done Patch Task');
 
   await startTask(request, org.token, task.id);
@@ -414,7 +395,7 @@ test('PATCH a done task updates title and status remains done', async ({ request
 
 // Test 12: Cancel task → GET /tasks default list excludes it, GET ?status=cancelled includes it
 test('Cancelled task excluded from default GET /tasks but included with ?status=cancelled', async ({ request }) => {
-  const org = await registerOrg(request, 't12-cancel-visibility');
+  const org = await registerVerifiedOrg(request, 't12-cancel-visibility');
   const task = await createTask(request, org, 'Cancel Visibility Task');
 
   await cancelTask(request, org.token, task.id);
@@ -437,7 +418,7 @@ test('Cancelled task excluded from default GET /tasks but included with ?status=
 
 // Test 13: Cancel task → try to complete → 422 TASK_CANCELLED
 test('Cancelled task: attempt to complete returns 422 TASK_CANCELLED', async ({ request }) => {
-  const org = await registerOrg(request, 't13-cancel-complete');
+  const org = await registerVerifiedOrg(request, 't13-cancel-complete');
   const task = await createTask(request, org, 'Cancel Then Complete');
 
   await cancelTask(request, org.token, task.id);
@@ -452,7 +433,7 @@ test('Cancelled task: attempt to complete returns 422 TASK_CANCELLED', async ({ 
 
 // Test 14: Cancel in_progress task → status becomes cancelled, DELETE returns 200
 test('DELETE an in_progress task cancels it and returns 200 with status=cancelled', async ({ request }) => {
-  const org = await registerOrg(request, 't14-cancel-inprogress');
+  const org = await registerVerifiedOrg(request, 't14-cancel-inprogress');
   const task = await createTask(request, org, 'In Progress Cancel');
 
   await startTask(request, org.token, task.id);
@@ -467,7 +448,7 @@ test('DELETE an in_progress task cancels it and returns 200 with status=cancelle
 
 // Test 15: After cancel, GET /:id still shows title, priority, contact_id preserved
 test('After cancel, task fields (title, priority, contact_id) are preserved in GET /:id', async ({ request }) => {
-  const org = await registerOrg(request, 't15-cancel-fields');
+  const org = await registerVerifiedOrg(request, 't15-cancel-fields');
   const contact = await createContact(request, org.token);
   const task = await createTask(request, org, 'Preserved Fields Task', {
     contact_id: contact.id,
@@ -485,7 +466,7 @@ test('After cancel, task fields (title, priority, contact_id) are preserved in G
 
 // Test 16: After completing task, completed_at is set (non-null ISO string)
 test('After completing a task, completed_at is a non-null ISO timestamp in GET /:id', async ({ request }) => {
-  const org = await registerOrg(request, 't16-completed-at');
+  const org = await registerVerifiedOrg(request, 't16-completed-at');
   const task = await createTask(request, org, 'Completed At Task');
 
   await completeTask(request, org.token, task.id);
@@ -499,7 +480,7 @@ test('After completing a task, completed_at is a non-null ISO timestamp in GET /
 
 // Test 17: After double-complete toggle, completed_at is null in GET /:id
 test('After toggling done→pending via second complete, completed_at is null in GET /:id', async ({ request }) => {
-  const org = await registerOrg(request, 't17-completed-at-null');
+  const org = await registerVerifiedOrg(request, 't17-completed-at-null');
   const task = await createTask(request, org, 'Toggle Completed At Task');
 
   await completeTask(request, org.token, task.id);
@@ -512,7 +493,7 @@ test('After toggling done→pending via second complete, completed_at is null in
 
 // Test 18: GET /tasks with no status filter returns pending and in_progress, excludes cancelled
 test('GET /tasks with no status filter includes pending and in_progress tasks, excludes cancelled', async ({ request }) => {
-  const org = await registerOrg(request, 't18-default-filter');
+  const org = await registerVerifiedOrg(request, 't18-default-filter');
   const pendingTask = await createTask(request, org, 'Default Filter Pending');
   const startedTask = await createTask(request, org, 'Default Filter Started');
   const cancelledTask = await createTask(request, org, 'Default Filter Cancelled');
@@ -531,7 +512,7 @@ test('GET /tasks with no status filter includes pending and in_progress tasks, e
 
 // Test 19: GET /tasks pagination page=1 per_page=3 with 5 tasks returns exactly 3
 test('GET /tasks pagination: page=1 per_page=3 with 5 tasks returns 3 results', async ({ request }) => {
-  const org = await registerOrg(request, 't19-page1');
+  const org = await registerVerifiedOrg(request, 't19-page1');
   for (let i = 0; i < 5; i++) {
     await createTask(request, org, `Paginate Task ${i}`);
   }
@@ -548,7 +529,7 @@ test('GET /tasks pagination: page=1 per_page=3 with 5 tasks returns 3 results', 
 
 // Test 20: GET /tasks pagination page=2 per_page=3 with 5 tasks returns 2 results and meta.total=5
 test('GET /tasks pagination: page=2 per_page=3 with 5 tasks returns 2 results and meta.total=5', async ({ request }) => {
-  const org = await registerOrg(request, 't20-page2');
+  const org = await registerVerifiedOrg(request, 't20-page2');
   for (let i = 0; i < 5; i++) {
     await createTask(request, org, `Page2 Task ${i}`);
   }
@@ -565,7 +546,7 @@ test('GET /tasks pagination: page=2 per_page=3 with 5 tasks returns 2 results an
 
 // Test 21: GET /tasks?priority=urgent returns only urgent tasks
 test('GET /tasks?priority=urgent returns only urgent-priority tasks', async ({ request }) => {
-  const org = await registerOrg(request, 't21-priority-urgent');
+  const org = await registerVerifiedOrg(request, 't21-priority-urgent');
   const urgentTask = await createTask(request, org, 'Urgent Priority Task', { priority: 'urgent' });
   const mediumTask = await createTask(request, org, 'Medium Priority Task', { priority: 'medium' });
 
@@ -582,7 +563,7 @@ test('GET /tasks?priority=urgent returns only urgent-priority tasks', async ({ r
 
 // Test 22: GET /tasks?priority=low returns only low-priority tasks
 test('GET /tasks?priority=low returns only low-priority tasks', async ({ request }) => {
-  const org = await registerOrg(request, 't22-priority-low');
+  const org = await registerVerifiedOrg(request, 't22-priority-low');
   const lowTask = await createTask(request, org, 'Low Priority Task', { priority: 'low' });
   const highTask = await createTask(request, org, 'High Priority Task', { priority: 'high' });
 
@@ -599,7 +580,7 @@ test('GET /tasks?priority=low returns only low-priority tasks', async ({ request
 
 // Test 23: GET /tasks?priority=high — urgent and medium tasks do not appear
 test('GET /tasks?priority=high excludes urgent and medium priority tasks', async ({ request }) => {
-  const org = await registerOrg(request, 't23-priority-high-exclude');
+  const org = await registerVerifiedOrg(request, 't23-priority-high-exclude');
   const highTask = await createTask(request, org, 'High Only Task', { priority: 'high' });
   const urgentTask = await createTask(request, org, 'Urgent Not High', { priority: 'urgent' });
   const mediumTask = await createTask(request, org, 'Medium Not High', { priority: 'medium' });
@@ -617,8 +598,8 @@ test('GET /tasks?priority=high excludes urgent and medium priority tasks', async
 
 // Test 24: GET /tasks?assigned_to=userId excludes tasks assigned to another user
 test('GET /tasks?assigned_to=userA excludes tasks assigned to userB', async ({ request }) => {
-  const orgA = await registerOrg(request, 't24-assigned-a');
-  const orgB = await registerOrg(request, 't24-assigned-b');
+  const orgA = await registerVerifiedOrg(request, 't24-assigned-a');
+  const orgB = await registerVerifiedOrg(request, 't24-assigned-b');
   const taskForA = await createTask(request, orgA, 'Task For A');
 
   // Create a task assigned to orgA.userId but query with orgB.userId as filter
@@ -632,7 +613,7 @@ test('GET /tasks?assigned_to=userA excludes tasks assigned to userB', async ({ r
 
 // Test 25: GET /tasks?deal_id returns only tasks for that deal
 test('GET /tasks?deal_id returns only tasks linked to that deal', async ({ request }) => {
-  const org = await registerOrg(request, 't25-dealid-filter');
+  const org = await registerVerifiedOrg(request, 't25-dealid-filter');
   const contact = await createContact(request, org.token);
   const pipeline = await getDefaultPipeline(request, org.token);
   const deal = await createDeal(request, org.token, contact.id, pipeline.id, pipeline.stages[0].id);
@@ -652,7 +633,7 @@ test('GET /tasks?deal_id returns only tasks linked to that deal', async ({ reque
 
 // Test 26: GET /tasks?contact_id AND ?deal_id combined filter
 test('GET /tasks?contact_id&deal_id combined filter returns only tasks matching both', async ({ request }) => {
-  const org = await registerOrg(request, 't26-combined-filter');
+  const org = await registerVerifiedOrg(request, 't26-combined-filter');
   const contact = await createContact(request, org.token);
   const pipeline = await getDefaultPipeline(request, org.token);
   const deal = await createDeal(request, org.token, contact.id, pipeline.id, pipeline.stages[0].id);
@@ -678,7 +659,7 @@ test('GET /tasks?contact_id&deal_id combined filter returns only tasks matching 
 
 // Test 27: GET /tasks?due_before returns tasks with due_date before cutoff
 test('GET /tasks?due_before includes tasks before cutoff and excludes tasks after', async ({ request }) => {
-  const org = await registerOrg(request, 't27-due-before');
+  const org = await registerVerifiedOrg(request, 't27-due-before');
   const beforeCutoff = daysFromNow(2);
   const afterCutoff = daysFromNow(8);
   const cutoff = daysFromNow(5);
@@ -698,7 +679,7 @@ test('GET /tasks?due_before includes tasks before cutoff and excludes tasks afte
 
 // Test 28: GET /tasks/overdue: in_progress task past due IS in overdue
 test('GET /tasks/overdue includes in_progress task with due_date in past', async ({ request }) => {
-  const org = await registerOrg(request, 't28-overdue-inprogress');
+  const org = await registerVerifiedOrg(request, 't28-overdue-inprogress');
   const task = await createTask(request, org, 'Overdue In Progress', { due_date: yesterdayNoonUTC() });
 
   await startTask(request, org.token, task.id);
@@ -711,7 +692,7 @@ test('GET /tasks/overdue includes in_progress task with due_date in past', async
 
 // Test 29: GET /tasks/overdue: done task past due is NOT in overdue
 test('GET /tasks/overdue excludes done task with due_date in past', async ({ request }) => {
-  const org = await registerOrg(request, 't29-overdue-done-exclude');
+  const org = await registerVerifiedOrg(request, 't29-overdue-done-exclude');
   const task = await createTask(request, org, 'Done Overdue Task', { due_date: yesterdayNoonUTC() });
 
   await completeTask(request, org.token, task.id);
@@ -724,7 +705,7 @@ test('GET /tasks/overdue excludes done task with due_date in past', async ({ req
 
 // Test 30: GET /tasks/overdue: task due tomorrow is NOT in overdue
 test('GET /tasks/overdue excludes pending task due tomorrow', async ({ request }) => {
-  const org = await registerOrg(request, 't30-overdue-future-exclude');
+  const org = await registerVerifiedOrg(request, 't30-overdue-future-exclude');
   const task = await createTask(request, org, 'Future Due Not Overdue', { due_date: daysFromNow(1) });
 
   const res = await request.get('/api/v1/tasks/overdue', { headers: authHeaders(org.token) });
@@ -735,7 +716,7 @@ test('GET /tasks/overdue excludes pending task due tomorrow', async ({ request }
 
 // Test 31: GET /tasks/today: task due today at 23:59:59 UTC is included
 test('GET /tasks/today includes pending task due at 23:59:59 UTC today', async ({ request }) => {
-  const org = await registerOrg(request, 't31-today-end-of-day');
+  const org = await registerVerifiedOrg(request, 't31-today-end-of-day');
   const endOfDay = todayUTC(23, 59, 59);
   const task = await createTask(request, org, 'End Of Day Task', { due_date: endOfDay });
 
@@ -747,7 +728,7 @@ test('GET /tasks/today includes pending task due at 23:59:59 UTC today', async (
 
 // Test 32: GET /tasks/today: task due today at 00:00:00 UTC is included
 test('GET /tasks/today includes pending task due at 00:00:00 UTC today', async ({ request }) => {
-  const org = await registerOrg(request, 't32-today-start-of-day');
+  const org = await registerVerifiedOrg(request, 't32-today-start-of-day');
   const startOfDay = todayUTC(0, 0, 0);
   const task = await createTask(request, org, 'Start Of Day Task', { due_date: startOfDay });
 
@@ -759,7 +740,7 @@ test('GET /tasks/today includes pending task due at 00:00:00 UTC today', async (
 
 // Test 33: GET /tasks/today: done task due today is NOT in today
 test('GET /tasks/today excludes done task due today', async ({ request }) => {
-  const org = await registerOrg(request, 't33-today-done-exclude');
+  const org = await registerVerifiedOrg(request, 't33-today-done-exclude');
   const task = await createTask(request, org, 'Done Today Task', { due_date: todayUTC(12, 0, 0) });
 
   await completeTask(request, org.token, task.id);
@@ -772,7 +753,7 @@ test('GET /tasks/today excludes done task due today', async ({ request }) => {
 
 // Test 34: GET /tasks/today: in_progress task due today IS in today
 test('GET /tasks/today includes in_progress task due today', async ({ request }) => {
-  const org = await registerOrg(request, 't34-today-inprogress');
+  const org = await registerVerifiedOrg(request, 't34-today-inprogress');
   const task = await createTask(request, org, 'In Progress Today Task', { due_date: todayUTC(12, 0, 0) });
 
   await startTask(request, org.token, task.id);
@@ -785,7 +766,7 @@ test('GET /tasks/today includes in_progress task due today', async ({ request })
 
 // Test 35: Bulk scenario: create 10 tasks for same contact, contact_id filter returns all 10
 test('GET /tasks?contact_id returns all 10 tasks linked to that contact', async ({ request }) => {
-  const org = await registerOrg(request, 't35-bulk-contact');
+  const org = await registerVerifiedOrg(request, 't35-bulk-contact');
   const contact = await createContact(request, org.token);
 
   const ids: string[] = [];
@@ -808,7 +789,7 @@ test('GET /tasks?contact_id returns all 10 tasks linked to that contact', async 
 
 // Test 36: PATCH changes priority from medium to urgent, GET /:id reflects change
 test('PATCH /api/v1/tasks/:id changes priority from medium to urgent — GET /:id shows urgent', async ({ request }) => {
-  const org = await registerOrg(request, 't36-patch-priority');
+  const org = await registerVerifiedOrg(request, 't36-patch-priority');
   const task = await createTask(request, org, 'Priority Change Task', { priority: 'medium' });
 
   const patchRes = await request.patch(`/api/v1/tasks/${task.id}`, {
@@ -825,18 +806,18 @@ test('PATCH /api/v1/tasks/:id changes priority from medium to urgent — GET /:i
 
 // Test 37: PATCH changes assigned_to to second user in same org, GET shows new assignee
 test('PATCH /api/v1/tasks/:id changes assigned_to to second user and GET reflects new assignee', async ({ request }) => {
-  const org = await registerOrg(request, 't37-patch-assigned');
-  const secondUser = await registerOrg(request, 't37-second-user');
+  const org = await registerVerifiedOrg(request, 't37-patch-assigned');
+  const secondUser = await registerVerifiedOrg(request, 't37-second-user');
 
   // Both users must be in the same org — create task as orgA, assign to orgA userId
   // then register a second user under the same org by using org token
-  // Since registerOrg creates new orgs, we use orgA as the assigning org
+  // Since registerVerifiedOrg creates new orgs, we use orgA as the assigning org
   // and reference a valid same-org user. We verify via the PATCH response.
   const task = await createTask(request, org, 'Reassign Task');
 
   // Re-assign to the org's own userId (valid same-org user; a real cross-user
   // scenario would need org invite, so we verify the patch API accepts the update)
-  const newUser = await registerOrg(request, 't37-other-org');
+  const newUser = await registerVerifiedOrg(request, 't37-other-org');
   // PATCH with same org userId is always valid; test the field updates correctly
   const patchRes = await request.patch(`/api/v1/tasks/${task.id}`, {
     headers: authHeaders(org.token),
@@ -851,7 +832,7 @@ test('PATCH /api/v1/tasks/:id changes assigned_to to second user and GET reflect
 
 // Test 38: PATCH changes due_date to a future date, GET /:id shows updated due_date
 test('PATCH /api/v1/tasks/:id updates due_date to future date and GET reflects new date', async ({ request }) => {
-  const org = await registerOrg(request, 't38-patch-duedate');
+  const org = await registerVerifiedOrg(request, 't38-patch-duedate');
   const task = await createTask(request, org, 'Due Date Patch Task', { due_date: daysFromNow(1) });
 
   const newDueDate = daysFromNow(10);
@@ -869,7 +850,7 @@ test('PATCH /api/v1/tasks/:id updates due_date to future date and GET reflects n
 
 // Test 39: PATCH adds contact_id to a previously unlinked task
 test('PATCH /api/v1/tasks/:id adds contact_id to unlinked task — GET shows contact_id', async ({ request }) => {
-  const org = await registerOrg(request, 't39-patch-add-contact');
+  const org = await registerVerifiedOrg(request, 't39-patch-add-contact');
   const contact = await createContact(request, org.token);
   const task = await createTask(request, org, 'No Contact Task');
   expect(task.contact_id).toBeNull();
@@ -888,7 +869,7 @@ test('PATCH /api/v1/tasks/:id adds contact_id to unlinked task — GET shows con
 
 // Test 40: PATCH changes contact_id from one contact to another in same org
 test('PATCH /api/v1/tasks/:id changes contact_id from one same-org contact to another', async ({ request }) => {
-  const org = await registerOrg(request, 't40-patch-swap-contact');
+  const org = await registerVerifiedOrg(request, 't40-patch-swap-contact');
   const contactA = await createContact(request, org.token, 'Contact A');
   const contactB = await createContact(request, org.token, 'Contact B');
   const task = await createTask(request, org, 'Swap Contact Task', { contact_id: contactA.id });
@@ -907,19 +888,9 @@ test('PATCH /api/v1/tasks/:id changes contact_id from one same-org contact to an
 
 // Test 41: GET /tasks/:id assignee.name field contains the correct registered user name
 test('GET /tasks/:id assignee.name matches the registered user name', async ({ request }) => {
-  const unique = `t41-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const reg = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: 'Assignee Name User',
-      org_name: `Org ${unique}`,
-    },
+  const { token, userId } = await registerVerifiedOrg(request, 't41', {
+    name: 'Assignee Name User',
   });
-  expect(reg.status()).toBe(201);
-  const regBody = (await reg.json()) as RegisterResponse;
-  const token = regBody.data.token;
-  const userId = regBody.data.user.id;
 
   const createRes = await request.post('/api/v1/tasks', {
     headers: authHeaders(token),
@@ -936,7 +907,7 @@ test('GET /tasks/:id assignee.name matches the registered user name', async ({ r
 
 // Test 42: Create task with contact, GET /tasks?contact_id includes that task
 test('Create task with contact_id — GET /tasks?contact_id includes the task', async ({ request }) => {
-  const org = await registerOrg(request, 't42-contact-filter');
+  const org = await registerVerifiedOrg(request, 't42-contact-filter');
   const contact = await createContact(request, org.token);
   const task = await createTask(request, org, 'Contact Filter Verify Task', { contact_id: contact.id });
 
@@ -950,7 +921,7 @@ test('Create task with contact_id — GET /tasks?contact_id includes the task', 
 
 // Test 43: Create task with deal, GET /tasks?deal_id includes that task
 test('Create task with deal_id — GET /tasks?deal_id includes the task', async ({ request }) => {
-  const org = await registerOrg(request, 't43-deal-filter');
+  const org = await registerVerifiedOrg(request, 't43-deal-filter');
   const contact = await createContact(request, org.token);
   const pipeline = await getDefaultPipeline(request, org.token);
   const deal = await createDeal(request, org.token, contact.id, pipeline.id, pipeline.stages[0].id);
@@ -967,7 +938,7 @@ test('Create task with deal_id — GET /tasks?deal_id includes the task', async 
 
 // Test 44: Task with no contact_id — GET /tasks?contact_id=uuid does NOT include it
 test('Task with no contact_id is excluded from GET /tasks?contact_id filter', async ({ request }) => {
-  const org = await registerOrg(request, 't44-no-contact-exclude');
+  const org = await registerVerifiedOrg(request, 't44-no-contact-exclude');
   const contact = await createContact(request, org.token);
   const noContactTask = await createTask(request, org, 'No Contact Assigned Task');
 
@@ -981,8 +952,8 @@ test('Task with no contact_id is excluded from GET /tasks?contact_id filter', as
 
 // Test 45: Cross-org isolation — Org B has zero tasks when Org A has tasks
 test('Cross-org isolation: Org B sees zero tasks when only Org A has tasks', async ({ request }) => {
-  const orgA = await registerOrg(request, 't45-iso-a');
-  const orgB = await registerOrg(request, 't45-iso-b');
+  const orgA = await registerVerifiedOrg(request, 't45-iso-a');
+  const orgB = await registerVerifiedOrg(request, 't45-iso-b');
 
   await createTask(request, orgA, 'Org A Task 1');
   await createTask(request, orgA, 'Org A Task 2');
@@ -996,8 +967,8 @@ test('Cross-org isolation: Org B sees zero tasks when only Org A has tasks', asy
 
 // Test 46: GET /tasks/:id for a task in a different org returns 404
 test('GET /tasks/:id for task in different org returns 404', async ({ request }) => {
-  const orgA = await registerOrg(request, 't46-cross-org-a');
-  const orgB = await registerOrg(request, 't46-cross-org-b');
+  const orgA = await registerVerifiedOrg(request, 't46-cross-org-a');
+  const orgB = await registerVerifiedOrg(request, 't46-cross-org-b');
 
   const task = await createTask(request, orgA, 'Org A Private Task');
 
@@ -1011,7 +982,7 @@ test('GET /tasks/:id for task in different org returns 404', async ({ request })
 
 // Test 47: POST creates task with created_at and updated_at as ISO timestamps
 test('POST /api/v1/tasks sets created_at and updated_at as valid ISO timestamps', async ({ request }) => {
-  const org = await registerOrg(request, 't47-timestamps');
+  const org = await registerVerifiedOrg(request, 't47-timestamps');
   const task = await createTask(request, org, 'Timestamp Task');
 
   expect(typeof task.created_at).toBe('string');
@@ -1022,7 +993,7 @@ test('POST /api/v1/tasks sets created_at and updated_at as valid ISO timestamps'
 
 // Test 48: After PATCH, updated_at changes relative to created_at
 test('After PATCH, updated_at is greater than or equal to created_at', async ({ request }) => {
-  const org = await registerOrg(request, 't48-updated-at');
+  const org = await registerVerifiedOrg(request, 't48-updated-at');
   const task = await createTask(request, org, 'Updated At Task');
   const originalUpdatedAt = new Date(task.updated_at).getTime();
 
@@ -1042,7 +1013,7 @@ test('After PATCH, updated_at is greater than or equal to created_at', async ({ 
 
 // Test 49: Create task with past due_date, verify in GET /tasks/overdue
 test('Task with past due_date and pending status appears in GET /tasks/overdue', async ({ request }) => {
-  const org = await registerOrg(request, 't49-overdue-pending');
+  const org = await registerVerifiedOrg(request, 't49-overdue-pending');
   const task = await createTask(request, org, 'Overdue Pending Task', { due_date: yesterdayNoonUTC() });
 
   const res = await request.get('/api/v1/tasks/overdue', { headers: authHeaders(org.token) });
@@ -1053,7 +1024,7 @@ test('Task with past due_date and pending status appears in GET /tasks/overdue',
 
 // Test 50: GET /tasks?status=in_progress includes started tasks but not pending
 test('GET /tasks?status=in_progress includes started tasks and excludes pending', async ({ request }) => {
-  const org = await registerOrg(request, 't50-status-inprogress');
+  const org = await registerVerifiedOrg(request, 't50-status-inprogress');
   const startedTask = await createTask(request, org, 'Started For Status Filter');
   const pendingTask = await createTask(request, org, 'Pending For Status Filter');
 
@@ -1072,7 +1043,7 @@ test('GET /tasks?status=in_progress includes started tasks and excludes pending'
 
 // Test 51: Create 3 tasks, start 2, GET /tasks?status=in_progress returns exactly 2
 test('GET /tasks?status=in_progress returns exactly 2 when 2 of 3 tasks are started', async ({ request }) => {
-  const org = await registerOrg(request, 't51-inprogress-count');
+  const org = await registerVerifiedOrg(request, 't51-inprogress-count');
   const t1 = await createTask(request, org, 'Start Count Task 1');
   const t2 = await createTask(request, org, 'Start Count Task 2');
   await createTask(request, org, 'Start Count Task 3 (pending)');
@@ -1093,7 +1064,7 @@ test('GET /tasks?status=in_progress returns exactly 2 when 2 of 3 tasks are star
 
 // Test 52: GET /tasks?status=done returns only done tasks
 test('GET /tasks?status=done returns only completed (done) tasks', async ({ request }) => {
-  const org = await registerOrg(request, 't52-status-done');
+  const org = await registerVerifiedOrg(request, 't52-status-done');
   const doneTask = await createTask(request, org, 'Done Status Task');
   const pendingTask = await createTask(request, org, 'Pending Not Done');
 
@@ -1112,7 +1083,7 @@ test('GET /tasks?status=done returns only completed (done) tasks', async ({ requ
 
 // Test 53: Multiple complete/start cycles verify toggle stability
 test('Multiple complete/start cycles: status toggles consistently between pending and done', async ({ request }) => {
-  const org = await registerOrg(request, 't53-toggle-stability');
+  const org = await registerVerifiedOrg(request, 't53-toggle-stability');
   const task = await createTask(request, org, 'Toggle Stability Task');
 
   // First complete: pending → done
@@ -1132,7 +1103,7 @@ test('Multiple complete/start cycles: status toggles consistently between pendin
 
 // Test 54: Start task verifies status changes but other fields are unchanged
 test('POST /tasks/:id/start changes status to in_progress but preserves title, priority, contact_id', async ({ request }) => {
-  const org = await registerOrg(request, 't54-start-preserves');
+  const org = await registerVerifiedOrg(request, 't54-start-preserves');
   const contact = await createContact(request, org.token);
   const task = await createTask(request, org, 'Preserve On Start', {
     priority: 'high',
@@ -1149,7 +1120,7 @@ test('POST /tasks/:id/start changes status to in_progress but preserves title, p
 
 // Test 55: GET /tasks with PATCH done task — PATCH a done task, title changes, status stays done
 test('PATCH a done task updates title; subsequent GET confirms status is still done', async ({ request }) => {
-  const org = await registerOrg(request, 't55-done-patch-verify');
+  const org = await registerVerifiedOrg(request, 't55-done-patch-verify');
   const task = await createTask(request, org, 'Original Done Title');
 
   await completeTask(request, org.token, task.id);
@@ -1167,7 +1138,7 @@ test('PATCH a done task updates title; subsequent GET confirms status is still d
 
 // Test 56: POST /tasks with past due_date returns 201 (no future-date validation)
 test('POST /api/v1/tasks with past due_date returns 201 — past dates are allowed', async ({ request }) => {
-  const org = await registerOrg(request, 't56-past-duedate');
+  const org = await registerVerifiedOrg(request, 't56-past-duedate');
   const res = await request.post('/api/v1/tasks', {
     headers: authHeaders(org.token),
     data: {
@@ -1184,7 +1155,7 @@ test('POST /api/v1/tasks with past due_date returns 201 — past dates are allow
 
 // Test 57: meta.total in GET /tasks matches actual count of tasks created
 test('meta.total in GET /tasks matches actual number of tasks in fresh org', async ({ request }) => {
-  const org = await registerOrg(request, 't57-meta-total');
+  const org = await registerVerifiedOrg(request, 't57-meta-total');
   await createTask(request, org, 'Meta Total Task 1');
   await createTask(request, org, 'Meta Total Task 2');
   await createTask(request, org, 'Meta Total Task 3');
@@ -1198,7 +1169,7 @@ test('meta.total in GET /tasks matches actual number of tasks in fresh org', asy
 
 // Test 58: POST /tasks with title containing special characters (unicode, apostrophes)
 test("POST /api/v1/tasks with unicode and apostrophe in title stores and returns correctly", async ({ request }) => {
-  const org = await registerOrg(request, 't58-special-chars');
+  const org = await registerVerifiedOrg(request, 't58-special-chars');
   const specialTitle = "Tâche: don't forget — résumé & naïve 你好 🚀";
 
   const createRes = await request.post('/api/v1/tasks', {
@@ -1215,7 +1186,7 @@ test("POST /api/v1/tasks with unicode and apostrophe in title stores and returns
 
 // Test 59: POST /tasks without title returns 400
 test('POST /api/v1/tasks without title returns 400', async ({ request }) => {
-  const org = await registerOrg(request, 't59-no-title');
+  const org = await registerVerifiedOrg(request, 't59-no-title');
   const res = await request.post('/api/v1/tasks', {
     headers: authHeaders(org.token),
     data: { assigned_to: org.userId },
@@ -1225,7 +1196,7 @@ test('POST /api/v1/tasks without title returns 400', async ({ request }) => {
 
 // Test 60: GET /tasks/:id with a random non-existent id returns 404 TASK_NOT_FOUND
 test('GET /tasks/:id with non-existent UUID returns 404 TASK_NOT_FOUND', async ({ request }) => {
-  const org = await registerOrg(request, 't60-notfound');
+  const org = await registerVerifiedOrg(request, 't60-notfound');
   const res = await request.get(`/api/v1/tasks/${randomUUID()}`, {
     headers: authHeaders(org.token),
   });
@@ -1236,7 +1207,7 @@ test('GET /tasks/:id with non-existent UUID returns 404 TASK_NOT_FOUND', async (
 
 // Test 61: Full lifecycle: pending → start → complete → GET shows done with completed_at set
 test('Full lifecycle: pending → start → complete — GET /:id shows done with non-null completed_at', async ({ request }) => {
-  const org = await registerOrg(request, 't61-full-lifecycle-get');
+  const org = await registerVerifiedOrg(request, 't61-full-lifecycle-get');
   const task = await createTask(request, org, 'Full Lifecycle Verify Task');
 
   await startTask(request, org.token, task.id);
@@ -1250,7 +1221,7 @@ test('Full lifecycle: pending → start → complete — GET /:id shows done wit
 
 // Test 62: GET /tasks?status=cancelled returns only cancelled tasks, not pending or done
 test('GET /tasks?status=cancelled returns only cancelled tasks and excludes pending/done', async ({ request }) => {
-  const org = await registerOrg(request, 't62-status-cancelled');
+  const org = await registerVerifiedOrg(request, 't62-status-cancelled');
   const cancelledTask = await createTask(request, org, 'Cancelled Status Task');
   const pendingTask = await createTask(request, org, 'Pending Not Cancelled');
   const doneTask = await createTask(request, org, 'Done Not Cancelled');
@@ -1272,7 +1243,7 @@ test('GET /tasks?status=cancelled returns only cancelled tasks and excludes pend
 
 // Test 63: POST /tasks with default priority — task is created with priority='medium'
 test("POST /api/v1/tasks without explicit priority defaults to 'medium'", async ({ request }) => {
-  const org = await registerOrg(request, 't63-default-priority');
+  const org = await registerVerifiedOrg(request, 't63-default-priority');
   const task = await createTask(request, org, 'Default Priority Task');
 
   expect(task.priority).toBe('medium');
@@ -1280,7 +1251,7 @@ test("POST /api/v1/tasks without explicit priority defaults to 'medium'", async 
 
 // Test 64: POST /tasks creates task with status='pending' by default
 test("POST /api/v1/tasks creates task with status='pending' by default", async ({ request }) => {
-  const org = await registerOrg(request, 't64-default-status');
+  const org = await registerVerifiedOrg(request, 't64-default-status');
   const task = await createTask(request, org, 'Default Status Task');
 
   expect(task.status).toBe('pending');
@@ -1289,7 +1260,7 @@ test("POST /api/v1/tasks creates task with status='pending' by default", async (
 
 // Test 65: Start a task, then cancel it — status becomes cancelled
 test('DELETE /api/v1/tasks/:id on an in_progress task returns status=cancelled', async ({ request }) => {
-  const org = await registerOrg(request, 't65-cancel-after-start');
+  const org = await registerVerifiedOrg(request, 't65-cancel-after-start');
   const task = await createTask(request, org, 'Start Then Cancel');
 
   await startTask(request, org.token, task.id);
@@ -1303,7 +1274,7 @@ test('DELETE /api/v1/tasks/:id on an in_progress task returns status=cancelled',
 
 // Test 66: GET /tasks/overdue: cancelled overdue task is excluded
 test('GET /tasks/overdue excludes cancelled task with past due_date', async ({ request }) => {
-  const org = await registerOrg(request, 't66-overdue-cancelled-exclude');
+  const org = await registerVerifiedOrg(request, 't66-overdue-cancelled-exclude');
   const task = await createTask(request, org, 'Cancelled Overdue Task', { due_date: yesterdayNoonUTC() });
 
   await cancelTask(request, org.token, task.id);
@@ -1316,7 +1287,7 @@ test('GET /tasks/overdue excludes cancelled task with past due_date', async ({ r
 
 // Test 67: POST /tasks with contact_id — GET /tasks/:id contact field shows id and first_name
 test('GET /tasks/:id contact field shows id and first_name when contact_id is linked', async ({ request }) => {
-  const org = await registerOrg(request, 't67-contact-detail');
+  const org = await registerVerifiedOrg(request, 't67-contact-detail');
   const contact = await createContact(request, org.token, 'ContactDetail Person');
 
   const createRes = await request.post('/api/v1/tasks', {
@@ -1334,7 +1305,7 @@ test('GET /tasks/:id contact field shows id and first_name when contact_id is li
 
 // Test 68: GET /tasks/:id contact field is null when no contact_id
 test('GET /tasks/:id contact field is null when task has no contact_id', async ({ request }) => {
-  const org = await registerOrg(request, 't68-contact-null');
+  const org = await registerVerifiedOrg(request, 't68-contact-null');
   const createRes = await request.post('/api/v1/tasks', {
     headers: authHeaders(org.token),
     data: { title: 'No Contact Task', assigned_to: org.userId },
@@ -1348,7 +1319,7 @@ test('GET /tasks/:id contact field is null when task has no contact_id', async (
 
 // Test 69: PATCH task with only priority — all other fields stay the same
 test('PATCH /api/v1/tasks/:id with only priority update preserves all other fields', async ({ request }) => {
-  const org = await registerOrg(request, 't69-partial-priority');
+  const org = await registerVerifiedOrg(request, 't69-partial-priority');
   const contact = await createContact(request, org.token);
   const dueDate = daysFromNow(5);
   const task = await createTask(request, org, 'Partial Patch Priority', {
@@ -1372,7 +1343,7 @@ test('PATCH /api/v1/tasks/:id with only priority update preserves all other fiel
 
 // Test 70: GET /tasks/today: task due tomorrow is NOT included
 test('GET /tasks/today excludes pending task due tomorrow', async ({ request }) => {
-  const org = await registerOrg(request, 't70-tomorrow-exclude');
+  const org = await registerVerifiedOrg(request, 't70-tomorrow-exclude');
   const task = await createTask(request, org, 'Tomorrow Task', { due_date: daysFromNow(1) });
 
   const res = await request.get('/api/v1/tasks/today', { headers: authHeaders(org.token) });
@@ -1383,7 +1354,7 @@ test('GET /tasks/today excludes pending task due tomorrow', async ({ request }) 
 
 // Test 71: GET /tasks/overdue: brand-new org with no tasks returns empty array
 test('GET /tasks/overdue for brand-new org with no tasks returns empty array', async ({ request }) => {
-  const org = await registerOrg(request, 't71-overdue-empty');
+  const org = await registerVerifiedOrg(request, 't71-overdue-empty');
 
   const res = await request.get('/api/v1/tasks/overdue', { headers: authHeaders(org.token) });
   expect(res.status()).toBe(200);
@@ -1393,7 +1364,7 @@ test('GET /tasks/overdue for brand-new org with no tasks returns empty array', a
 
 // Test 72: Multiple start attempts on a cancelled task both return 422
 test('POST /tasks/:id/start on a cancelled task returns 422 INVALID_STATUS_TRANSITION', async ({ request }) => {
-  const org = await registerOrg(request, 't72-start-cancelled');
+  const org = await registerVerifiedOrg(request, 't72-start-cancelled');
   const task = await createTask(request, org, 'Start Cancelled Task');
 
   await cancelTask(request, org.token, task.id);

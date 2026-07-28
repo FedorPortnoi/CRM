@@ -1,16 +1,6 @@
-import { test, expect, APIRequestContext } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import { registerVerifiedOrg } from './helpers/auth';
 
-type Auth = { token: string; userId: string };
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<Auth> {
-  const unique = `${suffix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: { email: `${unique}@example.com`, password: 'Password123!', name: `User ${suffix}`, org_name: `Org ${unique}` },
-  });
-  expect(res.status()).toBe(201);
-  const body = await res.json() as { data: { token: string; user: { id: string } } };
-  return { token: body.data.token, userId: body.data.user.id };
-}
 function authHeaders(token: string) { return { Authorization: `Bearer ${token}` }; }
 function daysFromNow(n: number) { return new Date(Date.now() + n * 86400000).toISOString(); }
 
@@ -42,8 +32,8 @@ interface WorkflowListBody {
 test.describe.configure({ timeout: 30000 });
 
 test('workflow 33: cross-org GET /:id for org-A workflow returns 404 for org-B', async ({ request }) => {
-  const orgA = await registerOrg(request, 'wf33-co-get-a');
-  const orgB = await registerOrg(request, 'wf33-co-get-b');
+  const orgA = await registerVerifiedOrg(request, 'wf33-co-get-a');
+  const orgB = await registerVerifiedOrg(request, 'wf33-co-get-b');
   const res = await request.post('/api/v1/workflows', {
     headers: authHeaders(orgA.token),
     data: { name: 'OrgA-WF', trigger: 'contact_created', actions: [{ type: 'create_task', config: { title: 'task' } }] },
@@ -55,8 +45,8 @@ test('workflow 33: cross-org GET /:id for org-A workflow returns 404 for org-B',
 });
 
 test('workflow 33: cross-org PATCH /:id for org-A workflow returns 404 for org-B', async ({ request }) => {
-  const orgA = await registerOrg(request, 'wf33-co-patch-a');
-  const orgB = await registerOrg(request, 'wf33-co-patch-b');
+  const orgA = await registerVerifiedOrg(request, 'wf33-co-patch-a');
+  const orgB = await registerVerifiedOrg(request, 'wf33-co-patch-b');
   const res = await request.post('/api/v1/workflows', {
     headers: authHeaders(orgA.token),
     data: { name: 'OrgA-PatchWF', trigger: 'contact_created', actions: [{ type: 'create_task', config: { title: 'task' } }] },
@@ -71,8 +61,8 @@ test('workflow 33: cross-org PATCH /:id for org-A workflow returns 404 for org-B
 });
 
 test('workflow 33: cross-org DELETE /:id for org-A workflow returns 404 for org-B', async ({ request }) => {
-  const orgA = await registerOrg(request, 'wf33-co-del-a');
-  const orgB = await registerOrg(request, 'wf33-co-del-b');
+  const orgA = await registerVerifiedOrg(request, 'wf33-co-del-a');
+  const orgB = await registerVerifiedOrg(request, 'wf33-co-del-b');
   const res = await request.post('/api/v1/workflows', {
     headers: authHeaders(orgA.token),
     data: { name: 'OrgA-DelWF', trigger: 'contact_created', actions: [{ type: 'create_task', config: { title: 'task' } }] },
@@ -84,8 +74,8 @@ test('workflow 33: cross-org DELETE /:id for org-A workflow returns 404 for org-
 });
 
 test('workflow 33: cross-org GET /workflows list for org-B does NOT contain org-A workflow', async ({ request }) => {
-  const orgA = await registerOrg(request, 'wf33-co-list-a');
-  const orgB = await registerOrg(request, 'wf33-co-list-b');
+  const orgA = await registerVerifiedOrg(request, 'wf33-co-list-a');
+  const orgB = await registerVerifiedOrg(request, 'wf33-co-list-b');
   const res = await request.post('/api/v1/workflows', {
     headers: authHeaders(orgA.token),
     data: { name: 'OrgA-ListWF', trigger: 'contact_created', actions: [{ type: 'create_task', config: { title: 'task' } }] },
@@ -99,8 +89,8 @@ test('workflow 33: cross-org GET /workflows list for org-B does NOT contain org-
 });
 
 test('workflow 33: cross-org GET /:id/runs for org-A workflow using org-B token returns 404', async ({ request }) => {
-  const orgA = await registerOrg(request, 'wf33-co-runs-a');
-  const orgB = await registerOrg(request, 'wf33-co-runs-b');
+  const orgA = await registerVerifiedOrg(request, 'wf33-co-runs-a');
+  const orgB = await registerVerifiedOrg(request, 'wf33-co-runs-b');
   const res = await request.post('/api/v1/workflows', {
     headers: authHeaders(orgA.token),
     data: { name: 'OrgA-RunsWF', trigger: 'contact_created', actions: [{ type: 'create_task', config: { title: 'task' } }] },
@@ -112,7 +102,7 @@ test('workflow 33: cross-org GET /:id/runs for org-A workflow using org-B token 
 });
 
 test('workflow 33: POST with invalid trigger value returns 400', async ({ request }) => {
-  const org = await registerOrg(request, 'wf33-inv-trig');
+  const org = await registerVerifiedOrg(request, 'wf33-inv-trig');
   const r = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
     data: { name: 'BadTrigger', trigger: 'deal_lost', actions: [{ type: 'create_task', config: { title: 'task' } }] },
@@ -121,7 +111,7 @@ test('workflow 33: POST with invalid trigger value returns 400', async ({ reques
 });
 
 test('workflow 33: POST with empty actions array returns 400', async ({ request }) => {
-  const org = await registerOrg(request, 'wf33-empty-act');
+  const org = await registerVerifiedOrg(request, 'wf33-empty-act');
   const r = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
     data: { name: 'NoActions', trigger: 'contact_created', actions: [] },
@@ -130,7 +120,7 @@ test('workflow 33: POST with empty actions array returns 400', async ({ request 
 });
 
 test('workflow 33: POST with invalid action type returns 400', async ({ request }) => {
-  const org = await registerOrg(request, 'wf33-inv-act');
+  const org = await registerVerifiedOrg(request, 'wf33-inv-act');
   const r = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
     data: { name: 'BadAction', trigger: 'contact_created', actions: [{ type: 'send_carrier_pigeon', config: {} }] },
@@ -139,7 +129,7 @@ test('workflow 33: POST with invalid action type returns 400', async ({ request 
 });
 
 test('workflow 33: POST with deal_won trigger returns 201', async ({ request }) => {
-  const org = await registerOrg(request, 'wf33-trig-dw');
+  const org = await registerVerifiedOrg(request, 'wf33-trig-dw');
   const r = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
     data: { name: 'OnDealWon', trigger: 'deal_won', actions: [{ type: 'create_task', config: { title: 'follow-up' } }] },
@@ -150,7 +140,7 @@ test('workflow 33: POST with deal_won trigger returns 201', async ({ request }) 
 });
 
 test('workflow 33: POST with deal_created trigger returns 201', async ({ request }) => {
-  const org = await registerOrg(request, 'wf33-trig-dc');
+  const org = await registerVerifiedOrg(request, 'wf33-trig-dc');
   const r = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
     data: { name: 'OnDealCreated', trigger: 'deal_created', actions: [{ type: 'create_task', config: { title: 'follow-up' } }] },
@@ -161,7 +151,7 @@ test('workflow 33: POST with deal_created trigger returns 201', async ({ request
 });
 
 test('workflow 33: POST with task_created trigger returns 201', async ({ request }) => {
-  const org = await registerOrg(request, 'wf33-trig-tc');
+  const org = await registerVerifiedOrg(request, 'wf33-trig-tc');
   const r = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
     data: { name: 'OnTaskCreated', trigger: 'task_created', actions: [{ type: 'create_task', config: { title: 'follow-up' } }] },
@@ -172,7 +162,7 @@ test('workflow 33: POST with task_created trigger returns 201', async ({ request
 });
 
 test('workflow 33: POST with add_contact_note action; GET /:id confirms action type', async ({ request }) => {
-  const org = await registerOrg(request, 'wf33-act-note');
+  const org = await registerVerifiedOrg(request, 'wf33-act-note');
   const createRes = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
     data: { name: 'NoteAction', trigger: 'contact_created', actions: [{ type: 'add_contact_note', config: { body: 'Note text' } }] },
@@ -186,7 +176,7 @@ test('workflow 33: POST with add_contact_note action; GET /:id confirms action t
 });
 
 test('workflow 33: POST with update_deal_stage action missing stage_id returns 400', async ({ request }) => {
-  const org = await registerOrg(request, 'wf33-act-stage');
+  const org = await registerVerifiedOrg(request, 'wf33-act-stage');
   const r = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
     data: { name: 'StageAction', trigger: 'deal_stage_changed', actions: [{ type: 'update_deal_stage', config: {} }] },
@@ -197,7 +187,7 @@ test('workflow 33: POST with update_deal_stage action missing stage_id returns 4
 });
 
 test('workflow 33: GET /:id response body.data has runs array', async ({ request }) => {
-  const org = await registerOrg(request, 'wf33-runs-arr');
+  const org = await registerVerifiedOrg(request, 'wf33-runs-arr');
   const createRes = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
     data: { name: 'RunsArrayWF', trigger: 'contact_created', actions: [{ type: 'create_task', config: { title: 'task' } }] },
@@ -211,7 +201,7 @@ test('workflow 33: GET /:id response body.data has runs array', async ({ request
 });
 
 test('workflow 33: GET /workflows list item has _count.runs property', async ({ request }) => {
-  const org = await registerOrg(request, 'wf33-count-runs');
+  const org = await registerVerifiedOrg(request, 'wf33-count-runs');
   await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
     data: { name: 'CountWF', trigger: 'contact_created', actions: [{ type: 'create_task', config: { title: 'task' } }] },
@@ -225,7 +215,7 @@ test('workflow 33: GET /workflows list item has _count.runs property', async ({ 
 });
 
 test('workflow 33: POST with conditions array; GET /:id confirms conditions non-null', async ({ request }) => {
-  const org = await registerOrg(request, 'wf33-conds');
+  const org = await registerVerifiedOrg(request, 'wf33-conds');
   const createRes = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
     data: { name: 'CondsWF', trigger: 'contact_created', actions: [{ type: 'create_task', config: { title: 'task' } }], conditions: [{ field: 'email', operator: 'contains', value: 'example.com' }] },
@@ -239,7 +229,7 @@ test('workflow 33: POST with conditions array; GET /:id confirms conditions non-
 });
 
 test('workflow 33: PATCH can update actions; GET /:id reflects new actions', async ({ request }) => {
-  const org = await registerOrg(request, 'wf33-patch-act');
+  const org = await registerVerifiedOrg(request, 'wf33-patch-act');
   const createRes = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
     data: { name: 'PatchActWF', trigger: 'contact_created', actions: [{ type: 'create_task', config: { title: 'old' } }] },
@@ -259,7 +249,7 @@ test('workflow 33: PATCH can update actions; GET /:id reflects new actions', asy
 });
 
 test('workflow 33: GET /workflows meta.total equals count of non-archived workflows', async ({ request }) => {
-  const org = await registerOrg(request, 'wf33-meta-total');
+  const org = await registerVerifiedOrg(request, 'wf33-meta-total');
   for (let i = 0; i < 3; i++) {
     const r = await request.post('/api/v1/workflows', {
       headers: authHeaders(org.token),

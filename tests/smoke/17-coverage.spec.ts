@@ -1,18 +1,5 @@
 import { APIRequestContext, test, expect } from '@playwright/test';
-
-interface AuthOrg {
-  token: string;
-  userId: string;
-}
-
-interface RegisterResponse {
-  data: {
-    token: string;
-    user: {
-      id: string;
-    };
-  };
-}
+import { registerVerifiedOrg } from './helpers/auth';
 
 interface ContactRecord {
   id: string;
@@ -103,21 +90,6 @@ function todayNoonIso(): string {
   const today = new Date();
   today.setUTCHours(12, 0, 0, 0);
   return today.toISOString();
-}
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<AuthOrg> {
-  const unique = uniqueSuffix(suffix);
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = (await res.json()) as RegisterResponse;
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 async function getPipelineAndStage(
@@ -229,7 +201,7 @@ async function getDeal(request: APIRequestContext, token: string, dealId: string
 }
 
 test('GET /analytics/dashboard open_deals.count decreases and total_value excludes the deal after it is marked won', async ({ request }) => {
-  const org = await registerOrg(request, 'dash-won');
+  const org = await registerVerifiedOrg(request, 'dash-won');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token);
   const wonLater = await createDeal(request, org.token, {
@@ -263,7 +235,7 @@ test('GET /analytics/dashboard open_deals.count decreases and total_value exclud
 });
 
 test('GET /analytics/dashboard open_deals.total_value sums only open deals and ignores won and lost values', async ({ request }) => {
-  const org = await registerOrg(request, 'dash-open-value');
+  const org = await registerVerifiedOrg(request, 'dash-open-value');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token);
   await createDeal(request, org.token, {
@@ -305,7 +277,7 @@ test('GET /analytics/dashboard open_deals.total_value sums only open deals and i
 });
 
 test('GET /analytics/dashboard tasks_due_today counts pending and in-progress tasks but excludes done and cancelled tasks', async ({ request }) => {
-  const org = await registerOrg(request, 'dash-tasks');
+  const org = await registerVerifiedOrg(request, 'dash-tasks');
   const dueDate = todayNoonIso();
 
   const pendingRes = await request.post('/api/v1/tasks', {
@@ -352,7 +324,7 @@ test('GET /analytics/dashboard tasks_due_today counts pending and in-progress ta
 });
 
 test('PATCH /contacts/:id partial update changes only provided fields and leaves other contact fields unchanged', async ({ request }) => {
-  const org = await registerOrg(request, 'contact-partial');
+  const org = await registerVerifiedOrg(request, 'contact-partial');
   const contact = await createContact(request, org.token, {
     first_name: 'Original',
     last_name: 'Still',
@@ -377,7 +349,7 @@ test('PATCH /contacts/:id partial update changes only provided fields and leaves
 });
 
 test('PATCH /contacts/:id for a missing contact returns 404 NOT_FOUND with an error envelope', async ({ request }) => {
-  const org = await registerOrg(request, 'contact-missing');
+  const org = await registerVerifiedOrg(request, 'contact-missing');
   const res = await request.patch('/api/v1/contacts/00000000-0000-4000-8000-000000000017', {
     headers: authHeaders(org.token),
     data: { first_name: 'Nobody' },
@@ -389,7 +361,7 @@ test('PATCH /contacts/:id for a missing contact returns 404 NOT_FOUND with an er
 });
 
 test('GET /contacts search excludes an archived contact that matches the query while returning the active match', async ({ request }) => {
-  const org = await registerOrg(request, 'contact-search-active');
+  const org = await registerVerifiedOrg(request, 'contact-search-active');
   const query = uniqueSuffix('SearchActive');
   const active = await createContact(request, org.token, { first_name: query, last_name: 'Active' });
   const archived = await createContact(request, org.token, { first_name: query, last_name: 'Archived' });
@@ -410,7 +382,7 @@ test('GET /contacts search excludes an archived contact that matches the query w
 });
 
 test('GET /contacts search with status=archived returns the archived match and excludes the active match', async ({ request }) => {
-  const org = await registerOrg(request, 'contact-search-archived');
+  const org = await registerVerifiedOrg(request, 'contact-search-archived');
   const query = uniqueSuffix('SearchArchived');
   const active = await createContact(request, org.token, { first_name: query, last_name: 'Active' });
   const archived = await createContact(request, org.token, { first_name: query, last_name: 'Archived' });
@@ -432,7 +404,7 @@ test('GET /contacts search with status=archived returns the archived match and e
 });
 
 test('POST /contacts permits duplicate email in the same org and both contacts are searchable by that email', async ({ request }) => {
-  const org = await registerOrg(request, 'contact-duplicate-email');
+  const org = await registerVerifiedOrg(request, 'contact-duplicate-email');
   const email = `${uniqueSuffix('duplicate-contact')}@example.com`;
   const first = await createContact(request, org.token, { first_name: 'DuplicateA', email });
   const second = await createContact(request, org.token, { first_name: 'DuplicateB', email });
@@ -452,7 +424,7 @@ test('POST /contacts permits duplicate email in the same org and both contacts a
 });
 
 test('PATCH /deals/:id with a negative value returns 400 and preserves the previous deal value', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-negative-value');
+  const org = await registerVerifiedOrg(request, 'deal-negative-value');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token);
   const deal = await createDeal(request, org.token, {
@@ -474,7 +446,7 @@ test('PATCH /deals/:id with a negative value returns 400 and preserves the previ
 });
 
 test('PATCH /deals/:id with value 0 returns 400 and preserves the previous positive deal value', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-zero-value');
+  const org = await registerVerifiedOrg(request, 'deal-zero-value');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token);
   const deal = await createDeal(request, org.token, {
@@ -496,7 +468,7 @@ test('PATCH /deals/:id with value 0 returns 400 and preserves the previous posit
 });
 
 test('PATCH /deals/:id with a stage from another pipeline returns STAGE_PIPELINE_MISMATCH and leaves the stage unchanged', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stage-mismatch');
+  const org = await registerVerifiedOrg(request, 'deal-stage-mismatch');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const otherStageId = await createSecondPipelineStage(request, org.token);
   const contact = await createContact(request, org.token);
@@ -521,7 +493,7 @@ test('PATCH /deals/:id with a stage from another pipeline returns STAGE_PIPELINE
 });
 
 test('PATCH /deals/:id happy path updates title and value while returning contact, pipeline, and stage details', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-patch-happy');
+  const org = await registerVerifiedOrg(request, 'deal-patch-happy');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token, { first_name: 'DealPatchContact' });
   const deal = await createDeal(request, org.token, {
@@ -546,8 +518,8 @@ test('PATCH /deals/:id happy path updates title and value while returning contac
 });
 
 test('POST /tasks with a contact_id from another org returns 403 FORBIDDEN and does not create the task in the requesting org', async ({ request }) => {
-  const orgA = await registerOrg(request, 'task-org-a');
-  const orgB = await registerOrg(request, 'task-org-b');
+  const orgA = await registerVerifiedOrg(request, 'task-org-a');
+  const orgB = await registerVerifiedOrg(request, 'task-org-b');
   const orgBContact = await createContact(request, orgB.token, { first_name: 'OtherOrgContact' });
   const title = `Cross Org Task ${uniqueSuffix('forbidden')}`;
 
@@ -570,7 +542,7 @@ test('POST /tasks with a contact_id from another org returns 403 FORBIDDEN and d
 // ── New tests (gap coverage) ─────────────────────────────────────────────────
 
 test('POST /deals/:id/won with explicit actual_close date sets actual_close to that date', async ({ request }) => {
-  const org = await registerOrg(request, 'won-close-date');
+  const org = await registerVerifiedOrg(request, 'won-close-date');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token);
   const deal = await createDeal(request, org.token, {
@@ -594,7 +566,7 @@ test('POST /deals/:id/won with explicit actual_close date sets actual_close to t
 });
 
 test('POST /deals/:id/lost twice — second call returns 422 DEAL_ALREADY_LOST', async ({ request }) => {
-  const org = await registerOrg(request, 'lost-twice');
+  const org = await registerVerifiedOrg(request, 'lost-twice');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token);
   const deal = await createDeal(request, org.token, {
@@ -621,7 +593,7 @@ test('POST /deals/:id/lost twice — second call returns 422 DEAL_ALREADY_LOST',
 });
 
 test('PATCH /contacts/:id updates last_name field and readback confirms the change', async ({ request }) => {
-  const org = await registerOrg(request, 'contact-lastname');
+  const org = await registerVerifiedOrg(request, 'contact-lastname');
   const contact = await createContact(request, org.token, {
     first_name: 'Readback',
     last_name: 'OldLastName',
@@ -643,7 +615,7 @@ test('PATCH /contacts/:id updates last_name field and readback confirms the chan
 });
 
 test('GET /contacts?q= with empty string returns all contacts without filtering', async ({ request }) => {
-  const org = await registerOrg(request, 'contact-empty-q');
+  const org = await registerVerifiedOrg(request, 'contact-empty-q');
   const a = await createContact(request, org.token, { first_name: 'AlphaEmpty' });
   const b = await createContact(request, org.token, { first_name: 'BetaEmpty' });
 
@@ -658,7 +630,7 @@ test('GET /contacts?q= with empty string returns all contacts without filtering'
 });
 
 test('GET /deals with pipeline_id filter returns only deals in that pipeline', async ({ request }) => {
-  const org = await registerOrg(request, 'deals-pipeline-filter');
+  const org = await registerVerifiedOrg(request, 'deals-pipeline-filter');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token);
 
@@ -702,7 +674,7 @@ test('GET /deals with pipeline_id filter returns only deals in that pipeline', a
 });
 
 test('GET /deals with page=1&per_page=1 limits results to exactly 1 deal', async ({ request }) => {
-  const org = await registerOrg(request, 'deals-pagination');
+  const org = await registerVerifiedOrg(request, 'deals-pagination');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token);
 
@@ -733,7 +705,7 @@ test('GET /deals with page=1&per_page=1 limits results to exactly 1 deal', async
 });
 
 test('GET /tasks/overdue returns tasks past their due_date with status not done or cancelled', async ({ request }) => {
-  const org = await registerOrg(request, 'tasks-overdue');
+  const org = await registerVerifiedOrg(request, 'tasks-overdue');
 
   // Past due date
   const pastDate = new Date();
@@ -773,7 +745,7 @@ test('GET /tasks/overdue returns tasks past their due_date with status not done 
 });
 
 test('GET /tasks/today includes in_progress tasks (not only pending)', async ({ request }) => {
-  const org = await registerOrg(request, 'tasks-today-progress');
+  const org = await registerVerifiedOrg(request, 'tasks-today-progress');
   const dueDate = todayNoonIso();
 
   const taskRes = await request.post('/api/v1/tasks', {
@@ -799,7 +771,7 @@ test('GET /tasks/today includes in_progress tasks (not only pending)', async ({ 
 });
 
 test('POST /calendar with location field succeeds and readback confirms location is stored', async ({ request }) => {
-  const org = await registerOrg(request, 'calendar-location');
+  const org = await registerVerifiedOrg(request, 'calendar-location');
 
   const res = await request.post('/api/v1/calendar', {
     headers: authHeaders(org.token),
@@ -825,7 +797,7 @@ test('POST /calendar with location field succeeds and readback confirms location
 });
 
 test('DELETE /contacts/:id twice — second DELETE still returns 200 and contact remains archived', async ({ request }) => {
-  const org = await registerOrg(request, 'contact-double-delete');
+  const org = await registerVerifiedOrg(request, 'contact-double-delete');
   const contact = await createContact(request, org.token, { first_name: 'ToDeleteTwice' });
 
   const first = await request.delete(`/api/v1/contacts/${contact.id}`, {
@@ -842,7 +814,7 @@ test('DELETE /contacts/:id twice — second DELETE still returns 200 and contact
 });
 
 test('Sequential: 3 sequential deal creates all return 201 with unique IDs', async ({ request }) => {
-  const org = await registerOrg(request, 'deals-concurrent');
+  const org = await registerVerifiedOrg(request, 'deals-concurrent');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token);
 
@@ -872,7 +844,7 @@ test('Sequential: 3 sequential deal creates all return 201 with unique IDs', asy
 });
 
 test('PATCH /deals/:id value=null clears the value field and readback confirms null', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-null-value');
+  const org = await registerVerifiedOrg(request, 'deal-null-value');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token);
   const deal = await createDeal(request, org.token, {

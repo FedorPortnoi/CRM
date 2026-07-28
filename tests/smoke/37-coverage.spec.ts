@@ -1,16 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-
-type Auth = { token: string; userId: string };
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<Auth> {
-  const unique = suffix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-  const res = await request.post('/api/v1/auth/', {
-    data: { email: unique + '@example.com', password: 'Password123!', name: 'User ' + suffix, org_name: 'Org ' + unique },
-  });
-  expect(res.status()).toBe(201);
-  const body = await res.json() as { data: { token: string; user: { id: string } } };
-  return { token: body.data.token, userId: body.data.user.id };
-}
+import { registerVerifiedOrg } from './helpers/auth';
 
 function authHeaders(token: string) { return { Authorization: 'Bearer ' + token }; }
 
@@ -75,7 +64,7 @@ test.describe.configure({ timeout: 30000 });
 // ─── Group 1: Trigger execution ───────────────────────────────────────────────
 
 test('workflow 37: deal_stage_changed trigger fires create_task action', async ({ request }) => {
-  const org = await registerOrg(request, 'wf37-dsc');
+  const org = await registerVerifiedOrg(request, 'wf37-dsc');
   const pl = await getPipeline(request, org.token);
   const stageA = pl.stages[0]!.id;
   const stageB = pl.stages[1]!.id;
@@ -101,7 +90,7 @@ test('workflow 37: deal_stage_changed trigger fires create_task action', async (
 });
 
 test('workflow 37: task_completed trigger fires create_task action', async ({ request }) => {
-  const org = await registerOrg(request, 'wf37-tc');
+  const org = await registerVerifiedOrg(request, 'wf37-tc');
   const t = await createTask(request, org.token, org.userId, 'Original Task 37');
 
   const wfRes = await request.post('/api/v1/workflows', {
@@ -124,7 +113,7 @@ test('workflow 37: task_completed trigger fires create_task action', async ({ re
 });
 
 test('workflow 37: contact_created + add_contact_note creates message in conversation', async ({ request }) => {
-  const org = await registerOrg(request, 'wf37-ccn');
+  const org = await registerVerifiedOrg(request, 'wf37-ccn');
 
   const wfRes = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
@@ -142,7 +131,7 @@ test('workflow 37: contact_created + add_contact_note creates message in convers
 });
 
 test('workflow 37: task_completed + add_contact_note creates message for task contact', async ({ request }) => {
-  const org = await registerOrg(request, 'wf37-tcn');
+  const org = await registerVerifiedOrg(request, 'wf37-tcn');
   const c = await createContact(request, org.token, 'TaskNoteTarget');
   const t = await createTask(request, org.token, org.userId, 'Linked Task 37', c.id);
 
@@ -164,7 +153,7 @@ test('workflow 37: task_completed + add_contact_note creates message for task co
 });
 
 test('workflow 37: update_deal_stage action moves deal to target stage after deal_created', async ({ request }) => {
-  const org = await registerOrg(request, 'wf37-uds');
+  const org = await registerVerifiedOrg(request, 'wf37-uds');
   const pl = await getPipeline(request, org.token);
   const stageA = pl.stages[0]!.id;
   const stageB = pl.stages[1]!.id;
@@ -185,8 +174,8 @@ test('workflow 37: update_deal_stage action moves deal to target stage after dea
 });
 
 test('workflow 37: create rejects update_deal_stage stage from another org', async ({ request }) => {
-  const orgA = await registerOrg(request, 'wf37-stage-org-a');
-  const orgB = await registerOrg(request, 'wf37-stage-org-b');
+  const orgA = await registerVerifiedOrg(request, 'wf37-stage-org-a');
+  const orgB = await registerVerifiedOrg(request, 'wf37-stage-org-b');
   const plB = await getPipeline(request, orgB.token);
 
   const wfRes = await request.post('/api/v1/workflows', {
@@ -204,8 +193,8 @@ test('workflow 37: create rejects update_deal_stage stage from another org', asy
 });
 
 test('workflow 37: patch rejects update_deal_stage stage from another org', async ({ request }) => {
-  const orgA = await registerOrg(request, 'wf37-patch-stage-a');
-  const orgB = await registerOrg(request, 'wf37-patch-stage-b');
+  const orgA = await registerVerifiedOrg(request, 'wf37-patch-stage-a');
+  const orgB = await registerVerifiedOrg(request, 'wf37-patch-stage-b');
   const plB = await getPipeline(request, orgB.token);
 
   const createRes = await request.post('/api/v1/workflows', {
@@ -226,8 +215,8 @@ test('workflow 37: patch rejects update_deal_stage stage from another org', asyn
 });
 
 test('workflow 37: create rejects create_task assignee from another org', async ({ request }) => {
-  const orgA = await registerOrg(request, 'wf37-assignee-a');
-  const orgB = await registerOrg(request, 'wf37-assignee-b');
+  const orgA = await registerVerifiedOrg(request, 'wf37-assignee-a');
+  const orgB = await registerVerifiedOrg(request, 'wf37-assignee-b');
 
   const wfRes = await request.post('/api/v1/workflows', {
     headers: authHeaders(orgA.token),
@@ -244,8 +233,8 @@ test('workflow 37: create rejects create_task assignee from another org', async 
 });
 
 test('workflow 37: patch rejects create_task assignee from another org', async ({ request }) => {
-  const orgA = await registerOrg(request, 'wf37-patch-assignee-a');
-  const orgB = await registerOrg(request, 'wf37-patch-assignee-b');
+  const orgA = await registerVerifiedOrg(request, 'wf37-patch-assignee-a');
+  const orgB = await registerVerifiedOrg(request, 'wf37-patch-assignee-b');
 
   const createRes = await request.post('/api/v1/workflows', {
     headers: authHeaders(orgA.token),
@@ -265,7 +254,7 @@ test('workflow 37: patch rejects create_task assignee from another org', async (
 });
 
 test('workflow 37: update_deal_stage execution rejects stage outside deal pipeline', async ({ request }) => {
-  const org = await registerOrg(request, 'wf37-stage-exec');
+  const org = await registerVerifiedOrg(request, 'wf37-stage-exec');
   const pl = await getPipeline(request, org.token);
   const originalStage = pl.stages[0]!.id;
   const otherPipeline = await createPipelineWithStage(request, org.token, 'Other');
@@ -298,7 +287,7 @@ test('workflow 37: update_deal_stage execution rejects stage outside deal pipeli
 // ─── Group 2: WorkflowRun record ─────────────────────────────────────────────
 
 test('workflow 37: GET /:id/runs shows success run after deal_stage_changed fires', async ({ request }) => {
-  const org = await registerOrg(request, 'wf37-runs');
+  const org = await registerVerifiedOrg(request, 'wf37-runs');
   const pl = await getPipeline(request, org.token);
   const stageA = pl.stages[0]!.id;
   const stageB = pl.stages[1]!.id;
@@ -327,7 +316,7 @@ test('workflow 37: GET /:id/runs shows success run after deal_stage_changed fire
 // ─── Group 3: Non-firing scenarios ───────────────────────────────────────────
 
 test('workflow 37: paused workflow does not fire on contact_created', async ({ request }) => {
-  const org = await registerOrg(request, 'wf37-paused');
+  const org = await registerVerifiedOrg(request, 'wf37-paused');
 
   await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
@@ -343,7 +332,7 @@ test('workflow 37: paused workflow does not fire on contact_created', async ({ r
 });
 
 test('workflow 37: archived workflow does not fire on contact_created', async ({ request }) => {
-  const org = await registerOrg(request, 'wf37-archno');
+  const org = await registerVerifiedOrg(request, 'wf37-archno');
 
   const wfRes = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
@@ -363,7 +352,7 @@ test('workflow 37: archived workflow does not fire on contact_created', async ({
 });
 
 test('workflow 37: condition non-match → workflow does NOT fire', async ({ request }) => {
-  const org = await registerOrg(request, 'wf37-cond-no');
+  const org = await registerVerifiedOrg(request, 'wf37-cond-no');
 
   await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
@@ -384,7 +373,7 @@ test('workflow 37: condition non-match → workflow does NOT fire', async ({ req
 });
 
 test('workflow 37: condition match → workflow fires', async ({ request }) => {
-  const org = await registerOrg(request, 'wf37-cond-yes');
+  const org = await registerVerifiedOrg(request, 'wf37-cond-yes');
 
   await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),
@@ -407,7 +396,7 @@ test('workflow 37: condition match → workflow fires', async ({ request }) => {
 // ─── Group 4: Filter and auth ─────────────────────────────────────────────────
 
 test('workflow 37: GET /workflows?trigger=deal_stage_changed returns only that trigger type', async ({ request }) => {
-  const org = await registerOrg(request, 'wf37-filter');
+  const org = await registerVerifiedOrg(request, 'wf37-filter');
 
   await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),

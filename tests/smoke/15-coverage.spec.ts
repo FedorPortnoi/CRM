@@ -1,5 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
@@ -31,14 +31,6 @@ async function createDeal(request: APIRequestContext, token: string, contactId: 
   return ((await res.json()).data as { id: string }).id;
 }
 
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<{ token: string; userId: string }> {
-  const ts = Date.now().toString() + Math.random().toString(36).slice(2);
-  const res = await request.post('/api/v1/auth/', {
-    data: { email: 'org-' + suffix + '-' + ts + '@example.com', password: 'Password123!', name: 'User ' + suffix, org_name: 'Org ' + suffix + ' ' + ts },
-  });
-  const data = (await res.json()).data as { token: string; user: { id: string } };
-  return { token: data.token, userId: data.user.id };
-}
 test('GET /api/v1/deals/:id body.data includes nested contact with id+first_name, pipeline with id+name, stage with id+name+position', async ({ request }) => {
   const { token } = getAuth();
   const { pipelineId, stageId } = await getPipelineAndStage(request, token);
@@ -68,8 +60,8 @@ test('GET /api/v1/deals/:id with non-existent UUID returns 404 and error.code DE
 });
 
 test('Cross-org: Org B token cannot GET Org A deal — returns 404', async ({ request }) => {
-  const orgA = await registerOrg(request, 'ga3');
-  const orgB = await registerOrg(request, 'gb3');
+  const orgA = await registerVerifiedOrg(request, 'ga3');
+  const orgB = await registerVerifiedOrg(request, 'gb3');
   const { pipelineId, stageId } = await getPipelineAndStage(request, orgA.token);
   const contactId = await createContact(request, orgA.token);
   const dealId = await createDeal(request, orgA.token, contactId, pipelineId, stageId, 'Org A Deal Get');
@@ -78,8 +70,8 @@ test('Cross-org: Org B token cannot GET Org A deal — returns 404', async ({ re
 });
 
 test('Cross-org: Org B token cannot PATCH Org A deal — returns 404', async ({ request }) => {
-  const orgA = await registerOrg(request, 'ga4');
-  const orgB = await registerOrg(request, 'gb4');
+  const orgA = await registerVerifiedOrg(request, 'ga4');
+  const orgB = await registerVerifiedOrg(request, 'gb4');
   const { pipelineId, stageId } = await getPipelineAndStage(request, orgA.token);
   const contactId = await createContact(request, orgA.token);
   const dealId = await createDeal(request, orgA.token, contactId, pipelineId, stageId, 'Org A Deal Patch');
@@ -183,8 +175,8 @@ test('GET /api/v1/analytics/dashboard response includes a meta field that is a n
 });
 
 test('Cross-org: Org B token GET /api/v1/contacts returns empty array — no Org A contacts leaked', async ({ request }) => {
-  const orgA = await registerOrg(request, 'ga14');
-  const orgB = await registerOrg(request, 'gb14');
+  const orgA = await registerVerifiedOrg(request, 'ga14');
+  const orgB = await registerVerifiedOrg(request, 'gb14');
   await createContact(request, orgA.token);
   const res = await request.get('/api/v1/contacts', { headers: { Authorization: 'Bearer ' + orgB.token } });
   expect(res.status()).toBe(200);
@@ -212,7 +204,7 @@ test('GET /api/v1/deals with status=open filter returns only open deals and excl
 });
 
 test('GET /api/v1/contacts/:id/tasks returns tasks linked to that contact', async ({ request }) => {
-  const org = await registerOrg(request, 'ct1');
+  const org = await registerVerifiedOrg(request, 'ct1');
   const contactId = await createContact(request, org.token);
   const due = new Date(Date.now() + 86400 * 1000).toISOString();
   const createRes = await request.post('/api/v1/tasks', {
@@ -229,7 +221,7 @@ test('GET /api/v1/contacts/:id/tasks returns tasks linked to that contact', asyn
 });
 
 test('GET /api/v1/contacts/:id/deals returns deals linked to that contact and not others', async ({ request }) => {
-  const org = await registerOrg(request, 'cd1');
+  const org = await registerVerifiedOrg(request, 'cd1');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contactA = await createContact(request, org.token);
   const contactB = await createContact(request, org.token);
@@ -243,7 +235,7 @@ test('GET /api/v1/contacts/:id/deals returns deals linked to that contact and no
 });
 
 test('GET /api/v1/analytics/revenue returns data with periods array each having period and revenue fields', async ({ request }) => {
-  const org = await registerOrg(request, 'rt1');
+  const org = await registerVerifiedOrg(request, 'rt1');
   const res = await request.get('/api/v1/analytics/revenue', { headers: { Authorization: 'Bearer ' + org.token } });
   expect(res.status()).toBe(200);
   const body = await res.json() as { data: { periods: Array<{ period: unknown; revenue: unknown }> } };
@@ -252,7 +244,7 @@ test('GET /api/v1/analytics/revenue returns data with periods array each having 
 });
 
 test('GET /api/v1/analytics/funnel returns data.stages array with stage_id and total fields', async ({ request }) => {
-  const org = await registerOrg(request, 'fn1');
+  const org = await registerVerifiedOrg(request, 'fn1');
   const res = await request.get('/api/v1/analytics/funnel', { headers: { Authorization: 'Bearer ' + org.token } });
   expect(res.status()).toBe(200);
   const body = await res.json() as { data: { stages: Array<{ stage_id: unknown; total: unknown }> } };
@@ -261,7 +253,7 @@ test('GET /api/v1/analytics/funnel returns data.stages array with stage_id and t
 });
 
 test('GET /api/v1/contacts with per_page=2 limits results and meta.total is correct', async ({ request }) => {
-  const org = await registerOrg(request, 'pg1');
+  const org = await registerVerifiedOrg(request, 'pg1');
   await createContact(request, org.token);
   await createContact(request, org.token);
   await createContact(request, org.token);
@@ -274,7 +266,7 @@ test('GET /api/v1/contacts with per_page=2 limits results and meta.total is corr
 });
 
 test('GET /api/v1/contacts page=2 with per_page=1 returns the second contact', async ({ request }) => {
-  const org = await registerOrg(request, 'pg2');
+  const org = await registerVerifiedOrg(request, 'pg2');
   const c1 = await createContact(request, org.token);
   const c2 = await createContact(request, org.token);
   const page1Res = await request.get('/api/v1/contacts?per_page=1&page=1', { headers: { Authorization: 'Bearer ' + org.token } });
@@ -291,7 +283,7 @@ test('GET /api/v1/contacts page=2 with per_page=1 returns the second contact', a
 });
 
 test('POST /api/v1/contacts with phone field stores and returns phone on readback', async ({ request }) => {
-  const org = await registerOrg(request, 'ph1');
+  const org = await registerVerifiedOrg(request, 'ph1');
   const tag = Date.now().toString(36);
   const createRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: 'Bearer ' + org.token },
@@ -305,7 +297,7 @@ test('POST /api/v1/contacts with phone field stores and returns phone on readbac
 });
 
 test('PATCH /api/v1/contacts/:id updates company field and readback confirms the new value', async ({ request }) => {
-  const org = await registerOrg(request, 'co1');
+  const org = await registerVerifiedOrg(request, 'co1');
   const contactId = await createContact(request, org.token);
   const patchRes = await request.patch('/api/v1/contacts/' + contactId, {
     headers: { Authorization: 'Bearer ' + org.token },
@@ -318,7 +310,7 @@ test('PATCH /api/v1/contacts/:id updates company field and readback confirms the
 });
 
 test('PATCH /api/v1/deals/:id changes title and GET readback confirms the updated title', async ({ request }) => {
-  const org = await registerOrg(request, 'dt1');
+  const org = await registerVerifiedOrg(request, 'dt1');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contactId = await createContact(request, org.token);
   const dealId = await createDeal(request, org.token, contactId, pipelineId, stageId, 'Original Deal Title');
@@ -333,7 +325,7 @@ test('PATCH /api/v1/deals/:id changes title and GET readback confirms the update
 });
 
 test('POST /api/v1/deals/:id/lost with no reason body still succeeds — reason is optional', async ({ request }) => {
-  const org = await registerOrg(request, 'ln1');
+  const org = await registerVerifiedOrg(request, 'ln1');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contactId = await createContact(request, org.token);
   const dealId = await createDeal(request, org.token, contactId, pipelineId, stageId, 'Lost No Reason Deal');
@@ -346,7 +338,7 @@ test('POST /api/v1/deals/:id/lost with no reason body still succeeds — reason 
 });
 
 test('Multiple deals for the same contact all appear in GET /api/v1/contacts/:id/deals', async ({ request }) => {
-  const org = await registerOrg(request, 'md1');
+  const org = await registerVerifiedOrg(request, 'md1');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contactId = await createContact(request, org.token);
   const deal1 = await createDeal(request, org.token, contactId, pipelineId, stageId, 'Multi Deal One');
@@ -361,7 +353,7 @@ test('Multiple deals for the same contact all appear in GET /api/v1/contacts/:id
 });
 
 test('POST /api/v1/tasks/:id/cancel on a pending task returns status=cancelled', async ({ request }) => {
-  const org = await registerOrg(request, 'tc1');
+  const org = await registerVerifiedOrg(request, 'tc1');
   const due = new Date(Date.now() + 86400 * 1000).toISOString();
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: 'Bearer ' + org.token },

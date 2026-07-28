@@ -1,6 +1,6 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
+import { registerVerifiedOrg } from './helpers/auth';
 
-type Auth = { token: string; userId: string };
 type Stage = { id: string; name?: string };
 type Pipeline = { id: string; name?: string; is_default?: boolean; stages: Stage[] };
 
@@ -10,27 +10,8 @@ function authHeaders(token: string): { Authorization: string } {
   return { Authorization: `Bearer ${token}` };
 }
 
-function unique(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
 function futureIso(offsetMs: number): string {
   return new Date(Date.now() + offsetMs).toISOString();
-}
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<Auth> {
-  const id = unique(suffix);
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${id}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${id}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = await res.json() as { data: { token: string; user: { id: string } } };
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 async function createContact(request: APIRequestContext, token: string, firstName: string): Promise<{ id: string }> {
@@ -125,8 +106,9 @@ function expectBlocked(status: number): void {
 }
 
 test('tenant isolation: cross-org contact update and delete are blocked', async ({ request }) => {
-  const orgA = await registerOrg(request, 'tenant-contact-a');
-  const orgB = await registerOrg(request, 'tenant-contact-b');
+  const orgA = await registerVerifiedOrg(request, 'tenant-contact-a');
+  const orgB = await registerVerifiedOrg(request, 'tenant-contact-b');
+  expect(orgA.orgId).not.toBe(orgB.orgId);
   const contact = await createContact(request, orgA.token, 'TenantContactA');
 
   const patch = await request.patch(`/api/v1/contacts/${contact.id}`, {
@@ -148,8 +130,9 @@ test('tenant isolation: cross-org contact update and delete are blocked', async 
 });
 
 test('tenant isolation: cross-org task update and delete are blocked', async ({ request }) => {
-  const orgA = await registerOrg(request, 'tenant-task-a');
-  const orgB = await registerOrg(request, 'tenant-task-b');
+  const orgA = await registerVerifiedOrg(request, 'tenant-task-a');
+  const orgB = await registerVerifiedOrg(request, 'tenant-task-b');
+  expect(orgA.orgId).not.toBe(orgB.orgId);
   const task = await createTask(request, orgA.token, orgA.userId, 'TenantTaskA');
 
   const patch = await request.patch(`/api/v1/tasks/${task.id}`, {
@@ -171,8 +154,9 @@ test('tenant isolation: cross-org task update and delete are blocked', async ({ 
 });
 
 test('tenant isolation: cross-org calendar update and delete are blocked', async ({ request }) => {
-  const orgA = await registerOrg(request, 'tenant-calendar-a');
-  const orgB = await registerOrg(request, 'tenant-calendar-b');
+  const orgA = await registerVerifiedOrg(request, 'tenant-calendar-a');
+  const orgB = await registerVerifiedOrg(request, 'tenant-calendar-b');
+  expect(orgA.orgId).not.toBe(orgB.orgId);
   const event = await createEvent(request, orgA.token, 'TenantEventA');
 
   const patch = await request.patch(`/api/v1/calendar/${event.id}`, {
@@ -195,8 +179,9 @@ test('tenant isolation: cross-org calendar update and delete are blocked', async
 });
 
 test('tenant isolation: cross-org deal update and delete are blocked', async ({ request }) => {
-  const orgA = await registerOrg(request, 'tenant-deal-a');
-  const orgB = await registerOrg(request, 'tenant-deal-b');
+  const orgA = await registerVerifiedOrg(request, 'tenant-deal-a');
+  const orgB = await registerVerifiedOrg(request, 'tenant-deal-b');
+  expect(orgA.orgId).not.toBe(orgB.orgId);
   const contact = await createContact(request, orgA.token, 'TenantDealContact');
   const pipeline = await getDefaultPipeline(request, orgA.token);
   const deal = await createDeal(request, orgA.token, 'TenantDealA', contact.id, pipeline.id, pipeline.stages[0].id);
@@ -220,8 +205,9 @@ test('tenant isolation: cross-org deal update and delete are blocked', async ({ 
 });
 
 test('tenant isolation: cross-org pipeline and stage mutations are blocked', async ({ request }) => {
-  const orgA = await registerOrg(request, 'tenant-pipeline-a');
-  const orgB = await registerOrg(request, 'tenant-pipeline-b');
+  const orgA = await registerVerifiedOrg(request, 'tenant-pipeline-a');
+  const orgB = await registerVerifiedOrg(request, 'tenant-pipeline-b');
+  expect(orgA.orgId).not.toBe(orgB.orgId);
   const pipeline = await createPipeline(request, orgA.token, 'TenantPipelineA');
   const stage = await createStage(request, orgA.token, pipeline.id, 'TenantStageA');
 
@@ -264,8 +250,9 @@ test('tenant isolation: cross-org pipeline and stage mutations are blocked', asy
 });
 
 test('tenant isolation: onboarding state updates stay in the authenticated org', async ({ request }) => {
-  const orgA = await registerOrg(request, 'tenant-onboarding-a');
-  const orgB = await registerOrg(request, 'tenant-onboarding-b');
+  const orgA = await registerVerifiedOrg(request, 'tenant-onboarding-a');
+  const orgB = await registerVerifiedOrg(request, 'tenant-onboarding-b');
+  expect(orgA.orgId).not.toBe(orgB.orgId);
 
   const updateA = await request.patch('/api/v1/onboarding', {
     headers: authHeaders(orgA.token),

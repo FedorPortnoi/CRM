@@ -1,24 +1,8 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-
-type Auth = { token: string; userId: string };
+import { registerVerifiedOrg } from './helpers/auth';
 
 function authHeaders(token: string) {
   return { Authorization: `Bearer ${token}` };
-}
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<Auth> {
-  const unique = `${suffix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = await res.json() as { data: { token: string; user: { id: string } } };
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 async function defaultPipeline(
@@ -69,7 +53,7 @@ async function createDeal(
 test.describe.configure({ timeout: 30000 });
 
 test('completion: stale deal scan fires deal_stale workflow once per deal', async ({ request }) => {
-  const org = await registerOrg(request, 's40-stale');
+  const org = await registerVerifiedOrg(request, 's40-stale');
   const pipeline = await defaultPipeline(request, org.token);
   const contact = await createContact(request, org.token, 'StaleTarget');
   const deal = await createDeal(request, org.token, contact.id, pipeline.id, pipeline.stages[0]!.id);
@@ -111,7 +95,7 @@ test('completion: stale deal scan fires deal_stale workflow once per deal', asyn
 });
 
 test('completion: create-contact from pending capture logs activity and creates follow-up task', async ({ request }) => {
-  const org = await registerOrg(request, 's40-capture-create');
+  const org = await registerVerifiedOrg(request, 's40-capture-create');
   const phone = '+79004000040';
   const captureRes = await request.post('/api/v1/captures', {
     headers: authHeaders(org.token),

@@ -1,21 +1,12 @@
 import { test, expect, request as playwrightRequest } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
 interface AuthOrg {
   token: string;
   userId: string;
-}
-
-interface RegisterResponse {
-  data: {
-    token: string;
-    user: {
-      id: string;
-    };
-  };
 }
 
 interface EmptyMeta {
@@ -115,22 +106,6 @@ function dateOnly(iso: string): string {
   return iso.slice(0, 10);
 }
 
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<AuthOrg> {
-  const unique = uniqueSuffix(suffix);
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `Session 22 ${suffix}`,
-      org_name: `Session 22 ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-
-  const body = (await res.json()) as RegisterResponse;
-  return { token: body.data.token, userId: body.data.user.id };
-}
-
 async function createPipeline(
   request: APIRequestContext,
   token: string,
@@ -215,7 +190,7 @@ test('G2: POST /api/v1/contacts/import-csv rejects an unsupported contact type',
 });
 
 test('G4: GET /api/v1/analytics/conversion-rates returns an empty transition set for a pipeline with no stages', async ({ request }) => {
-  const org = await registerOrg(request, 'g4-conversion-rates');
+  const org = await registerVerifiedOrg(request, 'g4-conversion-rates');
   const pipeline = await createPipeline(request, org.token);
 
   const res = await request.get(`/api/v1/analytics/conversion-rates?pipeline_id=${pipeline.id}`, {
@@ -232,7 +207,7 @@ test('G4: GET /api/v1/analytics/conversion-rates returns an empty transition set
 });
 
 test('G8: GET /api/v1/tasks/overdue returns an empty list for a fresh org', async ({ request }) => {
-  const org = await registerOrg(request, 'g8-overdue-empty');
+  const org = await registerVerifiedOrg(request, 'g8-overdue-empty');
 
   const res = await request.get('/api/v1/tasks/overdue', {
     headers: authHeaders(org.token),
@@ -244,7 +219,7 @@ test('G8: GET /api/v1/tasks/overdue returns an empty list for a fresh org', asyn
 });
 
 test('G9: GET /api/v1/tasks/overdue excludes completed and cancelled overdue tasks', async ({ request }) => {
-  const org = await registerOrg(request, 'g9-overdue-statuses');
+  const org = await registerVerifiedOrg(request, 'g9-overdue-statuses');
   const dueDate = new Date(Date.now() - 2 * 86400000).toISOString();
   const taskA = await createTask(request, org, 'G9 Task A', dueDate);
   const taskB = await createTask(request, org, 'G9 Task B', dueDate);
@@ -273,9 +248,9 @@ test('G9: GET /api/v1/tasks/overdue excludes completed and cancelled overdue tas
 });
 
 test('G11: GET /api/v1/analytics/conversion-rates is scoped to the requester org', async ({ request }) => {
-  const orgA = await registerOrg(request, 'g11-org-a');
+  const orgA = await registerVerifiedOrg(request, 'g11-org-a');
   const pipelineA = await createPipeline(request, orgA.token);
-  const orgB = await registerOrg(request, 'g11-org-b');
+  const orgB = await registerVerifiedOrg(request, 'g11-org-b');
 
   const res = await request.get('/api/v1/analytics/conversion-rates', {
     headers: authHeaders(orgB.token),
@@ -305,7 +280,7 @@ test('G13: POST /api/v1/contacts/import alias imports a row through the same CSV
     source: string | null;
   };
 
-  const org = await registerOrg(request, 'g13-import-alias');
+  const org = await registerVerifiedOrg(request, 'g13-import-alias');
   const prefix = uniqueSuffix('ImportAlias');
   const email = `${prefix.toLowerCase()}@example.com`;
 
@@ -331,7 +306,7 @@ test('G13: POST /api/v1/contacts/import alias imports a row through the same CSV
 test('G14: GET /api/v1/calendar with attendee_id returns only events containing that attendee', async ({ request }) => {
   type AttendeeEvent = CalendarEventRecord & { attendee_ids: string[] };
 
-  const org = await registerOrg(request, 'g14-attendee-filter');
+  const org = await registerVerifiedOrg(request, 'g14-attendee-filter');
   const matchingRes = await request.post('/api/v1/calendar', {
     headers: authHeaders(org.token),
     data: {
@@ -358,7 +333,7 @@ test('G14: GET /api/v1/calendar with attendee_id returns only events containing 
 });
 
 test('G15: GET /api/v1/calendar/availability includes scheduled events for the requested user', async ({ request }) => {
-  const org = await registerOrg(request, 'g15-availability-busy');
+  const org = await registerVerifiedOrg(request, 'g15-availability-busy');
   const start = futureIso(4, 15);
   const end = futureIso(4, 16);
   const event = await createCalendarEvent(request, org.token, 'Busy Slot Event', start, end);
@@ -381,7 +356,7 @@ test('G15: GET /api/v1/calendar/availability includes scheduled events for the r
 });
 
 test('G16: GET /api/v1/calendar/availability excludes cancelled events', async ({ request }) => {
-  const org = await registerOrg(request, 'g16-availability-cancelled');
+  const org = await registerVerifiedOrg(request, 'g16-availability-cancelled');
   const start = futureIso(5, 15);
   const event = await createCalendarEvent(request, org.token, 'Cancelled Busy Slot', start, futureIso(5, 16));
 
@@ -403,7 +378,7 @@ test('G16: GET /api/v1/calendar/availability excludes cancelled events', async (
 });
 
 test('G17: GET /api/v1/calendar/availability rejects duration below the 15 minute minimum', async ({ request }) => {
-  const org = await registerOrg(request, 'g17-availability-duration');
+  const org = await registerVerifiedOrg(request, 'g17-availability-duration');
   const date = dateOnly(futureIso(6, 10));
 
   const res = await request.get(

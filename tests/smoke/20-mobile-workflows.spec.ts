@@ -1,20 +1,7 @@
 import { APIRequestContext, expect, test } from '@playwright/test';
+import { registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
-
-type AuthOrg = {
-  token: string;
-  userId: string;
-};
-
-type RegisterResponse = {
-  data: {
-    token: string;
-    user: {
-      id: string;
-    };
-  };
-};
 
 type ContactRecord = {
   id: string;
@@ -103,22 +90,6 @@ function dayBoundsFromIso(isoDate: string): { start: string; end: string } {
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<AuthOrg> {
-  const unique = uniqueSuffix(suffix);
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `Mobile Smoke ${suffix}`,
-      org_name: `Mobile Smoke ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-
-  const body = (await res.json()) as RegisterResponse;
-  return { token: body.data.token, userId: body.data.user.id };
-}
-
 async function createContact(
   request: APIRequestContext,
   token: string,
@@ -189,7 +160,7 @@ async function listCalendarEventsForContact(
 }
 
 test('mobile messaging: an in-app note is returned in the contact conversation', async ({ request }) => {
-  const org = await registerOrg(request, 'mobile-note');
+  const org = await registerVerifiedOrg(request, 'mobile-note');
   const contact = await createContact(request, org.token);
   const noteBody = `Mobile note ${uniqueSuffix('conversation')}`;
 
@@ -221,7 +192,7 @@ test('mobile messaging: an in-app note is returned in the contact conversation',
 });
 
 test('mobile messaging: logging a call creates a message activity item', async ({ request }) => {
-  const org = await registerOrg(request, 'mobile-call');
+  const org = await registerVerifiedOrg(request, 'mobile-call');
   const contact = await createContact(request, org.token);
   const callNotes = `Call summary ${uniqueSuffix('activity')}`;
 
@@ -257,7 +228,7 @@ test('mobile messaging: logging a call creates a message activity item', async (
 });
 
 test('mobile calendar: event create, list, complete, notes, and cancel lifecycle', async ({ request }) => {
-  const org = await registerOrg(request, 'mobile-calendar');
+  const org = await registerVerifiedOrg(request, 'mobile-calendar');
   const contact = await createContact(request, org.token);
   const title = `Mobile calendar ${uniqueSuffix('event')}`;
   const initialNotes = 'Agenda before meeting';
@@ -325,7 +296,7 @@ test('mobile calendar: event create, list, complete, notes, and cancel lifecycle
 // ── Ring 4/5 gap tests ────────────────────────────────────────────────────────
 
 test('mobile messaging: POST /messages/in-app with body exceeding 5000 chars returns 400', async ({ request }) => {
-  const org = await registerOrg(request, 'msg-body-too-long');
+  const org = await registerVerifiedOrg(request, 'msg-body-too-long');
   const contact = await createContact(request, org.token);
   const oversizedBody = 'x'.repeat(5001);
 
@@ -337,7 +308,7 @@ test('mobile messaging: POST /messages/in-app with body exceeding 5000 chars ret
 });
 
 test('mobile messaging: POST /messages/in-app with missing body field returns 400', async ({ request }) => {
-  const org = await registerOrg(request, 'msg-no-body');
+  const org = await registerVerifiedOrg(request, 'msg-no-body');
   const contact = await createContact(request, org.token);
 
   const res = await request.post('/api/v1/messages/in-app', {
@@ -348,7 +319,7 @@ test('mobile messaging: POST /messages/in-app with missing body field returns 40
 });
 
 test('mobile messaging: POST /messages/in-app with missing contact_id returns 400', async ({ request }) => {
-  const org = await registerOrg(request, 'msg-no-contact');
+  const org = await registerVerifiedOrg(request, 'msg-no-contact');
 
   const res = await request.post('/api/v1/messages/in-app', {
     headers: authHeaders(org.token),
@@ -358,7 +329,7 @@ test('mobile messaging: POST /messages/in-app with missing contact_id returns 40
 });
 
 test('mobile messaging: POST /messages/call with missing direction field returns 400', async ({ request }) => {
-  const org = await registerOrg(request, 'call-no-dir');
+  const org = await registerVerifiedOrg(request, 'call-no-dir');
   const contact = await createContact(request, org.token);
 
   const res = await request.post('/api/v1/messages/call', {
@@ -369,7 +340,7 @@ test('mobile messaging: POST /messages/call with missing direction field returns
 });
 
 test('mobile messaging: GET /messages?contact_id returns only messages for that contact', async ({ request }) => {
-  const org = await registerOrg(request, 'msg-isolation');
+  const org = await registerVerifiedOrg(request, 'msg-isolation');
   const contactA = await createContact(request, org.token);
   const contactB = await createContact(request, org.token);
 
@@ -400,7 +371,7 @@ test('mobile messaging: GET /messages?contact_id returns only messages for that 
 });
 
 test('mobile messaging: GET /messages?channel=in_app returns only in_app channel messages', async ({ request }) => {
-  const org = await registerOrg(request, 'msg-channel-filter');
+  const org = await registerVerifiedOrg(request, 'msg-channel-filter');
   const contact = await createContact(request, org.token);
 
   const inAppBody = `In-app note ${uniqueSuffix('chan')}`;
@@ -429,7 +400,7 @@ test('mobile messaging: GET /messages?channel=in_app returns only in_app channel
 });
 
 test('mobile calendar: GET /calendar?contact_id filter returns only events for that contact', async ({ request }) => {
-  const org = await registerOrg(request, 'cal-contact-filter');
+  const org = await registerVerifiedOrg(request, 'cal-contact-filter');
   const contactA = await createContact(request, org.token);
   const contactB = await createContact(request, org.token);
 
@@ -459,7 +430,7 @@ test('mobile calendar: GET /calendar?contact_id filter returns only events for t
 });
 
 test('mobile calendar: PATCH title update is confirmed on readback', async ({ request }) => {
-  const org = await registerOrg(request, 'cal-patch-title');
+  const org = await registerVerifiedOrg(request, 'cal-patch-title');
   const contact = await createContact(request, org.token);
   const { startTime, endTime } = futureEventWindow(6);
   const originalTitle = `Original title ${uniqueSuffix('patch')}`;
@@ -484,7 +455,7 @@ test('mobile calendar: PATCH title update is confirmed on readback', async ({ re
 });
 
 test('mobile calendar: POST /calendar/:id/notes on a completed event stores notes', async ({ request }) => {
-  const org = await registerOrg(request, 'cal-completed-notes');
+  const org = await registerVerifiedOrg(request, 'cal-completed-notes');
   const contact = await createContact(request, org.token);
   const { startTime, endTime } = futureEventWindow(7);
   const title = `Notes on completed ${uniqueSuffix('ev')}`;
@@ -516,7 +487,7 @@ test('mobile calendar: POST /calendar/:id/notes on a completed event stores note
 });
 
 test('mobile messaging: 3 concurrent in-app messages to same contact all return 201 with unique ids', async ({ request }) => {
-  const org = await registerOrg(request, 'msg-concurrent');
+  const org = await registerVerifiedOrg(request, 'msg-concurrent');
   const contact = await createContact(request, org.token);
 
   const payloads = [

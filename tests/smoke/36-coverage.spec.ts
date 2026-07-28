@@ -1,16 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-
-type Auth = { token: string; userId: string };
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<Auth> {
-  const unique = suffix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-  const res = await request.post('/api/v1/auth/', {
-    data: { email: unique + '@example.com', password: 'Password123!', name: 'User ' + suffix, org_name: 'Org ' + unique },
-  });
-  expect(res.status()).toBe(201);
-  const body = await res.json() as { data: { token: string; user: { id: string } } };
-  return { token: body.data.token, userId: body.data.user.id };
-}
+import { registerVerifiedOrg } from './helpers/auth';
 
 function authHeaders(token: string) { return { Authorization: 'Bearer ' + token }; }
 
@@ -34,7 +23,7 @@ test.describe.configure({ timeout: 30000 });
 // ─── Group 1: POST /contacts/bulk-assign (completely untested) ─────────────────
 
 test('bulk-assign 36: happy path → 200 with assigned_count and contact_ids', async ({ request }) => {
-  const org = await registerOrg(request, 'ba36-happy');
+  const org = await registerVerifiedOrg(request, 'ba36-happy');
   const c1 = await createContact(request, org.token, 'Alice');
   const c2 = await createContact(request, org.token, 'Bob');
   const r = await request.post('/api/v1/contacts/bulk-assign', {
@@ -49,8 +38,8 @@ test('bulk-assign 36: happy path → 200 with assigned_count and contact_ids', a
 });
 
 test('bulk-assign 36: assigned user from another org → 403 FORBIDDEN', async ({ request }) => {
-  const orgA = await registerOrg(request, 'ba36-forbidden-a');
-  const orgB = await registerOrg(request, 'ba36-forbidden-b');
+  const orgA = await registerVerifiedOrg(request, 'ba36-forbidden-a');
+  const orgB = await registerVerifiedOrg(request, 'ba36-forbidden-b');
   const c = await createContact(request, orgA.token, 'Charlie');
   const r = await request.post('/api/v1/contacts/bulk-assign', {
     headers: authHeaders(orgA.token),
@@ -62,8 +51,8 @@ test('bulk-assign 36: assigned user from another org → 403 FORBIDDEN', async (
 });
 
 test('bulk-assign 36: contact IDs belonging to another org → 404 NOT_FOUND', async ({ request }) => {
-  const orgA = await registerOrg(request, 'ba36-xcontact-a');
-  const orgB = await registerOrg(request, 'ba36-xcontact-b');
+  const orgA = await registerVerifiedOrg(request, 'ba36-xcontact-a');
+  const orgB = await registerVerifiedOrg(request, 'ba36-xcontact-b');
   const c = await createContact(request, orgA.token, 'Dave');
   const r = await request.post('/api/v1/contacts/bulk-assign', {
     headers: authHeaders(orgB.token),
@@ -84,7 +73,7 @@ test('bulk-assign 36: without auth → 401', async ({ request }) => {
 // ─── Group 2: POST /contacts/bulk-tag (completely untested) ────────────────────
 
 test('bulk-tag 36: append mode adds tags without removing existing ones', async ({ request }) => {
-  const org = await registerOrg(request, 'bt36-append');
+  const org = await registerVerifiedOrg(request, 'bt36-append');
   const createRes = await request.post('/api/v1/contacts', {
     headers: authHeaders(org.token),
     data: { first_name: 'Eve', tags: ['vip'] },
@@ -108,7 +97,7 @@ test('bulk-tag 36: append mode adds tags without removing existing ones', async 
 });
 
 test('bulk-tag 36: replace mode replaces all existing tags', async ({ request }) => {
-  const org = await registerOrg(request, 'bt36-replace');
+  const org = await registerVerifiedOrg(request, 'bt36-replace');
   const createRes = await request.post('/api/v1/contacts', {
     headers: authHeaders(org.token),
     data: { first_name: 'Frank', tags: ['old-tag', 'stale'] },
@@ -139,7 +128,7 @@ test('bulk-tag 36: without auth → 401', async ({ request }) => {
 // ─── Group 3: POST /contacts/bulk-archive (completely untested) ────────────────
 
 test('bulk-archive 36: happy path → 200 with archived_count 2', async ({ request }) => {
-  const org = await registerOrg(request, 'ba36-arch');
+  const org = await registerVerifiedOrg(request, 'ba36-arch');
   const c1 = await createContact(request, org.token, 'Greg');
   const c2 = await createContact(request, org.token, 'Hana');
   const r = await request.post('/api/v1/contacts/bulk-archive', {
@@ -153,7 +142,7 @@ test('bulk-archive 36: happy path → 200 with archived_count 2', async ({ reque
 });
 
 test('bulk-archive 36: archived contacts excluded from default GET /contacts', async ({ request }) => {
-  const org = await registerOrg(request, 'ba36-excluded');
+  const org = await registerVerifiedOrg(request, 'ba36-excluded');
   const c = await createContact(request, org.token, 'Ivan');
   await request.post('/api/v1/contacts/bulk-archive', {
     headers: authHeaders(org.token),
@@ -167,7 +156,7 @@ test('bulk-archive 36: archived contacts excluded from default GET /contacts', a
 });
 
 test('bulk-archive 36: contact already archived → 404 NOT_FOUND on second call', async ({ request }) => {
-  const org = await registerOrg(request, 'ba36-already');
+  const org = await registerVerifiedOrg(request, 'ba36-already');
   const c = await createContact(request, org.token, 'Julia');
   await request.post('/api/v1/contacts/bulk-archive', {
     headers: authHeaders(org.token),
@@ -183,8 +172,8 @@ test('bulk-archive 36: contact already archived → 404 NOT_FOUND on second call
 });
 
 test('bulk-archive 36: contact IDs from another org → 404 NOT_FOUND', async ({ request }) => {
-  const orgA = await registerOrg(request, 'ba36-xorg-a');
-  const orgB = await registerOrg(request, 'ba36-xorg-b');
+  const orgA = await registerVerifiedOrg(request, 'ba36-xorg-a');
+  const orgB = await registerVerifiedOrg(request, 'ba36-xorg-b');
   const c = await createContact(request, orgA.token, 'Karl');
   const r = await request.post('/api/v1/contacts/bulk-archive', {
     headers: authHeaders(orgB.token),
@@ -194,7 +183,7 @@ test('bulk-archive 36: contact IDs from another org → 404 NOT_FOUND', async ({
 });
 
 test('bulk-archive 36: empty contact_ids array → 400 validation error', async ({ request }) => {
-  const org = await registerOrg(request, 'ba36-empty');
+  const org = await registerVerifiedOrg(request, 'ba36-empty');
   const r = await request.post('/api/v1/contacts/bulk-archive', {
     headers: authHeaders(org.token),
     data: { contact_ids: [] },

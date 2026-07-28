@@ -1,28 +1,8 @@
-import { test, expect, type APIRequestContext } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { test, expect } from '@playwright/test';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 test.use({ baseURL: 'http://127.0.0.1:3000' });
-
-// ─── Shared helper ────────────────────────────────────────────────────────────
-
-async function registerOrg(
-  request: APIRequestContext,
-  suffix: string,
-): Promise<{ token: string; userId: string }> {
-  const unique = `${suffix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = (await res.json()) as { data: { token: string; user: { id: string } } };
-  return { token: body.data.token, userId: body.data.user.id };
-}
 
 // ─── Shared response shape types ─────────────────────────────────────────────
 
@@ -416,7 +396,7 @@ test('soft-deleted contact is excluded from GET /contacts list but remains acces
 // ── Merge: source response body returns target contact ────────────────────────
 
 test('merge response body contains target contact id and active status', async ({ request }) => {
-  const { token } = await registerOrg(request, 'merge-response-body');
+  const { token } = await registerVerifiedOrg(request, 'merge-response-body');
 
   const tRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: `Bearer ${token}` },
@@ -451,7 +431,7 @@ test.describe('Merge re-associates multiple tasks (self-contained)', () => {
   const TASK_TITLES = ['MultiMergeTask-X', 'MultiMergeTask-Y', 'MultiMergeTask-Z'];
 
   test.beforeAll(async ({ request }) => {
-    ({ token, userId } = await registerOrg(request, 'merge-multi-tasks'));
+    ({ token, userId } = await registerVerifiedOrg(request, 'merge-multi-tasks'));
 
     const tRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -514,7 +494,7 @@ test.describe('Merge re-associates messages from source to target', () => {
   let sourceId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'merge-msgs'));
+    ({ token } = await registerVerifiedOrg(request, 'merge-msgs'));
 
     const tRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -578,7 +558,7 @@ test.describe('Merge re-associates deals from source to target', () => {
   let stageId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'merge-deals'));
+    ({ token } = await registerVerifiedOrg(request, 'merge-deals'));
 
     const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
       headers: { Authorization: `Bearer ${token}` },
@@ -653,7 +633,7 @@ test.describe('Sequential merges: multiple sources into one target', () => {
   let sourceBId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token, userId } = await registerOrg(request, 'multi-merge'));
+    ({ token, userId } = await registerVerifiedOrg(request, 'multi-merge'));
 
     const tRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -728,7 +708,7 @@ test.describe('Merge changes target updated_at', () => {
   let updatedAtBefore: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'merge-timestamp'));
+    ({ token } = await registerVerifiedOrg(request, 'merge-timestamp'));
 
     const tRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -769,7 +749,7 @@ test.describe('Sub-routes return empty arrays for fresh contacts', () => {
   let contactId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'empty-subroutes'));
+    ({ token } = await registerVerifiedOrg(request, 'empty-subroutes'));
 
     const cRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -825,7 +805,7 @@ test.describe('Tasks sub-route respects status filtering', () => {
   test.beforeAll(async ({ request }) => {
     test.setTimeout(30_000);
 
-    ({ token, userId } = await registerOrg(request, 'task-status'));
+    ({ token, userId } = await registerVerifiedOrg(request, 'task-status'));
 
     const cRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -913,7 +893,7 @@ test.describe('PATCH contact field mutations', () => {
   let contactId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token, userId } = await registerOrg(request, 'patch-mutations'));
+    ({ token, userId } = await registerVerifiedOrg(request, 'patch-mutations'));
 
     // Register a second user in the same org is not straightforward without
     // an invite flow; instead we test assigned_to using the same userId
@@ -1015,7 +995,7 @@ test.describe('Pagination data integrity', () => {
   const TOTAL = 7;
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'pagination'));
+    ({ token } = await registerVerifiedOrg(request, 'pagination'));
 
     for (let i = 0; i < TOTAL; i++) {
       await request.post('/api/v1/contacts', {
@@ -1096,7 +1076,7 @@ test.describe('Search (?q=) correctness', () => {
   const EMAIL_PREFIX = 'searchable';
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'search-correctness'));
+    ({ token } = await registerVerifiedOrg(request, 'search-correctness'));
 
     await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -1170,7 +1150,7 @@ test.describe('Type filter data integrity', () => {
   let partnerId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'type-filter'));
+    ({ token } = await registerVerifiedOrg(request, 'type-filter'));
 
     const lRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -1228,7 +1208,7 @@ test.describe('Status filter after archiving', () => {
   let contactId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'status-filter'));
+    ({ token } = await registerVerifiedOrg(request, 'status-filter'));
 
     const cRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -1271,7 +1251,7 @@ test.describe('Assigned_to filter returns correct subset', () => {
   let unassignedContactId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token, userId } = await registerOrg(request, 'assigned-filter'));
+    ({ token, userId } = await registerVerifiedOrg(request, 'assigned-filter'));
 
     const aRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -1341,7 +1321,7 @@ test.describe('Bulk-archive multiple contacts and verify state', () => {
   let contactIds: string[];
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'bulk-archive-integrity'));
+    ({ token } = await registerVerifiedOrg(request, 'bulk-archive-integrity'));
     contactIds = [];
 
     for (let i = 0; i < 5; i++) {
@@ -1393,7 +1373,7 @@ test.describe('Import-CSV field storage integrity', () => {
   let token: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'import-fields'));
+    ({ token } = await registerVerifiedOrg(request, 'import-fields'));
   });
 
   // Test 56
@@ -1503,7 +1483,7 @@ test.describe('Import-CSV stress: 50 rows', () => {
   const batchTag = `stress50-${Date.now()}`;
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'import-stress'));
+    ({ token } = await registerVerifiedOrg(request, 'import-stress'));
   });
 
   // Test 61
@@ -1542,7 +1522,7 @@ test.describe('Bulk-assign edge cases', () => {
   let contactIds: string[];
 
   test.beforeAll(async ({ request }) => {
-    ({ token, userId } = await registerOrg(request, 'bulk-assign-edge'));
+    ({ token, userId } = await registerVerifiedOrg(request, 'bulk-assign-edge'));
     contactIds = [];
 
     for (let i = 0; i < 3; i++) {
@@ -1602,7 +1582,7 @@ test.describe('Contacts ordered by created_at desc', () => {
   let olderContactId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'ordering'));
+    ({ token } = await registerVerifiedOrg(request, 'ordering'));
 
     const r1 = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -1640,7 +1620,7 @@ test.describe('Activity feed item types coverage', () => {
   let contactId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token, userId } = await registerOrg(request, 'activity-types'));
+    ({ token, userId } = await registerVerifiedOrg(request, 'activity-types'));
 
     const cRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -1694,7 +1674,7 @@ test.describe('Rejecting null contact assignment', () => {
   let contactId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token, userId } = await registerOrg(request, 'unassign'));
+    ({ token, userId } = await registerVerifiedOrg(request, 'unassign'));
 
     const cRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -1741,7 +1721,7 @@ test.describe('Archived source contact sub-routes remain accessible', () => {
   let sourceDealId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token, userId } = await registerOrg(request, 'archived-subroutes'));
+    ({ token, userId } = await registerVerifiedOrg(request, 'archived-subroutes'));
 
     const tRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -1798,7 +1778,7 @@ test.describe('GET contact after DELETE shows archived status', () => {
   let contactId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'get-after-delete'));
+    ({ token } = await registerVerifiedOrg(request, 'get-after-delete'));
 
     const cRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -1830,7 +1810,7 @@ test.describe('Full-featured contact: PATCH rejects null optional fields', () =>
   let contactId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token } = await registerOrg(request, 'full-patch'));
+    ({ token } = await registerVerifiedOrg(request, 'full-patch'));
 
     const cRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${token}` },
@@ -1896,8 +1876,8 @@ test.describe('Bulk-archive is transactional on cross-org ids', () => {
   let orgBContactId: string;
 
   test.beforeAll(async ({ request }) => {
-    ({ token: tokenA } = await registerOrg(request, 'bulk-txn-orgA'));
-    ({ token: tokenB } = await registerOrg(request, 'bulk-txn-orgB'));
+    ({ token: tokenA } = await registerVerifiedOrg(request, 'bulk-txn-orgA'));
+    ({ token: tokenB } = await registerVerifiedOrg(request, 'bulk-txn-orgB'));
 
     const aRes = await request.post('/api/v1/contacts', {
       headers: { Authorization: `Bearer ${tokenA}` },

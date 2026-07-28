@@ -1,5 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
@@ -30,10 +30,8 @@ async function getPipelineAndStage(
   return { pipelineId: def.id, stageId: def.stages[0].id, stages: def.stages };
 }
 test('contact merge re-points calendarEvent.contact_id to target — meeting appears in target activity feed', async ({ request }) => {
-  const email = 'merge-cal-' + Date.now() + '@test.com';
-  const regRes = await request.post('/api/v1/auth/', { data: { email, password: 'Test1234!', name: 'MergeCal', org_name: 'MergeCal Org' } });
-  expect(regRes.status()).toBe(201);
-  const freshToken: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'merge-cal', { name: 'MergeCal', orgName: 'MergeCal Org' });
+  const freshToken: string = org.token;
 
   const sourceRes = await request.post('/api/v1/contacts', { headers: { Authorization: 'Bearer ' + freshToken }, data: { first_name: 'CalSource' } });
   const targetRes = await request.post('/api/v1/contacts', { headers: { Authorization: 'Bearer ' + freshToken }, data: { first_name: 'CalTarget' } });
@@ -58,12 +56,9 @@ test('contact merge re-points calendarEvent.contact_id to target — meeting app
 });
 
 test('cancelled task due today is absent from GET /api/v1/tasks/today', async ({ request }) => {
-  const email = 'cancel-today-' + Date.now() + '@test.com';
-  const regRes = await request.post('/api/v1/auth/', { data: { email, password: 'Test1234!', name: 'CancelToday', org_name: 'CancelToday Org' } });
-  expect(regRes.status()).toBe(201);
-  const regBody = await regRes.json();
-  const freshToken: string = regBody.data.token;
-  const userId: string = regBody.data.user.id;
+  const org = await registerVerifiedOrg(request, 'cancel-today', { name: 'CancelToday', orgName: 'CancelToday Org' });
+  const freshToken: string = org.token;
+  const userId: string = org.userId;
 
   const createRes = await request.post('/api/v1/tasks', { headers: { Authorization: 'Bearer ' + freshToken }, data: { title: 'Cancel Today Task', assigned_to: userId, due_date: todayNoonUTC() } });
   expect(createRes.status()).toBe(201);
@@ -80,12 +75,9 @@ test('cancelled task due today is absent from GET /api/v1/tasks/today', async ({
 });
 
 test('GET /api/v1/contacts/:id/tasks excludes cancelled task linked to that contact', async ({ request }) => {
-  const email = 'contact-cancel-' + Date.now() + '@test.com';
-  const regRes = await request.post('/api/v1/auth/', { data: { email, password: 'Test1234!', name: 'ContactCancel', org_name: 'ContactCancel Org' } });
-  expect(regRes.status()).toBe(201);
-  const regBody = await regRes.json();
-  const freshToken: string = regBody.data.token;
-  const userId: string = regBody.data.user.id;
+  const org = await registerVerifiedOrg(request, 'contact-cancel', { name: 'ContactCancel', orgName: 'ContactCancel Org' });
+  const freshToken: string = org.token;
+  const userId: string = org.userId;
 
   const contactRes = await request.post('/api/v1/contacts', { headers: { Authorization: 'Bearer ' + freshToken }, data: { first_name: 'TaskedContact' } });
   const contactId: string = (await contactRes.json()).data.id;
@@ -254,17 +246,8 @@ test('malformed Bearer token (non-JWT string) on protected endpoint returns 401 
   expect((body.message as string).length).toBeGreaterThan(0);
 });
 
-async function registerOrg(request: APIRequestContext, suffix = '') {
-  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}${suffix}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
-  });
-  const body = await res.json();
-  return { token: body.data.token, userId: body.data.user.id };
-}
-
 test('POST /api/v1/tasks/:id/cancel on done task succeeds and sets status=cancelled (no done guard)', async ({ request }) => {
-  const { token, userId } = await registerOrg(request, 'cancelDone');
+  const { token, userId } = await registerVerifiedOrg(request, 'cancelDone');
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: 'Bearer ' + token },
     data: { title: 'Cancel Done Task', assigned_to: userId },
@@ -286,7 +269,7 @@ test('POST /api/v1/tasks/:id/cancel on done task succeeds and sets status=cancel
 });
 
 test('cancelled task GET readback shows status=cancelled', async ({ request }) => {
-  const { token, userId } = await registerOrg(request, 'cancelRead');
+  const { token, userId } = await registerVerifiedOrg(request, 'cancelRead');
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: 'Bearer ' + token },
     data: { title: 'Readback Cancel Task', assigned_to: userId },
@@ -305,7 +288,7 @@ test('cancelled task GET readback shows status=cancelled', async ({ request }) =
 });
 
 test('POST /api/v1/tasks/:id/complete on in_progress task succeeds and sets status=done', async ({ request }) => {
-  const { token, userId } = await registerOrg(request, 'completeInProg');
+  const { token, userId } = await registerVerifiedOrg(request, 'completeInProg');
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: 'Bearer ' + token },
     data: { title: 'In Progress Complete Task', assigned_to: userId },
@@ -329,7 +312,7 @@ test('POST /api/v1/tasks/:id/complete on in_progress task succeeds and sets stat
 });
 
 test('task created with priority=high reads back with priority=high', async ({ request }) => {
-  const { token, userId } = await registerOrg(request, 'priority');
+  const { token, userId } = await registerVerifiedOrg(request, 'priority');
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: 'Bearer ' + token },
     data: { title: 'High Priority Task', assigned_to: userId, priority: 'high' },
@@ -346,7 +329,7 @@ test('task created with priority=high reads back with priority=high', async ({ r
 });
 
 test('POST /api/v1/calendar creates event and GET readback confirms all fields', async ({ request }) => {
-  const { token } = await registerOrg(request, 'calCreate');
+  const { token } = await registerVerifiedOrg(request, 'calCreate');
   const start = futureTime(2);
   const end = futureTime(3);
   const createRes = await request.post('/api/v1/calendar', {
@@ -369,7 +352,7 @@ test('POST /api/v1/calendar creates event and GET readback confirms all fields',
 });
 
 test('PATCH /api/v1/calendar/:id updates title and readback confirms new value', async ({ request }) => {
-  const { token } = await registerOrg(request, 'calPatch');
+  const { token } = await registerVerifiedOrg(request, 'calPatch');
   const createRes = await request.post('/api/v1/calendar', {
     headers: { Authorization: 'Bearer ' + token },
     data: { title: 'Original Title', start_time: futureTime(1), end_time: futureTime(2) },
@@ -391,7 +374,7 @@ test('PATCH /api/v1/calendar/:id updates title and readback confirms new value',
 });
 
 test('DELETE /api/v1/calendar/:id cancels event and readback shows status=cancelled', async ({ request }) => {
-  const { token } = await registerOrg(request, 'calDelete');
+  const { token } = await registerVerifiedOrg(request, 'calDelete');
   const createRes = await request.post('/api/v1/calendar', {
     headers: { Authorization: 'Bearer ' + token },
     data: { title: 'To Be Cancelled', start_time: futureTime(1), end_time: futureTime(2) },
@@ -412,7 +395,7 @@ test('DELETE /api/v1/calendar/:id cancels event and readback shows status=cancel
 });
 
 test('POST /api/v1/messages/in-app creates in-app message and GET /messages?contact_id= returns it', async ({ request }) => {
-  const { token } = await registerOrg(request, 'msgInApp');
+  const { token } = await registerVerifiedOrg(request, 'msgInApp');
   const contactRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: 'Bearer ' + token },
     data: { first_name: 'MsgContact' },
@@ -437,7 +420,7 @@ test('POST /api/v1/messages/in-app creates in-app message and GET /messages?cont
 });
 
 test('POST /api/v1/messages/call creates a call log entry for the contact', async ({ request }) => {
-  const { token } = await registerOrg(request, 'msgCall');
+  const { token } = await registerVerifiedOrg(request, 'msgCall');
   const contactRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: 'Bearer ' + token },
     data: { first_name: 'CallContact' },
@@ -456,7 +439,7 @@ test('POST /api/v1/messages/call creates a call log entry for the contact', asyn
 });
 
 test('GET /api/v1/analytics/funnel returns data with stages array', async ({ request }) => {
-  const { token } = await registerOrg(request, 'funnel');
+  const { token } = await registerVerifiedOrg(request, 'funnel');
 
   const res = await request.get('/api/v1/analytics/funnel', {
     headers: { Authorization: 'Bearer ' + token },
@@ -469,7 +452,7 @@ test('GET /api/v1/analytics/funnel returns data with stages array', async ({ req
 });
 
 test('GET /api/v1/contacts?assigned_to=<userId> returns only contacts assigned to that user', async ({ request }) => {
-  const { token, userId } = await registerOrg(request, 'assignedContacts');
+  const { token, userId } = await registerVerifiedOrg(request, 'assignedContacts');
 
   await request.post('/api/v1/contacts', {
     headers: { Authorization: 'Bearer ' + token },
@@ -494,7 +477,7 @@ test('GET /api/v1/contacts?assigned_to=<userId> returns only contacts assigned t
 });
 
 test('GET /api/v1/deals?assigned_to=<userId> returns only deals assigned to that user', async ({ request }) => {
-  const { token, userId } = await registerOrg(request, 'assignedDeals');
+  const { token, userId } = await registerVerifiedOrg(request, 'assignedDeals');
   const { pipelineId, stageId } = await getPipelineAndStage(request, token);
 
   const contactRes = await request.post('/api/v1/contacts', {

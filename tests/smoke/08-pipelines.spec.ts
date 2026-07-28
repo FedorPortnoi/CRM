@@ -1,5 +1,5 @@
-import { test, expect, APIRequestContext } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { test, expect } from '@playwright/test';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
@@ -107,26 +107,8 @@ test('DELETE /api/v1/deals/pipelines/:id deletes empty pipeline', async ({ reque
 });
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
-
-interface OrgAuth {
-  token: string;
-  userId: string;
-}
-
-async function registerOrg(request: APIRequestContext, tag: string): Promise<OrgAuth> {
-  const suffix = Date.now() + '-' + Math.floor(Math.random() * 1e6);
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${tag}-${suffix}@test.com`,
-      password: 'Test1234!',
-      name: `${tag} User`,
-      org_name: `${tag} Org ${suffix}`,
-    },
-  });
-  if (res.status() !== 201) throw new Error(`registerOrg(${tag}) failed: ${res.status()}`);
-  const body = await res.json();
-  return { token: body.data.token, userId: body.data.user.id };
-}
+// Orgs are registered through the shared registerVerifiedOrg helper: registration now
+// issues an email OTP instead of a token, so the session comes from the login it performs.
 
 interface PipelineDetail {
   id: string;
@@ -153,7 +135,7 @@ test('GET /api/v1/deals/pipelines without auth returns 401', async ({ request })
 // ─── Test 2: GET /deals/pipelines/:id returns full pipeline shape ─────────────
 
 test('GET /api/v1/deals/pipelines/:id returns pipeline with id, name, is_default and stages array', async ({ request }) => {
-  const { token } = await registerOrg(request, 'get-pipeline-shape');
+  const { token } = await registerVerifiedOrg(request, 'get-pipeline-shape');
 
   const createRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + token },
@@ -192,8 +174,8 @@ test('GET /api/v1/deals/pipelines/:id with non-existent id returns 404 PIPELINE_
 
 test('cross-org: Org B cannot GET Org A pipeline by id — returns 404', async ({ request }) => {
   const suffix = Date.now() + Math.floor(Math.random() * 1e6);
-  const orgA = await registerOrg(request, 'get-xorg-a-' + suffix);
-  const orgB = await registerOrg(request, 'get-xorg-b-' + suffix);
+  const orgA = await registerVerifiedOrg(request, 'get-xorg-a-' + suffix);
+  const orgB = await registerVerifiedOrg(request, 'get-xorg-b-' + suffix);
 
   const createRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + orgA.token },
@@ -212,8 +194,8 @@ test('cross-org: Org B cannot GET Org A pipeline by id — returns 404', async (
 
 test('cross-org: Org B GET /deals/pipelines does not include Org A pipelines', async ({ request }) => {
   const suffix = Date.now() + Math.floor(Math.random() * 1e6);
-  const orgA = await registerOrg(request, 'list-xorg-a-' + suffix);
-  const orgB = await registerOrg(request, 'list-xorg-b-' + suffix);
+  const orgA = await registerVerifiedOrg(request, 'list-xorg-a-' + suffix);
+  const orgB = await registerVerifiedOrg(request, 'list-xorg-b-' + suffix);
 
   const createRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + orgA.token },
@@ -234,7 +216,7 @@ test('cross-org: Org B GET /deals/pipelines does not include Org A pipelines', a
 // ─── Test 6: POST pipeline with is_default=true sets new pipeline as default ──
 
 test('POST pipeline with is_default=true sets the new pipeline as default', async ({ request }) => {
-  const { token } = await registerOrg(request, 'post-default');
+  const { token } = await registerVerifiedOrg(request, 'post-default');
 
   const createRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + token },
@@ -254,7 +236,7 @@ test('POST pipeline with is_default=true sets the new pipeline as default', asyn
 // ─── Test 7: POST is_default=true unsets the previous default ─────────────────
 
 test('POST pipeline with is_default=true unsets the previous default pipeline', async ({ request }) => {
-  const { token } = await registerOrg(request, 'post-unset-default');
+  const { token } = await registerVerifiedOrg(request, 'post-unset-default');
 
   // The new org will have a seeded default — grab it
   const listRes = await request.get('/api/v1/deals/pipelines', {
@@ -284,7 +266,7 @@ test('POST pipeline with is_default=true unsets the previous default pipeline', 
 // ─── Test 8: Two pipelines — default appears first in list ────────────────────
 
 test('GET /deals/pipelines returns both pipelines and default appears first', async ({ request }) => {
-  const { token } = await registerOrg(request, 'list-order');
+  const { token } = await registerVerifiedOrg(request, 'list-order');
 
   const nonDefaultRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + token },
@@ -305,7 +287,7 @@ test('GET /deals/pipelines returns both pipelines and default appears first', as
 // ─── Test 9: PATCH is_default=true sets it as default and unsets others ───────
 
 test('PATCH pipeline with is_default=true sets it as default and unsets other defaults', async ({ request }) => {
-  const { token } = await registerOrg(request, 'patch-default');
+  const { token } = await registerVerifiedOrg(request, 'patch-default');
 
   // Grab current default (seeded by org registration)
   const listRes = await request.get('/api/v1/deals/pipelines', {
@@ -354,8 +336,8 @@ test('PATCH /api/v1/deals/pipelines/:id with unknown id returns 404 PIPELINE_NOT
 
 test('cross-org: Org B cannot PATCH Org A pipeline — returns 404', async ({ request }) => {
   const suffix = Date.now() + Math.floor(Math.random() * 1e6);
-  const orgA = await registerOrg(request, 'patch-xorg-a-' + suffix);
-  const orgB = await registerOrg(request, 'patch-xorg-b-' + suffix);
+  const orgA = await registerVerifiedOrg(request, 'patch-xorg-a-' + suffix);
+  const orgB = await registerVerifiedOrg(request, 'patch-xorg-b-' + suffix);
 
   const createRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + orgA.token },
@@ -375,8 +357,8 @@ test('cross-org: Org B cannot PATCH Org A pipeline — returns 404', async ({ re
 
 test('cross-org: Org B cannot DELETE Org A pipeline — returns 404', async ({ request }) => {
   const suffix = Date.now() + Math.floor(Math.random() * 1e6);
-  const orgA = await registerOrg(request, 'del-xorg-a-' + suffix);
-  const orgB = await registerOrg(request, 'del-xorg-b-' + suffix);
+  const orgA = await registerVerifiedOrg(request, 'del-xorg-a-' + suffix);
+  const orgB = await registerVerifiedOrg(request, 'del-xorg-b-' + suffix);
 
   const createRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + orgA.token },
@@ -394,7 +376,7 @@ test('cross-org: Org B cannot DELETE Org A pipeline — returns 404', async ({ r
 // ─── Test 13: DELETE pipeline with won deals succeeds ─────────────────────────
 
 test('DELETE pipeline succeeds when it only contains won (non-open) deals', async ({ request }) => {
-  const { token } = await registerOrg(request, 'del-won-deals');
+  const { token } = await registerVerifiedOrg(request, 'del-won-deals');
 
   const plRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + token },
@@ -439,7 +421,7 @@ test('DELETE pipeline succeeds when it only contains won (non-open) deals', asyn
 // ─── Test 14: DELETE pipeline with lost deals succeeds ────────────────────────
 
 test('DELETE pipeline succeeds when it only contains lost (non-open) deals', async ({ request }) => {
-  const { token } = await registerOrg(request, 'del-lost-deals');
+  const { token } = await registerVerifiedOrg(request, 'del-lost-deals');
 
   const plRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + token },
@@ -483,7 +465,7 @@ test('DELETE pipeline succeeds when it only contains lost (non-open) deals', asy
 // ─── Test 15: DELETE pipeline with archived deals succeeds ────────────────────
 
 test('DELETE pipeline succeeds when it only contains archived deals', async ({ request }) => {
-  const { token } = await registerOrg(request, 'del-archived-deals');
+  const { token } = await registerVerifiedOrg(request, 'del-archived-deals');
 
   const plRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + token },
@@ -527,7 +509,7 @@ test('DELETE pipeline succeeds when it only contains archived deals', async ({ r
 // ─── Test 16: GET /deals/pipelines/:id/stages — ascending position order ──────
 
 test('GET /api/v1/deals/pipelines/:id/stages returns stages in ascending position order', async ({ request }) => {
-  const { token } = await registerOrg(request, 'stages-order');
+  const { token } = await registerVerifiedOrg(request, 'stages-order');
 
   const plRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + token },
@@ -569,7 +551,7 @@ test('GET /api/v1/deals/pipelines/:id/stages for non-existent pipeline returns 4
 // ─── Test 18: POST stage — position field stored correctly on readback ─────────
 
 test('POST stage position field is stored correctly and returned on readback', async ({ request }) => {
-  const { token } = await registerOrg(request, 'stage-position-readback');
+  const { token } = await registerVerifiedOrg(request, 'stage-position-readback');
 
   const plRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + token },
@@ -590,7 +572,7 @@ test('POST stage position field is stored correctly and returned on readback', a
 // ─── Test 19: PATCH /deals/stages/:id updates stage name ──────────────────────
 
 test('PATCH /api/v1/deals/stages/:id updates the stage name', async ({ request }) => {
-  const { token } = await registerOrg(request, 'patch-stage-name');
+  const { token } = await registerVerifiedOrg(request, 'patch-stage-name');
 
   const plRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + token },
@@ -630,8 +612,8 @@ test('PATCH /api/v1/deals/stages/:id with unknown id returns 404', async ({ requ
 
 test('cross-org: Org B cannot PATCH Org A stage — returns 404', async ({ request }) => {
   const suffix = Date.now() + Math.floor(Math.random() * 1e6);
-  const orgA = await registerOrg(request, 'stage-xorg-a-' + suffix);
-  const orgB = await registerOrg(request, 'stage-xorg-b-' + suffix);
+  const orgA = await registerVerifiedOrg(request, 'stage-xorg-a-' + suffix);
+  const orgB = await registerVerifiedOrg(request, 'stage-xorg-b-' + suffix);
 
   const plRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + orgA.token },
@@ -657,7 +639,7 @@ test('cross-org: Org B cannot PATCH Org A stage — returns 404', async ({ reque
 // ─── Test 22: Default pipeline with no open deals can be deleted ──────────────
 
 test('default pipeline with no open deals can be deleted successfully', async ({ request }) => {
-  const { token } = await registerOrg(request, 'del-default-pipeline');
+  const { token } = await registerVerifiedOrg(request, 'del-default-pipeline');
 
   const listRes = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + token },
@@ -684,7 +666,7 @@ test('default pipeline with no open deals can be deleted successfully', async ({
 // ─── Test 23: Pipeline list includes _count.deals field ──────────────────────
 
 test('GET /api/v1/deals/pipelines pipeline entries include a _count.deals field', async ({ request }) => {
-  const { token } = await registerOrg(request, 'pipeline-count');
+  const { token } = await registerVerifiedOrg(request, 'pipeline-count');
 
   const res = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + token },
@@ -702,7 +684,7 @@ test('GET /api/v1/deals/pipelines pipeline entries include a _count.deals field'
 // ─── Test 24: Concurrent pipeline creation — both get unique IDs ──────────────
 
 test('concurrent pipeline creation gives each pipeline a unique id without blocking', async ({ request }) => {
-  const { token } = await registerOrg(request, 'concurrent-pipelines');
+  const { token } = await registerVerifiedOrg(request, 'concurrent-pipelines');
   const suffix = Date.now() + Math.floor(Math.random() * 1e6);
 
   const [resA, resB] = await Promise.all([

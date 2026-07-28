@@ -1,15 +1,11 @@
 import { test, expect } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
 import { randomUUID } from 'crypto';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
 // -- Interfaces ----------------------------------------------------------------
-interface RegisterResponse {
-  data: { token: string; user: { id: string } };
-}
-
 interface AuthOrg {
   token: string;
   userId: string;
@@ -103,21 +99,6 @@ function uniqueSuffix(prefix: string): string {
 
 function daysFromNow(days: number): string {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
-}
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<AuthOrg> {
-  const unique = uniqueSuffix(suffix);
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = (await res.json()) as RegisterResponse;
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 async function createContact(
@@ -227,7 +208,7 @@ test('G3: POST /api/v1/notifications/send without title returns 400', async ({ r
 });
 
 test('G3b: notifications/register is idempotent for the same Expo token', async ({ request }) => {
-  const org = await registerOrg(request, 'g3b-push-idempotent');
+  const org = await registerVerifiedOrg(request, 'g3b-push-idempotent');
   const tokenValue = `ExponentPushToken[${randomUUID()}]`;
 
   const first = await request.post('/api/v1/notifications/register', {
@@ -249,7 +230,7 @@ test('G3b: notifications/register is idempotent for the same Expo token', async 
 });
 
 test('G3c: notifications/send returns stable no-recipient error when user has no push token', async ({ request }) => {
-  const org = await registerOrg(request, 'g3c-no-push-token');
+  const org = await registerVerifiedOrg(request, 'g3c-no-push-token');
 
   const res = await request.post('/api/v1/notifications/send', {
     headers: authHeaders(org.token),
@@ -262,8 +243,8 @@ test('G3c: notifications/send returns stable no-recipient error when user has no
 });
 
 test('G3d: notifications/send rejects cross-org user_id', async ({ request }) => {
-  const orgA = await registerOrg(request, 'g3d-push-org-a');
-  const orgB = await registerOrg(request, 'g3d-push-org-b');
+  const orgA = await registerVerifiedOrg(request, 'g3d-push-org-a');
+  const orgB = await registerVerifiedOrg(request, 'g3d-push-org-b');
 
   const res = await request.post('/api/v1/notifications/send', {
     headers: authHeaders(orgA.token),
@@ -276,7 +257,7 @@ test('G3d: notifications/send rejects cross-org user_id', async ({ request }) =>
 });
 
 test('G5: GET /api/v1/tasks?due_before returns tasks before the ISO cutoff only', async ({ request }) => {
-  const org = await registerOrg(request, 'g5-due-before');
+  const org = await registerVerifiedOrg(request, 'g5-due-before');
   const tomorrowDue = daysFromNow(1);
   const futureDue = daysFromNow(10);
   const cutoffDue = daysFromNow(5);
@@ -296,7 +277,7 @@ test('G5: GET /api/v1/tasks?due_before returns tasks before the ISO cutoff only'
 });
 
 test('G6: GET /api/v1/deals?status=lost returns only deals marked lost', async ({ request }) => {
-  const org = await registerOrg(request, 'g6-lost-deals');
+  const org = await registerVerifiedOrg(request, 'g6-lost-deals');
   const contact = await createContact(request, org.token, 'G6 Deal Contact');
   const pipeline = await getDefaultPipeline(request, org.token);
   const stageId = pipeline.stages[0].id;
@@ -322,7 +303,7 @@ test('G6: GET /api/v1/deals?status=lost returns only deals marked lost', async (
 });
 
 test('G7: GET /api/v1/tasks?status=in_progress returns only started in-progress tasks', async ({ request }) => {
-  const org = await registerOrg(request, 'g7-in-progress');
+  const org = await registerVerifiedOrg(request, 'g7-in-progress');
   const startedTask = await createTask(request, org, 'G7 Started Task');
   const pendingTask = await createTask(request, org, 'G7 Pending Task');
 
@@ -344,8 +325,8 @@ test('G7: GET /api/v1/tasks?status=in_progress returns only started in-progress 
 });
 
 test('G8: POST /api/v1/contacts/bulk-archive with only another-org contact_id returns 404 NOT_FOUND', async ({ request }) => {
-  const orgA = await registerOrg(request, 'g8-org-a');
-  const orgB = await registerOrg(request, 'g8-org-b');
+  const orgA = await registerVerifiedOrg(request, 'g8-org-a');
+  const orgB = await registerVerifiedOrg(request, 'g8-org-b');
   const otherOrgContact = await createContact(request, orgB.token, 'G8 Other Org Contact');
 
   const res = await request.post('/api/v1/contacts/bulk-archive', {
@@ -359,7 +340,7 @@ test('G8: POST /api/v1/contacts/bulk-archive with only another-org contact_id re
 });
 
 test('G9: GET /api/v1/contacts?type=customer&status=active applies both filters together', async ({ request }) => {
-  const org = await registerOrg(request, 'g9-type-status');
+  const org = await registerVerifiedOrg(request, 'g9-type-status');
   const activeCustomer = await createContact(request, org.token, 'G9 Active Customer', 'customer');
   const activeLead = await createContact(request, org.token, 'G9 Active Lead', 'lead');
   const archivedCustomer = await createContact(request, org.token, 'G9 Archived Customer', 'customer');
@@ -383,8 +364,8 @@ test('G9: GET /api/v1/contacts?type=customer&status=active applies both filters 
 });
 
 test('G10: GET /api/v1/tasks?assigned_to returns only tasks assigned to that user', async ({ request }) => {
-  const orgA = await registerOrg(request, 'g10-org-a');
-  const orgB = await registerOrg(request, 'g10-org-b');
+  const orgA = await registerVerifiedOrg(request, 'g10-org-a');
+  const orgB = await registerVerifiedOrg(request, 'g10-org-b');
   const userATask = await createTask(request, orgA, 'G10 User A Task');
 
   const userARes = await request.get(`/api/v1/tasks?assigned_to=${orgA.userId}`, {
@@ -435,7 +416,7 @@ test('G12: POST /api/v1/calendar with end_time not after start_time returns 400'
 });
 
 test('G13: POST /api/v1/notifications/send with body="" returns 400 before push token lookup', async ({ request }) => {
-  const org = await registerOrg(request, 'g13-empty-notification-body');
+  const org = await registerVerifiedOrg(request, 'g13-empty-notification-body');
 
   const res = await request.post('/api/v1/notifications/send', {
     headers: authHeaders(org.token),
@@ -452,7 +433,7 @@ test('G13: POST /api/v1/notifications/send with body="" returns 400 before push 
 test('G14: POST /api/v1/contacts/bulk-assign with 101 contact_ids returns 400 (BulkAssignSchema max(100))', async ({
   request,
 }) => {
-  const org = await registerOrg(request, 'g14-bulk-assign-max');
+  const org = await registerVerifiedOrg(request, 'g14-bulk-assign-max');
   const contactIds = Array.from({ length: 101 }, () => randomUUID());
 
   const res = await request.post('/api/v1/contacts/bulk-assign', {
@@ -466,7 +447,7 @@ test('G14: POST /api/v1/contacts/bulk-assign with 101 contact_ids returns 400 (B
 test('G15: POST /api/v1/contacts/bulk-archive rejects an already archived id and preserves active contacts', async ({
   request,
 }) => {
-  const org = await registerOrg(request, 'g15-archive-archived-contact');
+  const org = await registerVerifiedOrg(request, 'g15-archive-archived-contact');
   const active = await createContact(request, org.token, 'G15 Active Contact');
   const archived = await createContact(request, org.token, 'G15 Archived Contact');
 
@@ -491,7 +472,7 @@ test('G15: POST /api/v1/contacts/bulk-archive rejects an already archived id and
 test('G16: POST /api/v1/contacts/bulk-assign rejects an archived contact id and preserves assignment state', async ({
   request,
 }) => {
-  const org = await registerOrg(request, 'g16-assign-archived-contact');
+  const org = await registerVerifiedOrg(request, 'g16-assign-archived-contact');
   const active = await createContact(request, org.token, 'G16 Active Contact');
   const archived = await createContact(request, org.token, 'G16 Archived Contact');
 
@@ -514,7 +495,7 @@ test('G16: POST /api/v1/contacts/bulk-assign rejects an archived contact id and 
 });
 
 test('G17: GET /api/v1/tasks combines q, status, and priority filters', async ({ request }) => {
-  const org = await registerOrg(request, 'g17-task-q-status-priority');
+  const org = await registerVerifiedOrg(request, 'g17-task-q-status-priority');
   const prefix = uniqueSuffix('G17TaskCombo');
   const matching = await createTask(request, org, `${prefix} Matching`, { priority: 'urgent' });
   const doneTask = await createTask(request, org, `${prefix} Done`, { priority: 'urgent' });
@@ -542,7 +523,7 @@ test('G17: GET /api/v1/tasks combines q, status, and priority filters', async ({
 });
 
 test('G18: GET /api/v1/deals combines q, contact_id, and status filters', async ({ request }) => {
-  const org = await registerOrg(request, 'g18-deal-q-contact-status');
+  const org = await registerVerifiedOrg(request, 'g18-deal-q-contact-status');
   const prefix = uniqueSuffix('G18DealCombo');
   const contact = await createContact(request, org.token, 'G18 Deal Contact');
   const otherContact = await createContact(request, org.token, 'G18 Other Deal Contact');
@@ -575,7 +556,7 @@ test('G18: GET /api/v1/deals combines q, contact_id, and status filters', async 
 test('G19: PATCH /api/v1/calendar/:id rejects start_time after the existing end_time and preserves times', async ({
   request,
 }) => {
-  const org = await registerOrg(request, 'g19-calendar-start-only-invalid');
+  const org = await registerVerifiedOrg(request, 'g19-calendar-start-only-invalid');
   const originalStart = daysFromNow(2);
   const originalEnd = daysFromNow(3);
   const event = await createCalendarEvent(request, org, 'G19 Calendar Time Guard', originalStart, originalEnd);
@@ -601,7 +582,7 @@ test('G19: PATCH /api/v1/calendar/:id rejects start_time after the existing end_
 test('G20: PATCH /api/v1/calendar/:id rejects end_time before the existing start_time and preserves times', async ({
   request,
 }) => {
-  const org = await registerOrg(request, 'g20-calendar-end-only-invalid');
+  const org = await registerVerifiedOrg(request, 'g20-calendar-end-only-invalid');
   const originalStart = daysFromNow(5);
   const originalEnd = daysFromNow(6);
   const event = await createCalendarEvent(request, org, 'G20 Calendar Time Guard', originalStart, originalEnd);

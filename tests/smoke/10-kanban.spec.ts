@@ -1,5 +1,5 @@
-import { test, expect, APIRequestContext } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { test, expect } from '@playwright/test';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
@@ -35,27 +35,9 @@ interface DealListMeta {
   per_page: number;
 }
 
-interface RegisteredOrg {
-  token: string;
-  userId: string;
-}
-
-async function registerOrg(
-  request: APIRequestContext,
-): Promise<RegisteredOrg> {
-  const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `testorg-${tag}@example.com`,
-      password: 'TestPass123!',
-      name: `Test User ${tag}`,
-      org_name: `Test Org ${tag}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = await res.json();
-  return { token: body.data.token, userId: body.data.user.id };
-}
+// Each test that needs its own tenant goes through the shared registerVerifiedOrg helper:
+// registration now returns an email-OTP challenge instead of a token, so the session token
+// comes from the login the helper performs after bypassing the OTP.
 
 test('GET /api/v1/deals/pipelines returns pipelines with nested stages', async ({ request }) => {
   const { token } = getAuth();
@@ -217,7 +199,7 @@ test('GET /api/v1/deals without auth returns 401', async ({ request }) => {
 
 // T02 — GET /deals?pipeline_id=<id> returns only deals in that pipeline
 test('GET /api/v1/deals?pipeline_id=<id> returns only deals in that pipeline', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t02');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -257,7 +239,7 @@ test('GET /api/v1/deals?pipeline_id=<id> returns only deals in that pipeline', a
 
 // T03 — GET /deals?stage_id=<id> returns only deals in that stage
 test('GET /api/v1/deals?stage_id=<id> returns only deals in that stage', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t03');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -296,7 +278,7 @@ test('GET /api/v1/deals?stage_id=<id> returns only deals in that stage', async (
 
 // T04 — GET /deals?status=won returns only won deals
 test('GET /api/v1/deals?status=won returns only won deals', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t04');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -342,7 +324,7 @@ test('GET /api/v1/deals?status=won returns only won deals', async ({ request }) 
 
 // T05 — GET /deals?status=lost returns only lost deals
 test('GET /api/v1/deals?status=lost returns only lost deals', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t05');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -388,7 +370,7 @@ test('GET /api/v1/deals?status=lost returns only lost deals', async ({ request }
 
 // T06 — Pagination: page=1 per_page=2 with 3 deals → meta.total=3, data.length=2
 test('GET /api/v1/deals pagination page=1 per_page=2 with 3 deals returns data.length=2 and meta.total>=3', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t06');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -431,7 +413,7 @@ test('GET /api/v1/deals pagination page=1 per_page=2 with 3 deals returns data.l
 
 // T07 — Pagination: page=2 per_page=2 with 3 deals → data.length=1
 test('GET /api/v1/deals pagination page=2 per_page=2 with exactly 3 deals returns data.length=1', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t07');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -478,8 +460,8 @@ test('GET /api/v1/deals pagination page=2 per_page=2 with exactly 3 deals return
 
 // T08 — Cross-org: Org B GET /deals returns no Org A deals
 test('Cross-org: Org B GET /deals returns no Org A deals', async ({ request }) => {
-  const orgA = await registerOrg(request);
-  const orgB = await registerOrg(request);
+  const orgA = await registerVerifiedOrg(request, 'kanban-t08-a');
+  const orgB = await registerVerifiedOrg(request, 'kanban-t08-b');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -517,7 +499,7 @@ test('Cross-org: Org B GET /deals returns no Org A deals', async ({ request }) =
 
 // T09 — PATCH /deals/:id/stage moves deal to last stage in pipeline
 test('PATCH /api/v1/deals/:id/stage moves deal to last stage in pipeline successfully', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t09');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -559,7 +541,7 @@ test('PATCH /api/v1/deals/:id/stage moves deal to last stage in pipeline success
 
 // T10 — PATCH /deals/:id/stage on archived deal returns 422 DEAL_NOT_OPEN
 test('PATCH /api/v1/deals/:id/stage on archived deal returns 422 DEAL_NOT_OPEN', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t10');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -603,7 +585,7 @@ test('PATCH /api/v1/deals/:id/stage on archived deal returns 422 DEAL_NOT_OPEN',
 
 // T11 — PATCH /deals/:id/stage with stage from different pipeline returns 404 STAGE_NOT_FOUND
 test('PATCH /api/v1/deals/:id/stage with stage from a different pipeline returns 404 STAGE_NOT_FOUND', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t11');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   // Create pipeline A
@@ -669,7 +651,7 @@ test('PATCH /api/v1/deals/:id/stage with stage from a different pipeline returns
 
 // T12 — Two concurrent PATCH stage moves on different deals both succeed
 test('Two concurrent PATCH stage moves on different deals in same pipeline both succeed', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t12');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -731,7 +713,7 @@ test('Two concurrent PATCH stage moves on different deals in same pipeline both 
 
 // T13 — Stage move does NOT set status=won (stage move != markWon)
 test('PATCH /api/v1/deals/:id/stage to a won stage leaves status=open (stage move != markWon)', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t13');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -776,7 +758,7 @@ test('PATCH /api/v1/deals/:id/stage to a won stage leaves status=open (stage mov
 
 // T14 — GET /deals returns deals sorted by created_at desc by default
 test('GET /api/v1/deals returns deals sorted by created_at desc by default', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t14');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -820,7 +802,7 @@ test('GET /api/v1/deals returns deals sorted by created_at desc by default', asy
 
 // T15 — POST /deals response includes nested contact, pipeline, stage objects
 test('POST /api/v1/deals response includes nested contact, pipeline, stage objects', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t15');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -857,7 +839,7 @@ test('POST /api/v1/deals response includes nested contact, pipeline, stage objec
 
 // T16 — Default list behavior: no status filter returns open-only (or verify all returned deals have a status field)
 test('GET /api/v1/deals without status filter returns deals that each have a status field', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t16');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -894,7 +876,7 @@ test('GET /api/v1/deals without status filter returns deals that each have a sta
 
 // T17 — DELETE /deals/:id archives deal, readback confirms status='archived'
 test('DELETE /api/v1/deals/:id archives deal and readback GET confirms status=archived', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t17');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -937,7 +919,7 @@ test('DELETE /api/v1/deals/:id archives deal and readback GET confirms status=ar
 
 // T18 — DELETE already-archived deal returns 422
 test('DELETE /api/v1/deals/:id on already-archived deal returns 422', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t18');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -978,7 +960,7 @@ test('DELETE /api/v1/deals/:id on already-archived deal returns 422', async ({ r
 
 // T19 — POST /deals/:id/won on open deal sets status=won and actual_close
 test('POST /api/v1/deals/:id/won on open deal sets status=won and actual_close', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t19');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -1018,7 +1000,7 @@ test('POST /api/v1/deals/:id/won on open deal sets status=won and actual_close',
 
 // T20 — POST /deals/:id/lost on open deal sets status=lost and lost_reason
 test('POST /api/v1/deals/:id/lost on open deal sets status=lost and lost_reason', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t20');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -1058,7 +1040,7 @@ test('POST /api/v1/deals/:id/lost on open deal sets status=lost and lost_reason'
 
 // T21 — PATCH stage move then verify via GET /deals/:id that stage_id matches
 test('PATCH /deals/:id/stage then GET /deals/:id confirms stage_id is updated', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t21');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -1103,7 +1085,7 @@ test('PATCH /deals/:id/stage then GET /deals/:id confirms stage_id is updated', 
 
 // T22 — GET /deals?status=open meta.total counts only open deals
 test('GET /api/v1/deals?status=open meta.total counts only open deals (excludes archived/won/lost)', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t22');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -1166,7 +1148,7 @@ test('GET /api/v1/deals?status=open meta.total counts only open deals (excludes 
 
 // T23 — GET /deals without status filter: all returned deals have a 'status' field present
 test('GET /api/v1/deals without status filter returns deals each with a non-empty status string', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t23');
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
@@ -1228,7 +1210,7 @@ test('Concurrent: two users in same org each move a different deal — both succ
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   // Register org and get token for user 1
-  const { token: token1 } = await registerOrg(request);
+  const { token: token1 } = await registerVerifiedOrg(request, 'kanban-t24');
 
   // Register a second user in the same org by re-using the same org registration is not directly
   // possible via the public API, so we use token1 for both moves (same org, different deals)
@@ -1290,7 +1272,7 @@ test('Concurrent: two users in same org each move a different deal — both succ
 
 // T25 — GET /deals?q=<title> returns only deals matching title search (case-insensitive)
 test('GET /api/v1/deals?q=<title> returns only deals matching title search (case-insensitive)', async ({ request }) => {
-  const { token } = await registerOrg(request);
+  const { token } = await registerVerifiedOrg(request, 'kanban-t25');
   const uniqueWord = `XYZFOO${Date.now()}`;
   const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 

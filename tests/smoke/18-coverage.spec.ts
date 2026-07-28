@@ -1,17 +1,9 @@
 import { APIRequestContext, APIResponse, expect, test } from '@playwright/test';
+import { registerVerifiedOrg } from './helpers/auth';
 
 interface AuthOrg {
   token: string;
   userId: string;
-}
-
-interface RegisterResponse {
-  data: {
-    token: string;
-    user: {
-      id: string;
-    };
-  };
 }
 
 interface ErrorResponse {
@@ -152,21 +144,6 @@ async function expectError(response: APIResponse, status: number, code: string):
   expect(body.error.code).toBe(code);
   expect(body.error.message.length).toBeGreaterThan(0);
   return body;
-}
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<AuthOrg> {
-  const unique = uniqueSuffix(suffix);
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = (await res.json()) as RegisterResponse;
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 async function createContact(
@@ -385,8 +362,8 @@ async function listCalendarEventsForDay(
 }
 
 test('POST /contacts with assigned_to from another org returns 403 FORBIDDEN and leaves the contact out of the requester list', async ({ request }) => {
-  const orgA = await registerOrg(request, 'contact-post-assignee-a');
-  const orgB = await registerOrg(request, 'contact-post-assignee-b');
+  const orgA = await registerVerifiedOrg(request, 'contact-post-assignee-a');
+  const orgB = await registerVerifiedOrg(request, 'contact-post-assignee-b');
   const firstName = uniqueSuffix('CrossAssignedContact');
 
   const res = await request.post('/api/v1/contacts', {
@@ -404,8 +381,8 @@ test('POST /contacts with assigned_to from another org returns 403 FORBIDDEN and
 });
 
 test('PATCH /contacts/:id with assigned_to from another org returns 403 FORBIDDEN and preserves the original assignee', async ({ request }) => {
-  const orgA = await registerOrg(request, 'contact-patch-assignee-a');
-  const orgB = await registerOrg(request, 'contact-patch-assignee-b');
+  const orgA = await registerVerifiedOrg(request, 'contact-patch-assignee-a');
+  const orgB = await registerVerifiedOrg(request, 'contact-patch-assignee-b');
   const contact = await createContact(request, orgA.token, { assigned_to: orgA.userId });
 
   const res = await request.patch(`/api/v1/contacts/${contact.id}`, {
@@ -419,7 +396,7 @@ test('PATCH /contacts/:id with assigned_to from another org returns 403 FORBIDDE
 });
 
 test('PATCH /contacts/:id clears optional text fields including email by storing empty strings', async ({ request }) => {
-  const org = await registerOrg(request, 'contact-clear-fields');
+  const org = await registerVerifiedOrg(request, 'contact-clear-fields');
   const contact = await createContact(request, org.token, {
     first_name: 'Clearable',
     last_name: 'Person',
@@ -443,7 +420,7 @@ test('PATCH /contacts/:id clears optional text fields including email by storing
 });
 
 test('PATCH /contacts/:id permits duplicate email in the same org and both contacts are searchable by that email', async ({ request }) => {
-  const org = await registerOrg(request, 'contact-patch-duplicate-email');
+  const org = await registerVerifiedOrg(request, 'contact-patch-duplicate-email');
   const email = `${uniqueSuffix('shared-email')}@example.com`;
   const first = await createContact(request, org.token, { first_name: 'DuplicatePatchA', email });
   const second = await createContact(request, org.token, {
@@ -468,7 +445,7 @@ test('PATCH /contacts/:id permits duplicate email in the same org and both conta
 });
 
 test('GET /contacts sorted by created_at desc returns the newest matching contacts first for dashboard usage', async ({ request }) => {
-  const org = await registerOrg(request, 'contact-sort-created');
+  const org = await registerVerifiedOrg(request, 'contact-sort-created');
   const prefix = uniqueSuffix('ContactSort');
   const oldest = await createContact(request, org.token, { first_name: `${prefix} Oldest` });
   await delay(50);
@@ -486,8 +463,8 @@ test('GET /contacts sorted by created_at desc returns the newest matching contac
 });
 
 test('POST /deals with contact_id from another org returns 403 FORBIDDEN and does not create the deal', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-post-contact-a');
-  const orgB = await registerOrg(request, 'deal-post-contact-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-post-contact-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-post-contact-b');
   const { pipelineId, stageId } = await getPipelineAndStage(request, orgA.token);
   const otherContact = await createContact(request, orgB.token);
   const title = uniqueSuffix('CrossOrgContactDeal');
@@ -507,8 +484,8 @@ test('POST /deals with contact_id from another org returns 403 FORBIDDEN and doe
 });
 
 test('POST /deals with pipeline_id and stage_id from another org returns 404 PIPELINE_NOT_FOUND and does not create the deal', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-post-pipeline-a');
-  const orgB = await registerOrg(request, 'deal-post-pipeline-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-post-pipeline-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-post-pipeline-b');
   const contact = await createContact(request, orgA.token);
   const otherPipeline = await getPipelineAndStage(request, orgB.token);
   const title = uniqueSuffix('CrossOrgPipelineDeal');
@@ -533,8 +510,8 @@ test('POST /deals with pipeline_id and stage_id from another org returns 404 PIP
 });
 
 test('POST /deals with assigned_to from another org returns 403 FORBIDDEN and does not create the deal', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-post-assignee-a');
-  const orgB = await registerOrg(request, 'deal-post-assignee-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-post-assignee-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-post-assignee-b');
   const { pipelineId, stageId } = await getPipelineAndStage(request, orgA.token);
   const contact = await createContact(request, orgA.token);
   const title = uniqueSuffix('CrossOrgAssigneeDeal');
@@ -560,8 +537,8 @@ test('POST /deals with assigned_to from another org returns 403 FORBIDDEN and do
 });
 
 test('PATCH /deals/:id with assigned_to from another org returns 403 FORBIDDEN and preserves the original assignee', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-patch-assignee-a');
-  const orgB = await registerOrg(request, 'deal-patch-assignee-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-patch-assignee-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-patch-assignee-b');
   const { pipelineId, stageId } = await getPipelineAndStage(request, orgA.token);
   const contact = await createContact(request, orgA.token);
   const deal = await createDeal(request, orgA.token, {
@@ -582,7 +559,7 @@ test('PATCH /deals/:id with assigned_to from another org returns 403 FORBIDDEN a
 });
 
 test('PATCH /deals/:id changing pipeline_id and stage_id together succeeds when the stage belongs to the new pipeline', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-patch-pipeline-stage');
+  const org = await registerVerifiedOrg(request, 'deal-patch-pipeline-stage');
   const originalPipeline = await getPipelineAndStage(request, org.token);
   const nextPipeline = await createPipelineWithStage(request, org.token, 'Next Pipeline');
   const contact = await createContact(request, org.token);
@@ -605,7 +582,7 @@ test('PATCH /deals/:id changing pipeline_id and stage_id together succeeds when 
 });
 
 test('PATCH /deals/:id changing pipeline_id without a matching stage_id returns STAGE_PIPELINE_MISMATCH and preserves pipeline and stage', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-patch-pipeline-only');
+  const org = await registerVerifiedOrg(request, 'deal-patch-pipeline-only');
   const originalPipeline = await getPipelineAndStage(request, org.token);
   const nextPipeline = await createPipelineWithStage(request, org.token, 'Pipeline Only Target');
   const contact = await createContact(request, org.token);
@@ -627,8 +604,8 @@ test('PATCH /deals/:id changing pipeline_id without a matching stage_id returns 
 });
 
 test('PATCH /deals/:id with contact_id from another org returns 403 FORBIDDEN and preserves the existing contact', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-patch-contact-a');
-  const orgB = await registerOrg(request, 'deal-patch-contact-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-patch-contact-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-patch-contact-b');
   const { pipelineId, stageId } = await getPipelineAndStage(request, orgA.token);
   const originalContact = await createContact(request, orgA.token);
   const otherContact = await createContact(request, orgB.token);
@@ -650,8 +627,8 @@ test('PATCH /deals/:id with contact_id from another org returns 403 FORBIDDEN an
 });
 
 test('PATCH /deals/:id with pipeline_id from another org returns 404 PIPELINE_NOT_FOUND and preserves pipeline and stage', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-patch-pipeline-a');
-  const orgB = await registerOrg(request, 'deal-patch-pipeline-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-patch-pipeline-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-patch-pipeline-b');
   const originalPipeline = await getPipelineAndStage(request, orgA.token);
   const otherPipeline = await getPipelineAndStage(request, orgB.token);
   const contact = await createContact(request, orgA.token);
@@ -673,8 +650,8 @@ test('PATCH /deals/:id with pipeline_id from another org returns 404 PIPELINE_NO
 });
 
 test('POST /tasks with deal_id from another org returns 403 FORBIDDEN and does not create the task', async ({ request }) => {
-  const orgA = await registerOrg(request, 'task-post-deal-a');
-  const orgB = await registerOrg(request, 'task-post-deal-b');
+  const orgA = await registerVerifiedOrg(request, 'task-post-deal-a');
+  const orgB = await registerVerifiedOrg(request, 'task-post-deal-b');
   const otherDeal = await createBasicDealForOrg(request, orgB, 'Other Org Task Deal');
   const title = uniqueSuffix('CrossOrgDealTask');
 
@@ -693,8 +670,8 @@ test('POST /tasks with deal_id from another org returns 403 FORBIDDEN and does n
 });
 
 test('PATCH /tasks/:id rejects cross-org assigned_to, contact_id, and deal_id with 403 FORBIDDEN and preserves original task relations', async ({ request }) => {
-  const orgA = await registerOrg(request, 'task-patch-rel-a');
-  const orgB = await registerOrg(request, 'task-patch-rel-b');
+  const orgA = await registerVerifiedOrg(request, 'task-patch-rel-a');
+  const orgB = await registerVerifiedOrg(request, 'task-patch-rel-b');
   const originalDeal = await createBasicDealForOrg(request, orgA, 'Original Task Deal');
   const originalContact = await getContact(request, orgA.token, originalDeal.contact_id);
   const otherContact = await createContact(request, orgB.token);
@@ -730,8 +707,8 @@ test('PATCH /tasks/:id rejects cross-org assigned_to, contact_id, and deal_id wi
 });
 
 test('POST /calendar rejects contact_id and deal_id from another org with 403 FORBIDDEN and leaves both event titles out of the requester calendar', async ({ request }) => {
-  const orgA = await registerOrg(request, 'calendar-post-rel-a');
-  const orgB = await registerOrg(request, 'calendar-post-rel-b');
+  const orgA = await registerVerifiedOrg(request, 'calendar-post-rel-a');
+  const orgB = await registerVerifiedOrg(request, 'calendar-post-rel-b');
   const otherContact = await createContact(request, orgB.token);
   const otherDeal = await createBasicDealForOrg(request, orgB, 'Other Calendar Deal');
   const contactTitle = uniqueSuffix('CrossOrgContactEvent');
@@ -766,8 +743,8 @@ test('POST /calendar rejects contact_id and deal_id from another org with 403 FO
 });
 
 test('PATCH /calendar/:id rejects cross-org contact_id and deal_id with 403 FORBIDDEN and preserves original event relations', async ({ request }) => {
-  const orgA = await registerOrg(request, 'calendar-patch-rel-a');
-  const orgB = await registerOrg(request, 'calendar-patch-rel-b');
+  const orgA = await registerVerifiedOrg(request, 'calendar-patch-rel-a');
+  const orgB = await registerVerifiedOrg(request, 'calendar-patch-rel-b');
   const originalDeal = await createBasicDealForOrg(request, orgA, 'Original Calendar Deal');
   const originalContact = await getContact(request, orgA.token, originalDeal.contact_id);
   const otherContact = await createContact(request, orgB.token);
@@ -796,7 +773,7 @@ test('PATCH /calendar/:id rejects cross-org contact_id and deal_id with 403 FORB
 });
 
 test('GET /tasks/today returns pending and in-progress tasks while excluding done and cancelled tasks due today', async ({ request }) => {
-  const org = await registerOrg(request, 'tasks-today-direct');
+  const org = await registerVerifiedOrg(request, 'tasks-today-direct');
   const dueDate = todayNoonIso();
   const pending = await createTask(request, org.token, {
     assignedTo: org.userId,
@@ -845,8 +822,8 @@ test('GET /tasks/today returns pending and in-progress tasks while excluding don
 });
 
 test('GET /analytics/dashboard keeps open deal totals and due-today task counts org-scoped when another org has noisy data', async ({ request }) => {
-  const orgA = await registerOrg(request, 'dashboard-scope-a');
-  const orgB = await registerOrg(request, 'dashboard-scope-b');
+  const orgA = await registerVerifiedOrg(request, 'dashboard-scope-a');
+  const orgB = await registerVerifiedOrg(request, 'dashboard-scope-b');
   const orgADeal = await createBasicDealForOrg(request, orgA, 'Org A Dashboard Deal', 10);
   await createTask(request, orgA.token, {
     assignedTo: orgA.userId,
@@ -873,8 +850,8 @@ test('GET /analytics/dashboard keeps open deal totals and due-today task counts 
 });
 
 test('GET /deals/:id with Org B token for Org A deal returns 404 DEAL_NOT_FOUND', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-get-xorg-a');
-  const orgB = await registerOrg(request, 'deal-get-xorg-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-get-xorg-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-get-xorg-b');
   const deal = await createBasicDealForOrg(request, orgA, 'Org A Deal Get Cross');
 
   const res = await request.get(`/api/v1/deals/${deal.id}`, {
@@ -884,8 +861,8 @@ test('GET /deals/:id with Org B token for Org A deal returns 404 DEAL_NOT_FOUND'
 });
 
 test('DELETE /deals/:id with Org B token for Org A deal returns 404 DEAL_NOT_FOUND', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-delete-xorg-a');
-  const orgB = await registerOrg(request, 'deal-delete-xorg-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-delete-xorg-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-delete-xorg-b');
   const deal = await createBasicDealForOrg(request, orgA, 'Org A Deal Delete Cross');
 
   const res = await request.delete(`/api/v1/deals/${deal.id}`, {
@@ -898,8 +875,8 @@ test('DELETE /deals/:id with Org B token for Org A deal returns 404 DEAL_NOT_FOU
 });
 
 test('PATCH /deals/:id with Org B token for Org A deal returns 404 DEAL_NOT_FOUND', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-patch-xorg-a');
-  const orgB = await registerOrg(request, 'deal-patch-xorg-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-patch-xorg-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-patch-xorg-b');
   const deal = await createBasicDealForOrg(request, orgA, 'Org A Deal Patch Cross');
 
   const res = await request.patch(`/api/v1/deals/${deal.id}`, {
@@ -913,8 +890,8 @@ test('PATCH /deals/:id with Org B token for Org A deal returns 404 DEAL_NOT_FOUN
 });
 
 test('POST /deals/:id/won with Org B token for Org A deal returns 404 DEAL_NOT_FOUND', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-won-xorg-a');
-  const orgB = await registerOrg(request, 'deal-won-xorg-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-won-xorg-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-won-xorg-b');
   const deal = await createBasicDealForOrg(request, orgA, 'Org A Deal Won Cross');
 
   const res = await request.post(`/api/v1/deals/${deal.id}/won`, {
@@ -928,8 +905,8 @@ test('POST /deals/:id/won with Org B token for Org A deal returns 404 DEAL_NOT_F
 });
 
 test('GET /tasks/:id with Org B token for Org A task returns 404 TASK_NOT_FOUND', async ({ request }) => {
-  const orgA = await registerOrg(request, 'task-get-xorg-a');
-  const orgB = await registerOrg(request, 'task-get-xorg-b');
+  const orgA = await registerVerifiedOrg(request, 'task-get-xorg-a');
+  const orgB = await registerVerifiedOrg(request, 'task-get-xorg-b');
   const task = await createTask(request, orgA.token, {
     assignedTo: orgA.userId,
     title: uniqueSuffix('OrgATaskGetCross'),
@@ -942,8 +919,8 @@ test('GET /tasks/:id with Org B token for Org A task returns 404 TASK_NOT_FOUND'
 });
 
 test('PATCH /tasks/:id with Org B token for Org A task returns 404 TASK_NOT_FOUND', async ({ request }) => {
-  const orgA = await registerOrg(request, 'task-patch-xorg-a');
-  const orgB = await registerOrg(request, 'task-patch-xorg-b');
+  const orgA = await registerVerifiedOrg(request, 'task-patch-xorg-a');
+  const orgB = await registerVerifiedOrg(request, 'task-patch-xorg-b');
   const task = await createTask(request, orgA.token, {
     assignedTo: orgA.userId,
     title: uniqueSuffix('OrgATaskPatchCross'),
@@ -960,8 +937,8 @@ test('PATCH /tasks/:id with Org B token for Org A task returns 404 TASK_NOT_FOUN
 });
 
 test('GET /calendar/:id with Org B token for Org A event returns 404', async ({ request }) => {
-  const orgA = await registerOrg(request, 'cal-get-xorg-a');
-  const orgB = await registerOrg(request, 'cal-get-xorg-b');
+  const orgA = await registerVerifiedOrg(request, 'cal-get-xorg-a');
+  const orgB = await registerVerifiedOrg(request, 'cal-get-xorg-b');
   const event = await createCalendarEvent(request, orgA.token, {
     title: uniqueSuffix('OrgAEventGetCross'),
     daysFromNow: 4,
@@ -974,8 +951,8 @@ test('GET /calendar/:id with Org B token for Org A event returns 404', async ({ 
 });
 
 test('DELETE /calendar/:id with Org B token for Org A event returns 404', async ({ request }) => {
-  const orgA = await registerOrg(request, 'cal-del-xorg-a');
-  const orgB = await registerOrg(request, 'cal-del-xorg-b');
+  const orgA = await registerVerifiedOrg(request, 'cal-del-xorg-a');
+  const orgB = await registerVerifiedOrg(request, 'cal-del-xorg-b');
   const event = await createCalendarEvent(request, orgA.token, {
     title: uniqueSuffix('OrgAEventDelCross'),
     daysFromNow: 5,
@@ -991,8 +968,8 @@ test('DELETE /calendar/:id with Org B token for Org A event returns 404', async 
 });
 
 test('GET /contacts/:id/activity with Org B token for Org A contact returns 404', async ({ request }) => {
-  const orgA = await registerOrg(request, 'contact-activity-xorg-a');
-  const orgB = await registerOrg(request, 'contact-activity-xorg-b');
+  const orgA = await registerVerifiedOrg(request, 'contact-activity-xorg-a');
+  const orgB = await registerVerifiedOrg(request, 'contact-activity-xorg-b');
   const contact = await createContact(request, orgA.token, {
     first_name: uniqueSuffix('OrgAContactActivity'),
   });
@@ -1004,8 +981,8 @@ test('GET /contacts/:id/activity with Org B token for Org A contact returns 404'
 });
 
 test('GET /contacts/:id/tasks with Org B token for Org A contact returns 404', async ({ request }) => {
-  const orgA = await registerOrg(request, 'contact-tasks-xorg-a');
-  const orgB = await registerOrg(request, 'contact-tasks-xorg-b');
+  const orgA = await registerVerifiedOrg(request, 'contact-tasks-xorg-a');
+  const orgB = await registerVerifiedOrg(request, 'contact-tasks-xorg-b');
   const contact = await createContact(request, orgA.token, {
     first_name: uniqueSuffix('OrgAContactTasks'),
   });
@@ -1017,8 +994,8 @@ test('GET /contacts/:id/tasks with Org B token for Org A contact returns 404', a
 });
 
 test('GET /contacts/:id/deals with Org B token for Org A contact returns 404', async ({ request }) => {
-  const orgA = await registerOrg(request, 'contact-deals-xorg-a');
-  const orgB = await registerOrg(request, 'contact-deals-xorg-b');
+  const orgA = await registerVerifiedOrg(request, 'contact-deals-xorg-a');
+  const orgB = await registerVerifiedOrg(request, 'contact-deals-xorg-b');
   const contact = await createContact(request, orgA.token, {
     first_name: uniqueSuffix('OrgAContactDeals'),
   });
@@ -1030,7 +1007,7 @@ test('GET /contacts/:id/deals with Org B token for Org A contact returns 404', a
 });
 
 test('GET /analytics/stage-duration returns data array with each stage having stage_name and avg_days', async ({ request }) => {
-  const org = await registerOrg(request, 'analytics-stage-duration');
+  const org = await registerVerifiedOrg(request, 'analytics-stage-duration');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token);
   await createDeal(request, org.token, {

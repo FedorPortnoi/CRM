@@ -1,21 +1,7 @@
 import { APIRequestContext, expect, test } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
-
-type AuthOrg = {
-  token: string;
-  userId: string;
-};
-
-type RegisterResponse = {
-  data: {
-    token: string;
-    user: {
-      id: string;
-    };
-  };
-};
 
 type ContactRecord = {
   id: string;
@@ -102,22 +88,6 @@ function futureIso(daysFromNow: number, hourUtc: number): string {
   date.setUTCDate(date.getUTCDate() + daysFromNow);
   date.setUTCHours(hourUtc, 0, 0, 0);
   return date.toISOString();
-}
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<AuthOrg> {
-  const unique = uniqueSuffix(suffix);
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `Session 22 ${suffix}`,
-      org_name: `Session 22 ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-
-  const body = (await res.json()) as RegisterResponse;
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 async function createContact(
@@ -298,7 +268,7 @@ async function expectCsvHeader(
 }
 
 test('PATCH /api/v1/tasks/:id updates only provided fields and preserves existing task metadata', async ({ request }) => {
-  const org = await registerOrg(request, 'task-partial-preserve');
+  const org = await registerVerifiedOrg(request, 'task-partial-preserve');
   const contact = await createContact(request, org.token);
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const deal = await createDeal(request, org.token, {
@@ -344,7 +314,7 @@ test('PATCH /api/v1/tasks/:id updates only provided fields and preserves existin
 });
 
 test('PATCH /api/v1/calendar/:id updates start and end times while preserving unrelated fields', async ({ request }) => {
-  const org = await registerOrg(request, 'calendar-time-update');
+  const org = await registerVerifiedOrg(request, 'calendar-time-update');
   const contact = await createContact(request, org.token);
   const event = await createCalendarEvent(request, org.token, {
     title: 'Session 22 calendar preserve',
@@ -378,7 +348,7 @@ test('PATCH /api/v1/calendar/:id updates start and end times while preserving un
 });
 
 test('PATCH /api/v1/calendar/:id rejects end_time before start_time with status 400', async ({ request }) => {
-  const org = await registerOrg(request, 'calendar-invalid-window');
+  const org = await registerVerifiedOrg(request, 'calendar-invalid-window');
   const originalStart = futureIso(2, 12);
   const originalEnd = futureIso(2, 13);
   const event = await createCalendarEvent(request, org.token, {
@@ -398,7 +368,7 @@ test('PATCH /api/v1/calendar/:id rejects end_time before start_time with status 
 });
 
 test('POST /api/v1/contacts/bulk-archive archives selected contacts and removes them from the default list', async ({ request }) => {
-  const org = await registerOrg(request, 'bulk-archive-success');
+  const org = await registerVerifiedOrg(request, 'bulk-archive-success');
   const prefix = uniqueSuffix('BulkArchive');
   const first = await createContact(request, org.token, { firstName: `${prefix} One` });
   const second = await createContact(request, org.token, { firstName: `${prefix} Two` });
@@ -427,8 +397,8 @@ test('POST /api/v1/contacts/bulk-archive archives selected contacts and removes 
 });
 
 test('POST /api/v1/contacts/bulk-archive rejects another-org contact_id without archiving requester contacts', async ({ request }) => {
-  const orgA = await registerOrg(request, 'bulk-archive-a');
-  const orgB = await registerOrg(request, 'bulk-archive-b');
+  const orgA = await registerVerifiedOrg(request, 'bulk-archive-a');
+  const orgB = await registerVerifiedOrg(request, 'bulk-archive-b');
   const prefix = uniqueSuffix('BulkArchiveReject');
   const requesterFirst = await createContact(request, orgA.token, { firstName: `${prefix} One` });
   const requesterSecond = await createContact(request, orgA.token, { firstName: `${prefix} Two` });
@@ -453,7 +423,7 @@ test('POST /api/v1/contacts/bulk-archive rejects another-org contact_id without 
 });
 
 test('POST /api/v1/contacts/bulk-assign assigns multiple contacts to the current-org user and persists assigned_to', async ({ request }) => {
-  const org = await registerOrg(request, 'bulk-assign-success');
+  const org = await registerVerifiedOrg(request, 'bulk-assign-success');
   const first = await createContact(request, org.token);
   const second = await createContact(request, org.token);
 
@@ -474,8 +444,8 @@ test('POST /api/v1/contacts/bulk-assign assigns multiple contacts to the current
 });
 
 test('POST /api/v1/contacts/bulk-assign rejects assigned_to from another org and preserves contacts', async ({ request }) => {
-  const orgA = await registerOrg(request, 'bulk-assign-a');
-  const orgB = await registerOrg(request, 'bulk-assign-b');
+  const orgA = await registerVerifiedOrg(request, 'bulk-assign-a');
+  const orgB = await registerVerifiedOrg(request, 'bulk-assign-b');
   const first = await createContact(request, orgA.token, { assignedTo: orgA.userId });
   const second = await createContact(request, orgA.token, { assignedTo: orgA.userId });
 
@@ -494,8 +464,8 @@ test('POST /api/v1/contacts/bulk-assign rejects assigned_to from another org and
 });
 
 test('GET /api/v1/messages?contact_id=<other-org-contact> returns an empty org-scoped list with total 0', async ({ request }) => {
-  const orgA = await registerOrg(request, 'messages-list-a');
-  const orgB = await registerOrg(request, 'messages-list-b');
+  const orgA = await registerVerifiedOrg(request, 'messages-list-a');
+  const orgB = await registerVerifiedOrg(request, 'messages-list-b');
   const otherContact = await createContact(request, orgB.token);
 
   const messageRes = await request.post('/api/v1/messages/in-app', {
@@ -514,8 +484,8 @@ test('GET /api/v1/messages?contact_id=<other-org-contact> returns an empty org-s
 });
 
 test('POST /api/v1/messages/in-app with another-org contact returns 404 CONTACT_NOT_FOUND and creates no requester message', async ({ request }) => {
-  const orgA = await registerOrg(request, 'messages-create-a');
-  const orgB = await registerOrg(request, 'messages-create-b');
+  const orgA = await registerVerifiedOrg(request, 'messages-create-a');
+  const orgB = await registerVerifiedOrg(request, 'messages-create-b');
   const otherContact = await createContact(request, orgB.token);
 
   const res = await request.post('/api/v1/messages/in-app', {
@@ -536,7 +506,7 @@ test('POST /api/v1/messages/in-app with another-org contact returns 404 CONTACT_
 });
 
 test('GET /api/v1/analytics/stage-duration for a brand-new org returns an empty data array and a meta.note string', async ({ request }) => {
-  const org = await registerOrg(request, 'stage-duration-empty');
+  const org = await registerVerifiedOrg(request, 'stage-duration-empty');
 
   const res = await request.get('/api/v1/analytics/stage-duration', {
     headers: authHeaders(org.token),
@@ -575,8 +545,8 @@ test('GET /api/v1/auth/users returns 200 with requester org user, excludes anoth
     };
   };
 
-  const orgA = await registerOrg(request, 'auth-users-a');
-  const orgB = await registerOrg(request, 'auth-users-b');
+  const orgA = await registerVerifiedOrg(request, 'auth-users-a');
+  const orgB = await registerVerifiedOrg(request, 'auth-users-b');
 
   const res = await request.get('/api/v1/auth/users', {
     headers: authHeaders(orgA.token),
@@ -613,7 +583,7 @@ test('POST /api/v1/contacts/import-csv with two JSON row objects returns 201/imp
     };
   };
 
-  const org = await registerOrg(request, 'contacts-import-csv-success');
+  const org = await registerVerifiedOrg(request, 'contacts-import-csv-success');
   const prefix = uniqueSuffix('ImportCsv');
   const aliceEmail = `alice.${prefix.toLowerCase()}@example.com`;
 
@@ -676,7 +646,7 @@ test('POST /api/v1/contacts/import-csv with two JSON row objects returns 201/imp
 });
 
 test('POST /api/v1/contacts/import-csv with an empty array returns 400 and creates no contacts matching a unique prefix', async ({ request }) => {
-  const org = await registerOrg(request, 'contacts-import-csv-empty');
+  const org = await registerVerifiedOrg(request, 'contacts-import-csv-empty');
   const prefix = uniqueSuffix('ImportCsvEmpty');
 
   const res = await request.post('/api/v1/contacts/import-csv', {
@@ -695,7 +665,7 @@ test('POST /api/v1/contacts/import-csv with an empty array returns 400 and creat
 });
 
 test('POST /api/v1/contacts/bulk-archive deduplicates duplicate contact_ids before archiving', async ({ request }) => {
-  const org = await registerOrg(request, 'bulk-archive-dedupe');
+  const org = await registerVerifiedOrg(request, 'bulk-archive-dedupe');
   const contact = await createContact(request, org.token);
 
   const res = await request.post('/api/v1/contacts/bulk-archive', {
@@ -712,7 +682,7 @@ test('POST /api/v1/contacts/bulk-archive deduplicates duplicate contact_ids befo
 });
 
 test('POST /api/v1/contacts/bulk-assign deduplicates duplicate contact_ids before assigning', async ({ request }) => {
-  const org = await registerOrg(request, 'bulk-assign-dedupe');
+  const org = await registerVerifiedOrg(request, 'bulk-assign-dedupe');
   const contact = await createContact(request, org.token);
 
   const res = await request.post('/api/v1/contacts/bulk-assign', {
@@ -732,7 +702,7 @@ test('POST /api/v1/contacts/bulk-assign deduplicates duplicate contact_ids befor
 test('POST /api/v1/contacts/bulk-tag append mode keeps existing tags and deduplicates new tags', async ({ request }) => {
   type TaggedContact = ContactRecord & { tags: string[] };
 
-  const org = await registerOrg(request, 'bulk-tag-append');
+  const org = await registerVerifiedOrg(request, 'bulk-tag-append');
   const createRes = await request.post('/api/v1/contacts', {
     headers: authHeaders(org.token),
     data: { first_name: uniqueSuffix('TaggedAppend'), tags: ['warm', 'vip'] },
@@ -761,7 +731,7 @@ test('POST /api/v1/contacts/bulk-tag append mode keeps existing tags and dedupli
 test('POST /api/v1/contacts/bulk-tag replace mode replaces existing tags', async ({ request }) => {
   type TaggedContact = ContactRecord & { tags: string[] };
 
-  const org = await registerOrg(request, 'bulk-tag-replace');
+  const org = await registerVerifiedOrg(request, 'bulk-tag-replace');
   const createRes = await request.post('/api/v1/contacts', {
     headers: authHeaders(org.token),
     data: { first_name: uniqueSuffix('TaggedReplace'), tags: ['old', 'stale'] },
@@ -790,7 +760,7 @@ test('POST /api/v1/contacts/import/phone defaults source to phone_contacts and t
     source: string | null;
   };
 
-  const org = await registerOrg(request, 'contacts-phone-import');
+  const org = await registerVerifiedOrg(request, 'contacts-phone-import');
   const prefix = uniqueSuffix('PhoneImport');
 
   const res = await request.post('/api/v1/contacts/import/phone', {
@@ -836,7 +806,7 @@ test('POST /api/v1/contacts/business-card/scan parses text without creating a co
     meta: Record<string, unknown>;
   };
 
-  const org = await registerOrg(request, 'business-card-no-create');
+  const org = await registerVerifiedOrg(request, 'business-card-no-create');
   const email = `${uniqueSuffix('card').toLowerCase()}@example.com`;
   const rawText = `Jordan Lee\nAcme Parse Co\n${email}\n+1 555 012 3456`;
 

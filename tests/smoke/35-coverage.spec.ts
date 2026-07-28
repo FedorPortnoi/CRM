@@ -1,16 +1,5 @@
-import { test, expect, APIRequestContext } from '@playwright/test';
-
-type Auth = { token: string; userId: string };
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<Auth> {
-  const unique = suffix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-  const res = await request.post('/api/v1/auth/', {
-    data: { email: unique + '@example.com', password: 'Password123!', name: 'User ' + suffix, org_name: 'Org ' + unique },
-  });
-  expect(res.status()).toBe(201);
-  const body = await res.json() as { data: { token: string; user: { id: string } } };
-  return { token: body.data.token, userId: body.data.user.id };
-}
+import { test, expect } from '@playwright/test';
+import { registerVerifiedOrg } from './helpers/auth';
 
 function authHeaders(token: string) { return { Authorization: 'Bearer ' + token }; }
 
@@ -34,7 +23,7 @@ test.describe.configure({ timeout: 30000 });
 // ─── Group 1: POST /contacts/business-card/scan (completely untested) ──────────
 
 test('biz-card 35: happy path with text → 200 with extracted fields', async ({ request }) => {
-  const org = await registerOrg(request, 'bc35-happy');
+  const org = await registerVerifiedOrg(request, 'bc35-happy');
   const r = await request.post('/api/v1/contacts/business-card/scan', {
     headers: authHeaders(org.token),
     data: { text: 'Ivan Petrov\nivanov@example.com\n+7 (900) 123-45-67\nACME Corp' },
@@ -46,7 +35,7 @@ test('biz-card 35: happy path with text → 200 with extracted fields', async ({
 });
 
 test('biz-card 35: email extracted from text', async ({ request }) => {
-  const org = await registerOrg(request, 'bc35-email');
+  const org = await registerVerifiedOrg(request, 'bc35-email');
   const r = await request.post('/api/v1/contacts/business-card/scan', {
     headers: authHeaders(org.token),
     data: { text: 'John Smith\njohn.smith@company.io\n+7 (999) 000-11-22' },
@@ -57,7 +46,7 @@ test('biz-card 35: email extracted from text', async ({ request }) => {
 });
 
 test('biz-card 35: phone extracted from text', async ({ request }) => {
-  const org = await registerOrg(request, 'bc35-phone');
+  const org = await registerVerifiedOrg(request, 'bc35-phone');
   const r = await request.post('/api/v1/contacts/business-card/scan', {
     headers: authHeaders(org.token),
     data: { text: 'Maria Ivanova\nmaria@test.ru\n+7 985 222 33 44' },
@@ -68,7 +57,7 @@ test('biz-card 35: phone extracted from text', async ({ request }) => {
 });
 
 test('biz-card 35: create_contact true → contact visible via GET /contacts', async ({ request }) => {
-  const org = await registerOrg(request, 'bc35-create');
+  const org = await registerVerifiedOrg(request, 'bc35-create');
   const r = await request.post('/api/v1/contacts/business-card/scan', {
     headers: authHeaders(org.token),
     data: { text: 'Alexei Smirnov\nalexei@example.com\n+7 (900) 555-77-88', create_contact: true },
@@ -85,7 +74,7 @@ test('biz-card 35: create_contact true → contact visible via GET /contacts', a
 });
 
 test('biz-card 35: create_contact true → created contact has source business_card', async ({ request }) => {
-  const org = await registerOrg(request, 'bc35-source');
+  const org = await registerVerifiedOrg(request, 'bc35-source');
   const r = await request.post('/api/v1/contacts/business-card/scan', {
     headers: authHeaders(org.token),
     data: { text: 'Olga Kuznetsova\nolga@corp.ru\n+7 911 100 20 30', create_contact: true },
@@ -101,7 +90,7 @@ test('biz-card 35: create_contact true → created contact has source business_c
 });
 
 test('biz-card 35: neither text nor image_base64 → 400 Zod validation', async ({ request }) => {
-  const org = await registerOrg(request, 'bc35-no-input');
+  const org = await registerVerifiedOrg(request, 'bc35-no-input');
   const r = await request.post('/api/v1/contacts/business-card/scan', {
     headers: authHeaders(org.token),
     data: { create_contact: false },
@@ -129,7 +118,7 @@ test('voice 35: without auth → 401', async ({ request }) => {
 });
 
 test('voice 35: with auth, no Yandex key configured → 503 SERVICE_NOT_CONFIGURED', async ({ request }) => {
-  const org = await registerOrg(request, 'voice35-no-key');
+  const org = await registerVerifiedOrg(request, 'voice35-no-key');
   // Send as JSON (audio_base64 field); Fastify accepts JSON, handler checks Yandex config first
   const r = await request.post('/api/v1/contacts/transcribe-voice', {
     headers: authHeaders(org.token),
@@ -143,8 +132,8 @@ test('voice 35: with auth, no Yandex key configured → 503 SERVICE_NOT_CONFIGUR
 // ─── Group 3: POST /messages/:id/read cross-org isolation ─────────────────────
 
 test('messages 35: mark-read cross-org → 404 MESSAGE_NOT_FOUND', async ({ request }) => {
-  const orgA = await registerOrg(request, 'msg35-org-a');
-  const orgB = await registerOrg(request, 'msg35-org-b');
+  const orgA = await registerVerifiedOrg(request, 'msg35-org-a');
+  const orgB = await registerVerifiedOrg(request, 'msg35-org-b');
 
   const contactRes = await request.post('/api/v1/contacts', {
     headers: authHeaders(orgA.token),
@@ -193,7 +182,7 @@ test('analytics 35: GET /stage-duration without auth → 401', async ({ request 
 // ─── Group 5: Workflows double-archive idempotency ────────────────────────────
 
 test('workflows 35: DELETE twice (double-archive) → both return 200', async ({ request }) => {
-  const org = await registerOrg(request, 'wf35-double-del');
+  const org = await registerVerifiedOrg(request, 'wf35-double-del');
 
   const createRes = await request.post('/api/v1/workflows', {
     headers: authHeaders(org.token),

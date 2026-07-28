@@ -1,5 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
@@ -53,19 +53,6 @@ async function createContact(
   });
   const body = (await res.json()) as { data: { id: string } };
   return body.data.id;
-}
-
-async function registerOrg(
-  request: APIRequestContext,
-  suffix: string
-): Promise<{ token: string; userId: string }> {
-  const ts = Date.now().toString() + Math.random().toString(36).slice(2);
-  const email = `org16-${suffix}-${ts}@example.com`;
-  const res = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Password123!', name: 'User ' + suffix, org_name: 'Org16 ' + suffix + ' ' + ts },
-  });
-  const body = (await res.json()) as { data: { user: { id: string }; token: string } };
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 test('POST /contacts without first_name returns 400', async ({ request }) => {
@@ -259,7 +246,7 @@ test('GET /tasks?contact_id returns only tasks for that contact', async ({ reque
 // ── Gap-coverage tests (Sprint 1 round 2) ────────────────────────────────────
 
 test('POST /contacts with all optional fields stores and returns them', async ({ request }) => {
-  const { token } = await registerOrg(request, 'allfields');
+  const { token } = await registerVerifiedOrg(request, 'allfields');
   const ts = Date.now();
   const res = await request.post('/api/v1/contacts', {
     headers: { Authorization: `Bearer ${token}` },
@@ -285,7 +272,7 @@ test('POST /contacts with all optional fields stores and returns them', async ({
 });
 
 test('POST /contacts with only first_name (minimum required) returns 201', async ({ request }) => {
-  const { token } = await registerOrg(request, 'minfield');
+  const { token } = await registerVerifiedOrg(request, 'minfield');
   const res = await request.post('/api/v1/contacts', {
     headers: { Authorization: `Bearer ${token}` },
     data: { first_name: 'Minimal' },
@@ -297,7 +284,7 @@ test('POST /contacts with only first_name (minimum required) returns 201', async
 });
 
 test('GET /contacts?q=<first_name> returns matching contacts', async ({ request }) => {
-  const { token } = await registerOrg(request, 'search');
+  const { token } = await registerVerifiedOrg(request, 'search');
   const unique = `Zqx${Date.now()}`;
   const createRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: `Bearer ${token}` },
@@ -316,7 +303,7 @@ test('GET /contacts?q=<first_name> returns matching contacts', async ({ request 
 });
 
 test('DELETE contact then GET /contacts/:id returns the contact with status=archived', async ({ request }) => {
-  const { token } = await registerOrg(request, 'del404');
+  const { token } = await registerVerifiedOrg(request, 'del404');
   const contactId = await createContact(request, token);
   const delRes = await request.delete(`/api/v1/contacts/${contactId}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -331,7 +318,7 @@ test('DELETE contact then GET /contacts/:id returns the contact with status=arch
 });
 
 test('GET /contacts?status=active excludes archived contacts — archived contact absent from default list', async ({ request }) => {
-  const { token } = await registerOrg(request, 'archget');
+  const { token } = await registerVerifiedOrg(request, 'archget');
   const contactId = await createContact(request, token);
   await request.delete(`/api/v1/contacts/${contactId}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -345,7 +332,7 @@ test('GET /contacts?status=active excludes archived contacts — archived contac
 });
 
 test('POST /tasks with priority=high — response body priority is high', async ({ request }) => {
-  const { token, userId } = await registerOrg(request, 'prihigh');
+  const { token, userId } = await registerVerifiedOrg(request, 'prihigh');
   const res = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
     data: { title: 'High Priority Task', assigned_to: userId, priority: 'high' },
@@ -356,7 +343,7 @@ test('POST /tasks with priority=high — response body priority is high', async 
 });
 
 test('POST /tasks with priority=low — response body priority is low', async ({ request }) => {
-  const { token, userId } = await registerOrg(request, 'prilow');
+  const { token, userId } = await registerVerifiedOrg(request, 'prilow');
   const res = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
     data: { title: 'Low Priority Task', assigned_to: userId, priority: 'low' },
@@ -367,7 +354,7 @@ test('POST /tasks with priority=low — response body priority is low', async ({
 });
 
 test('GET /tasks?status=done returns only done tasks', async ({ request }) => {
-  const { token, userId } = await registerOrg(request, 'taskdone');
+  const { token, userId } = await registerVerifiedOrg(request, 'taskdone');
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
     data: { title: 'Task To Complete', assigned_to: userId },
@@ -392,7 +379,7 @@ test('GET /tasks?status=done returns only done tasks', async ({ request }) => {
 });
 
 test('GET /tasks?status=cancelled returns only cancelled tasks', async ({ request }) => {
-  const { token, userId } = await registerOrg(request, 'taskcncl');
+  const { token, userId } = await registerVerifiedOrg(request, 'taskcncl');
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
     data: { title: 'Task To Cancel', assigned_to: userId },
@@ -417,7 +404,7 @@ test('GET /tasks?status=cancelled returns only cancelled tasks', async ({ reques
 });
 
 test('POST /tasks with assigned_to from same org — assigned_to field is set in response', async ({ request }) => {
-  const { token, userId } = await registerOrg(request, 'taskassign');
+  const { token, userId } = await registerVerifiedOrg(request, 'taskassign');
   const res = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
     data: { title: 'Assigned Task', assigned_to: userId },
@@ -428,7 +415,7 @@ test('POST /tasks with assigned_to from same org — assigned_to field is set in
 });
 
 test('POST /deals without stage_id returns 400 validation error', async ({ request }) => {
-  const { token } = await registerOrg(request, 'dealnostage');
+  const { token } = await registerVerifiedOrg(request, 'dealnostage');
   const { pipelineId } = await getPipelineAndStage(request, token);
   const contactId = await createContact(request, token);
   const res = await request.post('/api/v1/deals', {
@@ -439,7 +426,7 @@ test('POST /deals without stage_id returns 400 validation error', async ({ reque
 });
 
 test('POST /deals without pipeline_id returns 400 validation error', async ({ request }) => {
-  const { token } = await registerOrg(request, 'dealnopl');
+  const { token } = await registerVerifiedOrg(request, 'dealnopl');
   const { stageId } = await getPipelineAndStage(request, token);
   const contactId = await createContact(request, token);
   const res = await request.post('/api/v1/deals', {

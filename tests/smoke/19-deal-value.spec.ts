@@ -1,11 +1,7 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
+import { registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
-
-type AuthOrg = {
-  token: string;
-  userId: string;
-};
 
 type PipelineStage = {
   id: string;
@@ -32,26 +28,6 @@ type DealResponse = {
 
 function authHeaders(token: string): { Authorization: string } {
   return { Authorization: `Bearer ${token}` };
-}
-
-function uniqueEmail(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}@test.com`;
-}
-
-async function registerOrg(request: APIRequestContext): Promise<AuthOrg> {
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: uniqueEmail('deal-clear-value'),
-      password: 'Test1234!',
-      name: 'Deal Clear Value User',
-      org_name: 'Deal Clear Value Org',
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = (await res.json()) as {
-    data: { token: string; user: { id: string } };
-  };
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 async function getPipelineAndStage(
@@ -116,7 +92,7 @@ async function getDeal(
 }
 
 test('PATCH /deals/:id with value null clears the deal value and preserves null on readback', async ({ request }) => {
-  const org = await registerOrg(request);
+  const org = await registerVerifiedOrg(request, 'deal-clear-value');
   const { pipelineId, stageId } = await getPipelineAndStage(request, org.token);
   const contact = await createContact(request, org.token);
   const deal = await createDeal(request, org.token, contact.id, pipelineId, stageId);
@@ -136,13 +112,7 @@ test('PATCH /deals/:id with value null clears the deal value and preserves null 
 // --- New tests appended below ---
 
 test('POST /deals with value=500.99 stores decimal and readback confirms it', async ({ request }) => {
-  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = (await regRes.json()) as { data: { token: string; user: { id: string } } };
-  const token = regBody.data.token;
+  const { token } = await registerVerifiedOrg(request, 'deal-decimal-value');
 
   const { pipelineId, stageId } = await getPipelineAndStage(request, token);
   const contactRes = await request.post('/api/v1/contacts', {
@@ -166,13 +136,7 @@ test('POST /deals with value=500.99 stores decimal and readback confirms it', as
 });
 
 test('POST /deals with currency="EUR" stores currency and readback confirms it', async ({ request }) => {
-  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = (await regRes.json()) as { data: { token: string; user: { id: string } } };
-  const token = regBody.data.token;
+  const { token } = await registerVerifiedOrg(request, 'deal-currency-eur');
 
   const { pipelineId, stageId } = await getPipelineAndStage(request, token);
   const contactRes = await request.post('/api/v1/contacts', {
@@ -197,13 +161,7 @@ test('POST /deals with currency="EUR" stores currency and readback confirms it',
 });
 
 test('PATCH /deals/:id with value=999 updates deal value and readback confirms it', async ({ request }) => {
-  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = (await regRes.json()) as { data: { token: string; user: { id: string } } };
-  const token = regBody.data.token;
+  const { token } = await registerVerifiedOrg(request, 'deal-patch-value');
 
   const { pipelineId, stageId } = await getPipelineAndStage(request, token);
   const contactRes = await request.post('/api/v1/contacts', {
@@ -233,13 +191,7 @@ test('PATCH /deals/:id with value=999 updates deal value and readback confirms i
 });
 
 test('PATCH /deals/:id with currency="GBP" updates currency and readback confirms it', async ({ request }) => {
-  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = (await regRes.json()) as { data: { token: string; user: { id: string } } };
-  const token = regBody.data.token;
+  const { token } = await registerVerifiedOrg(request, 'deal-patch-currency-gbp');
 
   const { pipelineId, stageId } = await getPipelineAndStage(request, token);
   const contactRes = await request.post('/api/v1/contacts', {
@@ -271,13 +223,7 @@ test('PATCH /deals/:id with currency="GBP" updates currency and readback confirm
 });
 
 test('POST /deals without value field results in null value on readback', async ({ request }) => {
-  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = (await regRes.json()) as { data: { token: string; user: { id: string } } };
-  const token = regBody.data.token;
+  const { token } = await registerVerifiedOrg(request, 'deal-no-value');
 
   const { pipelineId, stageId } = await getPipelineAndStage(request, token);
   const contactRes = await request.post('/api/v1/contacts', {
@@ -300,13 +246,7 @@ test('POST /deals without value field results in null value on readback', async 
 });
 
 test('POST /deals without currency field defaults to USD', async ({ request }) => {
-  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = (await regRes.json()) as { data: { token: string; user: { id: string } } };
-  const token = regBody.data.token;
+  const { token } = await registerVerifiedOrg(request, 'deal-default-currency');
 
   const { pipelineId, stageId } = await getPipelineAndStage(request, token);
   const contactRes = await request.post('/api/v1/contacts', {
@@ -331,13 +271,7 @@ test('POST /deals without currency field defaults to USD', async ({ request }) =
 });
 
 test('Deal value persists after stage move via PATCH /deals/:id/stage', async ({ request }) => {
-  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = (await regRes.json()) as { data: { token: string; user: { id: string } } };
-  const token = regBody.data.token;
+  const { token } = await registerVerifiedOrg(request, 'deal-stage-move-value');
 
   const plRes = await request.get('/api/v1/deals/pipelines', { headers: authHeaders(token) });
   expect(plRes.status()).toBe(200);
@@ -376,13 +310,7 @@ test('Deal value persists after stage move via PATCH /deals/:id/stage', async ({
 });
 
 test('Deal value persists after marking won via POST /deals/:id/won', async ({ request }) => {
-  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = (await regRes.json()) as { data: { token: string; user: { id: string } } };
-  const token = regBody.data.token;
+  const { token } = await registerVerifiedOrg(request, 'deal-won-value');
 
   const { pipelineId, stageId } = await getPipelineAndStage(request, token);
   const contactRes = await request.post('/api/v1/contacts', {
@@ -416,13 +344,7 @@ test('Deal value persists after marking won via POST /deals/:id/won', async ({ r
 });
 
 test('POST /deals with value=0 succeeds and stores zero as a valid boundary', async ({ request }) => {
-  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = (await regRes.json()) as { data: { token: string; user: { id: string } } };
-  const token = regBody.data.token;
+  const { token } = await registerVerifiedOrg(request, 'deal-zero-value');
 
   const { pipelineId, stageId } = await getPipelineAndStage(request, token);
   const contactRes = await request.post('/api/v1/contacts', {
@@ -443,13 +365,7 @@ test('POST /deals with value=0 succeeds and stores zero as a valid boundary', as
 });
 
 test('Two deals with same value both appear in GET /deals list with correct values', async ({ request }) => {
-  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = (await regRes.json()) as { data: { token: string; user: { id: string } } };
-  const token = regBody.data.token;
+  const { token } = await registerVerifiedOrg(request, 'deal-duplicate-values');
 
   const { pipelineId, stageId } = await getPipelineAndStage(request, token);
   const contactRes = await request.post('/api/v1/contacts', {

@@ -1,5 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
@@ -9,26 +9,6 @@ function futureEvent(): { start_time: string; end_time: string } {
   const start = new Date(Date.now() + 60 * 60 * 1000);
   const end = new Date(start.getTime() + 60 * 60 * 1000);
   return { start_time: start.toISOString(), end_time: end.toISOString() };
-}
-
-async function registerOrg(
-  request: APIRequestContext,
-  suffix: string
-): Promise<{ token: string; userId: string }> {
-  const unique = `${suffix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = (await res.json()) as {
-    data: { token: string; user: { id: string } };
-  };
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 function authHeaders(token: string): { Authorization: string } {
@@ -86,8 +66,8 @@ test('GET /calendar/:id with an unknown UUID returns 404 EVENT_NOT_FOUND', async
 });
 
 test("PATCH /calendar/:id using a different org\'s token returns 404 (event not found in other org\'s scope)", async ({ request }) => {
-  const orgA = await registerOrg(request, 'orgA-patch');
-  const orgB = await registerOrg(request, 'orgB-patch');
+  const orgA = await registerVerifiedOrg(request, 'orgA-patch');
+  const orgB = await registerVerifiedOrg(request, 'orgB-patch');
 
   const createRes = await request.post('/api/v1/calendar', {
     headers: { Authorization: `Bearer ${orgA.token}` },
@@ -105,8 +85,8 @@ test("PATCH /calendar/:id using a different org\'s token returns 404 (event not 
 });
 
 test("DELETE /calendar/:id using a different org\'s token returns 404", async ({ request }) => {
-  const orgA = await registerOrg(request, 'orgA-delete');
-  const orgB = await registerOrg(request, 'orgB-delete');
+  const orgA = await registerVerifiedOrg(request, 'orgA-delete');
+  const orgB = await registerVerifiedOrg(request, 'orgB-delete');
 
   const createRes = await request.post('/api/v1/calendar', {
     headers: { Authorization: `Bearer ${orgA.token}` },
@@ -144,8 +124,8 @@ test('GET /messages/conversation/:contactId returns an empty array when the cont
 });
 
 test('GET /messages/conversation/:contactId returns 404 CONTACT_NOT_FOUND when the contact belongs to a different org', async ({ request }) => {
-  const orgA = await registerOrg(request, 'orgA-conv');
-  const orgB = await registerOrg(request, 'orgB-conv');
+  const orgA = await registerVerifiedOrg(request, 'orgA-conv');
+  const orgB = await registerVerifiedOrg(request, 'orgB-conv');
 
   const contactRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: `Bearer ${orgA.token}` },
@@ -208,7 +188,7 @@ test('POST /messages/call with no duration_seconds but with notes sets body to t
 // Deals tests
 
 test('PATCH /deals/:id with value -1 returns 400 (Zod rejects non-positive numbers)', async ({ request }) => {
-  const org = await registerOrg(request, 'deals-neg');
+  const org = await registerVerifiedOrg(request, 'deals-neg');
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${org.token}` },
@@ -242,7 +222,7 @@ test('PATCH /deals/:id with value -1 returns 400 (Zod rejects non-positive numbe
 });
 
 test('PATCH /deals/:id with value 0 returns 400 (z.number().positive() requires strictly greater than zero)', async ({ request }) => {
-  const org = await registerOrg(request, 'deals-zero');
+  const org = await registerVerifiedOrg(request, 'deals-zero');
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${org.token}` },
@@ -278,7 +258,7 @@ test('PATCH /deals/:id with value 0 returns 400 (z.number().positive() requires 
 // Analytics: conversionRates (Task 2)
 
 test('GET /analytics/conversion-rates returns 200 with pipeline array and zero counts for org with no deals', async ({ request }) => {
-  const org = await registerOrg(request, 'cvr-empty');
+  const org = await registerVerifiedOrg(request, 'cvr-empty');
   const res = await request.get('/api/v1/analytics/conversion-rates', {
     headers: { Authorization: `Bearer ${org.token}` },
   });
@@ -306,7 +286,7 @@ test('GET /analytics/conversion-rates returns 200 with pipeline array and zero c
 });
 
 test('GET /analytics/conversion-rates with pipeline_id filter returns only that pipeline', async ({ request }) => {
-  const org = await registerOrg(request, 'cvr-filter');
+  const org = await registerVerifiedOrg(request, 'cvr-filter');
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${org.token}` },
   });
@@ -324,7 +304,7 @@ test('GET /analytics/conversion-rates with pipeline_id filter returns only that 
 });
 
 test('GET /analytics/conversion-rates counts a won deal as entered and progressed through all stage transitions', async ({ request }) => {
-  const org = await registerOrg(request, 'cvr-won');
+  const org = await registerVerifiedOrg(request, 'cvr-won');
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${org.token}` },
   });
@@ -366,7 +346,7 @@ test('GET /analytics/conversion-rates counts a won deal as entered and progresse
 // Analytics: stageDuration (Task 3)
 
 test('GET /analytics/stage-duration returns 200 with correct structure and meta note', async ({ request }) => {
-  const org = await registerOrg(request, 'sd-struct');
+  const org = await registerVerifiedOrg(request, 'sd-struct');
   const res = await request.get('/api/v1/analytics/stage-duration', {
     headers: { Authorization: `Bearer ${org.token}` },
   });
@@ -381,7 +361,7 @@ test('GET /analytics/stage-duration returns 200 with correct structure and meta 
 });
 
 test('GET /analytics/stage-duration returns a stage entry with avg_days and deal_count when deals exist', async ({ request }) => {
-  const org = await registerOrg(request, 'sd-data');
+  const org = await registerVerifiedOrg(request, 'sd-data');
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${org.token}` },
   });
@@ -416,7 +396,7 @@ test('GET /analytics/stage-duration returns a stage entry with avg_days and deal
 });
 
 test('GET /analytics/stage-duration with pipeline_id filter returns only deals from that pipeline', async ({ request }) => {
-  const org = await registerOrg(request, 'sd-filter');
+  const org = await registerVerifiedOrg(request, 'sd-filter');
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${org.token}` },
   });
@@ -526,8 +506,8 @@ test('POST /analytics/export with unsupported report returns 400 validation erro
 });
 
 test('GET /analytics/conversion-rates with another-org pipeline_id returns an empty scoped result', async ({ request }) => {
-  const orgA = await registerOrg(request, 'cvr-other-pipeline-a');
-  const orgB = await registerOrg(request, 'cvr-other-pipeline-b');
+  const orgA = await registerVerifiedOrg(request, 'cvr-other-pipeline-a');
+  const orgB = await registerVerifiedOrg(request, 'cvr-other-pipeline-b');
   const otherPipeline = await getDefaultPipeline(request, orgA.token);
 
   const res = await request.get(`/api/v1/analytics/conversion-rates?pipeline_id=${otherPipeline.id}`, {
@@ -540,8 +520,8 @@ test('GET /analytics/conversion-rates with another-org pipeline_id returns an em
 });
 
 test('GET /analytics/stage-duration with another-org pipeline_id returns an empty scoped result', async ({ request }) => {
-  const orgA = await registerOrg(request, 'sd-other-pipeline-a');
-  const orgB = await registerOrg(request, 'sd-other-pipeline-b');
+  const orgA = await registerVerifiedOrg(request, 'sd-other-pipeline-a');
+  const orgB = await registerVerifiedOrg(request, 'sd-other-pipeline-b');
   const otherPipeline = await getDefaultPipeline(request, orgA.token);
 
   const res = await request.get(`/api/v1/analytics/stage-duration?pipeline_id=${otherPipeline.id}`, {
@@ -554,7 +534,7 @@ test('GET /analytics/stage-duration with another-org pipeline_id returns an empt
 });
 
 test('POST /messages/call with occurred_at stores created_at from the supplied timestamp', async ({ request }) => {
-  const org = await registerOrg(request, 'call-occurred-at');
+  const org = await registerVerifiedOrg(request, 'call-occurred-at');
   const contactRes = await request.post('/api/v1/contacts', {
     headers: authHeaders(org.token),
     data: { first_name: 'OccurredAtContact' },

@@ -1,21 +1,17 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
+import { registerVerifiedOrg } from './helpers/auth';
+import type { RegisteredOrg } from './helpers/auth';
 
-type Auth = { token: string; userId: string };
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<Auth> {
-  const unique = `${suffix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = await res.json() as { data: { token: string; user: { id: string; onboarding_completed?: boolean } } };
-  expect(body.data.user.onboarding_completed).toBe(false);
-  return { token: body.data.token, userId: body.data.user.id };
+/**
+ * Registration no longer returns a session token — it returns an OTP challenge — so the
+ * token comes from the login that registerVerifiedOrg performs once the account is
+ * verified. The onboarding_completed check that used to read the register response now
+ * reads the login response's user, which is where that field is published today.
+ */
+async function registerOrg(request: APIRequestContext, suffix: string): Promise<RegisteredOrg> {
+  const org = await registerVerifiedOrg(request, suffix);
+  expect(org.user.onboarding_completed).toBe(false);
+  return org;
 }
 
 function authHeaders(token: string): { Authorization: string } {
@@ -543,17 +539,12 @@ test('task assigned_to field: GET /tasks?assigned_to returns the task', async ({
 });
 
 test('POST /auth/login correct credentials → 200 with usable token', async ({ request }) => {
-  const tag = `login-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const email = `${tag}@example.com`;
-  const password = 'Password123!';
-
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email, password, name: 'LoginUser', org_name: `LoginOrg${tag}` },
-  });
-  expect(regRes.status()).toBe(201);
+  // registerVerifiedOrg does the register (201 + needs_verification) and the OTP bypass;
+  // the login below is what this test is actually about, so it stays explicit.
+  const org = await registerVerifiedOrg(request, 'login', { name: 'LoginUser' });
 
   const loginRes = await request.post('/api/v1/auth/login', {
-    data: { email, password },
+    data: { email: org.email, password: org.password },
   });
   expect(loginRes.status()).toBe(200);
   const loginBody = await loginRes.json() as { data: { token: string; user: { id: string } } };

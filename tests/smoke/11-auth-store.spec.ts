@@ -1,5 +1,16 @@
 import { test, expect } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import {
+  getAuth,
+  registerVerifiedOrg,
+  verifyRegisteredSmokeUser,
+  SMOKE_ORG_PHONE,
+} from './helpers/auth';
+
+// Registration is a two-step flow now: POST /auth/ creates the account and mails an OTP,
+// and only POST /auth/login issues a token. Tests that need an authenticated session go
+// through registerVerifiedOrg (register -> OTP bypass -> login); tests that assert on the
+// registration endpoint itself keep their raw POST and assert the OTP-challenge contract.
+const TEST_PHONE = SMOKE_ORG_PHONE;
 
 interface AuthUser {
   id: string;
@@ -14,6 +25,18 @@ interface AuthResponse {
   data: {
     user: AuthUser;
     token: string;
+  };
+}
+
+/** The 201 body of POST /api/v1/auth/ — an OTP challenge, not a session. */
+interface RegisterChallengeResponse {
+  data: {
+    user_id: string;
+    email: string;
+    needs_verification: boolean;
+  };
+  meta: {
+    email_sent: boolean;
   };
 }
 
@@ -44,21 +67,36 @@ interface PipelinesResponse {
   data: Array<{ id: string; name: string; org_id: string }>;
 }
 
-test('POST /api/v1/auth/ registers a new user and returns token + user shape', async ({ request }) => {
+test('POST /api/v1/auth/ registers a new user, then login returns token + user shape', async ({ request }) => {
   const email = 'auth-smoke-' + Date.now() + '@test.com';
+  const password = 'Test123!';
+  // Captured before registering: verifyRegisteredSmokeUser refuses users older than this.
+  const runStartedAt = new Date(Date.now() - 60_000).toISOString();
+
   const res = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Test123!', name: 'Auth Test', org_name: 'Auth Test Org' },
+    data: { email, password, name: 'Auth Test', org_name: 'Auth Test Org', phone: TEST_PHONE },
   });
   expect(res.status()).toBe(201);
-  const body: AuthResponse = await res.json();
-  expect(typeof body.data.token).toBe('string');
-  expect(body.data.token.length).toBeGreaterThan(0);
-  expect(body.data.user.email).toBe(email);
-  expect(body.data.user.id).toBeTruthy();
-  expect(body.data.user.email).toBeTruthy();
-  expect(body.data.user.name).toBeTruthy();
-  expect(body.data.user.role).toBeTruthy();
-  expect(body.data.user.org_id).toBeTruthy();
+  const body: RegisterChallengeResponse = await res.json();
+  // Registration issues an OTP challenge — no token, no user object.
+  expect(body.data.user_id).toBeTruthy();
+  expect(body.data.email).toBe(email);
+  expect(body.data.needs_verification).toBe(true);
+
+  await verifyRegisteredSmokeUser({ userId: body.data.user_id, email, runStartedAt });
+
+  // The token + user shape this test used to read off the register response now come from login.
+  const loginRes = await request.post('/api/v1/auth/login', { data: { email, password } });
+  expect(loginRes.status()).toBe(200);
+  const loginBody: AuthResponse = await loginRes.json();
+  expect(typeof loginBody.data.token).toBe('string');
+  expect(loginBody.data.token.length).toBeGreaterThan(0);
+  expect(loginBody.data.user.email).toBe(email);
+  expect(loginBody.data.user.id).toBeTruthy();
+  expect(loginBody.data.user.email).toBeTruthy();
+  expect(loginBody.data.user.name).toBeTruthy();
+  expect(loginBody.data.user.role).toBeTruthy();
+  expect(loginBody.data.user.org_id).toBeTruthy();
 });
 
 test('POST /api/v1/auth/login returns token + user for valid credentials', async ({ request }) => {
@@ -74,7 +112,7 @@ test('POST /api/v1/auth/login returns token + user for valid credentials', async
 
 test('POST /api/v1/auth/ returns 409 for duplicate email', async ({ request }) => {
   const res = await request.post('/api/v1/auth/', {
-    data: { email: getAuth().email, password: 'Test123!', name: 'Dup', org_name: 'Dup Org' },
+    data: { email: getAuth().email, password: 'Test123!', name: 'Dup', org_name: 'Dup Org', phone: TEST_PHONE },
   });
   expect(res.status()).toBe(409);
   const body: ErrorResponse = await res.json();
@@ -99,7 +137,7 @@ test('Token from login authenticates protected endpoints', async ({ request }) =
 // 1. Register missing email → 400
 test('POST /api/v1/auth/ returns 400 when email is missing', async ({ request }) => {
   const res = await request.post('/api/v1/auth/', {
-    data: { password: 'Test123!', name: 'No Email', org_name: 'No Email Org' },
+    data: { password: 'Test123!', name: 'No Email', org_name: 'No Email Org', phone: TEST_PHONE },
   });
   expect(res.status()).toBe(400);
 });
@@ -108,7 +146,7 @@ test('POST /api/v1/auth/ returns 400 when email is missing', async ({ request })
 test('POST /api/v1/auth/ returns 400 when password is missing', async ({ request }) => {
   const email = 'no-pwd-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
   const res = await request.post('/api/v1/auth/', {
-    data: { email, name: 'No Password', org_name: 'No Pwd Org' },
+    data: { email, name: 'No Password', org_name: 'No Pwd Org', phone: TEST_PHONE },
   });
   expect(res.status()).toBe(400);
 });
@@ -117,7 +155,7 @@ test('POST /api/v1/auth/ returns 400 when password is missing', async ({ request
 test('POST /api/v1/auth/ returns 400 when name is missing', async ({ request }) => {
   const email = 'no-name-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
   const res = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Test123!', org_name: 'No Name Org' },
+    data: { email, password: 'Test123!', org_name: 'No Name Org', phone: TEST_PHONE },
   });
   expect(res.status()).toBe(400);
 });
@@ -126,7 +164,7 @@ test('POST /api/v1/auth/ returns 400 when name is missing', async ({ request }) 
 test('POST /api/v1/auth/ returns 400 when org_name is missing', async ({ request }) => {
   const email = 'no-org-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
   const res = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Test123!', name: 'No Org' },
+    data: { email, password: 'Test123!', name: 'No Org', phone: TEST_PHONE },
   });
   expect(res.status()).toBe(400);
 });
@@ -134,7 +172,7 @@ test('POST /api/v1/auth/ returns 400 when org_name is missing', async ({ request
 // 5. Register with invalid email format → 400
 test('POST /api/v1/auth/ returns 400 for invalid email format', async ({ request }) => {
   const res = await request.post('/api/v1/auth/', {
-    data: { email: 'not-an-email', password: 'Test123!', name: 'Bad Email', org_name: 'Bad Email Org' },
+    data: { email: 'not-an-email', password: 'Test123!', name: 'Bad Email', org_name: 'Bad Email Org', phone: TEST_PHONE },
   });
   expect(res.status()).toBe(400);
 });
@@ -143,7 +181,7 @@ test('POST /api/v1/auth/ returns 400 for invalid email format', async ({ request
 test('POST /api/v1/auth/ returns 400 for password shorter than 8 characters', async ({ request }) => {
   const email = 'short-pwd-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
   const res = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Ab1!xyz', name: 'Short Pwd', org_name: 'Short Pwd Org' },
+    data: { email, password: 'Ab1!xyz', name: 'Short Pwd', org_name: 'Short Pwd Org', phone: TEST_PHONE },
   });
   expect(res.status()).toBe(400);
 });
@@ -152,56 +190,37 @@ test('POST /api/v1/auth/ returns 400 for password shorter than 8 characters', as
 test('POST /api/v1/auth/ accepts exactly 8-character password (boundary)', async ({ request }) => {
   const email = 'exact8-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
   const res = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Abcd123!', name: 'Exact Eight', org_name: 'Exact Eight Org' },
+    data: { email, password: 'Abcd123!', name: 'Exact Eight', org_name: 'Exact Eight Org', phone: TEST_PHONE },
   });
   expect(res.status()).toBe(201);
-  const body: AuthResponse = await res.json();
-  expect(body.data.token.length).toBeGreaterThan(0);
+  const body: RegisterChallengeResponse = await res.json();
+  // Registration no longer returns a token; the account being created is the success signal.
+  expect(body.data.user_id).toBeTruthy();
+  expect(body.data.needs_verification).toBe(true);
 });
 
-// 8. Register response user.role is exactly 'owner'
+// 8. Newly registered user's role is exactly 'owner' (read off the login response)
 test('POST /api/v1/auth/ sets user.role to "owner" for new registration', async ({ request }) => {
-  const email = 'role-check-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
-  const res = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Test123!', name: 'Role Check', org_name: 'Role Check Org' },
-  });
-  expect(res.status()).toBe(201);
-  const body: AuthResponse = await res.json();
-  expect(body.data.user.role).toBe('owner');
+  const org = await registerVerifiedOrg(request, 'role-check');
+  expect(org.user.role).toBe('owner');
 });
 
-// 9. Register response user.onboarding_completed is false for new user
+// 9. Newly registered user's onboarding_completed is false (read off the login response)
 test('POST /api/v1/auth/ returns user.onboarding_completed as false for new user', async ({ request }) => {
-  const email = 'onboarding-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
-  const res = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Test123!', name: 'Onboarding Check', org_name: 'Onboarding Org' },
-  });
-  expect(res.status()).toBe(201);
-  const body: AuthResponse = await res.json();
-  expect(body.data.user.onboarding_completed).toBe(false);
+  const org = await registerVerifiedOrg(request, 'onboarding');
+  expect(org.user.onboarding_completed).toBe(false);
 });
 
-// 10. Register response user.org_id is a valid UUID string format
+// 10. Newly registered user's org_id is a valid UUID string format
 test('POST /api/v1/auth/ returns user.org_id as a valid UUID v4', async ({ request }) => {
-  const email = 'uuid-check-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
-  const res = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Test123!', name: 'UUID Check', org_name: 'UUID Check Org' },
-  });
-  expect(res.status()).toBe(201);
-  const body: AuthResponse = await res.json();
+  const org = await registerVerifiedOrg(request, 'uuid-check');
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  expect(body.data.user.org_id).toMatch(uuidRegex);
+  expect(org.user.org_id).toMatch(uuidRegex);
 });
 
 // 11. Register seeds default pipeline — new user's org has ≥1 pipeline
 test('POST /api/v1/auth/ seeds at least one default pipeline for new org', async ({ request }) => {
-  const email = 'pipeline-seed-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Test123!', name: 'Pipeline Seed', org_name: 'Pipeline Seed Org' },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody: AuthResponse = await regRes.json();
-  const token = regBody.data.token;
+  const { token } = await registerVerifiedOrg(request, 'pipeline-seed');
 
   const pipeRes = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + token },
@@ -214,18 +233,12 @@ test('POST /api/v1/auth/ seeds at least one default pipeline for new org', async
 
 // 12. Login response user.id matches the registered user.id
 test('POST /api/v1/auth/login returns user.id matching the registered user', async ({ request }) => {
-  const email = 'id-match-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
-  const password = 'Test123!';
-
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email, password, name: 'ID Match', org_name: 'ID Match Org' },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody: AuthResponse = await regRes.json();
-  const registeredId = regBody.data.user.id;
+  // org.userId is the `data.user_id` the registration response returned.
+  const org = await registerVerifiedOrg(request, 'id-match');
+  const registeredId = org.userId;
 
   const loginRes = await request.post('/api/v1/auth/login', {
-    data: { email, password },
+    data: { email: org.email, password: org.password },
   });
   expect(loginRes.status()).toBe(200);
   const loginBody: AuthResponse = await loginRes.json();
@@ -259,15 +272,11 @@ test('POST /api/v1/auth/login returns 400 when body is empty', async ({ request 
   expect(res.status()).toBe(400);
 });
 
-// 16. Token from register (not login) authenticates protected GET /contacts
-test('Token from register (not login) authenticates GET /api/v1/contacts', async ({ request }) => {
-  const email = 'reg-token-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Test123!', name: 'Reg Token', org_name: 'Reg Token Org' },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody: AuthResponse = await regRes.json();
-  const token = regBody.data.token;
+// 16. A freshly registered account's token authenticates protected GET /contacts.
+//     Registration itself no longer hands out a token (01-auth asserts that contract), so
+//     the "from register, not login" distinction this test drew no longer exists.
+test('Token for a freshly registered account authenticates GET /api/v1/contacts', async ({ request }) => {
+  const { token } = await registerVerifiedOrg(request, 'reg-token');
 
   const contactsRes = await request.get('/api/v1/contacts', {
     headers: { Authorization: 'Bearer ' + token },
@@ -277,13 +286,8 @@ test('Token from register (not login) authenticates GET /api/v1/contacts', async
 
 // 17. Three sequential logins all return different tokens (JWT iat differs)
 test('Three sequential logins with same credentials return distinct tokens', async ({ request }) => {
-  const email = 'multi-login-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
-  const password = 'Test123!';
-
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email, password, name: 'Multi Login', org_name: 'Multi Login Org' },
-  });
-  expect(regRes.status()).toBe(201);
+  const org = await registerVerifiedOrg(request, 'multi-login');
+  const { email, password } = org;
 
   const tokens: string[] = [];
   for (let i = 0; i < 3; i++) {
@@ -329,7 +333,13 @@ test('Three sequential logins with same credentials return distinct tokens', asy
 // 18. Two concurrent POST /auth/ with same email — exactly one 201, other 409
 test('Concurrent registrations with same email yield exactly one 201 and one 409', async ({ request }) => {
   const email = 'concurrent-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
-  const payload = { email, password: 'Test123!', name: 'Concurrent', org_name: 'Concurrent Org' };
+  const payload = {
+    email,
+    password: 'Test123!',
+    name: 'Concurrent',
+    org_name: 'Concurrent Org',
+    phone: TEST_PHONE,
+  };
 
   const [res1, res2] = await Promise.all([
     request.post('/api/v1/auth/', { data: payload }),
@@ -344,14 +354,10 @@ test('Concurrent registrations with same email yield exactly one 201 and one 409
 });
 
 // 19. Registered user's token payload contains org_id matching user.org_id and sub matching user.id
+//     (the token now comes from the login that follows registration)
 test('JWT payload contains org_id and sub matching the registered user', async ({ request }) => {
-  const email = 'jwt-payload-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
-  const res = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Test123!', name: 'JWT Payload', org_name: 'JWT Payload Org' },
-  });
-  expect(res.status()).toBe(201);
-  const body: AuthResponse = await res.json();
-  const { token, user } = body.data;
+  const org = await registerVerifiedOrg(request, 'jwt-payload');
+  const { token, user } = org;
 
   const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()) as {
     sub: string;
@@ -369,13 +375,7 @@ test('GET /api/v1/auth/users returns 401 when no Authorization header is provide
 
 // 21. GET /api/v1/auth/users with valid token returns array with at least the registered user
 test('GET /api/v1/auth/users returns array containing the authenticated user', async ({ request }) => {
-  const email = 'users-list-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Test123!', name: 'Users List', org_name: 'Users List Org' },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody: AuthResponse = await regRes.json();
-  const { token, user } = regBody.data;
+  const { token, user, email } = await registerVerifiedOrg(request, 'users-list');
 
   const usersRes = await request.get('/api/v1/auth/users', {
     headers: { Authorization: 'Bearer ' + token },
@@ -392,22 +392,13 @@ test('GET /api/v1/auth/users returns array containing the authenticated user', a
 
 // 22. GET /api/v1/auth/users returns only users in the same org (cross-org isolation)
 test('GET /api/v1/auth/users does not include users from a different org', async ({ request }) => {
-  const emailA = 'org-a-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
-  const emailB = 'org-b-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
+  const orgA = await registerVerifiedOrg(request, 'org-a', { name: 'Org A User', orgName: 'Org A' });
+  const orgB = await registerVerifiedOrg(request, 'org-b', { name: 'Org B User', orgName: 'Org B' });
+  // Two registrations must land in two distinct tenants for this test to mean anything.
+  expect(orgA.orgId).not.toBe(orgB.orgId);
 
-  const [regA, regB] = await Promise.all([
-    request.post('/api/v1/auth/', {
-      data: { email: emailA, password: 'Test123!', name: 'Org A User', org_name: 'Org A' },
-    }),
-    request.post('/api/v1/auth/', {
-      data: { email: emailB, password: 'Test123!', name: 'Org B User', org_name: 'Org B' },
-    }),
-  ]);
-  expect(regA.status()).toBe(201);
-  expect(regB.status()).toBe(201);
-
-  const tokenA = ((await regA.json()) as AuthResponse).data.token;
-  const userBId = ((await regB.json()) as AuthResponse).data.user.id;
+  const tokenA = orgA.token;
+  const userBId = orgB.userId;
 
   const usersRes = await request.get('/api/v1/auth/users', {
     headers: { Authorization: 'Bearer ' + tokenA },
@@ -429,12 +420,7 @@ test('PATCH /api/v1/auth/onboarding returns 401 when no Authorization header is 
 
 // 24. GET /api/v1/auth/onboarding returns current onboarding state (default completed=false)
 test('GET /api/v1/auth/onboarding returns onboarding state with completed false for new user', async ({ request }) => {
-  const email = 'onboarding-get-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
-  const regRes = await request.post('/api/v1/auth/', {
-    data: { email, password: 'Test123!', name: 'Onboarding Get', org_name: 'Onboarding Get Org' },
-  });
-  expect(regRes.status()).toBe(201);
-  const token = ((await regRes.json()) as AuthResponse).data.token;
+  const { token } = await registerVerifiedOrg(request, 'onboarding-get');
 
   const res = await request.get('/api/v1/auth/onboarding', {
     headers: { Authorization: 'Bearer ' + token },
@@ -447,17 +433,12 @@ test('GET /api/v1/auth/onboarding returns onboarding state with completed false 
 
 // 25. Register with org_name containing special characters → 201
 test('POST /api/v1/auth/ accepts org_name with spaces, hyphens, and apostrophes', async ({ request }) => {
-  const email = 'special-org-' + Date.now() + Math.random().toString(36).slice(2) + '@test.com';
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email,
-      password: 'Test123!',
-      name: 'Special Org Owner',
-      org_name: "O'Brien & Co - North East",
-    },
+  // registerVerifiedOrg throws unless registration returns 201, so reaching the assertions
+  // below already proves the special-character org_name was accepted.
+  const org = await registerVerifiedOrg(request, 'special-org', {
+    name: 'Special Org Owner',
+    orgName: "O'Brien & Co - North East",
   });
-  expect(res.status()).toBe(201);
-  const body: AuthResponse = await res.json();
-  expect(body.data.token.length).toBeGreaterThan(0);
-  expect(body.data.user.org_id).toBeTruthy();
+  expect(org.token.length).toBeGreaterThan(0);
+  expect(org.user.org_id).toBeTruthy();
 });

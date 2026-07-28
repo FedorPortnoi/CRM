@@ -1,5 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
@@ -129,20 +129,10 @@ test('GET /api/v1/tasks/:id with non-existent id returns 404 TASK_NOT_FOUND', as
 // ─── Cross-org isolation (Rung 5) ─────────────────────────────────────────────
 
 test('cross-org isolation: Org B token cannot access Org A contact — returns 404', async ({ request }) => {
-  const emailA = 'org-a-contact-' + Date.now() + '@test.com';
-  const emailB = 'org-b-contact-' + (Date.now() + 1) + '@test.com';
-
-  const regA = await request.post('/api/v1/auth/', {
-    data: { email: emailA, password: 'Test1234!', name: 'OrgA User', org_name: 'OrgA' },
-  });
-  expect(regA.status()).toBe(201);
-  const tokenA: string = (await regA.json()).data.token;
-
-  const regB = await request.post('/api/v1/auth/', {
-    data: { email: emailB, password: 'Test1234!', name: 'OrgB User', org_name: 'OrgB' },
-  });
-  expect(regB.status()).toBe(201);
-  const tokenB: string = (await regB.json()).data.token;
+  const orgA = await registerVerifiedOrg(request, 'org-a-contact', { name: 'OrgA User', orgName: 'OrgA' });
+  const orgB = await registerVerifiedOrg(request, 'org-b-contact', { name: 'OrgB User', orgName: 'OrgB' });
+  const tokenA: string = orgA.token;
+  const tokenB: string = orgB.token;
 
   const contactRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: 'Bearer ' + tokenA },
@@ -158,22 +148,11 @@ test('cross-org isolation: Org B token cannot access Org A contact — returns 4
 });
 
 test('cross-org isolation: Org B token cannot access Org A task — returns 404', async ({ request }) => {
-  const emailA = 'org-a-task-' + Date.now() + '@test.com';
-  const emailB = 'org-b-task-' + (Date.now() + 1) + '@test.com';
-
-  const regA = await request.post('/api/v1/auth/', {
-    data: { email: emailA, password: 'Test1234!', name: 'OrgA User', org_name: 'OrgA' },
-  });
-  expect(regA.status()).toBe(201);
-  const regBodyA = await regA.json();
-  const tokenA: string = regBodyA.data.token;
-  const userIdA: string = regBodyA.data.user.id;
-
-  const regB = await request.post('/api/v1/auth/', {
-    data: { email: emailB, password: 'Test1234!', name: 'OrgB User', org_name: 'OrgB' },
-  });
-  expect(regB.status()).toBe(201);
-  const tokenB: string = (await regB.json()).data.token;
+  const orgA = await registerVerifiedOrg(request, 'org-a-task', { name: 'OrgA User', orgName: 'OrgA' });
+  const orgB = await registerVerifiedOrg(request, 'org-b-task', { name: 'OrgB User', orgName: 'OrgB' });
+  const tokenA: string = orgA.token;
+  const userIdA: string = orgA.userId;
+  const tokenB: string = orgB.token;
 
   const taskRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: 'Bearer ' + tokenA },
@@ -436,18 +415,9 @@ test('DELETE /api/v1/deals/stages/:id returns 409 STAGE_HAS_OPEN_DEALS when stag
 
 // ─── New Rung 4/5 tests ───────────────────────────────────────────────────────
 
-async function registerOrg(request: APIRequestContext, suffix = ''): Promise<{ token: string; userId: string }> {
-  const tag = `${Date.now()}${Math.random().toString(36).slice(2, 6)}${suffix}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: { email: `t${tag}@x.com`, password: 'Test1234!', name: 'T', org_name: `Org${tag}` },
-  });
-  const body = await res.json();
-  return { token: body.data.token, userId: body.data.user.id };
-}
-
 // Gap 1 — Calendar event linked to contact appears in contact activity feed
 test('POST /calendar creates event linked to contact — GET /contacts/:id/activity includes the event', async ({ request }) => {
-  const { token } = await registerOrg(request, 'g1');
+  const { token } = await registerVerifiedOrg(request, 'g1');
 
   const cRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: 'Bearer ' + token },
@@ -480,7 +450,7 @@ test('POST /calendar creates event linked to contact — GET /contacts/:id/activ
 
 // Gap 2 — PATCH /calendar/:id with new title — readback confirms update
 test('PATCH /calendar/:id with updated title — GET /calendar/:id readback confirms new title', async ({ request }) => {
-  const { token } = await registerOrg(request, 'g2');
+  const { token } = await registerVerifiedOrg(request, 'g2');
 
   const evRes = await request.post('/api/v1/calendar', {
     headers: { Authorization: 'Bearer ' + token },
@@ -505,7 +475,7 @@ test('PATCH /calendar/:id with updated title — GET /calendar/:id readback conf
 
 // Gap 3 — POST /calendar with past start_time returns 201 (no past-date validation)
 test('POST /calendar with past start_time returns 201 (no validation on past dates)', async ({ request }) => {
-  const { token } = await registerOrg(request, 'g3');
+  const { token } = await registerVerifiedOrg(request, 'g3');
 
   const pastStart = new Date(Date.now() - 7200000).toISOString(); // 2 hours ago
   const pastEnd = new Date(Date.now() - 3600000).toISOString();   // 1 hour ago
@@ -521,7 +491,7 @@ test('POST /calendar with past start_time returns 201 (no validation on past dat
 
 // Gap 4 — POST /messages/send-in-app — message appears in GET /messages?contact_id=
 test('POST /messages/send-in-app — message appears in GET /messages?contact_id=', async ({ request }) => {
-  const { token } = await registerOrg(request, 'g4');
+  const { token } = await registerVerifiedOrg(request, 'g4');
 
   const cRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: 'Bearer ' + token },
@@ -548,7 +518,7 @@ test('POST /messages/send-in-app — message appears in GET /messages?contact_id
 
 // Gap 5 — POST /messages/call creates a call entry with type=call
 test('POST /messages/call creates a call log entry with type=call', async ({ request }) => {
-  const { token } = await registerOrg(request, 'g5');
+  const { token } = await registerVerifiedOrg(request, 'g5');
 
   const cRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: 'Bearer ' + token },
@@ -569,7 +539,7 @@ test('POST /messages/call creates a call log entry with type=call', async ({ req
 
 // Gap 6 — GET /messages?contact_id pagination: per_page=1 returns exactly 1 result
 test('GET /messages?contact_id — per_page=1 returns exactly 1 result', async ({ request }) => {
-  const { token } = await registerOrg(request, 'g6');
+  const { token } = await registerVerifiedOrg(request, 'g6');
 
   const cRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: 'Bearer ' + token },
@@ -597,8 +567,8 @@ test('GET /messages?contact_id — per_page=1 returns exactly 1 result', async (
 
 // Gap 7 — Cross-org: Org B cannot GET Org A calendar event — returns 404
 test('cross-org isolation: Org B token cannot GET Org A calendar event — returns 404', async ({ request }) => {
-  const orgA = await registerOrg(request, 'g7a');
-  const orgB = await registerOrg(request, 'g7b');
+  const orgA = await registerVerifiedOrg(request, 'g7a');
+  const orgB = await registerVerifiedOrg(request, 'g7b');
 
   const evRes = await request.post('/api/v1/calendar', {
     headers: { Authorization: 'Bearer ' + orgA.token },
@@ -615,8 +585,8 @@ test('cross-org isolation: Org B token cannot GET Org A calendar event — retur
 
 // Gap 8 — Cross-org: Org B cannot PATCH Org A calendar event — returns 404
 test('cross-org isolation: Org B token cannot PATCH Org A calendar event — returns 404', async ({ request }) => {
-  const orgA = await registerOrg(request, 'g8a');
-  const orgB = await registerOrg(request, 'g8b');
+  const orgA = await registerVerifiedOrg(request, 'g8a');
+  const orgB = await registerVerifiedOrg(request, 'g8b');
 
   const evRes = await request.post('/api/v1/calendar', {
     headers: { Authorization: 'Bearer ' + orgA.token },
@@ -634,7 +604,7 @@ test('cross-org isolation: Org B token cannot PATCH Org A calendar event — ret
 
 // Gap 9 — GET /contacts/:id/deals lists only deals belonging to that contact
 test('GET /contacts/:id/deals lists only deals for that contact, not deals from other contacts', async ({ request }) => {
-  const { token } = await registerOrg(request, 'g9');
+  const { token } = await registerVerifiedOrg(request, 'g9');
   const { pipelineId, stageId } = await getPipelineAndStage(request, token);
 
   const c1Res = await request.post('/api/v1/contacts', {
@@ -674,7 +644,7 @@ test('GET /contacts/:id/deals lists only deals for that contact, not deals from 
 
 // Gap 10 — GET /contacts/:id/messages returns message list for that contact
 test('GET /contacts/:id/messages returns message list scoped to that contact', async ({ request }) => {
-  const { token } = await registerOrg(request, 'g10');
+  const { token } = await registerVerifiedOrg(request, 'g10');
 
   const cRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: 'Bearer ' + token },
@@ -701,7 +671,7 @@ test('GET /contacts/:id/messages returns message list scoped to that contact', a
 
 // Gap 11 — DELETE stage fails with 409 STAGE_HAS_OPEN_DEALS (independent pipeline)
 test('DELETE /deals/stages/:id returns 409 STAGE_HAS_OPEN_DEALS when open deal blocks deletion', async ({ request }) => {
-  const { token } = await registerOrg(request, 'g11');
+  const { token } = await registerVerifiedOrg(request, 'g11');
 
   const plRes = await request.post('/api/v1/deals/pipelines', {
     headers: { Authorization: 'Bearer ' + token },
@@ -739,7 +709,7 @@ test('DELETE /deals/stages/:id returns 409 STAGE_HAS_OPEN_DEALS when open deal b
 
 // Gap 12 — GET /deals response includes nested pipeline and stage objects
 test('GET /deals response — each deal has nested pipeline and stage objects when pipeline_id/stage_id set', async ({ request }) => {
-  const { token } = await registerOrg(request, 'g12');
+  const { token } = await registerVerifiedOrg(request, 'g12');
   const { pipelineId, stageId } = await getPipelineAndStage(request, token);
 
   const cRes = await request.post('/api/v1/contacts', {

@@ -1,5 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
@@ -34,13 +34,6 @@ interface ConversationResponse {
   data: MessageData[];
 }
 
-interface AuthResponse {
-  data: {
-    token: string;
-    user: { id: string };
-  };
-}
-
 interface ContactData {
   id: string;
   first_name: string;
@@ -49,16 +42,6 @@ interface ContactData {
 
 interface ContactResponse {
   data: ContactData;
-}
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<{ token: string; userId: string }> {
-  const unique = `${suffix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: { email: `${unique}@example.com`, password: 'Password123!', name: `User ${suffix}`, org_name: `Org ${unique}` },
-  });
-  expect(res.status()).toBe(201);
-  const body = (await res.json()) as AuthResponse;
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 async function createContact(request: APIRequestContext, token: string, firstName: string): Promise<string> {
@@ -141,7 +124,7 @@ test('GET /api/v1/messages/conversation/:contactId returns thread', async ({ req
 // ── Rung 4 & 5 tests ─────────────────────────────────────────────────────────
 
 test('POST /messages/in-app then GET /conversation: message appears in thread', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-conv-appear');
+  const { token } = await registerVerifiedOrg(request, 'r4-conv-appear');
   const cid = await createContact(request, token, 'ConvAppear');
   const msgBody = 'appear in thread test';
   await sendInApp(request, token, cid, msgBody);
@@ -154,7 +137,7 @@ test('POST /messages/in-app then GET /conversation: message appears in thread', 
 });
 
 test('POST /messages/in-app then POST /:id/read: status becomes read, read_at set in conversation', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-read-conv');
+  const { token } = await registerVerifiedOrg(request, 'r4-read-conv');
   const cid = await createContact(request, token, 'ReadConv');
   const msg = await sendInApp(request, token, cid, 'mark me read');
   const readRes = await request.post(`/api/v1/messages/${msg.id}/read`, {
@@ -172,7 +155,7 @@ test('POST /messages/in-app then POST /:id/read: status becomes read, read_at se
 });
 
 test('POST /messages/call duration_seconds=90: body stores seconds prefix', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-call-90');
+  const { token } = await registerVerifiedOrg(request, 'r4-call-90');
   const cid = await createContact(request, token, 'Call90');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },
@@ -184,7 +167,7 @@ test('POST /messages/call duration_seconds=90: body stores seconds prefix', asyn
 });
 
 test('POST /messages/call duration_seconds=90 and notes: body has seconds prefix then notes', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-call-dur-notes');
+  const { token } = await registerVerifiedOrg(request, 'r4-call-dur-notes');
   const cid = await createContact(request, token, 'CallDurNotes');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },
@@ -196,7 +179,7 @@ test('POST /messages/call duration_seconds=90 and notes: body has seconds prefix
 });
 
 test('POST /messages/call duration_seconds=3600: body stores seconds prefix', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-call-3600');
+  const { token } = await registerVerifiedOrg(request, 'r4-call-3600');
   const cid = await createContact(request, token, 'Call3600');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },
@@ -208,7 +191,7 @@ test('POST /messages/call duration_seconds=3600: body stores seconds prefix', as
 });
 
 test('POST /messages/call direction=inbound: direction stored as inbound', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-call-inbound');
+  const { token } = await registerVerifiedOrg(request, 'r4-call-inbound');
   const cid = await createContact(request, token, 'CallInbound');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },
@@ -220,7 +203,7 @@ test('POST /messages/call direction=inbound: direction stored as inbound', async
 });
 
 test('POST /messages/email returns 404 because email route is not implemented', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-email-stored');
+  const { token } = await registerVerifiedOrg(request, 'r4-email-stored');
   const cid = await createContact(request, token, 'EmailStored');
   const res = await request.post('/api/v1/messages/email', {
     headers: { Authorization: `Bearer ${token}` },
@@ -230,7 +213,7 @@ test('POST /messages/email returns 404 because email route is not implemented', 
 });
 
 test('GET /messages?channel=email returns empty list when no email messages exist', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-filter-email');
+  const { token } = await registerVerifiedOrg(request, 'r4-filter-email');
   const cid = await createContact(request, token, 'FilterEmail');
   await sendInApp(request, token, cid, 'in-app to exclude');
   const res = await request.get('/api/v1/messages?channel=email', {
@@ -243,7 +226,7 @@ test('GET /messages?channel=email returns empty list when no email messages exis
 });
 
 test('GET /messages?status=delivered returns only delivered messages', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-filter-delivered');
+  const { token } = await registerVerifiedOrg(request, 'r4-filter-delivered');
   const cid = await createContact(request, token, 'FilterDelivered');
   await sendInApp(request, token, cid, 'sent status test');
   await request.post('/api/v1/messages/call', {
@@ -261,7 +244,7 @@ test('GET /messages?status=delivered returns only delivered messages', async ({ 
 });
 
 test('GET /messages?status=read returns read messages after marking one', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-filter-read');
+  const { token } = await registerVerifiedOrg(request, 'r4-filter-read');
   const cid = await createContact(request, token, 'FilterRead');
   const msg = await sendInApp(request, token, cid, 'will be read');
   await request.post(`/api/v1/messages/${msg.id}/read`, {
@@ -277,7 +260,7 @@ test('GET /messages?status=read returns read messages after marking one', async 
 });
 
 test('GET /messages?status=read returns only read messages', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-read-excludes-delivered');
+  const { token } = await registerVerifiedOrg(request, 'r4-read-excludes-delivered');
   const cid = await createContact(request, token, 'ReadExcludesDelivered');
   const msg = await sendInApp(request, token, cid, 'will be read');
   await sendInApp(request, token, cid, 'stays delivered');
@@ -294,7 +277,7 @@ test('GET /messages?status=read returns only read messages', async ({ request })
 });
 
 test('GET /messages?contact_id returns only that contact messages', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-filter-contact');
+  const { token } = await registerVerifiedOrg(request, 'r4-filter-contact');
   const cid1 = await createContact(request, token, 'FilterContact1');
   const cid2 = await createContact(request, token, 'FilterContact2');
   await sendInApp(request, token, cid1, 'for contact 1');
@@ -309,7 +292,7 @@ test('GET /messages?contact_id returns only that contact messages', async ({ req
 });
 
 test('GET /messages?contact_id excludes messages for a different contact', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-filter-contact-excl');
+  const { token } = await registerVerifiedOrg(request, 'r4-filter-contact-excl');
   const cid1 = await createContact(request, token, 'ExclContact1');
   const cid2 = await createContact(request, token, 'ExclContact2');
   await sendInApp(request, token, cid1, 'contact1 msg');
@@ -322,7 +305,7 @@ test('GET /messages?contact_id excludes messages for a different contact', async
 });
 
 test('Pagination: page=1 per_page=2 of 4 messages returns 2 items', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-page1');
+  const { token } = await registerVerifiedOrg(request, 'r4-page1');
   const cid = await createContact(request, token, 'Page1');
   for (let i = 0; i < 4; i++) {
     await sendInApp(request, token, cid, `page msg ${i}`);
@@ -339,7 +322,7 @@ test('Pagination: page=1 per_page=2 of 4 messages returns 2 items', async ({ req
 });
 
 test('Pagination: page=2 per_page=2 of 4 messages returns remaining 2', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-page2');
+  const { token } = await registerVerifiedOrg(request, 'r4-page2');
   const cid = await createContact(request, token, 'Page2');
   for (let i = 0; i < 4; i++) {
     await sendInApp(request, token, cid, `page2 msg ${i}`);
@@ -354,7 +337,7 @@ test('Pagination: page=2 per_page=2 of 4 messages returns remaining 2', async ({
 });
 
 test('GET /messages/conversation returns messages sorted asc (oldest first)', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-conv-sort');
+  const { token } = await registerVerifiedOrg(request, 'r4-conv-sort');
   const cid = await createContact(request, token, 'ConvSort');
   await sendInApp(request, token, cid, 'first');
   await sendInApp(request, token, cid, 'second');
@@ -372,7 +355,7 @@ test('GET /messages/conversation returns messages sorted asc (oldest first)', as
 });
 
 test('Multiple in-app messages to same contact: conversation returns all', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-multi-inapp');
+  const { token } = await registerVerifiedOrg(request, 'r4-multi-inapp');
   const cid = await createContact(request, token, 'MultiInApp');
   const bodies = ['msg-alpha', 'msg-beta', 'msg-gamma'];
   for (const b of bodies) {
@@ -388,7 +371,7 @@ test('Multiple in-app messages to same contact: conversation returns all', async
 });
 
 test('POST /messages/in-app then read: read_at is a valid ISO timestamp', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-read-at-iso');
+  const { token } = await registerVerifiedOrg(request, 'r4-read-at-iso');
   const cid = await createContact(request, token, 'ReadAtIso');
   const msg = await sendInApp(request, token, cid, 'check read_at iso');
   const readRes = await request.post(`/api/v1/messages/${msg.id}/read`, {
@@ -401,7 +384,7 @@ test('POST /messages/in-app then read: read_at is a valid ISO timestamp', async 
 });
 
 test('POST /messages/:id/read is idempotent (calling twice both return 200)', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-read-idempotent');
+  const { token } = await registerVerifiedOrg(request, 'r4-read-idempotent');
   const cid = await createContact(request, token, 'ReadIdempotent');
   const msg = await sendInApp(request, token, cid, 'idempotent read test');
   const r1 = await request.post(`/api/v1/messages/${msg.id}/read`, {
@@ -415,7 +398,7 @@ test('POST /messages/:id/read is idempotent (calling twice both return 200)', as
 });
 
 test('POST /messages/:id/read twice: read_at refreshes on second call', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-read-at-unchanged');
+  const { token } = await registerVerifiedOrg(request, 'r4-read-at-unchanged');
   const cid = await createContact(request, token, 'ReadAtUnchanged');
   const msg = await sendInApp(request, token, cid, 'read_at stable test');
   const r1 = await request.post(`/api/v1/messages/${msg.id}/read`, {
@@ -432,8 +415,8 @@ test('POST /messages/:id/read twice: read_at refreshes on second call', async ({
 });
 
 test('Cross-org: Org A messages not visible to Org B GET /messages', async ({ request }) => {
-  const orgA = await registerOrg(request, 'r4-cross-a');
-  const orgB = await registerOrg(request, 'r4-cross-b');
+  const orgA = await registerVerifiedOrg(request, 'r4-cross-a');
+  const orgB = await registerVerifiedOrg(request, 'r4-cross-b');
   const cidA = await createContact(request, orgA.token, 'CrossA');
   await sendInApp(request, orgA.token, cidA, 'org a private');
   const res = await request.get('/api/v1/messages', {
@@ -445,7 +428,7 @@ test('Cross-org: Org A messages not visible to Org B GET /messages', async ({ re
 });
 
 test('Cross-org: new org GET /messages returns empty list (total=0)', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-cross-empty');
+  const { token } = await registerVerifiedOrg(request, 'r4-cross-empty');
   const res = await request.get('/api/v1/messages', {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -456,7 +439,7 @@ test('Cross-org: new org GET /messages returns empty list (total=0)', async ({ r
 });
 
 test('POST /messages/in-app with long body (500 chars): stored and returned', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-long-body');
+  const { token } = await registerVerifiedOrg(request, 'r4-long-body');
   const cid = await createContact(request, token, 'LongBody');
   const longBody = 'A'.repeat(500);
   const msg = await sendInApp(request, token, cid, longBody);
@@ -464,7 +447,7 @@ test('POST /messages/in-app with long body (500 chars): stored and returned', as
 });
 
 test('GET /messages meta.total reflects count of all org messages', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-meta-total');
+  const { token } = await registerVerifiedOrg(request, 'r4-meta-total');
   const cid = await createContact(request, token, 'MetaTotal');
   for (let i = 0; i < 3; i++) {
     await sendInApp(request, token, cid, `meta total msg ${i}`);
@@ -477,7 +460,7 @@ test('GET /messages meta.total reflects count of all org messages', async ({ req
 });
 
 test('GET /messages meta.page and per_page match request parameters', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-meta-page');
+  const { token } = await registerVerifiedOrg(request, 'r4-meta-page');
   const cid = await createContact(request, token, 'MetaPage');
   await sendInApp(request, token, cid, 'meta page msg');
   const res = await request.get('/api/v1/messages?page=1&per_page=5', {
@@ -489,7 +472,7 @@ test('GET /messages meta.page and per_page match request parameters', async ({ r
 });
 
 test('POST /messages/call channel is call', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-call-channel');
+  const { token } = await registerVerifiedOrg(request, 'r4-call-channel');
   const cid = await createContact(request, token, 'CallChannel');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },
@@ -501,7 +484,7 @@ test('POST /messages/call channel is call', async ({ request }) => {
 });
 
 test('POST /messages/call direction=inbound stored as inbound in response', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-call-dir-in');
+  const { token } = await registerVerifiedOrg(request, 'r4-call-dir-in');
   const cid = await createContact(request, token, 'CallDirIn');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },
@@ -513,7 +496,7 @@ test('POST /messages/call direction=inbound stored as inbound in response', asyn
 });
 
 test('GET /messages/conversation order is asc by created_at for multiple messages', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-conv-order');
+  const { token } = await registerVerifiedOrg(request, 'r4-conv-order');
   const cid = await createContact(request, token, 'ConvOrder');
   await sendInApp(request, token, cid, 'order-msg-1');
   await sendInApp(request, token, cid, 'order-msg-2');
@@ -529,7 +512,7 @@ test('GET /messages/conversation order is asc by created_at for multiple message
 });
 
 test('POST /messages/in-app with unicode body: stored and returned correctly', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-unicode');
+  const { token } = await registerVerifiedOrg(request, 'r4-unicode');
   const cid = await createContact(request, token, 'Unicode');
   const unicodeBody = 'こんにちは 🌟 Ünïcödé test';
   const msg = await sendInApp(request, token, cid, unicodeBody);
@@ -537,7 +520,7 @@ test('POST /messages/in-app with unicode body: stored and returned correctly', a
 });
 
 test('POST /messages/in-app for non-existent contact returns 404', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-nonexistent');
+  const { token } = await registerVerifiedOrg(request, 'r4-nonexistent');
   const fakeId = '00000000-0000-4000-a000-000000000000';
   const res = await request.post('/api/v1/messages/in-app', {
     headers: { Authorization: `Bearer ${token}` },
@@ -549,7 +532,7 @@ test('POST /messages/in-app for non-existent contact returns 404', async ({ requ
 });
 
 test('5 messages to contact: GET /conversation returns exactly 5', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-exactly-5');
+  const { token } = await registerVerifiedOrg(request, 'r4-exactly-5');
   const cid = await createContact(request, token, 'Exactly5');
   for (let i = 0; i < 5; i++) {
     await sendInApp(request, token, cid, `msg-${i}`);
@@ -562,7 +545,7 @@ test('5 messages to contact: GET /conversation returns exactly 5', async ({ requ
 });
 
 test('GET /messages/conversation for archived contact still works', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-archived-contact');
+  const { token } = await registerVerifiedOrg(request, 'r4-archived-contact');
   const cid = await createContact(request, token, 'ArchivedContact');
   await sendInApp(request, token, cid, 'before archive');
   await request.patch(`/api/v1/contacts/${cid}`, {
@@ -578,7 +561,7 @@ test('GET /messages/conversation for archived contact still works', async ({ req
 });
 
 test('Read a message: GET /messages?status=delivered excludes read messages', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-delivered-excl');
+  const { token } = await registerVerifiedOrg(request, 'r4-delivered-excl');
   const cid = await createContact(request, token, 'DeliveredExcl');
   const msg = await sendInApp(request, token, cid, 'will be read, not delivered');
   await request.post('/api/v1/messages/call', {
@@ -597,7 +580,7 @@ test('Read a message: GET /messages?status=delivered excludes read messages', as
 });
 
 test('POST /messages/call duration_seconds=60: body stores seconds prefix', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-call-60');
+  const { token } = await registerVerifiedOrg(request, 'r4-call-60');
   const cid = await createContact(request, token, 'Call60');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },
@@ -609,7 +592,7 @@ test('POST /messages/call duration_seconds=60: body stores seconds prefix', asyn
 });
 
 test('Message created_at is a valid ISO string', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-created-at-iso');
+  const { token } = await registerVerifiedOrg(request, 'r4-created-at-iso');
   const cid = await createContact(request, token, 'CreatedAtIso');
   const msg = await sendInApp(request, token, cid, 'iso timestamp test');
   expect(msg.created_at).toBeTruthy();
@@ -617,7 +600,7 @@ test('Message created_at is a valid ISO string', async ({ request }) => {
 });
 
 test('GET /messages returns messages ordered by created_at desc (newest first)', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r4-list-order');
+  const { token } = await registerVerifiedOrg(request, 'r4-list-order');
   const cid = await createContact(request, token, 'ListOrder');
   await sendInApp(request, token, cid, 'list order 1');
   await sendInApp(request, token, cid, 'list order 2');
@@ -637,7 +620,7 @@ test('GET /messages returns messages ordered by created_at desc (newest first)',
 // ── Rung 5 tests ─────────────────────────────────────────────────────────────
 
 test('R5: POST /messages/in-app missing contact_id returns 400', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-missing-cid');
+  const { token } = await registerVerifiedOrg(request, 'r5-missing-cid');
   const res = await request.post('/api/v1/messages/in-app', {
     headers: { Authorization: `Bearer ${token}` },
     data: { body: 'no contact id' },
@@ -646,7 +629,7 @@ test('R5: POST /messages/in-app missing contact_id returns 400', async ({ reques
 });
 
 test('R5: POST /messages/in-app missing body returns 400', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-missing-body');
+  const { token } = await registerVerifiedOrg(request, 'r5-missing-body');
   const cid = await createContact(request, token, 'MissingBody');
   const res = await request.post('/api/v1/messages/in-app', {
     headers: { Authorization: `Bearer ${token}` },
@@ -656,7 +639,7 @@ test('R5: POST /messages/in-app missing body returns 400', async ({ request }) =
 });
 
 test('R5: POST /messages/call missing contact_id returns 400', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-call-no-cid');
+  const { token } = await registerVerifiedOrg(request, 'r5-call-no-cid');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },
     data: { direction: 'outbound' },
@@ -665,7 +648,7 @@ test('R5: POST /messages/call missing contact_id returns 400', async ({ request 
 });
 
 test('R5: POST /messages/call missing direction returns 400', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-call-no-dir');
+  const { token } = await registerVerifiedOrg(request, 'r5-call-no-dir');
   const cid = await createContact(request, token, 'CallNoDir');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },
@@ -675,7 +658,7 @@ test('R5: POST /messages/call missing direction returns 400', async ({ request }
 });
 
 test('R5: POST /messages/email missing subject returns 404 because email route is not implemented', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-email-no-subject');
+  const { token } = await registerVerifiedOrg(request, 'r5-email-no-subject');
   const cid = await createContact(request, token, 'EmailNoSubject');
   const res = await request.post('/api/v1/messages/email', {
     headers: { Authorization: `Bearer ${token}` },
@@ -685,7 +668,7 @@ test('R5: POST /messages/email missing subject returns 404 because email route i
 });
 
 test('R5: POST /messages/email missing body returns 404 because email route is not implemented', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-email-no-body');
+  const { token } = await registerVerifiedOrg(request, 'r5-email-no-body');
   const cid = await createContact(request, token, 'EmailNoBody');
   const res = await request.post('/api/v1/messages/email', {
     headers: { Authorization: `Bearer ${token}` },
@@ -724,28 +707,28 @@ test('R5: POST /messages/:id/read without auth returns 401', async ({ request })
 });
 
 test('R5: POST /messages/in-app returns correct contact_id in response', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-contact-id-echo');
+  const { token } = await registerVerifiedOrg(request, 'r5-contact-id-echo');
   const cid = await createContact(request, token, 'ContactIdEcho');
   const msg = await sendInApp(request, token, cid, 'contact id check');
   expect(msg.contact_id).toBe(cid);
 });
 
 test('R5: POST /messages/in-app returns direction=outbound', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-inapp-direction');
+  const { token } = await registerVerifiedOrg(request, 'r5-inapp-direction');
   const cid = await createContact(request, token, 'InAppDirection');
   const msg = await sendInApp(request, token, cid, 'direction check');
   expect(msg.direction).toBe('outbound');
 });
 
 test('R5: POST /messages/in-app returns status=sent', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-inapp-status');
+  const { token } = await registerVerifiedOrg(request, 'r5-inapp-status');
   const cid = await createContact(request, token, 'InAppStatus');
   const msg = await sendInApp(request, token, cid, 'status check');
   expect(msg.status).toBe('sent');
 });
 
 test('R5: POST /messages/email returns 404 because email route is not implemented', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-email-channel');
+  const { token } = await registerVerifiedOrg(request, 'r5-email-channel');
   const cid = await createContact(request, token, 'EmailChannel');
   const res = await request.post('/api/v1/messages/email', {
     headers: { Authorization: `Bearer ${token}` },
@@ -755,7 +738,7 @@ test('R5: POST /messages/email returns 404 because email route is not implemente
 });
 
 test('R5: POST /messages/email status case returns 404 because email route is not implemented', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-email-status');
+  const { token } = await registerVerifiedOrg(request, 'r5-email-status');
   const cid = await createContact(request, token, 'EmailStatus');
   const res = await request.post('/api/v1/messages/email', {
     headers: { Authorization: `Bearer ${token}` },
@@ -765,7 +748,7 @@ test('R5: POST /messages/email status case returns 404 because email route is no
 });
 
 test('R5: POST /messages/email direction case returns 404 because email route is not implemented', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-email-dir');
+  const { token } = await registerVerifiedOrg(request, 'r5-email-dir');
   const cid = await createContact(request, token, 'EmailDir');
   const res = await request.post('/api/v1/messages/email', {
     headers: { Authorization: `Bearer ${token}` },
@@ -775,7 +758,7 @@ test('R5: POST /messages/email direction case returns 404 because email route is
 });
 
 test('R5: POST /messages/call returns 201 with id in response', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-call-id');
+  const { token } = await registerVerifiedOrg(request, 'r5-call-id');
   const cid = await createContact(request, token, 'CallId');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },
@@ -787,7 +770,7 @@ test('R5: POST /messages/call returns 201 with id in response', async ({ request
 });
 
 test('R5: POST /messages/in-app response includes contact_id, body, channel, direction, status, created_at', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-full-shape');
+  const { token } = await registerVerifiedOrg(request, 'r5-full-shape');
   const cid = await createContact(request, token, 'FullShape');
   const msg = await sendInApp(request, token, cid, 'full shape check');
   expect(msg.id).toBeTruthy();
@@ -800,7 +783,7 @@ test('R5: POST /messages/in-app response includes contact_id, body, channel, dir
 });
 
 test('R5: GET /messages list response has data array and meta object', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-list-shape');
+  const { token } = await registerVerifiedOrg(request, 'r5-list-shape');
   const res = await request.get('/api/v1/messages', {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -813,7 +796,7 @@ test('R5: GET /messages list response has data array and meta object', async ({ 
 });
 
 test('R5: GET /messages/conversation/:contactId response has data array', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-conv-shape');
+  const { token } = await registerVerifiedOrg(request, 'r5-conv-shape');
   const cid = await createContact(request, token, 'ConvShape');
   const res = await request.get(`/api/v1/messages/conversation/${cid}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -824,7 +807,7 @@ test('R5: GET /messages/conversation/:contactId response has data array', async 
 });
 
 test('R5: POST /messages/call with no duration and no notes: body is Call logged', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-call-no-dur-no-notes');
+  const { token } = await registerVerifiedOrg(request, 'r5-call-no-dur-no-notes');
   const cid = await createContact(request, token, 'CallNoDurNoNotes');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },
@@ -836,7 +819,7 @@ test('R5: POST /messages/call with no duration and no notes: body is Call logged
 });
 
 test('R5: POST /messages/call with notes only: body equals notes text', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-call-notes-only');
+  const { token } = await registerVerifiedOrg(request, 'r5-call-notes-only');
   const cid = await createContact(request, token, 'CallNotesOnly');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },
@@ -848,7 +831,7 @@ test('R5: POST /messages/call with notes only: body equals notes text', async ({
 });
 
 test('R5: POST /messages/call duration=120 no notes: body stores seconds prefix', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-call-120');
+  const { token } = await registerVerifiedOrg(request, 'r5-call-120');
   const cid = await createContact(request, token, 'Call120');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },
@@ -860,7 +843,7 @@ test('R5: POST /messages/call duration=120 no notes: body stores seconds prefix'
 });
 
 test('R5: POST /messages/call duration=120 and notes: body has seconds prefix and notes', async ({ request }) => {
-  const { token } = await registerOrg(request, 'r5-call-dur-note-sep');
+  const { token } = await registerVerifiedOrg(request, 'r5-call-dur-note-sep');
   const cid = await createContact(request, token, 'CallDurNoteSep');
   const res = await request.post('/api/v1/messages/call', {
     headers: { Authorization: `Bearer ${token}` },

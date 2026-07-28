@@ -1,5 +1,5 @@
 import { APIRequestContext, test, expect } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.use({ baseURL: 'http://127.0.0.1:3000' });
 
@@ -11,6 +11,7 @@ let authToken: string;
 type PipelineSummary = {
   id: string;
   is_default: boolean;
+  stages: Array<{ id: string; position: number }>;
 };
 
 test.describe.configure({ timeout: 60000 });
@@ -32,10 +33,12 @@ test.beforeAll(async ({ request }) => {
   const defaultPipeline = pipelines.find((p) => p.is_default) ?? pipelines[0];
   pipelineId = defaultPipeline.id;
 
-  const stagesRes = await request.get(`/api/v1/deals/pipelines/${pipelineId}/stages`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  stageId = (await stagesRes.json()).data[0].id;
+  // GET /deals/pipelines already returns each pipeline's stages nested and
+  // position-ordered (see 10-kanban.spec.ts:42 — a passing test that asserts exactly
+  // that). There is no GET /deals/pipelines/:id/stages route; the request that used to
+  // be here 404'd, and `.data[0].id` on the error envelope threw a TypeError inside
+  // beforeAll, which took all 87 tests in this file down with it.
+  stageId = defaultPipeline.stages[0].id;
 });
 
 test('GET /api/v1/deals returns list', async ({ request }) => {
@@ -123,18 +126,6 @@ test('PATCH /api/v1/deals/:id/lost marks deal lost', async ({ request }) => {
 
 // ─── Shared types ────────────────────────────────────────────────────────────
 
-interface AuthOrg {
-  token: string;
-  userId: string;
-}
-
-interface RegisterResponse {
-  data: {
-    token: string;
-    user: { id: string };
-  };
-}
-
 interface ErrorResponse {
   error: { code: string; message: string };
 }
@@ -193,21 +184,6 @@ function uniq(prefix: string): string {
 function numVal(v: number | string | null): number {
   if (v === null) return 0;
   return typeof v === 'number' ? v : Number(v);
-}
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<AuthOrg> {
-  const unique = uniq(suffix);
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = (await res.json()) as RegisterResponse;
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 async function getOrgPipeline(
@@ -298,7 +274,7 @@ async function fetchDeals(
 // ─── Rung 4 — data-integrity / multi-step / state-verification ───────────────
 
 test('POST /deals with all optional fields stored and verified on GET /:id readback', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-all-fields');
+  const org = await registerVerifiedOrg(request, 'deal-all-fields');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, {
@@ -322,7 +298,7 @@ test('POST /deals with all optional fields stored and verified on GET /:id readb
 });
 
 test('PATCH /deals/:id changes currency from USD to EUR and readback verifies', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-currency-patch');
+  const org = await registerVerifiedOrg(request, 'deal-currency-patch');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, {
@@ -346,7 +322,7 @@ test('PATCH /deals/:id changes currency from USD to EUR and readback verifies', 
 });
 
 test('PATCH /deals/:id changes assigned_to to different user in same org and readback verifies', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-reassign');
+  const org = await registerVerifiedOrg(request, 'deal-reassign');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -372,7 +348,7 @@ test('PATCH /deals/:id changes assigned_to to different user in same org and rea
 });
 
 test('POST /deals/:id/lost with reason, GET /:id shows lost_reason equals reason', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-lost-reason-read');
+  const org = await registerVerifiedOrg(request, 'deal-lost-reason-read');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -389,7 +365,7 @@ test('POST /deals/:id/lost with reason, GET /:id shows lost_reason equals reason
 });
 
 test('After marking deal won, GET /:id shows status=won and actual_close is not null', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-won-readback');
+  const org = await registerVerifiedOrg(request, 'deal-won-readback');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -406,7 +382,7 @@ test('After marking deal won, GET /:id shows status=won and actual_close is not 
 });
 
 test('After marking deal lost, GET /:id shows status=lost and lost_reason reflects the reason', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-lost-readback');
+  const org = await registerVerifiedOrg(request, 'deal-lost-readback');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -423,8 +399,8 @@ test('After marking deal lost, GET /:id shows status=lost and lost_reason reflec
 });
 
 test('GET /deals list is org-scoped: deals from another org do not appear', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-list-scope-a');
-  const orgB = await registerOrg(request, 'deal-list-scope-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-list-scope-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-list-scope-b');
   const { pipelineId: pidA, stages: stagesA } = await getOrgPipeline(request, orgA.token);
   const { pipelineId: pidB, stages: stagesB } = await getOrgPipeline(request, orgB.token);
   const cA = await makeContact(request, orgA.token);
@@ -443,7 +419,7 @@ test('GET /deals list is org-scoped: deals from another org do not appear', asyn
 });
 
 test('GET /deals?assigned_to=userId returns only deals assigned to that user', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-filter-assignee');
+  const org = await registerVerifiedOrg(request, 'deal-filter-assignee');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const assigned = await makeDeal(request, org.token, {
@@ -461,7 +437,7 @@ test('GET /deals?assigned_to=userId returns only deals assigned to that user', a
 });
 
 test('GET /deals?assigned_to=userId excludes deals not assigned to that user', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-filter-assignee-excl');
+  const org = await registerVerifiedOrg(request, 'deal-filter-assignee-excl');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const unassigned = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -472,7 +448,7 @@ test('GET /deals?assigned_to=userId excludes deals not assigned to that user', a
 });
 
 test('GET /deals?stage_id=stageId returns only deals in that stage', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-filter-stage');
+  const org = await registerVerifiedOrg(request, 'deal-filter-stage');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -496,7 +472,7 @@ test('GET /deals?stage_id=stageId returns only deals in that stage', async ({ re
 });
 
 test('GET /deals?pipeline_id=pipelineId returns only deals in that pipeline', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-filter-pipeline');
+  const org = await registerVerifiedOrg(request, 'deal-filter-pipeline');
   const { pipelineId: pid1, stages: stages1 } = await getOrgPipeline(request, org.token);
 
   const pr = await request.post('/api/v1/deals/pipelines', {
@@ -523,7 +499,7 @@ test('GET /deals?pipeline_id=pipelineId returns only deals in that pipeline', as
 });
 
 test('GET /deals pagination: page=1 per_page=2 with 3 deals returns 2 results and meta.total=3', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-page1');
+  const org = await registerVerifiedOrg(request, 'deal-page1');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -539,7 +515,7 @@ test('GET /deals pagination: page=1 per_page=2 with 3 deals returns 2 results an
 });
 
 test('GET /deals pagination: page=2 per_page=2 with 3 deals returns 1 result', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-page2');
+  const org = await registerVerifiedOrg(request, 'deal-page2');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -553,7 +529,7 @@ test('GET /deals pagination: page=2 per_page=2 with 3 deals returns 1 result', a
 });
 
 test('GET /deals?status=archived returns only archived deals', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-filter-archived');
+  const org = await registerVerifiedOrg(request, 'deal-filter-archived');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const open = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -570,7 +546,7 @@ test('GET /deals?status=archived returns only archived deals', async ({ request 
 });
 
 test('PATCH /deals/:id/stage moves deal from stage[0] to stage[2], GET /:id shows new stage', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stage-move');
+  const org = await registerVerifiedOrg(request, 'deal-stage-move');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
 
   // Ensure at least 3 stages exist
@@ -599,7 +575,7 @@ test('PATCH /deals/:id/stage moves deal from stage[0] to stage[2], GET /:id show
 });
 
 test('PATCH /deals/:id/stage to same stage is idempotent and returns 200', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stage-idempotent');
+  const org = await registerVerifiedOrg(request, 'deal-stage-idempotent');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -615,7 +591,7 @@ test('PATCH /deals/:id/stage to same stage is idempotent and returns 200', async
 });
 
 test('After DELETE /deals/:id, deal is excluded from GET /deals?status=open list', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-del-open-excl');
+  const org = await registerVerifiedOrg(request, 'deal-del-open-excl');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -629,7 +605,7 @@ test('After DELETE /deals/:id, deal is excluded from GET /deals?status=open list
 });
 
 test('After DELETE /deals/:id, GET /deals/:id still returns the deal with status=archived', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-del-get-archived');
+  const org = await registerVerifiedOrg(request, 'deal-del-get-archived');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -643,7 +619,7 @@ test('After DELETE /deals/:id, GET /deals/:id still returns the deal with status
 });
 
 test('After DELETE /deals/:id, deal appears in GET /deals?status=archived', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-del-in-archived-list');
+  const org = await registerVerifiedOrg(request, 'deal-del-in-archived-list');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -657,7 +633,7 @@ test('After DELETE /deals/:id, deal appears in GET /deals?status=archived', asyn
 });
 
 test('POST two deals with same contact_id, GET /deals?contact_id returns both', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-filter-contact');
+  const org = await registerVerifiedOrg(request, 'deal-filter-contact');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -671,7 +647,7 @@ test('POST two deals with same contact_id, GET /deals?contact_id returns both', 
 });
 
 test('POST deal with value=0.01 (minimum positive float) verifies stored correctly', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-min-float');
+  const org = await registerVerifiedOrg(request, 'deal-min-float');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, {
@@ -686,7 +662,7 @@ test('POST deal with value=0.01 (minimum positive float) verifies stored correct
 });
 
 test('POST deal with value=999999.99 (large value) verifies stored correctly', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-large-value');
+  const org = await registerVerifiedOrg(request, 'deal-large-value');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, {
@@ -701,7 +677,7 @@ test('POST deal with value=999999.99 (large value) verifies stored correctly', a
 });
 
 test('POST deal without value (omitted), GET /:id shows value is null', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-no-value');
+  const org = await registerVerifiedOrg(request, 'deal-no-value');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -711,7 +687,7 @@ test('POST deal without value (omitted), GET /:id shows value is null', async ({
 });
 
 test('PATCH /deals/:id updates only title, other fields are preserved after partial PATCH', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-patch-title-only');
+  const org = await registerVerifiedOrg(request, 'deal-patch-title-only');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, {
@@ -740,7 +716,7 @@ test('PATCH /deals/:id updates only title, other fields are preserved after part
 });
 
 test('PATCH /deals/:id updates only value, title is preserved', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-patch-value-only');
+  const org = await registerVerifiedOrg(request, 'deal-patch-value-only');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, {
@@ -763,7 +739,7 @@ test('PATCH /deals/:id updates only value, title is preserved', async ({ request
 });
 
 test('PATCH /deals/:id changes contact_id to different contact in same org and readback verifies', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-change-contact');
+  const org = await registerVerifiedOrg(request, 'deal-change-contact');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const cA = await makeContact(request, org.token);
   const cB = await makeContact(request, org.token);
@@ -782,7 +758,7 @@ test('PATCH /deals/:id changes contact_id to different contact in same org and r
 });
 
 test('Bulk: create 5 deals in same pipeline, filter by pipeline shows all 5', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-bulk-5');
+  const org = await registerVerifiedOrg(request, 'deal-bulk-5');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const created: string[] = [];
@@ -806,7 +782,7 @@ test('Bulk: create 5 deals in same pipeline, filter by pipeline shows all 5', as
 });
 
 test('After moving deal to stage[1], GET /deals?stage_id=stage[0].id no longer includes deal', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stage-move-filter');
+  const org = await registerVerifiedOrg(request, 'deal-stage-move-filter');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
 
   if (stages.length < 2) {
@@ -837,8 +813,8 @@ test('After moving deal to stage[1], GET /deals?stage_id=stage[0].id no longer i
 });
 
 test('Multi-org isolation: Org B creates deal, Org A sees zero deals from Org B', async ({ request }) => {
-  const orgA = await registerOrg(request, 'multi-org-a');
-  const orgB = await registerOrg(request, 'multi-org-b');
+  const orgA = await registerVerifiedOrg(request, 'multi-org-a');
+  const orgB = await registerVerifiedOrg(request, 'multi-org-b');
   const { pipelineId: pidB, stages: stagesB } = await getOrgPipeline(request, orgB.token);
   const cB = await makeContact(request, orgB.token);
   const dB = await makeDeal(request, orgB.token, { contactId: cB.id, pipelineId: pidB, stageId: stagesB[0].id });
@@ -849,7 +825,7 @@ test('Multi-org isolation: Org B creates deal, Org A sees zero deals from Org B'
 });
 
 test('GET /deals list meta.total matches the number of created deals in fresh org', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-meta-total');
+  const org = await registerVerifiedOrg(request, 'deal-meta-total');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -863,7 +839,7 @@ test('GET /deals list meta.total matches the number of created deals in fresh or
 });
 
 test('Deal value is returned with numeric-equivalent value in GET /:id response', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-value-type');
+  const org = await registerVerifiedOrg(request, 'deal-value-type');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, {
@@ -880,7 +856,7 @@ test('Deal value is returned with numeric-equivalent value in GET /:id response'
 });
 
 test('POST /deals with currency=EUR stored correctly in GET /:id readback', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-currency-eur');
+  const org = await registerVerifiedOrg(request, 'deal-currency-eur');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, {
@@ -896,7 +872,7 @@ test('POST /deals with currency=EUR stored correctly in GET /:id readback', asyn
 });
 
 test('After PATCH /deals/:id sets new title, original title is gone from GET /:id', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-title-overwrite');
+  const org = await registerVerifiedOrg(request, 'deal-title-overwrite');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, {
@@ -917,7 +893,7 @@ test('After PATCH /deals/:id sets new title, original title is gone from GET /:i
 });
 
 test('GET /deals?status=won does not return lost deals', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-won-not-lost');
+  const org = await registerVerifiedOrg(request, 'deal-won-not-lost');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const won = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -934,7 +910,7 @@ test('GET /deals?status=won does not return lost deals', async ({ request }) => 
 });
 
 test('GET /deals?status=lost does not return won deals', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-lost-not-won');
+  const org = await registerVerifiedOrg(request, 'deal-lost-not-won');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const won = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -951,7 +927,7 @@ test('GET /deals?status=lost does not return won deals', async ({ request }) => 
 });
 
 test('GET /deals?status=open returns only open deals (not won, not lost, not archived)', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-open-only');
+  const org = await registerVerifiedOrg(request, 'deal-open-only');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const open = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -973,7 +949,7 @@ test('GET /deals?status=open returns only open deals (not won, not lost, not arc
 });
 
 test('POST /deals creates deal with pipeline_id and first stage, GET /:id verifies stage_id matches', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stage-verify');
+  const org = await registerVerifiedOrg(request, 'deal-stage-verify');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -986,7 +962,7 @@ test('POST /deals creates deal with pipeline_id and first stage, GET /:id verifi
 });
 
 test('PATCH /deals/:id with empty string title returns 400', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-empty-title');
+  const org = await registerVerifiedOrg(request, 'deal-empty-title');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id, title: 'Valid Title' });
@@ -1002,8 +978,8 @@ test('PATCH /deals/:id with empty string title returns 400', async ({ request })
 });
 
 test('GET /deals/:id for a deal in different org returns 404 DEAL_NOT_FOUND', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-cross-get-a');
-  const orgB = await registerOrg(request, 'deal-cross-get-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-cross-get-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-cross-get-b');
   const { pipelineId, stages } = await getOrgPipeline(request, orgA.token);
   const contact = await makeContact(request, orgA.token);
   const deal = await makeDeal(request, orgA.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1015,8 +991,8 @@ test('GET /deals/:id for a deal in different org returns 404 DEAL_NOT_FOUND', as
 });
 
 test('DELETE /deals/:id for deal not in org returns 404 DEAL_NOT_FOUND', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-del-cross-a');
-  const orgB = await registerOrg(request, 'deal-del-cross-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-del-cross-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-del-cross-b');
   const { pipelineId, stages } = await getOrgPipeline(request, orgA.token);
   const contact = await makeContact(request, orgA.token);
   const deal = await makeDeal(request, orgA.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1028,7 +1004,7 @@ test('DELETE /deals/:id for deal not in org returns 404 DEAL_NOT_FOUND', async (
 });
 
 test('PATCH /deals/:id with extra unknown field returns 200 and ignores the unknown field', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-extra-field');
+  const org = await registerVerifiedOrg(request, 'deal-extra-field');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id, title: 'Extra Field Test', value: 50 });
@@ -1045,7 +1021,7 @@ test('PATCH /deals/:id with extra unknown field returns 200 and ignores the unkn
 });
 
 test('Move deal between stages in same pipeline keeps pipeline_id unchanged', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stage-pipeline-unchanged');
+  const org = await registerVerifiedOrg(request, 'deal-stage-pipeline-unchanged');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
 
   if (stages.length < 2) {
@@ -1072,7 +1048,7 @@ test('Move deal between stages in same pipeline keeps pipeline_id unchanged', as
 });
 
 test('After POST /deals/:id/won, POST /deals/:id/lost updates status to lost', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-won-then-lost');
+  const org = await registerVerifiedOrg(request, 'deal-won-then-lost');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1095,7 +1071,7 @@ test('After POST /deals/:id/won, POST /deals/:id/lost updates status to lost', a
 });
 
 test('After POST /deals/:id/lost, POST /deals/:id/won updates status to won', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-lost-then-won');
+  const org = await registerVerifiedOrg(request, 'deal-lost-then-won');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1117,7 +1093,7 @@ test('After POST /deals/:id/lost, POST /deals/:id/won updates status to won', as
 });
 
 test('Archived deals are included in default GET /deals list with no status filter', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-default-no-archived');
+  const org = await registerVerifiedOrg(request, 'deal-default-no-archived');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const open = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1134,7 +1110,7 @@ test('Archived deals are included in default GET /deals list with no status filt
 });
 
 test('PATCH /deals/:id/stage on archived deal returns 422 DEAL_NOT_OPEN', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stage-archived');
+  const org = await registerVerifiedOrg(request, 'deal-stage-archived');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
 
   if (stages.length < 2) {
@@ -1161,7 +1137,7 @@ test('PATCH /deals/:id/stage on archived deal returns 422 DEAL_NOT_OPEN', async 
 });
 
 test('GET /deals?status=open excludes won deals', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-open-excl-won');
+  const org = await registerVerifiedOrg(request, 'deal-open-excl-won');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const toWin = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1174,7 +1150,7 @@ test('GET /deals?status=open excludes won deals', async ({ request }) => {
 });
 
 test('GET /deals?status=open excludes lost deals', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-open-excl-lost');
+  const org = await registerVerifiedOrg(request, 'deal-open-excl-lost');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const toLose = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1187,7 +1163,7 @@ test('GET /deals?status=open excludes lost deals', async ({ request }) => {
 });
 
 test('PATCH /deals/:id/stage with stage from different pipeline returns STAGE_NOT_FOUND and deal stage is unchanged', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stage-mismatch-patch');
+  const org = await registerVerifiedOrg(request, 'deal-stage-mismatch-patch');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
 
   const pr2 = await request.post('/api/v1/deals/pipelines', {
@@ -1219,7 +1195,7 @@ test('PATCH /deals/:id/stage with stage from different pipeline returns STAGE_NO
 });
 
 test('GET /deals/:id includes nested contact with id and first_name', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-nested-contact');
+  const org = await registerVerifiedOrg(request, 'deal-nested-contact');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token, 'NestedFirst');
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1232,7 +1208,7 @@ test('GET /deals/:id includes nested contact with id and first_name', async ({ r
 });
 
 test('GET /deals/:id includes nested pipeline with id and name', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-nested-pipeline');
+  const org = await registerVerifiedOrg(request, 'deal-nested-pipeline');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1244,7 +1220,7 @@ test('GET /deals/:id includes nested pipeline with id and name', async ({ reques
 });
 
 test('GET /deals/:id includes nested stage with id, name, and position', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-nested-stage');
+  const org = await registerVerifiedOrg(request, 'deal-nested-stage');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1257,7 +1233,7 @@ test('GET /deals/:id includes nested stage with id, name, and position', async (
 });
 
 test('PATCH /deals/:id value=null clears value, GET /:id shows null', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-null-value-clear');
+  const org = await registerVerifiedOrg(request, 'deal-null-value-clear');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id, value: 300 });
@@ -1274,7 +1250,7 @@ test('PATCH /deals/:id value=null clears value, GET /:id shows null', async ({ r
 });
 
 test('PATCH /deals/:id updates updated_at timestamp after a change', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-updated-at');
+  const org = await registerVerifiedOrg(request, 'deal-updated-at');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1293,8 +1269,8 @@ test('PATCH /deals/:id updates updated_at timestamp after a change', async ({ re
 });
 
 test('POST /deals with stage_id belonging to a different org pipeline returns 404 or 400', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-xorg-stage-a');
-  const orgB = await registerOrg(request, 'deal-xorg-stage-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-xorg-stage-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-xorg-stage-b');
   const { pipelineId: pidA } = await getOrgPipeline(request, orgA.token);
   const { stages: stagesB } = await getOrgPipeline(request, orgB.token);
   const contact = await makeContact(request, orgA.token);
@@ -1312,7 +1288,7 @@ test('POST /deals with stage_id belonging to a different org pipeline returns 40
 });
 
 test('PATCH /deals/:id/stage with non-existent stage UUID returns 404 STAGE_NOT_FOUND', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stage-notfound');
+  const org = await registerVerifiedOrg(request, 'deal-stage-notfound');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1327,7 +1303,7 @@ test('PATCH /deals/:id/stage with non-existent stage UUID returns 404 STAGE_NOT_
 });
 
 test('GET /deals with no filters returns deals with status field present on each deal', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-list-status-field');
+  const org = await registerVerifiedOrg(request, 'deal-list-status-field');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1341,7 +1317,7 @@ test('GET /deals with no filters returns deals with status field present on each
 });
 
 test('POST /deals/:id/won twice returns 422 DEAL_ALREADY_WON on the second call, status stays won', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-double-won');
+  const org = await registerVerifiedOrg(request, 'deal-double-won');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1359,7 +1335,7 @@ test('POST /deals/:id/won twice returns 422 DEAL_ALREADY_WON on the second call,
 });
 
 test('POST /deals/:id/lost twice returns 422 DEAL_ALREADY_LOST on the second call, status stays lost', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-double-lost');
+  const org = await registerVerifiedOrg(request, 'deal-double-lost');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1378,7 +1354,7 @@ test('POST /deals/:id/lost twice returns 422 DEAL_ALREADY_LOST on the second cal
 });
 
 test('DELETE /deals/:id twice returns 422 DEAL_ALREADY_ARCHIVED on the second call', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-double-archive');
+  const org = await registerVerifiedOrg(request, 'deal-double-archive');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1393,7 +1369,7 @@ test('DELETE /deals/:id twice returns 422 DEAL_ALREADY_ARCHIVED on the second ca
 });
 
 test('POST /deals/:id/won on a non-existent UUID returns 404', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-won-notfound');
+  const org = await registerVerifiedOrg(request, 'deal-won-notfound');
   const res = await request.post('/api/v1/deals/00000000-0000-4000-8000-000000000066/won', {
     headers: authHdr(org.token),
     data: {},
@@ -1402,7 +1378,7 @@ test('POST /deals/:id/won on a non-existent UUID returns 404', async ({ request 
 });
 
 test('POST /deals/:id/lost on a non-existent UUID returns 404', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-lost-notfound');
+  const org = await registerVerifiedOrg(request, 'deal-lost-notfound');
   const res = await request.post('/api/v1/deals/00000000-0000-4000-8000-000000000067/lost', {
     headers: authHdr(org.token),
     data: { reason: 'ghost' },
@@ -1411,7 +1387,7 @@ test('POST /deals/:id/lost on a non-existent UUID returns 404', async ({ request
 });
 
 test('PATCH /deals/:id on a non-existent UUID returns 404', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-patch-notfound');
+  const org = await registerVerifiedOrg(request, 'deal-patch-notfound');
   const res = await request.patch('/api/v1/deals/00000000-0000-4000-8000-000000000068', {
     headers: authHdr(org.token),
     data: { title: 'Ghost Patch' },
@@ -1420,7 +1396,7 @@ test('PATCH /deals/:id on a non-existent UUID returns 404', async ({ request }) 
 });
 
 test('GET /deals/:id with non-existent UUID returns 404 DEAL_NOT_FOUND', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-get-notfound');
+  const org = await registerVerifiedOrg(request, 'deal-get-notfound');
   const res = await request.get('/api/v1/deals/00000000-0000-4000-8000-000000000069', {
     headers: authHdr(org.token),
   });
@@ -1430,7 +1406,7 @@ test('GET /deals/:id with non-existent UUID returns 404 DEAL_NOT_FOUND', async (
 });
 
 test('POST /deals/:id/won sets actual_close to a non-null ISO date string', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-actual-close');
+  const org = await registerVerifiedOrg(request, 'deal-actual-close');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   const deal = await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1446,7 +1422,7 @@ test('POST /deals/:id/won sets actual_close to a non-null ISO date string', asyn
 });
 
 test('GET /deals returns meta object with total, page, per_page fields', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-meta-shape');
+  const org = await registerVerifiedOrg(request, 'deal-meta-shape');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1458,7 +1434,7 @@ test('GET /deals returns meta object with total, page, per_page fields', async (
 });
 
 test('GET /deals/?status=open returns deals with status=open on each record', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-status-open-field');
+  const org = await registerVerifiedOrg(request, 'deal-status-open-field');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
   await makeDeal(request, org.token, { contactId: contact.id, pipelineId, stageId: stages[0].id });
@@ -1473,7 +1449,7 @@ test('GET /deals/?status=open returns deals with status=open on each record', as
 // ─── Rung 5 — concurrent / stress ────────────────────────────────────────────
 
 test('Stress: create 20 deals in same stage, paginate 5 per page across 4 pages', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stress-20');
+  const org = await registerVerifiedOrg(request, 'deal-stress-20');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -1509,7 +1485,7 @@ test('Stress: create 20 deals in same stage, paginate 5 per page across 4 pages'
 });
 
 test('Concurrent: 5 parallel POST /deals all succeed with 201', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-concurrent-create');
+  const org = await registerVerifiedOrg(request, 'deal-concurrent-create');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -1536,7 +1512,7 @@ test('Concurrent: 5 parallel POST /deals all succeed with 201', async ({ request
 });
 
 test('Concurrent: 5 parallel PATCH /deals/:id on different deals all succeed with 200', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-concurrent-patch');
+  const org = await registerVerifiedOrg(request, 'deal-concurrent-patch');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -1570,7 +1546,7 @@ test('Concurrent: 5 parallel PATCH /deals/:id on different deals all succeed wit
 });
 
 test('Concurrent: 5 parallel GET /deals/:id on different deals all return 200', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-concurrent-get');
+  const org = await registerVerifiedOrg(request, 'deal-concurrent-get');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -1592,7 +1568,7 @@ test('Concurrent: 5 parallel GET /deals/:id on different deals all return 200', 
 });
 
 test('Concurrent: 5 parallel DELETE /deals/:id on different deals all return 200', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-concurrent-delete');
+  const org = await registerVerifiedOrg(request, 'deal-concurrent-delete');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -1614,7 +1590,7 @@ test('Concurrent: 5 parallel DELETE /deals/:id on different deals all return 200
 });
 
 test('Concurrent: 3 parallel POST /deals/:id/won on distinct deals all return 200', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-concurrent-won');
+  const org = await registerVerifiedOrg(request, 'deal-concurrent-won');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -1636,7 +1612,7 @@ test('Concurrent: 3 parallel POST /deals/:id/won on distinct deals all return 20
 });
 
 test('Concurrent: 3 parallel POST /deals/:id/lost on distinct deals all return 200', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-concurrent-lost');
+  const org = await registerVerifiedOrg(request, 'deal-concurrent-lost');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -1664,7 +1640,7 @@ test('Concurrent: 3 parallel POST /deals/:id/lost on distinct deals all return 2
 });
 
 test('Concurrent: 4 parallel GET /deals list requests all return consistent meta.total', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-concurrent-list');
+  const org = await registerVerifiedOrg(request, 'deal-concurrent-list');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -1686,7 +1662,7 @@ test('Concurrent: 4 parallel GET /deals list requests all return consistent meta
 });
 
 test('Stress: sequential stage transitions across all 4 default stages', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stress-stages');
+  const org = await registerVerifiedOrg(request, 'deal-stress-stages');
   const res = await request.get('/api/v1/deals/pipelines', { headers: authHdr(org.token) });
   expect(res.status()).toBe(200);
   const pipelines = ((await res.json()) as { data: PipelineRecord[] }).data;
@@ -1723,7 +1699,7 @@ test('Stress: sequential stage transitions across all 4 default stages', async (
 });
 
 test('Stress: create 10 deals with distinct values, GET /deals list total_value integrity via dashboard', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stress-value-sum');
+  const org = await registerVerifiedOrg(request, 'deal-stress-value-sum');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -1742,8 +1718,8 @@ test('Stress: create 10 deals with distinct values, GET /deals list total_value 
 });
 
 test('Concurrent: two orgs create deals simultaneously, each sees only their own deals', async ({ request }) => {
-  const orgA = await registerOrg(request, 'deal-concurrent-iso-a');
-  const orgB = await registerOrg(request, 'deal-concurrent-iso-b');
+  const orgA = await registerVerifiedOrg(request, 'deal-concurrent-iso-a');
+  const orgB = await registerVerifiedOrg(request, 'deal-concurrent-iso-b');
   const { pipelineId: pidA, stages: stagesA } = await getOrgPipeline(request, orgA.token);
   const { pipelineId: pidB, stages: stagesB } = await getOrgPipeline(request, orgB.token);
   const cA = await makeContact(request, orgA.token);
@@ -1781,7 +1757,7 @@ test('Concurrent: two orgs create deals simultaneously, each sees only their own
 });
 
 test('Stress: paginate 10 deals with per_page=3 and verify all IDs are unique across pages', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stress-paginate-uniq');
+  const org = await registerVerifiedOrg(request, 'deal-stress-paginate-uniq');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 
@@ -1807,7 +1783,7 @@ test('Stress: paginate 10 deals with per_page=3 and verify all IDs are unique ac
 });
 
 test('Concurrent: 5 parallel PATCH /deals/:id/stage on different deals all succeed', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-concurrent-stage');
+  const org = await registerVerifiedOrg(request, 'deal-concurrent-stage');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
 
   if (stages.length < 2) {
@@ -1843,7 +1819,7 @@ test('Concurrent: 5 parallel PATCH /deals/:id/stage on different deals all succe
 });
 
 test('Stress: create 15 deals, mark 5 won, 5 lost, 5 open — counts match per status filter', async ({ request }) => {
-  const org = await registerOrg(request, 'deal-stress-status-counts');
+  const org = await registerVerifiedOrg(request, 'deal-stress-status-counts');
   const { pipelineId, stages } = await getOrgPipeline(request, org.token);
   const contact = await makeContact(request, org.token);
 

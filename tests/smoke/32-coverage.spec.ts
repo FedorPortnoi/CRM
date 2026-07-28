@@ -1,6 +1,6 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
+import { registerVerifiedOrg } from './helpers/auth';
 
-type Auth = { token: string; userId: string };
 type CaptureType = 'call' | 'email';
 type CaptureStatus = 'pending' | 'matched' | 'dismissed';
 type CaptureStatusQuery = CaptureStatus | 'all';
@@ -28,21 +28,6 @@ type Message = {
   twilio_sid?: string | null;
 };
 type ErrorBody = { error: { code: string; message: string } };
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<Auth> {
-  const unique = `${suffix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = await res.json() as { data: { token: string; user: { id: string } } };
-  return { token: body.data.token, userId: body.data.user.id };
-}
 
 function authHeaders(token: string) { return { Authorization: `Bearer ${token}` }; }
 
@@ -160,7 +145,7 @@ test.describe.configure({ timeout: 30000 });
 
 test.describe('export csv', () => {
   test('export: funnel report as csv returns text/csv', async ({ request }) => {
-    const { token } = await registerOrg(request, 'exp-csv-funnel');
+    const { token } = await registerVerifiedOrg(request, 'exp-csv-funnel');
     const r = await request.post('/api/v1/analytics/export', {
       headers: authHeaders(token),
       data: { format: 'csv', report: 'funnel', period: 'month' },
@@ -172,7 +157,7 @@ test.describe('export csv', () => {
   });
 
   test('export: revenue report as csv returns text/csv with headers', async ({ request }) => {
-    const { token } = await registerOrg(request, 'exp-csv-rev');
+    const { token } = await registerVerifiedOrg(request, 'exp-csv-rev');
     const r = await request.post('/api/v1/analytics/export', {
       headers: authHeaders(token),
       data: { format: 'csv', report: 'revenue', period: 'month' },
@@ -184,7 +169,7 @@ test.describe('export csv', () => {
   });
 
   test('export: win_loss report as csv returns text/csv', async ({ request }) => {
-    const { token } = await registerOrg(request, 'exp-csv-wl');
+    const { token } = await registerVerifiedOrg(request, 'exp-csv-wl');
     const r = await request.post('/api/v1/analytics/export', {
       headers: authHeaders(token),
       data: { format: 'csv', report: 'win_loss', period: 'month' },
@@ -194,7 +179,7 @@ test.describe('export csv', () => {
   });
 
   test('export: lead_sources report as csv returns text/csv', async ({ request }) => {
-    const { token } = await registerOrg(request, 'exp-csv-ls');
+    const { token } = await registerVerifiedOrg(request, 'exp-csv-ls');
     const r = await request.post('/api/v1/analytics/export', {
       headers: authHeaders(token),
       data: { format: 'csv', report: 'lead_sources', period: 'month' },
@@ -204,7 +189,7 @@ test.describe('export csv', () => {
   });
 
   test('export: team_activity report as csv returns text/csv', async ({ request }) => {
-    const { token } = await registerOrg(request, 'exp-csv-ta');
+    const { token } = await registerVerifiedOrg(request, 'exp-csv-ta');
     const r = await request.post('/api/v1/analytics/export', {
       headers: authHeaders(token),
       data: { format: 'csv', report: 'team_activity', period: 'month' },
@@ -214,7 +199,7 @@ test.describe('export csv', () => {
   });
 
   test('export: custom period date range works', async ({ request }) => {
-    const { token } = await registerOrg(request, 'exp-csv-custom');
+    const { token } = await registerVerifiedOrg(request, 'exp-csv-custom');
     const start = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
     const end = new Date().toISOString().slice(0, 10);
     const r = await request.post('/api/v1/analytics/export', {
@@ -230,7 +215,7 @@ test.describe('export csv', () => {
 
 test.describe('export pdf', () => {
   test('export: funnel report as pdf returns application/pdf', async ({ request }) => {
-    const { token } = await registerOrg(request, 'exp-pdf-funnel');
+    const { token } = await registerVerifiedOrg(request, 'exp-pdf-funnel');
     const r = await request.post('/api/v1/analytics/export', {
       headers: authHeaders(token),
       data: { format: 'pdf', report: 'funnel', period: 'month' },
@@ -243,7 +228,7 @@ test.describe('export pdf', () => {
   });
 
   test('export: revenue report as pdf returns application/pdf', async ({ request }) => {
-    const { token } = await registerOrg(request, 'exp-pdf-rev');
+    const { token } = await registerVerifiedOrg(request, 'exp-pdf-rev');
     const r = await request.post('/api/v1/analytics/export', {
       headers: authHeaders(token),
       data: { format: 'pdf', report: 'revenue', period: 'month' },
@@ -253,7 +238,7 @@ test.describe('export pdf', () => {
   });
 
   test('export: win_loss report as pdf returns application/pdf', async ({ request }) => {
-    const { token } = await registerOrg(request, 'exp-pdf-wl');
+    const { token } = await registerVerifiedOrg(request, 'exp-pdf-wl');
     const r = await request.post('/api/v1/analytics/export', {
       headers: authHeaders(token),
       data: { format: 'pdf', report: 'win_loss', period: 'month' },
@@ -263,7 +248,7 @@ test.describe('export pdf', () => {
   });
 
   test('export: missing format returns 400', async ({ request }) => {
-    const { token } = await registerOrg(request, 'exp-bad-fmt');
+    const { token } = await registerVerifiedOrg(request, 'exp-bad-fmt');
     const r = await request.post('/api/v1/analytics/export', {
       headers: authHeaders(token),
       data: { report: 'funnel', period: 'month' },
@@ -272,7 +257,7 @@ test.describe('export pdf', () => {
   });
 
   test('export: invalid report type returns 400', async ({ request }) => {
-    const { token } = await registerOrg(request, 'exp-bad-rpt');
+    const { token } = await registerVerifiedOrg(request, 'exp-bad-rpt');
     const r = await request.post('/api/v1/analytics/export', {
       headers: authHeaders(token),
       data: { format: 'csv', report: 'nonexistent_report', period: 'month' },
@@ -286,7 +271,7 @@ test.describe('export pdf', () => {
 
 test.describe('workflow triggers extended', () => {
   test('workflow: deal_created trigger fires task on deal creation', async ({ request }) => {
-    const { token, userId } = await registerOrg(request, 'wf-deal-created');
+    const { token, userId } = await registerVerifiedOrg(request, 'wf-deal-created');
     const pl = await getPipeline(request, token);
     const stId = pl.stages[0]!.id;
 
@@ -316,7 +301,7 @@ test.describe('workflow triggers extended', () => {
   });
 
   test('workflow: deal_won trigger fires task when deal marked won', async ({ request }) => {
-    const { token, userId } = await registerOrg(request, 'wf-deal-won');
+    const { token, userId } = await registerVerifiedOrg(request, 'wf-deal-won');
     const pl = await getPipeline(request, token);
     const stId = pl.stages[0]!.id;
 
@@ -350,7 +335,7 @@ test.describe('workflow triggers extended', () => {
   });
 
   test('workflow: task_created trigger fires task when task created', async ({ request }) => {
-    const { token, userId } = await registerOrg(request, 'wf-task-created');
+    const { token, userId } = await registerVerifiedOrg(request, 'wf-task-created');
 
     // Create workflow with task_created trigger
     const wfRes = await request.post('/api/v1/workflows', {
@@ -379,7 +364,7 @@ test.describe('workflow triggers extended', () => {
 
 test.describe('onboarding', () => {
   test('onboarding: GET /auth/onboarding returns current state', async ({ request }) => {
-    const { token } = await registerOrg(request, 'ob-get');
+    const { token } = await registerVerifiedOrg(request, 'ob-get');
     const r = await request.get('/api/v1/auth/onboarding', { headers: authHeaders(token) });
     expect(r.status()).toBe(200);
     const body = await r.json() as { data: Record<string, unknown>; meta: Record<string, unknown> };
@@ -388,7 +373,7 @@ test.describe('onboarding', () => {
   });
 
   test('onboarding: PATCH /auth/onboarding sets completed=true', async ({ request }) => {
-    const { token } = await registerOrg(request, 'ob-patch');
+    const { token } = await registerVerifiedOrg(request, 'ob-patch');
     const r = await request.patch('/api/v1/auth/onboarding', {
       headers: authHeaders(token),
       data: { completed: true },
@@ -399,7 +384,7 @@ test.describe('onboarding', () => {
   });
 
   test('onboarding: PATCH with dismissed_steps records steps', async ({ request }) => {
-    const { token } = await registerOrg(request, 'ob-steps');
+    const { token } = await registerVerifiedOrg(request, 'ob-steps');
     const r = await request.patch('/api/v1/auth/onboarding', {
       headers: authHeaders(token),
       data: { completed: false, dismissed_steps: ['add_contact', 'create_deal'] },
@@ -408,7 +393,7 @@ test.describe('onboarding', () => {
   });
 
   test('onboarding: completing onboarding → GET shows completed=true', async ({ request }) => {
-    const { token } = await registerOrg(request, 'ob-roundtrip');
+    const { token } = await registerVerifiedOrg(request, 'ob-roundtrip');
     // Complete
     await request.patch('/api/v1/auth/onboarding', {
       headers: authHeaders(token),
@@ -421,20 +406,17 @@ test.describe('onboarding', () => {
   });
 
   test('onboarding: new user has onboarding_completed=false in auth response', async ({ request }) => {
-    const unique = `ob-new-${Date.now()}`;
-    const res = await request.post('/api/v1/auth/', {
-      data: { email: `${unique}@example.com`, password: 'Password123!', name: 'New User', org_name: `Org ${unique}` },
-    });
-    expect(res.status()).toBe(201);
-    const body = await res.json() as { data: { user: { onboarding_completed?: boolean } } };
+    // Registration's 201 body is only { user_id, email, needs_verification } now, so the user
+    // object this asserts on is the one returned by the login that follows registration.
+    const org = await registerVerifiedOrg(request, 'ob-new', { name: 'New User' });
     // New users should have onboarding_completed = false (or undefined treated as false)
-    expect(body.data.user.onboarding_completed === false || body.data.user.onboarding_completed === undefined).toBe(true);
+    expect(org.user.onboarding_completed === false || org.user.onboarding_completed === undefined).toBe(true);
   });
 });
 
 test.describe('auto-capture', () => {
   test('captures: POST creates pending call capture with response envelope', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-create-call');
+    const { token } = await registerVerifiedOrg(request, 'cap-create-call');
     const phone = uniquePhone();
     const r = await request.post('/api/v1/captures', {
       headers: authHeaders(token),
@@ -453,7 +435,7 @@ test.describe('auto-capture', () => {
   });
 
   test('captures: POST backfills phone_number from raw_data phone fields', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-phone-backfill');
+    const { token } = await registerVerifiedOrg(request, 'cap-phone-backfill');
     const phoneValue = uniquePhone();
     const fromValue = uniquePhone();
     const upperFromValue = uniquePhone();
@@ -468,7 +450,7 @@ test.describe('auto-capture', () => {
   });
 
   test('captures: GET defaults to pending only and returns meta.total', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-list-pending');
+    const { token } = await registerVerifiedOrg(request, 'cap-list-pending');
     const seeded = await seedCaptureStates(request, token, 'default');
 
     const body = await listCaptures(request, token);
@@ -479,7 +461,7 @@ test.describe('auto-capture', () => {
   });
 
   test('captures: GET status=all includes pending matched and dismissed', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-list-all');
+    const { token } = await registerVerifiedOrg(request, 'cap-list-all');
     const seeded = await seedCaptureStates(request, token, 'all');
 
     const body = await listCaptures(request, token, 'all');
@@ -489,7 +471,7 @@ test.describe('auto-capture', () => {
   });
 
   test('captures: GET status=matched returns matched captures only', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-list-matched');
+    const { token } = await registerVerifiedOrg(request, 'cap-list-matched');
     const seeded = await seedCaptureStates(request, token, 'matched');
 
     const body = await listCaptures(request, token, 'matched');
@@ -500,7 +482,7 @@ test.describe('auto-capture', () => {
   });
 
   test('captures: GET status=dismissed returns dismissed captures only', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-list-dismissed');
+    const { token } = await registerVerifiedOrg(request, 'cap-list-dismissed');
     const seeded = await seedCaptureStates(request, token, 'dismissed');
 
     const body = await listCaptures(request, token, 'dismissed');
@@ -511,7 +493,7 @@ test.describe('auto-capture', () => {
   });
 
   test('captures: dismiss marks pending capture dismissed and removes it from default list', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-dismiss');
+    const { token } = await registerVerifiedOrg(request, 'cap-dismiss');
     const capture = await createCapture(request, token, 'call', { phone: uniquePhone(), notes: 'Dismiss me' });
 
     const dismissRes = await request.post(`/api/v1/captures/${capture.id}/dismiss`, { headers: authHeaders(token) });
@@ -527,7 +509,7 @@ test.describe('auto-capture', () => {
   });
 
   test('captures: dismissing an already resolved capture returns CAPTURE_ALREADY_RESOLVED', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-dismiss-resolved');
+    const { token } = await registerVerifiedOrg(request, 'cap-dismiss-resolved');
     const capture = await createCapture(request, token, 'call', { phone: uniquePhone(), notes: 'Resolve once' });
 
     const firstDismiss = await request.post(`/api/v1/captures/${capture.id}/dismiss`, { headers: authHeaders(token) });
@@ -540,8 +522,8 @@ test.describe('auto-capture', () => {
   });
 
   test('captures: match rejects a contact from another org and leaves capture pending', async ({ request }) => {
-    const orgA = await registerOrg(request, 'cap-cross-contact-a');
-    const orgB = await registerOrg(request, 'cap-cross-contact-b');
+    const orgA = await registerVerifiedOrg(request, 'cap-cross-contact-a');
+    const orgB = await registerVerifiedOrg(request, 'cap-cross-contact-b');
     const capture = await createCapture(request, orgA.token, 'email', { from: uniquePhone(), Body: 'Cross org candidate' });
     const otherContact = await makeContact(request, orgB.token, 'OtherOrgContact', { phone: uniquePhone() });
 
@@ -558,7 +540,7 @@ test.describe('auto-capture', () => {
   });
 
   test('captures: match creates a call message linked to the matched contact', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-match-message');
+    const { token } = await registerVerifiedOrg(request, 'cap-match-message');
     const contact = await makeContact(request, token, 'CallContact', { phone: uniquePhone() });
     const capture = await createCapture(request, token, 'call', {
       phone: uniquePhone(),
@@ -585,8 +567,8 @@ test.describe('auto-capture', () => {
   });
 
   test('captures: org A capture is not visible or actionable from org B', async ({ request }) => {
-    const orgA = await registerOrg(request, 'cap-scope-a');
-    const orgB = await registerOrg(request, 'cap-scope-b');
+    const orgA = await registerVerifiedOrg(request, 'cap-scope-a');
+    const orgB = await registerVerifiedOrg(request, 'cap-scope-b');
     const capture = await createCapture(request, orgA.token, 'call', { phone: uniquePhone(), notes: 'Private capture' });
     const orgBContact = await makeContact(request, orgB.token, 'OrgBContact', { phone: uniquePhone() });
 
@@ -609,7 +591,7 @@ test.describe('auto-capture', () => {
   });
 
   test('captures: create-contact creates a contact, matches the capture, and creates a message', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-create-contact');
+    const { token } = await registerVerifiedOrg(request, 'cap-create-contact');
     const phone = uniquePhone();
     const capture = await createCapture(request, token, 'email', {
       first_name: 'Captured',
@@ -636,7 +618,7 @@ test.describe('auto-capture', () => {
   });
 
   test('captures: create-contact falls back to Unknown and uses the raw phone', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-create-contact-fallback');
+    const { token } = await registerVerifiedOrg(request, 'cap-create-contact-fallback');
     const phone = uniquePhone();
     const capture = await createCapture(request, token, 'email', {
       From: phone,
@@ -661,13 +643,13 @@ test.describe('auto-capture', () => {
   });
 
   test('captures: invalid status query returns 400', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-bad-status');
+    const { token } = await registerVerifiedOrg(request, 'cap-bad-status');
     const r = await request.get('/api/v1/captures?status=resolved', { headers: authHeaders(token) });
     expect(r.status()).toBe(400);
   });
 
   test('captures: invalid type on POST returns 400', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-bad-type');
+    const { token } = await registerVerifiedOrg(request, 'cap-bad-type');
     const r = await request.post('/api/v1/captures', {
       headers: authHeaders(token),
       data: { type: 'fax', raw_data: { phone: uniquePhone() } },
@@ -676,7 +658,7 @@ test.describe('auto-capture', () => {
   });
 
   test('contacts: phone filter matches normalized phone and mobile variants only', async ({ request }) => {
-    const { token } = await registerOrg(request, 'cap-phone-filter');
+    const { token } = await registerVerifiedOrg(request, 'cap-phone-filter');
     const digits = uniqueNationalPhone();
     const phoneContact = await makeContact(request, token, 'PhoneVariant', { phone: formatPhoneVariant(digits) });
     const mobileContact = await makeContact(request, token, 'MobileVariant', { mobile: `8 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 8)} ${digits.slice(8)}` });

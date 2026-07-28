@@ -1,16 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-
-type Auth = { token: string; userId: string };
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<Auth> {
-  const unique = suffix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-  const res = await request.post('/api/v1/auth/', {
-    data: { email: unique + '@example.com', password: 'Password123!', name: 'User ' + suffix, org_name: 'Org ' + unique },
-  });
-  expect(res.status()).toBe(201);
-  const body = await res.json() as { data: { token: string; user: { id: string } } };
-  return { token: body.data.token, userId: body.data.user.id };
-}
+import { registerVerifiedOrg } from './helpers/auth';
 
 function authHeaders(token: string) { return { Authorization: 'Bearer ' + token }; }
 
@@ -62,7 +51,7 @@ test.describe.configure({ timeout: 30000 });
 // ─── Group 1: Deal state machine edge cases ───────────────────────────────────
 
 test('coverage 38: PATCH /deals/:id/stage on archived deal → 422 DEAL_NOT_OPEN', async ({ request }) => {
-  const org = await registerOrg(request, '38-arc-stage');
+  const org = await registerVerifiedOrg(request, '38-arc-stage');
   const pl = await getPipeline(request, org.token);
   const stageA = pl.stages[0]!.id;
   const stageB = pl.stages[1]!.id;
@@ -81,7 +70,7 @@ test('coverage 38: PATCH /deals/:id/stage on archived deal → 422 DEAL_NOT_OPEN
 });
 
 test('coverage 38: PATCH /deals/:id/stage with stage from wrong pipeline → 404 STAGE_NOT_FOUND', async ({ request }) => {
-  const org = await registerOrg(request, '38-wrong-pipe');
+  const org = await registerVerifiedOrg(request, '38-wrong-pipe');
   const pl = await getPipeline(request, org.token);
   const stageA = pl.stages[0]!.id;
   const c = await createContact(request, org.token, 'WrongPipeContact');
@@ -111,7 +100,7 @@ test('coverage 38: PATCH /deals/:id/stage with stage from wrong pipeline → 404
 });
 
 test('coverage 38: POST /deals/:id/won on already-won deal → 422 DEAL_ALREADY_WON', async ({ request }) => {
-  const org = await registerOrg(request, '38-dbl-won');
+  const org = await registerVerifiedOrg(request, '38-dbl-won');
   const pl = await getPipeline(request, org.token);
   const stageA = pl.stages[0]!.id;
   const c = await createContact(request, org.token, 'WonContact');
@@ -127,7 +116,7 @@ test('coverage 38: POST /deals/:id/won on already-won deal → 422 DEAL_ALREADY_
 });
 
 test('coverage 38: POST /deals/:id/lost then won → deal status becomes won', async ({ request }) => {
-  const org = await registerOrg(request, '38-lost-won');
+  const org = await registerVerifiedOrg(request, '38-lost-won');
   const pl = await getPipeline(request, org.token);
   const stageA = pl.stages[0]!.id;
   const c = await createContact(request, org.token, 'LostWonContact');
@@ -145,7 +134,7 @@ test('coverage 38: POST /deals/:id/lost then won → deal status becomes won', a
 // ─── Group 2: Task state machine edge cases ───────────────────────────────────
 
 test('coverage 38: POST /tasks/:id/start on in_progress task → 422 INVALID_STATUS_TRANSITION', async ({ request }) => {
-  const org = await registerOrg(request, '38-task-start');
+  const org = await registerVerifiedOrg(request, '38-task-start');
   const t = await createTask(request, org.token, org.userId, 'Start Task 38');
 
   const startRes = await request.post(`/api/v1/tasks/${t.id}/start`, { headers: authHeaders(org.token) });
@@ -158,7 +147,7 @@ test('coverage 38: POST /tasks/:id/start on in_progress task → 422 INVALID_STA
 });
 
 test('coverage 38: POST /tasks/:id/complete on cancelled task → 422 TASK_CANCELLED', async ({ request }) => {
-  const org = await registerOrg(request, '38-task-cancel-complete');
+  const org = await registerVerifiedOrg(request, '38-task-cancel-complete');
   const t = await createTask(request, org.token, org.userId, 'Cancel Me 38');
 
   await request.delete(`/api/v1/tasks/${t.id}`, { headers: authHeaders(org.token) });
@@ -170,7 +159,7 @@ test('coverage 38: POST /tasks/:id/complete on cancelled task → 422 TASK_CANCE
 });
 
 test('coverage 38: POST /tasks/:id/complete toggles done→pending (no workflow re-fire)', async ({ request }) => {
-  const org = await registerOrg(request, '38-toggle-done');
+  const org = await registerVerifiedOrg(request, '38-toggle-done');
   const t = await createTask(request, org.token, org.userId, 'Toggle Task 38');
 
   const done = await request.post(`/api/v1/tasks/${t.id}/complete`, { headers: authHeaders(org.token) });
@@ -185,8 +174,8 @@ test('coverage 38: POST /tasks/:id/complete toggles done→pending (no workflow 
 // ─── Group 3: Messages ────────────────────────────────────────────────────────
 
 test('coverage 38: GET /messages with cross-org contact_id returns empty (isolation)', async ({ request }) => {
-  const orgA = await registerOrg(request, '38-msg-iso-a');
-  const orgB = await registerOrg(request, '38-msg-iso-b');
+  const orgA = await registerVerifiedOrg(request, '38-msg-iso-a');
+  const orgB = await registerVerifiedOrg(request, '38-msg-iso-b');
 
   const cA = await createContact(request, orgA.token, 'OrgAContact', { phone: '+79991110001' });
   const seeded = await request.post('/api/v1/messages/in-app', {
@@ -203,7 +192,7 @@ test('coverage 38: GET /messages with cross-org contact_id returns empty (isolat
 });
 
 test('coverage 38: POST /messages with email channel returns message id and status', async ({ request }) => {
-  const org = await registerOrg(request, '38-msg-generic-email');
+  const org = await registerVerifiedOrg(request, '38-msg-generic-email');
   const c = await createContact(request, org.token, 'GenericEmail');
 
   const res = await request.post('/api/v1/messages', {
@@ -217,7 +206,7 @@ test('coverage 38: POST /messages with email channel returns message id and stat
 });
 
 test('coverage 38: GET /messages/:id returns created message', async ({ request }) => {
-  const org = await registerOrg(request, '38-msg-get-id');
+  const org = await registerVerifiedOrg(request, '38-msg-get-id');
   const c = await createContact(request, org.token, 'GetMessage');
   const createRes = await request.post('/api/v1/messages', {
     headers: authHeaders(org.token),
@@ -246,7 +235,7 @@ test('coverage 38: POST /messages without auth returns 401', async ({ request })
 // ─── Group 4: Captures ───────────────────────────────────────────────────────
 
 test('coverage 38: POST /captures/:id/match on already-matched capture → 422 CAPTURE_ALREADY_RESOLVED', async ({ request }) => {
-  const org = await registerOrg(request, '38-cap-dbl-match');
+  const org = await registerVerifiedOrg(request, '38-cap-dbl-match');
   const cap = await createCapture(request, org.token);
   const c = await createContact(request, org.token, 'MatchTarget');
 
@@ -269,7 +258,7 @@ test('coverage 38: POST /captures/:id/match on already-matched capture → 422 C
 // ─── Group 5: Onboarding example data ────────────────────────────────────────
 
 test('coverage 38: POST /onboarding/example-data twice → second call still 201 (idempotent load)', async ({ request }) => {
-  const org = await registerOrg(request, '38-example-twice');
+  const org = await registerVerifiedOrg(request, '38-example-twice');
 
   const first = await request.post('/api/v1/onboarding/example-data', { headers: authHeaders(org.token) });
   expect(first.status()).toBe(201);
@@ -281,7 +270,7 @@ test('coverage 38: POST /onboarding/example-data twice → second call still 201
 });
 
 test('coverage 38: DELETE /onboarding/example-data when none loaded → 200 cleared:true', async ({ request }) => {
-  const org = await registerOrg(request, '38-del-no-data');
+  const org = await registerVerifiedOrg(request, '38-del-no-data');
 
   const res = await request.delete('/api/v1/onboarding/example-data', { headers: authHeaders(org.token) });
   expect(res.status()).toBe(200);
@@ -292,7 +281,7 @@ test('coverage 38: DELETE /onboarding/example-data when none loaded → 200 clea
 // ─── Group 6: Sync delta ─────────────────────────────────────────────────────
 
 test('coverage 38: GET /sync/delta with invalid since format → 400', async ({ request }) => {
-  const org = await registerOrg(request, '38-sync-bad');
+  const org = await registerVerifiedOrg(request, '38-sync-bad');
 
   const res = await request.get('/api/v1/sync/delta?since=not-a-datetime', { headers: authHeaders(org.token) });
   expect(res.status()).toBe(400);
@@ -301,7 +290,7 @@ test('coverage 38: GET /sync/delta with invalid since format → 400', async ({ 
 // ─── Group 7: Dashboard pipeline health score denominator=0 ──────────────────
 
 test('coverage 38: GET /analytics/dashboard with no won/lost/stalled → health score is 0', async ({ request }) => {
-  const org = await registerOrg(request, '38-health-zero');
+  const org = await registerVerifiedOrg(request, '38-health-zero');
 
   const res = await request.get('/api/v1/analytics/dashboard', { headers: authHeaders(org.token) });
   expect(res.status()).toBe(200);

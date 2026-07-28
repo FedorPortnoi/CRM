@@ -1,18 +1,11 @@
 import { test, expect } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
 import { randomUUID } from 'crypto';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
-
-interface RegisterResponse {
-  data: {
-    token: string;
-    user: { id: string };
-  };
-}
 
 interface ContactRecord {
   id: string;
@@ -104,21 +97,6 @@ function daysFromNow(days: number): string {
 interface AuthOrg {
   token: string;
   userId: string;
-}
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<AuthOrg> {
-  const unique = uniqueSuffix(suffix);
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = (await res.json()) as RegisterResponse;
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 async function createContact(
@@ -229,7 +207,7 @@ test('G2: POST /api/v1/contacts/bulk-assign rejects an empty contact_ids array (
 test('G4: POST /api/v1/contacts/import-csv with two rows sharing an email creates both contacts (Contact.email has no unique constraint)', async ({
   request,
 }) => {
-  const org = await registerOrg(request, 'g4-dup-email');
+  const org = await registerVerifiedOrg(request, 'g4-dup-email');
   const sharedEmail = `dup-${Date.now()}@example.com`;
 
   const res = await request.post('/api/v1/contacts/import-csv', {
@@ -246,7 +224,7 @@ test('G4: POST /api/v1/contacts/import-csv with two rows sharing an email create
 });
 
 test('G5: GET /api/v1/contacts?type=customer returns only customer-type contacts (type filter)', async ({ request }) => {
-  const org = await registerOrg(request, 'g5-type-filter');
+  const org = await registerVerifiedOrg(request, 'g5-type-filter');
 
   await createContact(request, org.token, 'CustomerOne', 'customer');
   await createContact(request, org.token, 'LeadOne', 'lead');
@@ -264,7 +242,7 @@ test('G5: GET /api/v1/contacts?type=customer returns only customer-type contacts
 test('G6: GET /api/v1/contacts?page=2&per_page=1 returns exactly 1 result and meta.total=2 when org has 2 contacts', async ({
   request,
 }) => {
-  const org = await registerOrg(request, 'g6-pagination');
+  const org = await registerVerifiedOrg(request, 'g6-pagination');
 
   await createContact(request, org.token, 'PageFirst');
   await createContact(request, org.token, 'PageSecond');
@@ -280,7 +258,7 @@ test('G6: GET /api/v1/contacts?page=2&per_page=1 returns exactly 1 result and me
 });
 
 test('G7: GET /api/v1/tasks?status=done returns only done tasks and excludes pending tasks', async ({ request }) => {
-  const org = await registerOrg(request, 'g7-done-filter');
+  const org = await registerVerifiedOrg(request, 'g7-done-filter');
 
   const doneTask = await createTask(request, org, 'DoneTask');
   await createTask(request, org, 'PendingTask');
@@ -302,7 +280,7 @@ test('G7: GET /api/v1/tasks?status=done returns only done tasks and excludes pen
 });
 
 test('G8: GET /api/v1/deals?status=won returns only won deals and excludes open deals', async ({ request }) => {
-  const org = await registerOrg(request, 'g8-won-filter');
+  const org = await registerVerifiedOrg(request, 'g8-won-filter');
   const contact = await createContact(request, org.token, 'DealContact');
   const pipeline = await getDefaultPipeline(request, org.token);
   const stageId = pipeline.stages[0].id;
@@ -340,7 +318,7 @@ test('G9: POST /api/v1/contacts with email="" returns 400 (CreateContactSchema r
 });
 
 test('G10: GET /api/v1/tasks?priority=high returns only high-priority tasks (priority filter)', async ({ request }) => {
-  const org = await registerOrg(request, 'g10-priority-filter');
+  const org = await registerVerifiedOrg(request, 'g10-priority-filter');
 
   const highTask = await createTask(request, org, 'HighPriTask', 'high');
   await createTask(request, org, 'MediumPriTask', 'medium');
@@ -357,7 +335,7 @@ test('G10: GET /api/v1/tasks?priority=high returns only high-priority tasks (pri
 });
 
 test('G11: POST /api/v1/tasks/:id/start on a cancelled task returns 422 INVALID_STATUS_TRANSITION', async ({ request }) => {
-  const org = await registerOrg(request, 'g11-start-cancelled');
+  const org = await registerVerifiedOrg(request, 'g11-start-cancelled');
   const task = await createTask(request, org, 'CancelledTask');
 
   const cancelRes = await request.delete(`/api/v1/tasks/${task.id}`, {
@@ -416,7 +394,7 @@ test('G14: POST /api/v1/notifications/register with valid token returns 200 and 
 });
 
 test('G15: POST /api/v1/notifications/send for user with no push_token returns 422 NO_PUSH_TOKEN', async ({ request }) => {
-  const org = await registerOrg(request, 'g15-no-token');
+  const org = await registerVerifiedOrg(request, 'g15-no-token');
 
   const res = await request.post('/api/v1/notifications/send', {
     headers: authHeaders(org.token),
@@ -433,8 +411,8 @@ test('G15: POST /api/v1/notifications/send for user with no push_token returns 4
 });
 
 test('G16: POST /api/v1/notifications/send for cross-org user returns 404 USER_NOT_FOUND', async ({ request }) => {
-  const orgA = await registerOrg(request, 'g16-org-a');
-  const orgB = await registerOrg(request, 'g16-org-b');
+  const orgA = await registerVerifiedOrg(request, 'g16-org-a');
+  const orgB = await registerVerifiedOrg(request, 'g16-org-b');
 
   const res = await request.post('/api/v1/notifications/send', {
     headers: authHeaders(orgA.token),
@@ -451,7 +429,7 @@ test('G16: POST /api/v1/notifications/send for cross-org user returns 404 USER_N
 });
 
 test('G17: POST /api/v1/notifications/register with same token twice for same user is idempotent', async ({ request }) => {
-  const org = await registerOrg(request, 'g17-same-user-token');
+  const org = await registerVerifiedOrg(request, 'g17-same-user-token');
   const pushToken = `ExponentPushToken[g17-${Date.now()}]`;
 
   const firstRes = await request.post('/api/v1/notifications/register', {
@@ -472,8 +450,8 @@ test('G17: POST /api/v1/notifications/register with same token twice for same us
 });
 
 test('G18: POST /api/v1/notifications/register does not clear duplicate device token across orgs', async ({ request }) => {
-  const orgA = await registerOrg(request, 'g18-token-owner-a');
-  const orgB = await registerOrg(request, 'g18-token-owner-b');
+  const orgA = await registerVerifiedOrg(request, 'g18-token-owner-a');
+  const orgB = await registerVerifiedOrg(request, 'g18-token-owner-b');
   const pushToken = `ExponentPushToken[g18-${Date.now()}]`;
 
   const firstRes = await request.post('/api/v1/notifications/register', {
@@ -504,7 +482,7 @@ test('G18: POST /api/v1/notifications/register does not clear duplicate device t
 });
 
 test('G19: POST /api/v1/notifications/register with token="" returns 400 before controller validation', async ({ request }) => {
-  const org = await registerOrg(request, 'g19-empty-push-token');
+  const org = await registerVerifiedOrg(request, 'g19-empty-push-token');
 
   const res = await request.post('/api/v1/notifications/register', {
     headers: authHeaders(org.token),
@@ -515,7 +493,7 @@ test('G19: POST /api/v1/notifications/register with token="" returns 400 before 
 });
 
 test('G20: POST /api/v1/notifications/send with malformed user_id returns 400 before lookup', async ({ request }) => {
-  const org = await registerOrg(request, 'g20-bad-send-user-id');
+  const org = await registerVerifiedOrg(request, 'g20-bad-send-user-id');
 
   const res = await request.post('/api/v1/notifications/send', {
     headers: authHeaders(org.token),
@@ -532,7 +510,7 @@ test('G20: POST /api/v1/notifications/send with malformed user_id returns 400 be
 test('G21: POST /api/v1/notifications/register replaces the same user device token with duplicate count 0', async ({
   request,
 }) => {
-  const org = await registerOrg(request, 'g21-replace-token');
+  const org = await registerVerifiedOrg(request, 'g21-replace-token');
   const firstToken = `ExponentPushToken[g21-first-${Date.now()}]`;
   const secondToken = `ExponentPushToken[g21-second-${Date.now()}]`;
 
@@ -569,7 +547,7 @@ test('G21: POST /api/v1/notifications/register replaces the same user device tok
 test('G22: POST /api/v1/contacts/bulk-tag with empty tags returns 400 (BulkTagSchema min(1))', async ({
   request,
 }) => {
-  const org = await registerOrg(request, 'g22-bulk-tag-empty');
+  const org = await registerVerifiedOrg(request, 'g22-bulk-tag-empty');
   const contact = await createContact(request, org.token, 'G22 Empty Tags');
 
   const res = await request.post('/api/v1/contacts/bulk-tag', {
@@ -583,8 +561,8 @@ test('G22: POST /api/v1/contacts/bulk-tag with empty tags returns 400 (BulkTagSc
 test('G23: POST /api/v1/contacts/bulk-tag rejects another-org contact_id and preserves requester tags', async ({
   request,
 }) => {
-  const orgA = await registerOrg(request, 'g23-bulk-tag-a');
-  const orgB = await registerOrg(request, 'g23-bulk-tag-b');
+  const orgA = await registerVerifiedOrg(request, 'g23-bulk-tag-a');
+  const orgB = await registerVerifiedOrg(request, 'g23-bulk-tag-b');
   const requester = await createContact(request, orgA.token, 'G23 Requester Tagged', 'lead', undefined, {
     tags: ['original'],
   });
@@ -604,7 +582,7 @@ test('G23: POST /api/v1/contacts/bulk-tag rejects another-org contact_id and pre
 });
 
 test('G24: GET /api/v1/contacts combines q, type, and assigned_to filters', async ({ request }) => {
-  const org = await registerOrg(request, 'g24-contact-combo');
+  const org = await registerVerifiedOrg(request, 'g24-contact-combo');
   const prefix = uniqueSuffix('G24Combo');
   const target = await createContact(request, org.token, `${prefix} Target`, 'customer', undefined, {
     assigned_to: org.userId,
@@ -640,7 +618,7 @@ test('G24: GET /api/v1/contacts combines q, type, and assigned_to filters', asyn
 });
 
 test('G25: GET /api/v1/tasks combines status, priority, due_after, and due_before filters', async ({ request }) => {
-  const org = await registerOrg(request, 'g25-task-combo');
+  const org = await registerVerifiedOrg(request, 'g25-task-combo');
   const windowStart = daysFromNow(2);
   const matchingDue = daysFromNow(3);
   const windowEnd = daysFromNow(4);
@@ -683,7 +661,7 @@ test('G25: GET /api/v1/tasks combines status, priority, due_after, and due_befor
 });
 
 test('G26: GET /api/v1/deals combines pipeline_id, stage_id, and status filters', async ({ request }) => {
-  const org = await registerOrg(request, 'g26-deal-combo');
+  const org = await registerVerifiedOrg(request, 'g26-deal-combo');
   const contact = await createContact(request, org.token, 'G26 Deal Contact');
   const pipeline = await getDefaultPipeline(request, org.token);
   const stageId = pipeline.stages[0].id;

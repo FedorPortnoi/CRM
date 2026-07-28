@@ -1,5 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
@@ -14,24 +14,6 @@ function futureIso(daysFromNow: number, hourUtc: number = 10): string {
   d.setUTCDate(d.getUTCDate() + daysFromNow);
   d.setUTCHours(hourUtc, 0, 0, 0);
   return d.toISOString();
-}
-
-async function registerOrg(
-  request: APIRequestContext,
-  suffix: string,
-): Promise<{ token: string; userId: string }> {
-  const unique = `${suffix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = (await res.json()) as { data: { token: string; user: { id: string } } };
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 interface CalendarEvent {
@@ -553,7 +535,7 @@ test('After DELETE, GET /:id still returns event with status=cancelled', async (
 
 // 15. After cancel, GET /calendar?status=cancelled includes event
 test('After cancel, GET /calendar?status=cancelled includes the event', async ({ request }) => {
-  const { token } = await registerOrg(request, 'cancel-filter');
+  const { token } = await registerVerifiedOrg(request, 'cancel-filter');
   const event = await createEvent(request, token, { title: 'Cancelled List Event' });
 
   await request.delete(`/api/v1/calendar/${event.id}`, {
@@ -571,7 +553,7 @@ test('After cancel, GET /calendar?status=cancelled includes the event', async ({
 
 // 16. After complete, GET /calendar?status=completed includes event
 test('After complete, GET /calendar?status=completed includes the event', async ({ request }) => {
-  const { token } = await registerOrg(request, 'completed-filter');
+  const { token } = await registerVerifiedOrg(request, 'completed-filter');
   const event = await createEvent(request, token, { title: 'Completed List Event' });
   await completeEvent(request, token, event.id);
 
@@ -586,7 +568,7 @@ test('After complete, GET /calendar?status=completed includes the event', async 
 
 // 17. GET /calendar?status=scheduled returns only scheduled events
 test('GET /calendar?status=scheduled returns only scheduled events', async ({ request }) => {
-  const { token } = await registerOrg(request, 'scheduled-filter');
+  const { token } = await registerVerifiedOrg(request, 'scheduled-filter');
   const scheduled = await createEvent(request, token, { title: 'Should Appear' });
   const toCancel = await createEvent(request, token, { title: 'Should Not Appear' });
 
@@ -606,7 +588,7 @@ test('GET /calendar?status=scheduled returns only scheduled events', async ({ re
 
 // 18. GET /calendar?contact_id=contactId returns only events for that contact
 test('GET /calendar?contact_id filters events to that contact only', async ({ request }) => {
-  const { token } = await registerOrg(request, 'contact-filter');
+  const { token } = await registerVerifiedOrg(request, 'contact-filter');
   const contactA = await createContact(request, token);
   const contactB = await createContact(request, token);
 
@@ -624,7 +606,7 @@ test('GET /calendar?contact_id filters events to that contact only', async ({ re
 
 // 19. GET /calendar?deal_id=dealId returns only events for that deal
 test('GET /calendar?deal_id filters events to that deal only', async ({ request }) => {
-  const { token } = await registerOrg(request, 'deal-filter');
+  const { token } = await registerVerifiedOrg(request, 'deal-filter');
   const contactId = await createContact(request, token);
   const dealA = await createDeal(request, token, contactId);
   const dealB = await createDeal(request, token, contactId);
@@ -643,7 +625,7 @@ test('GET /calendar?deal_id filters events to that deal only', async ({ request 
 
 // 20. GET /calendar pagination: create 5 events, per_page=2 → page 1 returns 2, meta.total>=5
 test('GET /calendar pagination: per_page=2 returns 2 events and correct meta', async ({ request }) => {
-  const { token } = await registerOrg(request, 'pagination');
+  const { token } = await registerVerifiedOrg(request, 'pagination');
   for (let i = 0; i < 5; i++) {
     await createEvent(request, token, { title: `Paged Event ${i}` });
   }
@@ -661,7 +643,7 @@ test('GET /calendar pagination: per_page=2 returns 2 events and correct meta', a
 
 // 21. GET /calendar pagination page 2 returns next set
 test('GET /calendar pagination page 2 returns the next 2 events', async ({ request }) => {
-  const { token } = await registerOrg(request, 'pagination-p2');
+  const { token } = await registerVerifiedOrg(request, 'pagination-p2');
   for (let i = 0; i < 5; i++) {
     await createEvent(request, token, { title: `Paged2 Event ${i}` });
   }
@@ -733,7 +715,7 @@ test('PATCH event causes updated_at to change', async ({ request }) => {
 
 // 25. Create 2 events for different contacts, GET /calendar?contact_id=A returns only A's events
 test('Two contacts with events — contact_id filter isolates correctly', async ({ request }) => {
-  const { token } = await registerOrg(request, 'two-contacts');
+  const { token } = await registerVerifiedOrg(request, 'two-contacts');
   const contactA = await createContact(request, token);
   const contactB = await createContact(request, token);
 
@@ -753,8 +735,8 @@ test('Two contacts with events — contact_id filter isolates correctly', async 
 
 // 26. Cross-org isolation: Org B cannot see Org A events in GET /calendar
 test('Cross-org isolation: Org B GET /calendar does not see Org A events', async ({ request }) => {
-  const orgA = await registerOrg(request, 'iso-orgA');
-  const orgB = await registerOrg(request, 'iso-orgB');
+  const orgA = await registerVerifiedOrg(request, 'iso-orgA');
+  const orgB = await registerVerifiedOrg(request, 'iso-orgB');
 
   const evA = await createEvent(request, orgA.token, { title: 'Org A Only Event' });
 
@@ -769,8 +751,8 @@ test('Cross-org isolation: Org B GET /calendar does not see Org A events', async
 
 // 27. Cross-org isolation: Org B GET /calendar returns empty list when only Org A has events
 test('Cross-org isolation: fresh Org B list is empty when only Org A has events', async ({ request }) => {
-  const orgA = await registerOrg(request, 'empty-orgA');
-  const orgB = await registerOrg(request, 'empty-orgB');
+  const orgA = await registerVerifiedOrg(request, 'empty-orgA');
+  const orgB = await registerVerifiedOrg(request, 'empty-orgB');
 
   await createEvent(request, orgA.token, { title: 'Org A Event' });
   await createEvent(request, orgA.token, { title: 'Org A Event 2' });
@@ -785,7 +767,7 @@ test('Cross-org isolation: fresh Org B list is empty when only Org A has events'
 
 // 28. PATCH event with contact_id from same org succeeds (not treated as cross-org)
 test('PATCH event with valid same-org contact_id succeeds', async ({ request }) => {
-  const { token } = await registerOrg(request, 'same-org-contact');
+  const { token } = await registerVerifiedOrg(request, 'same-org-contact');
   const contactId = await createContact(request, token);
   const event = await createEvent(request, token);
 
@@ -800,7 +782,7 @@ test('PATCH event with valid same-org contact_id succeeds', async ({ request }) 
 
 // 29. GET /calendar?start=ISO&end=ISO filter returns only events in that window
 test('GET /calendar with start/end filters returns only events in the window', async ({ request }) => {
-  const { token } = await registerOrg(request, 'time-filter');
+  const { token } = await registerVerifiedOrg(request, 'time-filter');
 
   // Event within window: day 10, hour 10-11
   const inStart = futureIso(10, 10);
@@ -840,7 +822,7 @@ test('GET /calendar with start/end filters returns only events in the window', a
 
 // 30. GET /calendar?start after all events returns empty
 test('GET /calendar with start filter far in the future returns empty list', async ({ request }) => {
-  const { token } = await registerOrg(request, 'future-filter');
+  const { token } = await registerVerifiedOrg(request, 'future-filter');
   await createEvent(request, token, { title: 'Past-ish Event' });
 
   const farFuture = futureIso(3650, 0); // 10 years out
@@ -992,7 +974,7 @@ test('Completed event notes appear on GET /:id', async ({ request }) => {
 test('GET /calendar without status filter returns scheduled and completed but excludes cancelled events', async ({
   request,
 }) => {
-  const { token } = await registerOrg(request, 'all-statuses');
+  const { token } = await registerVerifiedOrg(request, 'all-statuses');
   const ev1 = await createEvent(request, token, { title: 'Scheduled' });
   const ev2 = await createEvent(request, token, { title: 'To Complete' });
   const ev3 = await createEvent(request, token, { title: 'To Cancel' });
@@ -1015,7 +997,7 @@ test('GET /calendar without status filter returns scheduled and completed but ex
 
 // 40. Create 3 events, complete 1, cancel 1; GET /calendar returns active events by default
 test('GET /calendar returns active events by default and excludes cancelled events', async ({ request }) => {
-  const { token } = await registerOrg(request, 'three-mixed');
+  const { token } = await registerVerifiedOrg(request, 'three-mixed');
   const ev1 = await createEvent(request, token, { title: 'Mixed Scheduled' });
   const ev2 = await createEvent(request, token, { title: 'Mixed Completed' });
   const ev3 = await createEvent(request, token, { title: 'Mixed Cancelled' });
@@ -1123,7 +1105,7 @@ test('POST /notes with empty string on completed event returns 400 or stores emp
 
 // 46. GET /calendar events returned in deterministic order (start_time or created_at)
 test('GET /calendar events are returned in a deterministic order', async ({ request }) => {
-  const { token } = await registerOrg(request, 'ordering');
+  const { token } = await registerVerifiedOrg(request, 'ordering');
   // Create events with staggered start times
   const ev1 = await createEvent(request, token, {
     title: 'Order A',
@@ -1163,8 +1145,8 @@ test('GET /calendar events are returned in a deterministic order', async ({ requ
 
 // 47. Cross-org isolation: Org B PATCH /calendar/:id with Org A event returns 404
 test('Cross-org isolation: Org B PATCH on Org A event returns 404', async ({ request }) => {
-  const orgA = await registerOrg(request, 'patch-orgA');
-  const orgB = await registerOrg(request, 'patch-orgB');
+  const orgA = await registerVerifiedOrg(request, 'patch-orgA');
+  const orgB = await registerVerifiedOrg(request, 'patch-orgB');
   const evA = await createEvent(request, orgA.token, { title: 'Org A Private Event' });
 
   const patchRes = await request.patch(`/api/v1/calendar/${evA.id}`, {

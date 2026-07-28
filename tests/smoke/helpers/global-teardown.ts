@@ -75,6 +75,37 @@ async function deleteSmokeOrgs(
     await tx.$executeRaw(
       Prisma.sql`DELETE FROM "Pipeline" WHERE organization_id IN (${uuidList(orgIds)})`,
     );
+    // Seven tables that existed only as hand-applied DDL on the old cluster until
+    // migration 20260727120000_reconcile_schema_drift added them. This teardown was
+    // written before they were in the schema, so it deleted "User" while
+    // Notification.recipient_id still pointed at those rows — a 23503 foreign-key
+    // violation that aborted the whole cleanup transaction.
+    //
+    // Org-scoped:
+    await tx.$executeRaw(
+      Prisma.sql`DELETE FROM "Notification" WHERE organization_id IN (${uuidList(orgIds)})`,
+    );
+    await tx.$executeRaw(
+      Prisma.sql`DELETE FROM "ChatReadReceipt" WHERE organization_id IN (${uuidList(orgIds)})`,
+    );
+    await tx.$executeRaw(
+      Prisma.sql`DELETE FROM "ChatMessage" WHERE organization_id IN (${uuidList(orgIds)})`,
+    );
+    await tx.$executeRaw(
+      Prisma.sql`DELETE FROM "ActivityLog" WHERE organization_id IN (${uuidList(orgIds)})`,
+    );
+    await tx.$executeRaw(
+      Prisma.sql`DELETE FROM "Attachment" WHERE organization_id IN (${uuidList(orgIds)})`,
+    );
+    // Scoped to the user instead — neither table carries organization_id.
+    // NotificationSent has no foreign key at all, so orphan rows would simply
+    // accumulate and poison the dedup check on a later run.
+    await tx.$executeRaw(
+      Prisma.sql`DELETE FROM "VerificationCode" WHERE user_id IN (SELECT id FROM "User" WHERE organization_id IN (${uuidList(orgIds)}))`,
+    );
+    await tx.$executeRaw(
+      Prisma.sql`DELETE FROM "NotificationSent" WHERE recipient_id IN (SELECT id FROM "User" WHERE organization_id IN (${uuidList(orgIds)}))`,
+    );
     await tx.$executeRaw(
       Prisma.sql`DELETE FROM "Contact" WHERE organization_id IN (${uuidList(orgIds)})`,
     );

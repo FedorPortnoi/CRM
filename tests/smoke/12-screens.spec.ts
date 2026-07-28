@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
@@ -57,16 +58,8 @@ test('GET /api/v1/tasks/today without Authorization returns 401 with non-empty m
 // ─── Contacts: empty state ────────────────────────────────────────────────────
 
 test('GET /api/v1/contacts for a brand-new org returns an empty data array (contacts empty state)', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-empty-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens Empty User',
-      org_name: 'Screens Empty Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const freshToken: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-empty');
+  const freshToken: string = org.token;
 
   const res = await request.get('/api/v1/contacts', {
     headers: { Authorization: `Bearer ${freshToken}` },
@@ -80,16 +73,8 @@ test('GET /api/v1/contacts for a brand-new org returns an empty data array (cont
 // ─── Contacts: server-side search ────────────────────────────────────────────
 
 test('GET /api/v1/contacts?q=<term> returns only contacts whose name contains the search term', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-search-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens Search User',
-      org_name: 'Screens Search Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const freshToken: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-search');
+  const freshToken: string = org.token;
 
   const aRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: `Bearer ${freshToken}` },
@@ -118,18 +103,9 @@ test('GET /api/v1/contacts?q=<term> returns only contacts whose name contains th
 // ─── Tasks: cancelled excluded ────────────────────────────────────────────────
 
 test('cancelled task is absent from GET /api/v1/tasks default list (status integrity)', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-cancel-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens Cancel User',
-      org_name: 'Screens Cancel Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = await regRes.json();
-  const freshToken: string = regBody.data.token;
-  const userId: string = regBody.data.user.id;
+  const org = await registerVerifiedOrg(request, 'screens-cancel');
+  const freshToken: string = org.token;
+  const userId: string = org.userId;
 
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${freshToken}` },
@@ -154,18 +130,9 @@ test('cancelled task is absent from GET /api/v1/tasks default list (status integ
 // ─── Tasks: today boundary ────────────────────────────────────────────────────
 
 test('task due tomorrow is absent from GET /api/v1/tasks/today (today-filter boundary)', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-tomorrow-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens Tomorrow User',
-      org_name: 'Screens Tomorrow Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = await regRes.json();
-  const freshToken: string = regBody.data.token;
-  const userId: string = regBody.data.user.id;
+  const org = await registerVerifiedOrg(request, 'screens-tomorrow');
+  const freshToken: string = org.token;
+  const userId: string = org.userId;
 
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${freshToken}` },
@@ -183,18 +150,9 @@ test('task due tomorrow is absent from GET /api/v1/tasks/today (today-filter bou
 });
 
 test('overdue task (past due_date, pending) appears in GET /api/v1/tasks but not in GET /api/v1/tasks/today', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-overdue-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens Overdue User',
-      org_name: 'Screens Overdue Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = await regRes.json();
-  const freshToken: string = regBody.data.token;
-  const userId: string = regBody.data.user.id;
+  const org = await registerVerifiedOrg(request, 'screens-overdue');
+  const freshToken: string = org.token;
+  const userId: string = org.userId;
 
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${freshToken}` },
@@ -219,18 +177,9 @@ test('overdue task (past due_date, pending) appears in GET /api/v1/tasks but not
 });
 
 test('GET /api/v1/tasks/today includes a task with due_date set to noon UTC today', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-today-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens Today User',
-      org_name: 'Screens Today Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = await regRes.json();
-  const freshToken: string = regBody.data.token;
-  const userId: string = regBody.data.user.id;
+  const org = await registerVerifiedOrg(request, 'screens-today');
+  const freshToken: string = org.token;
+  const userId: string = org.userId;
 
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${freshToken}` },
@@ -306,16 +255,8 @@ interface ListMeta { total: number; page: number; per_page: number }
 interface ListBody<T> { data: T[]; meta: ListMeta }
 
 test('GET /api/v1/contacts?per_page=2 with 3 contacts returns data.length=2 and meta.total=3', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-page-size-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens PageSize User',
-      org_name: 'Screens PageSize Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const token: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-page-size');
+  const token: string = org.token;
 
   for (const n of ['Alice', 'Bob', 'Carol']) {
     const r = await request.post('/api/v1/contacts', {
@@ -337,16 +278,8 @@ test('GET /api/v1/contacts?per_page=2 with 3 contacts returns data.length=2 and 
 });
 
 test('GET /api/v1/contacts?page=2&per_page=2 with 3 contacts returns data.length=1 (second page)', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-page2-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens Page2 User',
-      org_name: 'Screens Page2 Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const token: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-page2');
+  const token: string = org.token;
 
   for (const n of ['Dave', 'Eve', 'Frank']) {
     const r = await request.post('/api/v1/contacts', {
@@ -367,16 +300,8 @@ test('GET /api/v1/contacts?page=2&per_page=2 with 3 contacts returns data.length
 });
 
 test('GET /api/v1/contacts?q= (empty string) returns all contacts (no unintended filter)', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-empty-q-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens EmptyQ User',
-      org_name: 'Screens EmptyQ Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const token: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-empty-q');
+  const token: string = org.token;
 
   for (const n of ['Grace', 'Heidi']) {
     const r = await request.post('/api/v1/contacts', {
@@ -396,16 +321,8 @@ test('GET /api/v1/contacts?q= (empty string) returns all contacts (no unintended
 });
 
 test('GET /api/v1/contacts?q=<exact-email> returns only the contact with that email', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-email-q-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens EmailQ User',
-      org_name: 'Screens EmailQ Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const token: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-email-q');
+  const token: string = org.token;
 
   const uniqueEmail = `find-me-${Date.now()}@example.com`;
   const aRes = await request.post('/api/v1/contacts', {
@@ -435,18 +352,9 @@ test('GET /api/v1/contacts?q=<exact-email> returns only the contact with that em
 // ─── Tasks screen: status filtering edge-cases ────────────────────────────────
 
 test('done task (status=done) is present in GET /api/v1/tasks default list (done is not excluded by default)', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-done-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens Done User',
-      org_name: 'Screens Done Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = await regRes.json();
-  const token: string = regBody.data.token;
-  const userId: string = regBody.data.user.id;
+  const org = await registerVerifiedOrg(request, 'screens-done');
+  const token: string = org.token;
+  const userId: string = org.userId;
 
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
@@ -469,18 +377,9 @@ test('done task (status=done) is present in GET /api/v1/tasks default list (done
 });
 
 test('in-progress task appears in GET /api/v1/tasks default list', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-inprog-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens InProg User',
-      org_name: 'Screens InProg Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = await regRes.json();
-  const token: string = regBody.data.token;
-  const userId: string = regBody.data.user.id;
+  const org = await registerVerifiedOrg(request, 'screens-inprog');
+  const token: string = org.token;
+  const userId: string = org.userId;
 
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
@@ -505,18 +404,9 @@ test('in-progress task appears in GET /api/v1/tasks default list', async ({ requ
 });
 
 test('GET /api/v1/tasks/overdue returns tasks with past due_date and status pending', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-overdue2-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens Overdue2 User',
-      org_name: 'Screens Overdue2 Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = await regRes.json();
-  const token: string = regBody.data.token;
-  const userId: string = regBody.data.user.id;
+  const org = await registerVerifiedOrg(request, 'screens-overdue2');
+  const token: string = org.token;
+  const userId: string = org.userId;
 
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
@@ -534,18 +424,9 @@ test('GET /api/v1/tasks/overdue returns tasks with past due_date and status pend
 });
 
 test('GET /api/v1/tasks/overdue excludes cancelled tasks even when past due_date', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-overdue-cancel-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens OverdueCancel User',
-      org_name: 'Screens OverdueCancel Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = await regRes.json();
-  const token: string = regBody.data.token;
-  const userId: string = regBody.data.user.id;
+  const org = await registerVerifiedOrg(request, 'screens-overdue-cancel');
+  const token: string = org.token;
+  const userId: string = org.userId;
 
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
@@ -568,18 +449,9 @@ test('GET /api/v1/tasks/overdue excludes cancelled tasks even when past due_date
 });
 
 test('GET /api/v1/tasks/overdue excludes done tasks even when past due_date', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-overdue-done-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens OverdueDone User',
-      org_name: 'Screens OverdueDone Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = await regRes.json();
-  const token: string = regBody.data.token;
-  const userId: string = regBody.data.user.id;
+  const org = await registerVerifiedOrg(request, 'screens-overdue-done');
+  const token: string = org.token;
+  const userId: string = org.userId;
 
   const createRes = await request.post('/api/v1/tasks', {
     headers: { Authorization: `Bearer ${token}` },
@@ -608,16 +480,8 @@ type Stage    = { id: string; name: string; position: number };
 type Deal     = { id: string; title: string; status: string; value?: number | null };
 
 test('brand-new org has exactly one pipeline after registration', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-pipe-count-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens PipeCount User',
-      org_name: 'Screens PipeCount Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const token: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-pipe-count');
+  const token: string = org.token;
 
   const res = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${token}` },
@@ -628,16 +492,8 @@ test('brand-new org has exactly one pipeline after registration', async ({ reque
 });
 
 test('GET /api/v1/deals/pipelines for brand-new org returns is_default=true pipeline named Воронка продаж', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-pipe-default-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens PipeDefault User',
-      org_name: 'Screens PipeDefault Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const token: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-pipe-default');
+  const token: string = org.token;
 
   const res = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${token}` },
@@ -651,16 +507,8 @@ test('GET /api/v1/deals/pipelines for brand-new org returns is_default=true pipe
 });
 
 test('GET /api/v1/deals?status=won returns only won deals', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-deals-won-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens DealsWon User',
-      org_name: 'Screens DealsWon Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const token: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-deals-won');
+  const token: string = org.token;
 
   const pipeRes = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${token}` },
@@ -711,16 +559,8 @@ test('GET /api/v1/deals?status=won returns only won deals', async ({ request }) 
 });
 
 test('GET /api/v1/deals?status=lost returns only lost deals', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-deals-lost-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens DealsLost User',
-      org_name: 'Screens DealsLost Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const token: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-deals-lost');
+  const token: string = org.token;
 
   const pipeRes = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${token}` },
@@ -771,16 +611,8 @@ test('GET /api/v1/deals?status=lost returns only lost deals', async ({ request }
 });
 
 test('GET /api/v1/deals for brand-new org returns empty data array', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-deals-empty-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens DealsEmpty User',
-      org_name: 'Screens DealsEmpty Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const token: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-deals-empty');
+  const token: string = org.token;
 
   const res = await request.get('/api/v1/deals', {
     headers: { Authorization: `Bearer ${token}` },
@@ -802,16 +634,8 @@ interface DashboardData {
 interface DashboardBody { data: DashboardData; meta: Record<string, unknown> }
 
 test('dashboard pipeline_health_score is a number between 0 and 1 (inclusive)', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-dash-score-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens DashScore User',
-      org_name: 'Screens DashScore Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const token: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-dash-score');
+  const token: string = org.token;
 
   const res = await request.get('/api/v1/analytics/dashboard', {
     headers: { Authorization: `Bearer ${token}` },
@@ -825,16 +649,8 @@ test('dashboard pipeline_health_score is a number between 0 and 1 (inclusive)', 
 });
 
 test('dashboard for org with no deals returns open_deals.count=0 and total_value=0', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-dash-nodeals-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens DashNoDeals User',
-      org_name: 'Screens DashNoDeals Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const token: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-dash-nodeals');
+  const token: string = org.token;
 
   const res = await request.get('/api/v1/analytics/dashboard', {
     headers: { Authorization: `Bearer ${token}` },
@@ -846,16 +662,8 @@ test('dashboard for org with no deals returns open_deals.count=0 and total_value
 });
 
 test('dashboard recent_activity is an array (may be empty for new org)', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-dash-activity-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens DashActivity User',
-      org_name: 'Screens DashActivity Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const token: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-dash-activity');
+  const token: string = org.token;
 
   const res = await request.get('/api/v1/analytics/dashboard', {
     headers: { Authorization: `Bearer ${token}` },
@@ -866,16 +674,8 @@ test('dashboard recent_activity is an array (may be empty for new org)', async (
 });
 
 test('dashboard tasks_due_today=0 for org with no tasks due today', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `screens-dash-notasks-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Screens DashNoTasks User',
-      org_name: 'Screens DashNoTasks Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const token: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'screens-dash-notasks');
+  const token: string = org.token;
 
   const res = await request.get('/api/v1/analytics/dashboard', {
     headers: { Authorization: `Bearer ${token}` },

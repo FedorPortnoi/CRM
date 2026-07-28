@@ -1,23 +1,11 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-import { getAuth } from './helpers/auth';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 test.describe.configure({ timeout: 30000 });
 
 // ---------------------------------------------------------------------------
 // Interfaces
 // ---------------------------------------------------------------------------
-
-interface RegisterResponse {
-  data: {
-    token: string;
-    user: { id: string };
-  };
-}
-
-interface AuthOrg {
-  token: string;
-  userId: string;
-}
 
 interface PipelineStageRecord {
   id: string;
@@ -188,21 +176,6 @@ function uniqueSuffix(prefix: string): string {
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10) + 'T12:00:00.000Z';
-}
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<AuthOrg> {
-  const unique = uniqueSuffix(suffix);
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = (await res.json()) as RegisterResponse;
-  return { token: body.data.token, userId: body.data.user.id };
 }
 
 async function getDefaultPipeline(request: APIRequestContext, token: string): Promise<PipelineRecord> {
@@ -387,16 +360,8 @@ test('GET /api/v1/analytics/dashboard returns home screen aggregates', async ({ 
 });
 
 test('pipeline_health_score is 0 when org has no won, lost, or stalled deals (zero-guard)', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `phs-zero-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'PHS Zero User',
-      org_name: 'PHS Zero Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const freshToken: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'phs-zero');
+  const freshToken: string = org.token;
 
   const res = await request.get('/api/v1/analytics/dashboard', {
     headers: { Authorization: `Bearer ${freshToken}` },
@@ -407,16 +372,8 @@ test('pipeline_health_score is 0 when org has no won, lost, or stalled deals (ze
 });
 
 test('pipeline_health_score increases from 0 to non-zero after a deal is moved to won status', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `phs-recalc-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'PHS Recalc User',
-      org_name: 'PHS Recalc Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const freshToken: string = (await regRes.json()).data.token;
+  const org = await registerVerifiedOrg(request, 'phs-recalc');
+  const freshToken: string = org.token;
 
   const pipelinesRes = await request.get('/api/v1/deals/pipelines', {
     headers: { Authorization: `Bearer ${freshToken}` },
@@ -465,18 +422,9 @@ test('pipeline_health_score increases from 0 to non-zero after a deal is moved t
 });
 
 test('dashboard recent_activity is capped at exactly 5 items when pool contains more than 5', async ({ request }) => {
-  const regRes = await request.post('/api/v1/auth/', {
-    data: {
-      email: `phs-activity-${Date.now()}@test.com`,
-      password: 'Test1234!',
-      name: 'Activity Cap User',
-      org_name: 'Activity Cap Org',
-    },
-  });
-  expect(regRes.status()).toBe(201);
-  const regBody = await regRes.json();
-  const freshToken: string = regBody.data.token;
-  const userId: string = regBody.data.user.id;
+  const org = await registerVerifiedOrg(request, 'phs-activity');
+  const freshToken: string = org.token;
+  const userId: string = org.userId;
 
   const contactRes = await request.post('/api/v1/contacts', {
     headers: { Authorization: `Bearer ${freshToken}` },
@@ -513,7 +461,7 @@ test('dashboard recent_activity is capped at exactly 5 items when pool contains 
 // --- Funnel ---
 
 test('GET /api/v1/analytics/funnel for a fresh org returns all-zero stage counts', async ({ request }) => {
-  const org = await registerOrg(request, 'funnel-fresh');
+  const org = await registerVerifiedOrg(request, 'funnel-fresh');
   const res = await request.get('/api/v1/analytics/funnel', { headers: authHeaders(org.token) });
   expect(res.status()).toBe(200);
   const body = (await res.json()) as FunnelResponse;
@@ -529,7 +477,7 @@ test('GET /api/v1/analytics/funnel for a fresh org returns all-zero stage counts
 });
 
 test('GET /api/v1/analytics/funnel response has correct structure: array of stage objects with numeric counts', async ({ request }) => {
-  const org = await registerOrg(request, 'funnel-structure');
+  const org = await registerVerifiedOrg(request, 'funnel-structure');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
   await createDeal(request, org.token, {
@@ -554,7 +502,7 @@ test('GET /api/v1/analytics/funnel response has correct structure: array of stag
 });
 
 test('GET /api/v1/analytics/funnel after creating a deal reflects open count increment in the deal\'s stage', async ({ request }) => {
-  const org = await registerOrg(request, 'funnel-open-count');
+  const org = await registerVerifiedOrg(request, 'funnel-open-count');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
   const stageId = pipeline.stages[0].id;
@@ -573,7 +521,7 @@ test('GET /api/v1/analytics/funnel after creating a deal reflects open count inc
 });
 
 test('GET /api/v1/analytics/funnel after marking a deal won reflects won count in the correct stage', async ({ request }) => {
-  const org = await registerOrg(request, 'funnel-won-count');
+  const org = await registerVerifiedOrg(request, 'funnel-won-count');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
   const stageId = pipeline.stages[0].id;
@@ -591,8 +539,8 @@ test('GET /api/v1/analytics/funnel after marking a deal won reflects won count i
 });
 
 test('GET /api/v1/analytics/funnel is org-scoped: Org B funnel unaffected by Org A deals', async ({ request }) => {
-  const orgA = await registerOrg(request, 'funnel-scope-a');
-  const orgB = await registerOrg(request, 'funnel-scope-b');
+  const orgA = await registerVerifiedOrg(request, 'funnel-scope-a');
+  const orgB = await registerVerifiedOrg(request, 'funnel-scope-b');
 
   const pipeline = await getDefaultPipeline(request, orgA.token);
   const contact = await createContact(request, orgA.token);
@@ -613,7 +561,7 @@ test('GET /api/v1/analytics/funnel is org-scoped: Org B funnel unaffected by Org
 // --- Revenue ---
 
 test('GET /api/v1/analytics/revenue for a fresh org returns zero-revenue summary', async ({ request }) => {
-  const org = await registerOrg(request, 'revenue-fresh');
+  const org = await registerVerifiedOrg(request, 'revenue-fresh');
   const res = await request.get('/api/v1/analytics/revenue', {
     headers: authHeaders(org.token),
     params: { period: 'month' },
@@ -626,7 +574,7 @@ test('GET /api/v1/analytics/revenue for a fresh org returns zero-revenue summary
 });
 
 test('GET /api/v1/analytics/revenue periods include required fields: period, deal_count, revenue, avg_deal_value', async ({ request }) => {
-  const org = await registerOrg(request, 'revenue-fields');
+  const org = await registerVerifiedOrg(request, 'revenue-fields');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
   const deal = await createDeal(request, org.token, {
@@ -656,7 +604,7 @@ test('GET /api/v1/analytics/revenue periods include required fields: period, dea
 });
 
 test('GET /api/v1/analytics/revenue after winning a deal reflects revenue increase', async ({ request }) => {
-  const org = await registerOrg(request, 'revenue-after-won');
+  const org = await registerVerifiedOrg(request, 'revenue-after-won');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
 
@@ -686,8 +634,8 @@ test('GET /api/v1/analytics/revenue after winning a deal reflects revenue increa
 });
 
 test('GET /api/v1/analytics/revenue is org-scoped: Org B revenue unaffected by Org A won deals', async ({ request }) => {
-  const orgA = await registerOrg(request, 'revenue-scope-a');
-  const orgB = await registerOrg(request, 'revenue-scope-b');
+  const orgA = await registerVerifiedOrg(request, 'revenue-scope-a');
+  const orgB = await registerVerifiedOrg(request, 'revenue-scope-b');
 
   const pipeline = await getDefaultPipeline(request, orgA.token);
   const contact = await createContact(request, orgA.token);
@@ -712,7 +660,7 @@ test('GET /api/v1/analytics/revenue is org-scoped: Org B revenue unaffected by O
 // --- Team Activity ---
 
 test('GET /api/v1/analytics/team-activity for a fresh org returns an array (empty or with zero-count user row)', async ({ request }) => {
-  const org = await registerOrg(request, 'team-activity-fresh');
+  const org = await registerVerifiedOrg(request, 'team-activity-fresh');
   const res = await request.get('/api/v1/analytics/team-activity', { headers: authHeaders(org.token) });
   expect(res.status()).toBe(200);
   const body = (await res.json()) as DataResponse<TeamActivityEntry[]>;
@@ -724,7 +672,7 @@ test('GET /api/v1/analytics/team-activity for a fresh org returns an array (empt
 });
 
 test('GET /api/v1/analytics/team-activity after creating a message reflects incremented message count for the user', async ({ request }) => {
-  const org = await registerOrg(request, 'team-activity-msg');
+  const org = await registerVerifiedOrg(request, 'team-activity-msg');
   const contact = await createContact(request, org.token);
   await request.post('/api/v1/messages/in-app', {
     headers: authHeaders(org.token),
@@ -743,8 +691,8 @@ test('GET /api/v1/analytics/team-activity after creating a message reflects incr
 });
 
 test('GET /api/v1/analytics/team-activity is org-scoped: Org B activity not visible in Org A results', async ({ request }) => {
-  const orgA = await registerOrg(request, 'team-activity-scope-a');
-  const orgB = await registerOrg(request, 'team-activity-scope-b');
+  const orgA = await registerVerifiedOrg(request, 'team-activity-scope-a');
+  const orgB = await registerVerifiedOrg(request, 'team-activity-scope-b');
   const contactB = await createContact(request, orgB.token);
   await request.post('/api/v1/messages/in-app', {
     headers: authHeaders(orgB.token),
@@ -761,7 +709,7 @@ test('GET /api/v1/analytics/team-activity is org-scoped: Org B activity not visi
 // --- Rep Performance ---
 
 test('GET /api/v1/analytics/rep-performance shows the current user\'s metrics in the result set', async ({ request }) => {
-  const org = await registerOrg(request, 'rep-perf-current-user');
+  const org = await registerVerifiedOrg(request, 'rep-perf-current-user');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
   const deal = await createDeal(request, org.token, {
@@ -786,8 +734,8 @@ test('GET /api/v1/analytics/rep-performance shows the current user\'s metrics in
 });
 
 test('GET /api/v1/analytics/rep-performance is org-scoped: Org B user not present in Org A results', async ({ request }) => {
-  const orgA = await registerOrg(request, 'rep-perf-scope-a');
-  const orgB = await registerOrg(request, 'rep-perf-scope-b');
+  const orgA = await registerVerifiedOrg(request, 'rep-perf-scope-a');
+  const orgB = await registerVerifiedOrg(request, 'rep-perf-scope-b');
 
   const res = await request.get('/api/v1/analytics/rep-performance', { headers: authHeaders(orgA.token) });
   expect(res.status()).toBe(200);
@@ -799,7 +747,7 @@ test('GET /api/v1/analytics/rep-performance is org-scoped: Org B user not presen
 // --- Lead Sources ---
 
 test('GET /api/v1/analytics/lead-sources for a fresh org returns an empty array', async ({ request }) => {
-  const org = await registerOrg(request, 'lead-sources-fresh');
+  const org = await registerVerifiedOrg(request, 'lead-sources-fresh');
   const res = await request.get('/api/v1/analytics/lead-sources', { headers: authHeaders(org.token) });
   expect(res.status()).toBe(200);
   const body = (await res.json()) as DataResponse<LeadSourceEntry[]>;
@@ -808,7 +756,7 @@ test('GET /api/v1/analytics/lead-sources for a fresh org returns an empty array'
 });
 
 test('GET /api/v1/analytics/lead-sources after creating deals with a source field reflects that source', async ({ request }) => {
-  const org = await registerOrg(request, 'lead-sources-data');
+  const org = await registerVerifiedOrg(request, 'lead-sources-data');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token, { firstName: 'LeadSrcContact' });
   await createDeal(request, org.token, {
@@ -838,8 +786,8 @@ test('GET /api/v1/analytics/lead-sources after creating deals with a source fiel
 });
 
 test('GET /api/v1/analytics/lead-sources is org-scoped: Org B source data not visible in Org A results', async ({ request }) => {
-  const orgA = await registerOrg(request, 'lead-sources-scope-a');
-  const orgB = await registerOrg(request, 'lead-sources-scope-b');
+  const orgA = await registerVerifiedOrg(request, 'lead-sources-scope-a');
+  const orgB = await registerVerifiedOrg(request, 'lead-sources-scope-b');
   await createContact(request, orgB.token, { firstName: 'OrgBContact', source: 'cold_call' });
 
   const res = await request.get('/api/v1/analytics/lead-sources', { headers: authHeaders(orgA.token) });
@@ -850,7 +798,7 @@ test('GET /api/v1/analytics/lead-sources is org-scoped: Org B source data not vi
 });
 
 test('POST /api/v1/analytics/export lead_sources CSV contains a data row when deals have source field set', async ({ request }) => {
-  const org = await registerOrg(request, 'export-lead-sources-data');
+  const org = await registerVerifiedOrg(request, 'export-lead-sources-data');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token, { firstName: 'ExportSrcContact' });
   await createDeal(request, org.token, {
@@ -874,7 +822,7 @@ test('POST /api/v1/analytics/export lead_sources CSV contains a data row when de
 // --- Win-Loss ---
 
 test('GET /api/v1/analytics/win-loss for a fresh org returns zero counts for won and lost', async ({ request }) => {
-  const org = await registerOrg(request, 'win-loss-fresh');
+  const org = await registerVerifiedOrg(request, 'win-loss-fresh');
   const res = await request.get('/api/v1/analytics/win-loss', { headers: authHeaders(org.token) });
   expect(res.status()).toBe(200);
   const body = (await res.json()) as WinLossResponse;
@@ -885,7 +833,7 @@ test('GET /api/v1/analytics/win-loss for a fresh org returns zero counts for won
 });
 
 test('GET /api/v1/analytics/win-loss after winning and losing deals reflects correct breakdown', async ({ request }) => {
-  const org = await registerOrg(request, 'win-loss-counts');
+  const org = await registerVerifiedOrg(request, 'win-loss-counts');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
   const stageId = pipeline.stages[0].id;
@@ -909,8 +857,8 @@ test('GET /api/v1/analytics/win-loss after winning and losing deals reflects cor
 });
 
 test('GET /api/v1/analytics/win-loss is org-scoped: Org B closed deals not counted in Org A win-loss', async ({ request }) => {
-  const orgA = await registerOrg(request, 'win-loss-scope-a');
-  const orgB = await registerOrg(request, 'win-loss-scope-b');
+  const orgA = await registerVerifiedOrg(request, 'win-loss-scope-a');
+  const orgB = await registerVerifiedOrg(request, 'win-loss-scope-b');
 
   const pipeline = await getDefaultPipeline(request, orgB.token);
   const contact = await createContact(request, orgB.token);
@@ -929,7 +877,7 @@ test('GET /api/v1/analytics/win-loss is org-scoped: Org B closed deals not count
 // --- Dashboard ---
 
 test('GET /api/v1/analytics/dashboard open_deals.count is 0 for a fresh org', async ({ request }) => {
-  const org = await registerOrg(request, 'dash-fresh-count');
+  const org = await registerVerifiedOrg(request, 'dash-fresh-count');
   const res = await request.get('/api/v1/analytics/dashboard', { headers: authHeaders(org.token) });
   expect(res.status()).toBe(200);
   const body = (await res.json()) as DashboardResponse;
@@ -937,7 +885,7 @@ test('GET /api/v1/analytics/dashboard open_deals.count is 0 for a fresh org', as
 });
 
 test('GET /api/v1/analytics/dashboard open_deals.total_value is 0 for a fresh org', async ({ request }) => {
-  const org = await registerOrg(request, 'dash-fresh-value');
+  const org = await registerVerifiedOrg(request, 'dash-fresh-value');
   const res = await request.get('/api/v1/analytics/dashboard', { headers: authHeaders(org.token) });
   expect(res.status()).toBe(200);
   const body = (await res.json()) as DashboardResponse;
@@ -945,7 +893,7 @@ test('GET /api/v1/analytics/dashboard open_deals.total_value is 0 for a fresh or
 });
 
 test('GET /api/v1/analytics/dashboard tasks_due_today is 0 for a fresh org with no tasks', async ({ request }) => {
-  const org = await registerOrg(request, 'dash-fresh-tasks');
+  const org = await registerVerifiedOrg(request, 'dash-fresh-tasks');
   const res = await request.get('/api/v1/analytics/dashboard', { headers: authHeaders(org.token) });
   expect(res.status()).toBe(200);
   const body = (await res.json()) as DashboardResponse;
@@ -953,7 +901,7 @@ test('GET /api/v1/analytics/dashboard tasks_due_today is 0 for a fresh org with 
 });
 
 test('GET /api/v1/analytics/dashboard recent_activity.items is empty for a fresh org', async ({ request }) => {
-  const org = await registerOrg(request, 'dash-fresh-activity');
+  const org = await registerVerifiedOrg(request, 'dash-fresh-activity');
   const res = await request.get('/api/v1/analytics/dashboard', { headers: authHeaders(org.token) });
   expect(res.status()).toBe(200);
   const body = (await res.json()) as DashboardResponse;
@@ -961,7 +909,7 @@ test('GET /api/v1/analytics/dashboard recent_activity.items is empty for a fresh
 });
 
 test('GET /api/v1/analytics/dashboard after creating one open deal, open_deals.count is 1', async ({ request }) => {
-  const org = await registerOrg(request, 'dash-open-count-1');
+  const org = await registerVerifiedOrg(request, 'dash-open-count-1');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
   await createDeal(request, org.token, {
@@ -977,7 +925,7 @@ test('GET /api/v1/analytics/dashboard after creating one open deal, open_deals.c
 });
 
 test('GET /api/v1/analytics/dashboard after creating a deal with value 500, open_deals.total_value equals 500', async ({ request }) => {
-  const org = await registerOrg(request, 'dash-open-value-500');
+  const org = await registerVerifiedOrg(request, 'dash-open-value-500');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
   await createDeal(request, org.token, {
@@ -994,7 +942,7 @@ test('GET /api/v1/analytics/dashboard after creating a deal with value 500, open
 });
 
 test('GET /api/v1/analytics/dashboard after marking the only open deal won, open_deals.total_value decreases to 0', async ({ request }) => {
-  const org = await registerOrg(request, 'dash-value-decrease');
+  const org = await registerVerifiedOrg(request, 'dash-value-decrease');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
   const deal = await createDeal(request, org.token, {
@@ -1017,7 +965,7 @@ test('GET /api/v1/analytics/dashboard after marking the only open deal won, open
 });
 
 test('GET /api/v1/analytics/dashboard after creating a task due today, tasks_due_today count is at least 1', async ({ request }) => {
-  const org = await registerOrg(request, 'dash-task-today');
+  const org = await registerVerifiedOrg(request, 'dash-task-today');
   await request.post('/api/v1/tasks', {
     headers: authHeaders(org.token),
     data: { title: 'Due today task', assigned_to: org.userId, due_date: todayIso() },
@@ -1030,7 +978,7 @@ test('GET /api/v1/analytics/dashboard after creating a task due today, tasks_due
 });
 
 test('GET /api/v1/analytics/dashboard recent_activity items have required fields: type, id, summary, created_at', async ({ request }) => {
-  const org = await registerOrg(request, 'dash-activity-fields');
+  const org = await registerVerifiedOrg(request, 'dash-activity-fields');
   const contact = await createContact(request, org.token);
   await request.post('/api/v1/messages/in-app', {
     headers: authHeaders(org.token),
@@ -1052,7 +1000,7 @@ test('GET /api/v1/analytics/dashboard recent_activity items have required fields
 // --- Conversion Rates ---
 
 test('GET /api/v1/analytics/conversion-rates: moving a deal from stage[0] to stage[1] increments transition conversion data', async ({ request }) => {
-  const org = await registerOrg(request, 'cvr-move-stage');
+  const org = await registerVerifiedOrg(request, 'cvr-move-stage');
   const pipeline = await getDefaultPipeline(request, org.token);
   if (pipeline.stages.length < 2) {
     // Pipeline has only one stage — skip the move assertion, just verify structure
@@ -1083,7 +1031,7 @@ test('GET /api/v1/analytics/conversion-rates: moving a deal from stage[0] to sta
 });
 
 test('GET /api/v1/analytics/conversion-rates after multiple stage moves reflects incremented transition counts', async ({ request }) => {
-  const org = await registerOrg(request, 'cvr-multi-move');
+  const org = await registerVerifiedOrg(request, 'cvr-multi-move');
   const pipeline = await getDefaultPipeline(request, org.token);
   if (pipeline.stages.length < 2) {
     const res = await request.get('/api/v1/analytics/conversion-rates', { headers: authHeaders(org.token) });
@@ -1114,7 +1062,7 @@ test('GET /api/v1/analytics/conversion-rates after multiple stage moves reflects
 // --- Stage Duration ---
 
 test('GET /api/v1/analytics/stage-duration deal_count increments when a deal is placed in a stage', async ({ request }) => {
-  const org = await registerOrg(request, 'stage-dur-count');
+  const org = await registerVerifiedOrg(request, 'stage-dur-count');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
   const stageId = pipeline.stages[0].id;
@@ -1132,7 +1080,7 @@ test('GET /api/v1/analytics/stage-duration deal_count increments when a deal is 
 });
 
 test('GET /api/v1/analytics/stage-duration pipeline_id filter returns only stages from that pipeline', async ({ request }) => {
-  const org = await registerOrg(request, 'stage-dur-pipeline-filter');
+  const org = await registerVerifiedOrg(request, 'stage-dur-pipeline-filter');
   const pipeline = await getDefaultPipeline(request, org.token);
 
   // Create a second pipeline to ensure filter excludes it
@@ -1233,7 +1181,7 @@ test('POST /api/v1/analytics/export with period=year returns 200', async ({ requ
 });
 
 test('POST /api/v1/analytics/export funnel CSV has multiple rows when deals exist in different stages', async ({ request }) => {
-  const org = await registerOrg(request, 'export-funnel-rows');
+  const org = await registerVerifiedOrg(request, 'export-funnel-rows');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
 
@@ -1326,7 +1274,7 @@ test('POST /api/v1/analytics/export with format=csv and report=revenue Content-T
 // --- Rung 5: cross-endpoint consistency and deeper invariants ---
 
 test('GET /api/v1/analytics/funnel summary.total_deals matches sum of total across all stage entries', async ({ request }) => {
-  const org = await registerOrg(request, 'funnel-summary-consistency');
+  const org = await registerVerifiedOrg(request, 'funnel-summary-consistency');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
   await createDeal(request, org.token, {
@@ -1343,7 +1291,7 @@ test('GET /api/v1/analytics/funnel summary.total_deals matches sum of total acro
 });
 
 test('GET /api/v1/analytics/funnel summary.total_won matches sum of won across all stage entries', async ({ request }) => {
-  const org = await registerOrg(request, 'funnel-won-summary');
+  const org = await registerVerifiedOrg(request, 'funnel-won-summary');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
   const deal = await createDeal(request, org.token, {
@@ -1361,7 +1309,7 @@ test('GET /api/v1/analytics/funnel summary.total_won matches sum of won across a
 });
 
 test('GET /api/v1/analytics/win-loss won.count equals rep-performance total deals_won for assigned single-user org', async ({ request }) => {
-  const org = await registerOrg(request, 'win-loss-vs-rep-perf');
+  const org = await registerVerifiedOrg(request, 'win-loss-vs-rep-perf');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
 
@@ -1386,7 +1334,7 @@ test('GET /api/v1/analytics/win-loss won.count equals rep-performance total deal
 });
 
 test('GET /api/v1/analytics/dashboard open_deals.count equals sum of funnel open entries for a fresh org with one deal', async ({ request }) => {
-  const org = await registerOrg(request, 'dash-funnel-consistency');
+  const org = await registerVerifiedOrg(request, 'dash-funnel-consistency');
   const pipeline = await getDefaultPipeline(request, org.token);
   const contact = await createContact(request, org.token);
   await createDeal(request, org.token, {
@@ -1407,7 +1355,7 @@ test('GET /api/v1/analytics/dashboard open_deals.count equals sum of funnel open
 });
 
 test('GET /api/v1/analytics/team-activity total field equals sum of messages + tasks + meetings for each user row', async ({ request }) => {
-  const org = await registerOrg(request, 'team-activity-total-sum');
+  const org = await registerVerifiedOrg(request, 'team-activity-total-sum');
   const contact = await createContact(request, org.token);
   await request.post('/api/v1/messages/in-app', {
     headers: authHeaders(org.token),

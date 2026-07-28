@@ -1,22 +1,5 @@
-import { test, expect, APIRequestContext } from '@playwright/test';
-import { getAuth } from './helpers/auth';
-
-type Auth = { token: string; userId: string; email: string };
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<Auth> {
-  const unique = `${suffix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: {
-      email: `${unique}@example.com`,
-      password: 'Password123!',
-      name: `User ${suffix}`,
-      org_name: `Org ${unique}`,
-    },
-  });
-  expect(res.status()).toBe(201);
-  const body = await res.json() as { data: { token: string; user: { id: string; email: string } } };
-  return { token: body.data.token, userId: body.data.user.id, email: body.data.user.email };
-}
+import { test, expect } from '@playwright/test';
+import { getAuth, registerVerifiedOrg } from './helpers/auth';
 
 function authHeaders(token: string) {
   return { Authorization: `Bearer ${token}` };
@@ -97,8 +80,8 @@ test.describe('GET /sync/delta', () => {
   });
 
   test('cross-org isolation: org A records not in org B delta', async ({ request }) => {
-    const orgA = await registerOrg(request, 'delta-a');
-    const orgB = await registerOrg(request, 'delta-b');
+    const orgA = await registerVerifiedOrg(request, 'delta-a');
+    const orgB = await registerVerifiedOrg(request, 'delta-b');
 
     const createRes = await request.post('/api/v1/contacts', {
       headers: authHeaders(orgA.token),
@@ -165,7 +148,7 @@ test.describe('Yandex Calendar sync', () => {
   });
 
   test('GET /calendar/sync/status returns connected:false for new org', async ({ request }) => {
-    const auth = await registerOrg(request, 'ysync-status');
+    const auth = await registerVerifiedOrg(request, 'ysync-status');
     const res = await request.get('/api/v1/calendar/sync/status', {
       headers: authHeaders(auth.token),
     });
@@ -180,7 +163,7 @@ test.describe('Yandex Calendar sync', () => {
   });
 
   test('DELETE /calendar/sync/yandex returns 404 when not connected', async ({ request }) => {
-    const auth = await registerOrg(request, 'ysync-disconnect');
+    const auth = await registerVerifiedOrg(request, 'ysync-disconnect');
     const res = await request.delete('/api/v1/calendar/sync/yandex', {
       headers: authHeaders(auth.token),
     });

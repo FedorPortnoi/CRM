@@ -1,16 +1,6 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
+import { registerVerifiedOrg, SMOKE_ORG_PASSWORD, SMOKE_ORG_PHONE } from './helpers/auth';
 
-type Auth = { token: string; userId: string };
-
-async function registerOrg(request: APIRequestContext, suffix: string): Promise<Auth> {
-  const unique = `${suffix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const res = await request.post('/api/v1/auth/', {
-    data: { email: `${unique}@example.com`, password: 'Password123!', name: `User ${suffix}`, org_name: `Org ${unique}` },
-  });
-  expect(res.status()).toBe(201);
-  const body = await res.json() as { data: { token: string; user: { id: string } } };
-  return { token: body.data.token, userId: body.data.user.id };
-}
 function authHeaders(token: string) { return { Authorization: `Bearer ${token}` }; }
 function daysFromNow(n: number) { return new Date(Date.now() + n * 86400000).toISOString(); }
 
@@ -88,17 +78,21 @@ test('auth: missing Authorization header on GET /deals/pipelines returns 401', a
   const r = await request.get('/api/v1/deals/pipelines');
   expect(r.status()).toBe(401);
 });
+// Registration is asserted on directly here — it IS what this test checks — so the raw
+// endpoint is kept, updated to the current contract (phone required, 201 + needs_verification).
 test('auth: duplicate email on register returns 409 EMAIL_ALREADY_EXISTS', async ({ request }) => {
   const u = `dup-${Date.now()}@example.com`;
-  await request.post('/api/v1/auth/', { data: { email: u, password: 'Password123!', name: 'A', org_name: 'OrgA' } });
-  const r = await request.post('/api/v1/auth/', { data: { email: u, password: 'Password123!', name: 'B', org_name: 'OrgB' } });
+  const first = await request.post('/api/v1/auth/', { data: { email: u, password: SMOKE_ORG_PASSWORD, name: 'A', org_name: 'OrgA', phone: SMOKE_ORG_PHONE } });
+  expect(first.status()).toBe(201);
+  const r = await request.post('/api/v1/auth/', { data: { email: u, password: SMOKE_ORG_PASSWORD, name: 'B', org_name: 'OrgB', phone: SMOKE_ORG_PHONE } });
   expect(r.status()).toBe(409);
   expect(((await r.json()) as { error: { code: string } }).error.code).toBe('EMAIL_ALREADY_EXISTS');
 });
 test('auth: wrong password on login returns 401 INVALID_CREDENTIALS', async ({ request }) => {
-  const u = `wrongpw-${Date.now()}@example.com`;
-  await request.post('/api/v1/auth/', { data: { email: u, password: 'Password123!', name: 'A', org_name: 'OrgA' } });
-  const r = await request.post('/api/v1/auth/login', { data: { email: u, password: 'WrongPassword!' } });
+  // Verified account, so a 401 can only be caused by the wrong password
+  // (an unverified account answers 403 ACCOUNT_NOT_VERIFIED instead).
+  const org = await registerVerifiedOrg(request, 'wrongpw');
+  const r = await request.post('/api/v1/auth/login', { data: { email: org.email, password: 'WrongPassword!' } });
   expect(r.status()).toBe(401);
   expect(((await r.json()) as { error: { code: string } }).error.code).toBe('INVALID_CREDENTIALS');
 });
@@ -110,14 +104,14 @@ test('auth: login with nonexistent email returns 401', async ({ request }) => {
 // ── BOUNDARY / EDGE INPUTS ────────────────────────────────────────────────────
 
 test('boundary: contact with 80-char first_name is created successfully', async ({ request }) => {
-  const org = await registerOrg(request, 'b28ln1');
+  const org = await registerVerifiedOrg(request, 'b28ln1');
   const name = 'A'.repeat(80);
   const r = await request.post('/api/v1/contacts', { headers: authHeaders(org.token), data: { first_name: name } });
   expect(r.status()).toBe(201);
   expect(((await r.json()) as { data: { first_name: string } }).data.first_name).toBe(name);
 });
 test('boundary: deal with value=0 is created and stored as 0', async ({ request }) => {
-  const org = await registerOrg(request, 'b28v0');
+  const org = await registerVerifiedOrg(request, 'b28v0');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'ValZero');
   const r = await request.post('/api/v1/deals', { headers: authHeaders(org.token), data: { title: 'ZeroDeal', contact_id: c.id, pipeline_id: pl.id, stage_id: pl.stages[0].id, currency: 'USD', value: 0 } });
@@ -125,7 +119,7 @@ test('boundary: deal with value=0 is created and stored as 0', async ({ request 
   expect(Number(((await r.json()) as { data: { value: unknown } }).data.value)).toBe(0);
 });
 test('boundary: deal with no value field has null value', async ({ request }) => {
-  const org = await registerOrg(request, 'b28vnull');
+  const org = await registerVerifiedOrg(request, 'b28vnull');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'ValNull');
   const r = await request.post('/api/v1/deals', { headers: authHeaders(org.token), data: { title: 'NullValDeal', contact_id: c.id, pipeline_id: pl.id, stage_id: pl.stages[0].id, currency: 'USD' } });
@@ -133,7 +127,7 @@ test('boundary: deal with no value field has null value', async ({ request }) =>
   expect(((await r.json()) as { data: { value: unknown } }).data.value).toBeNull();
 });
 test('boundary: PATCH deal value to null clears the value', async ({ request }) => {
-  const org = await registerOrg(request, 'b28vclr');
+  const org = await registerVerifiedOrg(request, 'b28vclr');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'ValClr');
   const d = await makeDeal(request, org.token, 'ClearVal', c.id, pl.id, pl.stages[0].id);
@@ -143,18 +137,18 @@ test('boundary: PATCH deal value to null clears the value', async ({ request }) 
   expect(((await r.json()) as { data: { value: unknown } }).data.value).toBeNull();
 });
 test('boundary: task with no due_date has null due_date', async ({ request }) => {
-  const org = await registerOrg(request, 'b28tdd');
+  const org = await registerVerifiedOrg(request, 'b28tdd');
   const t = await makeTask(request, org.token, org.userId, 'NoDueDate');
   const r = await request.get(`/api/v1/tasks/${t.id}`, { headers: authHeaders(org.token) });
   expect(((await r.json()) as { data: { due_date: unknown } }).data.due_date).toBeNull();
 });
 test('boundary: contact with no last_name has null last_name', async ({ request }) => {
-  const org = await registerOrg(request, 'b28cln');
+  const org = await registerVerifiedOrg(request, 'b28cln');
   const r = await request.post('/api/v1/contacts', { headers: authHeaders(org.token), data: { first_name: 'NoLast' } });
   expect(((await r.json()) as { data: { last_name: unknown } }).data.last_name).toBeNull();
 });
 test('boundary: deal pagination page=1 per_page=1 returns exactly 1 item', async ({ request }) => {
-  const org = await registerOrg(request, 'b28pg1');
+  const org = await registerVerifiedOrg(request, 'b28pg1');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'PgC');
   await makeDeal(request, org.token, 'PgD1', c.id, pl.id, pl.stages[0].id);
@@ -166,7 +160,7 @@ test('boundary: deal pagination page=1 per_page=1 returns exactly 1 item', async
   expect(body.meta.per_page).toBe(1);
 });
 test('boundary: contacts page=999 returns empty data array with total intact', async ({ request }) => {
-  const org = await registerOrg(request, 'b28pg999');
+  const org = await registerVerifiedOrg(request, 'b28pg999');
   await makeContact(request, org.token, 'PgCX');
   const r = await request.get('/api/v1/contacts?page=999&per_page=10', { headers: authHeaders(org.token) });
   expect(r.status()).toBe(200);
@@ -175,14 +169,14 @@ test('boundary: contacts page=999 returns empty data array with total intact', a
   expect(body.meta.total).toBeGreaterThanOrEqual(1);
 });
 test('boundary: task title with unicode emoji is stored and returned correctly', async ({ request }) => {
-  const org = await registerOrg(request, 'b28uni');
+  const org = await registerVerifiedOrg(request, 'b28uni');
   const title = 'Task with emoji';
   const t = await makeTask(request, org.token, org.userId, title);
   const r = await request.get(`/api/v1/tasks/${t.id}`, { headers: authHeaders(org.token) });
   expect(((await r.json()) as { data: { title: string } }).data.title).toBe(title);
 });
 test('boundary: deal title with special characters is stored and returned correctly', async ({ request }) => {
-  const org = await registerOrg(request, 'b28spec');
+  const org = await registerVerifiedOrg(request, 'b28spec');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'SpecC');
   const title = 'Deal QA test 100pct';
@@ -191,17 +185,17 @@ test('boundary: deal title with special characters is stored and returned correc
   expect(((await r.json()) as { data: { title: string } }).data.title).toBe(title);
 });
 test('boundary: GET nonexistent contact ID returns 404', async ({ request }) => {
-  const org = await registerOrg(request, 'b28404c');
+  const org = await registerVerifiedOrg(request, 'b28404c');
   const r = await request.get('/api/v1/contacts/00000000-0000-0000-0000-000000000000', { headers: authHeaders(org.token) });
   expect(r.status()).toBe(404);
 });
 test('boundary: GET nonexistent deal ID returns 404', async ({ request }) => {
-  const org = await registerOrg(request, 'b28404d');
+  const org = await registerVerifiedOrg(request, 'b28404d');
   const r = await request.get('/api/v1/deals/00000000-0000-0000-0000-000000000000', { headers: authHeaders(org.token) });
   expect(r.status()).toBe(404);
 });
 test('boundary: GET nonexistent task ID returns 404', async ({ request }) => {
-  const org = await registerOrg(request, 'b28404t');
+  const org = await registerVerifiedOrg(request, 'b28404t');
   const r = await request.get('/api/v1/tasks/00000000-0000-0000-0000-000000000000', { headers: authHeaders(org.token) });
   expect(r.status()).toBe(404);
 });
@@ -209,7 +203,7 @@ test('boundary: GET nonexistent task ID returns 404', async ({ request }) => {
 // ── DEEP INVARIANT CHAINS ─────────────────────────────────────────────────────
 
 test('invariant: contact created_at and updated_at are present and ISO 8601', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28c1');
+  const org = await registerVerifiedOrg(request, 'inv28c1');
   const c = await makeContact(request, org.token, 'TsC');
   const r = await request.get(`/api/v1/contacts/${c.id}`, { headers: authHeaders(org.token) });
   const d = ((await r.json()) as { data: { created_at: string; updated_at: string } }).data;
@@ -218,7 +212,7 @@ test('invariant: contact created_at and updated_at are present and ISO 8601', as
   expect(d.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 });
 test('invariant: PATCH contact updates updated_at but not created_at', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28c2');
+  const org = await registerVerifiedOrg(request, 'inv28c2');
   const c = await makeContact(request, org.token, 'TsC2');
   const before = await request.get(`/api/v1/contacts/${c.id}`, { headers: authHeaders(org.token) });
   const beforeBody = ((await before.json()) as { data: { created_at: string; updated_at: string } }).data;
@@ -230,7 +224,7 @@ test('invariant: PATCH contact updates updated_at but not created_at', async ({ 
   expect(new Date(afterBody.updated_at).getTime()).toBeGreaterThanOrEqual(new Date(beforeBody.updated_at).getTime());
 });
 test('invariant: deal appears in contact deals sub-route after creation', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28d1');
+  const org = await registerVerifiedOrg(request, 'inv28d1');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'SubD');
   const d = await makeDeal(request, org.token, 'SubDeal', c.id, pl.id, pl.stages[0].id);
@@ -240,7 +234,7 @@ test('invariant: deal appears in contact deals sub-route after creation', async 
   expect(body.data.some(x => x.id === d.id)).toBe(true);
 });
 test('invariant: task appears in contact tasks sub-route after creation', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28t1');
+  const org = await registerVerifiedOrg(request, 'inv28t1');
   const c = await makeContact(request, org.token, 'SubT');
   const t = await makeTask(request, org.token, org.userId, 'SubTask');
   await request.patch(`/api/v1/tasks/${t.id}`, { headers: authHeaders(org.token), data: { contact_id: c.id } });
@@ -250,7 +244,7 @@ test('invariant: task appears in contact tasks sub-route after creation', async 
   expect(body.data.some(x => x.id === t.id)).toBe(true);
 });
 test('invariant: deal marked won reflects status=won on subsequent GET', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28dw');
+  const org = await registerVerifiedOrg(request, 'inv28dw');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'WonC');
   const d = await makeDeal(request, org.token, 'WonD', c.id, pl.id, pl.stages[0].id);
@@ -259,7 +253,7 @@ test('invariant: deal marked won reflects status=won on subsequent GET', async (
   expect(((await r.json()) as { data: { status: string } }).data.status).toBe('won');
 });
 test('invariant: deal marked lost reflects status=lost on subsequent GET', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28dl');
+  const org = await registerVerifiedOrg(request, 'inv28dl');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'LostC');
   const d = await makeDeal(request, org.token, 'LostD', c.id, pl.id, pl.stages[0].id);
@@ -268,14 +262,14 @@ test('invariant: deal marked lost reflects status=lost on subsequent GET', async
   expect(((await r.json()) as { data: { status: string } }).data.status).toBe('lost');
 });
 test('invariant: task completed reflects status=done on subsequent GET', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28tc');
+  const org = await registerVerifiedOrg(request, 'inv28tc');
   const t = await makeTask(request, org.token, org.userId, 'CompTask');
   await request.post(`/api/v1/tasks/${t.id}/complete`, { headers: authHeaders(org.token) });
   const r = await request.get(`/api/v1/tasks/${t.id}`, { headers: authHeaders(org.token) });
   expect(((await r.json()) as { data: { status: string } }).data.status).toBe('done');
 });
 test('invariant: deal moved to stage via PATCH /stage reflects new stage_id on GET', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28ms');
+  const org = await registerVerifiedOrg(request, 'inv28ms');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'MoveC');
   const d = await makeDeal(request, org.token, 'MoveD', c.id, pl.id, pl.stages[0].id);
@@ -285,7 +279,7 @@ test('invariant: deal moved to stage via PATCH /stage reflects new stage_id on G
   expect(((await r.json()) as { data: { stage: { id: string } } }).data.stage.id).toBe(targetStage.id);
 });
 test('invariant: archived contact excluded from default contact list', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28ca');
+  const org = await registerVerifiedOrg(request, 'inv28ca');
   const c = await makeContact(request, org.token, 'ToArchive');
   await request.delete(`/api/v1/contacts/${c.id}`, { headers: authHeaders(org.token) });
   const r = await request.get('/api/v1/contacts', { headers: authHeaders(org.token) });
@@ -293,7 +287,7 @@ test('invariant: archived contact excluded from default contact list', async ({ 
   expect(body.data.every(x => x.id !== c.id)).toBe(true);
 });
 test('invariant: archived deal excluded from open deal list', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28da');
+  const org = await registerVerifiedOrg(request, 'inv28da');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'ArchiveC');
   const d = await makeDeal(request, org.token, 'ArchiveD', c.id, pl.id, pl.stages[0].id);
@@ -303,14 +297,14 @@ test('invariant: archived deal excluded from open deal list', async ({ request }
   expect(body.data.every(x => x.id !== d.id)).toBe(true);
 });
 test('invariant: PATCH contact first_name reflected on subsequent GET', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28cp');
+  const org = await registerVerifiedOrg(request, 'inv28cp');
   const c = await makeContact(request, org.token, 'BeforePatch');
   await request.patch(`/api/v1/contacts/${c.id}`, { headers: authHeaders(org.token), data: { first_name: 'AfterPatch' } });
   const r = await request.get(`/api/v1/contacts/${c.id}`, { headers: authHeaders(org.token) });
   expect(((await r.json()) as { data: { first_name: string } }).data.first_name).toBe('AfterPatch');
 });
 test('invariant: PATCH deal title reflected on subsequent GET', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28dp');
+  const org = await registerVerifiedOrg(request, 'inv28dp');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'DpC');
   const d = await makeDeal(request, org.token, 'OldTitle', c.id, pl.id, pl.stages[0].id);
@@ -319,13 +313,13 @@ test('invariant: PATCH deal title reflected on subsequent GET', async ({ request
   expect(((await r.json()) as { data: { title: string } }).data.title).toBe('NewTitle');
 });
 test('invariant: create 5 contacts; list total equals 5', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28c5');
+  const org = await registerVerifiedOrg(request, 'inv28c5');
   await Promise.all(Array.from({ length: 5 }, (_, i) => makeContact(request, org.token, `Bulk${i}`)));
   const r = await request.get('/api/v1/contacts', { headers: authHeaders(org.token) });
   expect(((await r.json()) as { meta: { total: number } }).meta.total).toBe(5);
 });
 test('invariant: calendar event PATCH updates title on GET', async ({ request }) => {
-  const org = await registerOrg(request, 'inv28ev');
+  const org = await registerVerifiedOrg(request, 'inv28ev');
   const e = await makeEvent(request, org.token, 'OldEvTitle');
   await request.patch(`/api/v1/calendar/${e.id}`, { headers: authHeaders(org.token), data: { title: 'NewEvTitle' } });
   const r = await request.get(`/api/v1/calendar/${e.id}`, { headers: authHeaders(org.token) });
@@ -335,7 +329,7 @@ test('invariant: calendar event PATCH updates title on GET', async ({ request })
 // ── CASCADE BEHAVIOR ──────────────────────────────────────────────────────────
 
 test('cascade: archiving contact does not delete associated deals', async ({ request }) => {
-  const org = await registerOrg(request, 'cas28d');
+  const org = await registerVerifiedOrg(request, 'cas28d');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'CasC');
   const d = await makeDeal(request, org.token, 'CasDeal', c.id, pl.id, pl.stages[0].id);
@@ -344,14 +338,14 @@ test('cascade: archiving contact does not delete associated deals', async ({ req
   expect(r.status()).toBe(200);
 });
 test('cascade: contact activity log is accessible after contact PATCH', async ({ request }) => {
-  const org = await registerOrg(request, 'cas28a');
+  const org = await registerVerifiedOrg(request, 'cas28a');
   const c = await makeContact(request, org.token, 'ActC');
   await request.patch(`/api/v1/contacts/${c.id}`, { headers: authHeaders(org.token), data: { first_name: 'Updated' } });
   const r = await request.get(`/api/v1/contacts/${c.id}/activity`, { headers: authHeaders(org.token) });
   expect(r.status()).toBe(200);
 });
 test('cascade: delete pipeline stage returns 200 or 204', async ({ request }) => {
-  const org = await registerOrg(request, 'cas28ps');
+  const org = await registerVerifiedOrg(request, 'cas28ps');
   const plRes = await request.post('/api/v1/deals/pipelines', { headers: authHeaders(org.token), data: { name: 'CasPl' } });
   const plId = ((await plRes.json()) as { data: { id: string } }).data.id;
   const stRes = await request.post(`/api/v1/deals/pipelines/${plId}/stages`, { headers: authHeaders(org.token), data: { name: 'StageX', position: 1, is_won_stage: false, is_lost_stage: false } });
@@ -360,13 +354,13 @@ test('cascade: delete pipeline stage returns 200 or 204', async ({ request }) =>
   expect([200, 204]).toContain(r.status());
 });
 test('cascade: delete calendar event returns 200 or 204', async ({ request }) => {
-  const org = await registerOrg(request, 'cas28ev');
+  const org = await registerVerifiedOrg(request, 'cas28ev');
   const e = await makeEvent(request, org.token, 'DeleteMe');
   const r = await request.delete(`/api/v1/calendar/${e.id}`, { headers: authHeaders(org.token) });
   expect([200, 204]).toContain(r.status());
 });
 test('cascade: deal list filtered by contact_id returns only that contact deals', async ({ request }) => {
-  const org = await registerOrg(request, 'cas28cf');
+  const org = await registerVerifiedOrg(request, 'cas28cf');
   const pl = await getPipeline(request, org.token);
   const c1 = await makeContact(request, org.token, 'CasC1');
   const c2 = await makeContact(request, org.token, 'CasC2');
@@ -381,14 +375,14 @@ test('cascade: deal list filtered by contact_id returns only that contact deals'
 // ── PIPELINE INVARIANTS ───────────────────────────────────────────────────────
 
 test('pipeline: newly created pipeline appears in list', async ({ request }) => {
-  const org = await registerOrg(request, 'pl28l1');
+  const org = await registerVerifiedOrg(request, 'pl28l1');
   await request.post('/api/v1/deals/pipelines', { headers: authHeaders(org.token), data: { name: 'NewPl' } });
   const r = await request.get('/api/v1/deals/pipelines', { headers: authHeaders(org.token) });
   const body = await r.json() as { data: { name: string }[] };
   expect(body.data.some(p => p.name === 'NewPl')).toBe(true);
 });
 test('pipeline: PATCH pipeline name is reflected on GET', async ({ request }) => {
-  const org = await registerOrg(request, 'pl28p1');
+  const org = await registerVerifiedOrg(request, 'pl28p1');
   const plRes = await request.post('/api/v1/deals/pipelines', { headers: authHeaders(org.token), data: { name: 'OldPl' } });
   const plId = ((await plRes.json()) as { data: { id: string } }).data.id;
   await request.patch(`/api/v1/deals/pipelines/${plId}`, { headers: authHeaders(org.token), data: { name: 'PatchedPl' } });
@@ -396,7 +390,7 @@ test('pipeline: PATCH pipeline name is reflected on GET', async ({ request }) =>
   expect(((await r.json()) as { data: { name: string } }).data.name).toBe('PatchedPl');
 });
 test('pipeline: stage added to pipeline appears in stages list', async ({ request }) => {
-  const org = await registerOrg(request, 'pl28s1');
+  const org = await registerVerifiedOrg(request, 'pl28s1');
   const plRes = await request.post('/api/v1/deals/pipelines', { headers: authHeaders(org.token), data: { name: 'StPl' } });
   const plId = ((await plRes.json()) as { data: { id: string } }).data.id;
   await request.post(`/api/v1/deals/pipelines/${plId}/stages`, { headers: authHeaders(org.token), data: { name: 'NewStage', position: 1, is_won_stage: false, is_lost_stage: false } });
@@ -406,7 +400,7 @@ test('pipeline: stage added to pipeline appears in stages list', async ({ reques
 });
 test('pipeline: deal filter by pipeline_id returns only matching deals', async ({ request }) => {
   test.setTimeout(30000);
-  const org = await registerOrg(request, 'pl28f1');
+  const org = await registerVerifiedOrg(request, 'pl28f1');
   const pl = await getPipeline(request, org.token);
   const pl2Res = await request.post('/api/v1/deals/pipelines', { headers: authHeaders(org.token), data: { name: 'Pl2' } });
   const pl2Id = ((await pl2Res.json()) as { data: { id: string } }).data.id;
@@ -423,7 +417,7 @@ test('pipeline: deal filter by pipeline_id returns only matching deals', async (
 // ── ANALYTICS INVARIANTS ──────────────────────────────────────────────────────
 
 test('analytics: dashboard returns open_deals, tasks_due_today, pipeline_health_score fields', async ({ request }) => {
-  const org = await registerOrg(request, 'an28d1');
+  const org = await registerVerifiedOrg(request, 'an28d1');
   const r = await request.get('/api/v1/analytics/dashboard', { headers: authHeaders(org.token) });
   expect(r.status()).toBe(200);
   const body = await r.json() as { data: Record<string, unknown> };
@@ -432,31 +426,31 @@ test('analytics: dashboard returns open_deals, tasks_due_today, pipeline_health_
   expect('pipeline_health_score' in body.data).toBe(true);
 });
 test('analytics: funnel data.stages is an array', async ({ request }) => {
-  const org = await registerOrg(request, 'an28f1');
+  const org = await registerVerifiedOrg(request, 'an28f1');
   const r = await request.get('/api/v1/analytics/funnel', { headers: authHeaders(org.token) });
   expect(r.status()).toBe(200);
   const body = await r.json() as { data: { stages: unknown[] } };
   expect(Array.isArray(body.data.stages)).toBe(true);
 });
 test('analytics: revenue data.periods is an array', async ({ request }) => {
-  const org = await registerOrg(request, 'an28r1');
+  const org = await registerVerifiedOrg(request, 'an28r1');
   const r = await request.get('/api/v1/analytics/revenue', { headers: authHeaders(org.token) });
   expect(r.status()).toBe(200);
   const body = await r.json() as { data: { periods: unknown[] } };
   expect(Array.isArray(body.data.periods)).toBe(true);
 });
 test('analytics: win-loss returns 200', async ({ request }) => {
-  const org = await registerOrg(request, 'an28wl');
+  const org = await registerVerifiedOrg(request, 'an28wl');
   const r = await request.get('/api/v1/analytics/win-loss', { headers: authHeaders(org.token) });
   expect(r.status()).toBe(200);
 });
 test('analytics: lead-sources returns 200', async ({ request }) => {
-  const org = await registerOrg(request, 'an28ls');
+  const org = await registerVerifiedOrg(request, 'an28ls');
   const r = await request.get('/api/v1/analytics/lead-sources', { headers: authHeaders(org.token) });
   expect(r.status()).toBe(200);
 });
 test('analytics: open_deals count increases after creating a deal', async ({ request }) => {
-  const org = await registerOrg(request, 'an28inc');
+  const org = await registerVerifiedOrg(request, 'an28inc');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'AnC');
   const before = await request.get('/api/v1/analytics/dashboard', { headers: authHeaders(org.token) });
@@ -471,7 +465,7 @@ test('analytics: open_deals count increases after creating a deal', async ({ req
 // ── MESSAGES ──────────────────────────────────────────────────────────────────
 
 test('messages: GET /messages returns 200 with data array and meta', async ({ request }) => {
-  const org = await registerOrg(request, 'msg28l');
+  const org = await registerVerifiedOrg(request, 'msg28l');
   const r = await request.get('/api/v1/messages', { headers: authHeaders(org.token) });
   expect(r.status()).toBe(200);
   const body = await r.json() as { data: unknown[]; meta: unknown };
@@ -479,14 +473,14 @@ test('messages: GET /messages returns 200 with data array and meta', async ({ re
   expect(body.meta).toBeDefined();
 });
 test('messages: send in-app message returns 201 with id', async ({ request }) => {
-  const org = await registerOrg(request, 'msg28s');
+  const org = await registerVerifiedOrg(request, 'msg28s');
   const c = await makeContact(request, org.token, 'MsgC');
   const r = await request.post('/api/v1/messages/in-app', { headers: authHeaders(org.token), data: { contact_id: c.id, body: 'Hello from test' } });
   expect(r.status()).toBe(201);
   expect(((await r.json()) as { data: { id: string } }).data.id).toBeTruthy();
 });
 test('messages: log a call via POST /call returns 201 with id and channel=call', async ({ request }) => {
-  const org = await registerOrg(request, 'msg28c');
+  const org = await registerVerifiedOrg(request, 'msg28c');
   const c = await makeContact(request, org.token, 'CallC');
   const r = await request.post('/api/v1/messages/call', { headers: authHeaders(org.token), data: { contact_id: c.id, direction: 'outbound', duration_seconds: 120, notes: 'Test call' } });
   expect(r.status()).toBe(201);
@@ -495,7 +489,7 @@ test('messages: log a call via POST /call returns 201 with id and channel=call',
   expect(body.data.channel).toBe('call');
 });
 test('messages: sent in-app message appears in contact messages sub-route', async ({ request }) => {
-  const org = await registerOrg(request, 'msg28sub');
+  const org = await registerVerifiedOrg(request, 'msg28sub');
   const c = await makeContact(request, org.token, 'SubMsgC');
   const msgRes = await request.post('/api/v1/messages/in-app', { headers: authHeaders(org.token), data: { contact_id: c.id, body: 'SubMsg' } });
   const msgId = ((await msgRes.json()) as { data: { id: string } }).data.id;
@@ -505,7 +499,7 @@ test('messages: sent in-app message appears in contact messages sub-route', asyn
   expect(body.data.some(m => m.id === msgId)).toBe(true);
 });
 test('messages: mark message read via POST /:id/read returns 200', async ({ request }) => {
-  const org = await registerOrg(request, 'msg28r');
+  const org = await registerVerifiedOrg(request, 'msg28r');
   const c = await makeContact(request, org.token, 'ReadC');
   const msgRes = await request.post('/api/v1/messages/in-app', { headers: authHeaders(org.token), data: { contact_id: c.id, body: 'ReadMsg' } });
   const msgId = ((await msgRes.json()) as { data: { id: string } }).data.id;
@@ -516,7 +510,7 @@ test('messages: mark message read via POST /:id/read returns 200', async ({ requ
 // ── SEARCH / FILTER INVARIANTS ────────────────────────────────────────────────
 
 test('search: contact search by first_name q param returns matching results', async ({ request }) => {
-  const org = await registerOrg(request, 'srch28c');
+  const org = await registerVerifiedOrg(request, 'srch28c');
   await makeContact(request, org.token, 'UniqueNameXYZ');
   await makeContact(request, org.token, 'OtherName');
   const r = await request.get('/api/v1/contacts?q=UniqueNameXYZ', { headers: authHeaders(org.token) });
@@ -524,7 +518,7 @@ test('search: contact search by first_name q param returns matching results', as
   expect(body.meta.total).toBeGreaterThanOrEqual(1);
 });
 test('search: deal search by title q param returns matching deals', async ({ request }) => {
-  const org = await registerOrg(request, 'srch28d');
+  const org = await registerVerifiedOrg(request, 'srch28d');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'SrchDC');
   await makeDeal(request, org.token, 'XYZUniqueDeal', c.id, pl.id, pl.stages[0].id);
@@ -535,7 +529,7 @@ test('search: deal search by title q param returns matching deals', async ({ req
   expect(body.data.some(d => d.title === 'XYZUniqueDeal')).toBe(true);
 });
 test('search: task filter by status=pending returns only pending tasks', async ({ request }) => {
-  const org = await registerOrg(request, 'srch28t');
+  const org = await registerVerifiedOrg(request, 'srch28t');
   const t1 = await makeTask(request, org.token, org.userId, 'PendingT');
   const t2 = await makeTask(request, org.token, org.userId, 'DoneT');
   await request.post(`/api/v1/tasks/${t2.id}/complete`, { headers: authHeaders(org.token) });
@@ -545,13 +539,13 @@ test('search: task filter by status=pending returns only pending tasks', async (
   expect(body.data.every(t => t.status === 'pending')).toBe(true);
 });
 test('search: GET /tasks/today returns 200 with data array', async ({ request }) => {
-  const org = await registerOrg(request, 'srch28td');
+  const org = await registerVerifiedOrg(request, 'srch28td');
   const r = await request.get('/api/v1/tasks/today', { headers: authHeaders(org.token) });
   expect(r.status()).toBe(200);
   expect(Array.isArray(((await r.json()) as { data: unknown[] }).data)).toBe(true);
 });
 test('search: GET /tasks/overdue returns 200 with data array', async ({ request }) => {
-  const org = await registerOrg(request, 'srch28od');
+  const org = await registerVerifiedOrg(request, 'srch28od');
   const r = await request.get('/api/v1/tasks/overdue', { headers: authHeaders(org.token) });
   expect(r.status()).toBe(200);
   expect(Array.isArray(((await r.json()) as { data: unknown[] }).data)).toBe(true);
@@ -560,14 +554,14 @@ test('search: GET /tasks/overdue returns 200 with data array', async ({ request 
 // ── RESPONSE ENVELOPE SHAPE ───────────────────────────────────────────────────
 
 test('envelope: POST /contacts response has data and no error key', async ({ request }) => {
-  const org = await registerOrg(request, 'env28c');
+  const org = await registerVerifiedOrg(request, 'env28c');
   const r = await request.post('/api/v1/contacts', { headers: authHeaders(org.token), data: { first_name: 'EnvC' } });
   const body = await r.json() as Record<string, unknown>;
   expect('data' in body).toBe(true);
   expect('error' in body).toBe(false);
 });
 test('envelope: GET /contacts response has data array and meta object', async ({ request }) => {
-  const org = await registerOrg(request, 'env28l');
+  const org = await registerVerifiedOrg(request, 'env28l');
   const r = await request.get('/api/v1/contacts', { headers: authHeaders(org.token) });
   const body = await r.json() as { data: unknown[]; meta: { total: number; page: number; per_page: number } };
   expect(Array.isArray(body.data)).toBe(true);
@@ -581,7 +575,7 @@ test('envelope: 401 auth error response has a message field', async ({ request }
   expect(typeof body.message === 'string' || ('error' in body && typeof (body.error as Record<string, unknown>).message === 'string')).toBe(true);
 });
 test('envelope: GET /deals response meta.total reflects actual deal count', async ({ request }) => {
-  const org = await registerOrg(request, 'env28d');
+  const org = await registerVerifiedOrg(request, 'env28d');
   const pl = await getPipeline(request, org.token);
   const c = await makeContact(request, org.token, 'EnvDC');
   await makeDeal(request, org.token, 'EnvD1', c.id, pl.id, pl.stages[0].id);
