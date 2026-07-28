@@ -8,6 +8,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { db } from '../../services/db';
+import { encryptField, decryptField, blindIndex } from '../../services/encryption';
 
 // --- Local request types ---
 
@@ -252,7 +253,16 @@ async function list(request: FastifyRequest, reply: FastifyReply): Promise<void>
     orderBy: { created_at: 'desc' },
   });
 
-  reply.send({ data: captures, meta: { total: captures.length } });
+  // Contact.phone comes back as ciphertext. This used to be sent to the client verbatim
+  // and only looked correct because the create-contact path above wrote plaintext; a
+  // contact created through any other route rendered as "enc:v1:…" in the capture list.
+  const data = captures.map((capture) =>
+    capture.contact
+      ? { ...capture, contact: { ...capture.contact, phone: decryptField(capture.contact.phone) } }
+      : capture,
+  );
+
+  reply.send({ data, meta: { total: data.length } });
 }
 
 async function match(request: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -376,7 +386,13 @@ async function createContact(request: FastifyRequest, reply: FastifyReply): Prom
         data: {
           organization_id: orgId,
           first_name,
-          phone: rawPhone,
+          // Contact.phone is an encrypted column everywhere else in the codebase, with a
+          // phone_bidx HMAC beside it so the value stays searchable. Until 2026-07-27 this
+          // path wrote the raw number straight in, which both stored PII in the clear and
+          // produced a contact that phone search could never find. decryptField passes
+          // unprefixed values through unchanged, so the damage read back as normal.
+          phone: rawPhone ? encryptField(rawPhone) : undefined,
+          phone_bidx: rawPhone ? blindIndex(rawPhone, 'phone') : undefined,
           created_by: request.user.sub,
         },
       });
