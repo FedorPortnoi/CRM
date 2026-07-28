@@ -75,5 +75,17 @@ expo-env.d.ts
 /releases/
 .auth-state.json
 
+# Backup copies of an env file hold exactly the same live credentials as the
+# original, so they get the same treatment as .env above.
+.env.bak*
+.env.*.bak
+*.env.backup
+
+# wrangler's local secrets file (workers/*). The worker directory ships its own
+# .gitignore saying this; repeated here so deleting that file cannot expose it.
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
 # Claude Code local scratch / worktrees (~85MB, never commit)
 .claude/
