@@ -1,0 +1,16 @@
+{
+  "name": "kub-openai-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker proxying 4КУБ's CRM assistant to api.openai.com",
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "wrangler types && tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  }
+}

@@ -1,0 +1,58 @@
+# ---------------------------------------------------------------------------
+# 4КУБ → OpenAI proxy.
+#
+# NOTHING SECRET GOES IN THIS FILE. It is committed to a PUBLIC repository.
+# OPENAI_API_KEY and PROXY_TOKEN are Worker secrets, set with
+# `wrangler secret put` (see README.md) and stored only by Cloudflare.
+# The [vars] block below is public configuration and must stay that way.
+# ---------------------------------------------------------------------------
+
+name = "kub-openai-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-11-01"
+
+# Structured request lines are kept in Cloudflare Workers Logs. They contain
+# status, duration, model name and quota counters only — never request or
+# response bodies. See the privacy note at the top of src/index.ts.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[vars]
+# Exact model ids this proxy will forward. Exact match, no prefixes: a dated
+# snapshot such as "gpt-4o-mini-2024-07-18" must be listed on its own.
+ALLOWED_MODELS = "gpt-4o-mini,gpt-4o"
+
+# Hard ceiling on forwarded requests per day. This is the runaway-loop brake:
+# once it is hit, every further request is refused until the day rolls over.
+DAILY_REQUEST_LIMIT = "500"
+
+# Largest request body accepted, in bytes (256 KiB).
+MAX_BODY_BYTES = "262144"
+
+# Abort the OpenAI call after this long, in milliseconds.
+UPSTREAM_TIMEOUT_MS = "60000"
+
+# The CRM's assistant is request/response, so streaming is refused. Set to
+# "true" only once backend/services/ can consume SSE — the Worker already
+# pipes the upstream body through unbuffered.
+ALLOW_STREAMING = "false"
+
+# Minutes to shift the quota's day boundary away from UTC. 180 = the counter
+# resets at midnight Moscow time.
+DAY_BOUNDARY_OFFSET_MINUTES = "180"
+
+# Reject any single request asking for more output tokens than this. The CRM
+# assistant currently asks for 2000. Set to "0" to disable the check.
+MAX_OUTPUT_TOKENS = "4096"
+
+# The daily counter. A Durable Object rather than KV because KV's cached reads
+# and ~1 write/sec per key cannot count a burst — see the comment block at the
+# top of src/quota.ts for the full reasoning.
+[[durable_objects.bindings]]
+name = "DAILY_QUOTA"
+class_name = "DailyQuota"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["DailyQuota"]

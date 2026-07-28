@@ -1,0 +1,29 @@
+# Template for local development with `wrangler dev`.
+#
+# Copy this file to `.dev.vars` and put the real values there. `.dev.vars` is
+# ignored by the .gitignore in this directory; this `.example` file is the only
+# one that is ever committed.
+#
+# EVERY VALUE BELOW IS A PLACEHOLDER. Do not paste a real key into this file,
+# and do not "helpfully" replace a placeholder with a realistic-looking one —
+# this repository is public and has leaked a real credential before.
+#
+# In production these are Worker secrets, not vars:
+#   wrangler secret put OPENAI_API_KEY
+#   wrangler secret put PROXY_TOKEN
+
+# Your OpenAI API key. Only Cloudflare and this file ever see it.
+OPENAI_API_KEY="PLACEHOLDER_OPENAI_API_KEY"
+
+# The shared secret the CRM backend presents as `Authorization: Bearer <...>`.
+# Generate a fresh random one, do not invent it by hand:
+#   openssl rand -hex 32
+PROXY_TOKEN="PLACEHOLDER_PROXY_TOKEN"
+
+# Optional. Only set during a token rotation, so the old and new PROXY_TOKEN
+# are both accepted for the length of the changeover. Delete it afterwards.
+# PROXY_TOKEN_PREVIOUS="PLACEHOLDER_PREVIOUS_PROXY_TOKEN"
+
+# Optional. Only needed if your OpenAI key is scoped to a specific org/project.
+# OPENAI_ORG_ID="PLACEHOLDER_OPENAI_ORG_ID"
+# OPENAI_PROJECT_ID="PLACEHOLDER_OPENAI_PROJECT_ID"
