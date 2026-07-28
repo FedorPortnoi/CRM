@@ -520,9 +520,12 @@ export async function sendAssistantMessage(
 
     conversationTitle = conversation.title;
 
+    // Order by seq, never created_at: one turn writes all of its rows in one
+    // transaction, so they share a single CURRENT_TIMESTAMP and created_at
+    // cannot separate them. seq is the insertion-order BIGSERIAL.
     const rows = await db.assistantMessage.findMany({
       where: { conversation_id: conversation.id, organization_id: caller.org_id },
-      orderBy: { created_at: 'desc' },
+      orderBy: { seq: 'desc' },
       take: MAX_HISTORY_MESSAGES,
       select: { role: true, content: true, tool_calls: true },
     });
@@ -772,9 +775,11 @@ export async function getAssistantConversation(
     return null;
   }
 
+  // seq, not created_at — see the note in sendAssistantMessage. The select
+  // deliberately omits seq: it is a JS bigint and this row is JSON-serialised.
   const messages = await db.assistantMessage.findMany({
     where: { conversation_id: conversation.id, organization_id: caller.org_id },
-    orderBy: { created_at: 'asc' },
+    orderBy: { seq: 'asc' },
     select: { id: true, role: true, content: true, tool_calls: true, created_at: true },
   });
 

@@ -956,7 +956,14 @@ model AssistantConversation {
 }
 
 model AssistantMessage {
-  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // Intra-turn ordering. Every message of one assistant turn is written inside a
+  // single transaction, so created_at is the SAME CURRENT_TIMESTAMP on all of
+  // them and the random-UUID primary key is no tiebreaker. seq is BIGSERIAL:
+  // nextval() is claimed per INSERT, so it records true insertion order and is
+  // the only column replay may order by. Never select it into an API response —
+  // Prisma maps BigInt to a JS bigint, which JSON.stringify refuses.
+  seq             BigInt               @default(autoincrement())
   organization_id String               @db.Uuid
   conversation_id String               @db.Uuid
   role            AssistantMessageRole
@@ -967,6 +974,6 @@ model AssistantMessage {
   organization Org                   @relation(fields: [organization_id], references: [id])
   conversation AssistantConversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
 
-  @@index([conversation_id, created_at])
+  @@index([conversation_id, seq])
   @@index([organization_id, created_at])
 }

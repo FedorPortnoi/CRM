@@ -39,6 +39,7 @@ vi.mock('../../../backend/mcp/server', () => mcpMock);
 import {
   MAX_TOOL_ROUNDS,
   buildSystemPrompt,
+  getAssistantConversation,
   sanitizeToolArguments,
   sendAssistantMessage,
   type AssistantCaller,
@@ -590,5 +591,55 @@ describe('system prompt', () => {
 
     expect(prompt).toContain('наблюдатель');
     expect(prompt).toContain('только чтение');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Replay ordering
+//
+// One turn writes all of its rows (user, assistant-with-tool_calls, tool result,
+// answer) inside a single db.$transaction, so PostgreSQL stamps every one of them
+// with the SAME CURRENT_TIMESTAMP and the primary key is a random
+// gen_random_uuid(). Ordering by created_at therefore returns an arbitrary
+// intra-turn order — which OpenAI rejects, because a tool message must follow the
+// assistant tool call it correlates with. AssistantMessage.seq (BIGSERIAL) is the
+// only column that carries insertion order, so these two reads must use it.
+// ---------------------------------------------------------------------------
+
+describe('replay ordering', () => {
+  it('reads turn history by seq, newest first — never by created_at', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(textCompletion('ok'))));
+    dbMock.assistantConversation.findFirst.mockResolvedValue({ id: 'conv-9', title: 'Диалог' });
+    dbMock.assistantMessage.findMany.mockResolvedValue([]);
+
+    await sendAssistantMessage(CALLER, { message: 'продолжай', conversation_id: 'conv-9' });
+
+    const args = dbMock.assistantMessage.findMany.mock.calls[0]?.[0] as {
+      orderBy: unknown;
+      select: Record<string, boolean>;
+    };
+    expect(args.orderBy).toEqual({ seq: 'desc' });
+    // Prisma maps BigInt to a JS bigint and JSON.stringify throws on it, so seq
+    // must never be selected into anything that reaches a response body.
+    expect(args.select).not.toHaveProperty('seq');
+  });
+
+  it('reads a stored conversation by seq, oldest first — never by created_at', async () => {
+    dbMock.assistantConversation.findFirst.mockResolvedValue({
+      id: 'conv-9',
+      title: 'Диалог',
+      created_at: new Date('2026-07-25T10:00:00.000Z'),
+      updated_at: new Date('2026-07-25T10:00:00.000Z'),
+    });
+    dbMock.assistantMessage.findMany.mockResolvedValue([]);
+
+    await getAssistantConversation(CALLER, 'conv-9');
+
+    const args = dbMock.assistantMessage.findMany.mock.calls[0]?.[0] as {
+      orderBy: unknown;
+      select: Record<string, boolean>;
+    };
+    expect(args.orderBy).toEqual({ seq: 'asc' });
+    expect(args.select).not.toHaveProperty('seq');
   });
 });
