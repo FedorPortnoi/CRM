@@ -8,6 +8,7 @@ import {
 import { createVerifier } from 'fast-jwt';
 import { getJwtSecret } from '../config/security';
 import { validateMcpPrincipal } from './validation';
+import { projectModelFacing } from './model-projection';
 import { auditLog } from '../services/audit';
 
 export type McpUser = { sub: string; org_id: string; role: string; sid?: string };
@@ -29,6 +30,27 @@ type ToolEntry = {
   description: string;
   inputSchema: Record<string, unknown>;
   handler: ToolHandler;
+};
+
+/**
+ * Per-tool declarations about what this tool's RESULT may contain once it is in
+ * front of a language model. Everything here is default-deny: a tool that says
+ * nothing gets the strictest treatment, and relaxing it is an explicit, visible
+ * act at the registration site.
+ */
+export type ToolModelFacingOptions = {
+  /**
+   * `'omit'` (default) — operator ФИО is stripped out of this tool's result by
+   * `projectModelFacing`. Applies to every tool that does not say otherwise,
+   * including ones written after this comment.
+   *
+   * `'allowed'` — this tool's whole output IS about named people, so stripping
+   * the names would delete the feature rather than minimise it. The only such
+   * tool today is `get_rep_performance`, and the trade-off is an open decision
+   * in docs/decisions/002-operator-names-in-model-facing-analytics.md. Do not
+   * add a second one to dodge a test.
+   */
+  operatorNames?: 'omit' | 'allowed';
 };
 
 const tools: ToolEntry[] = [];
@@ -127,13 +149,35 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
   };
 });
 
+/**
+ * Register a tool.
+ *
+ * The handler is wrapped, not stored raw: `projectModelFacing` runs over
+ * whatever it returns before the result reaches a caller. This is the single
+ * place where model-visible data gets shaped, and it sits HERE rather than in
+ * the assistant because both doors below — the stdio `CallToolRequestSchema`
+ * handler and the in-process `invokeMcpTool` — read the same `tools` array, and
+ * an external MCP client on the stdio transport is a language model too.
+ *
+ * Wrapping at registration rather than at the two call sites is deliberate: a
+ * future tool file cannot opt out of the projection by forgetting something,
+ * because the only way into the registry is through this function. See
+ * ./model-projection.ts for what it strips and why the assistant's
+ * `redactToolResult` structurally cannot.
+ */
 export function registerTool(
   name: string,
   description: string,
   inputSchema: Record<string, unknown>,
   handler: ToolHandler,
+  options?: ToolModelFacingOptions,
 ): void {
-  tools.push({ name, description, inputSchema, handler });
+  const projected: ToolHandler =
+    options?.operatorNames === 'allowed'
+      ? handler
+      : async (args, user) => projectModelFacing(await handler(args, user));
+
+  tools.push({ name, description, inputSchema, handler: projected });
   mcpServer.sendToolListChanged().catch(() => {
     // ignore if transport not yet connected
   });

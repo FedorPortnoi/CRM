@@ -183,6 +183,17 @@ export async function getTaskForUser(
       organization_id: orgId,
       ...(assignedFilter !== undefined && { assigned_to: assignedFilter }),
     },
+    // `assignee.name` is an OPERATOR's ФИО and it STAYS here, because this
+    // function is shared: GET /tasks/:id feeds src/app/task/[id].tsx, which
+    // renders it at :371, and src/app/task/edit/[id].tsx, which seeds its
+    // assignee picker from it at :239-240. Deleting the select the way c456e0f
+    // and cb88ba9 did would break the user interface, not just the prompt.
+    //
+    // The same row also reaches a language model through MCP `get_task`. It is
+    // stripped there — once, at the MCP boundary, by projectModelFacing() in
+    // backend/mcp/model-projection.ts, which registerTool applies to every tool
+    // result. The app keeps the name; the model never sees it. Do not "fix"
+    // this line.
     include: {
       assignee: { select: { id: true, name: true } },
       contact: { select: { id: true, first_name: true, last_name: true } },
@@ -484,6 +495,20 @@ export async function completeTaskForUser(
 
 /**
  * Return overdue tasks (past due, not done/cancelled) visible to `requestingUser`.
+ *
+ * Unlike getTaskForUser above, this one reads NO assignee. Its only caller is
+ * the MCP tool `get_overdue_tasks` (backend/mcp/tools/tasks.ts:222) — there is
+ * no REST route, no public-API route and no app screen behind it, so the whole
+ * result set is model-facing and the operator's ФИО has no reason to leave
+ * Postgres at all. That is the c456e0f / cb88ba9 move, available here precisely
+ * because nothing renders these rows to a human.
+ *
+ * projectModelFacing() at the MCP boundary would have stripped the name anyway;
+ * this makes the query honest about what it needs rather than relying on the
+ * backstop. `assigned_to` is a non-nullable scalar on Task and carries the same
+ * uuid `assignee.id` would have, so the model can still chain on the operator.
+ * If a REST caller ever needs this list, give it the include back and let the
+ * projection do its job.
  */
 export async function getOverdueTasksForUser(
   orgId: string,
@@ -501,7 +526,6 @@ export async function getOverdueTasksForUser(
       due_date: { lt: new Date() },
     },
     include: {
-      assignee: { select: { id: true, name: true } },
       contact: { select: { id: true, first_name: true, last_name: true } },
     },
     orderBy: { due_date: 'asc' },

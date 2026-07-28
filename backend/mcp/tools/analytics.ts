@@ -508,6 +508,21 @@ registerTool(
 
     return { data, meta: {} };
   },
+  // Declared, not defaulted. Every other tool's result is projected through
+  // projectModelFacing() on the way out of registerTool, which drops operator
+  // ФИО. This one's rows are `{ user_id, name, … }` — the name IS the answer to
+  // «кто лучший менеджер», not a passenger riding along in a payload about a
+  // customer — so the projection's two structural rules do not reach it and
+  // this flag says so out loud rather than leaving it to the shape.
+  //
+  // It is NOT a settled "this is fine". It is the open question in
+  // docs/decisions/002-operator-names-in-model-facing-analytics.md, whose
+  // recommendation is option (b): emit USER-… handles here and substitute the
+  // real names back after the model has written its sentence. Until that lands,
+  // this tool is the one place an operator's ФИО reaches the model, and the
+  // record's Gate list must be satisfied before Wave A repoints
+  // backend/services/yandex-gpt.ts at OpenAI.
+  { operatorNames: 'allowed' },
 );
 
 registerTool(

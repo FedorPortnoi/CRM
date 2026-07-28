@@ -208,6 +208,18 @@ export async function getContactForUser(
 ): Promise<unknown> {
   const contact = await db.contact.findFirst({
     where: { id: contactId, organization_id: orgId },
+    // `assignee.name` is an OPERATOR's ФИО and it STAYS here. This function is
+    // shared: it backs GET /contacts/:id for the app (src/app/contact/[id].tsx
+    // types the contact with `assignee: Assignee | null`) and GET
+    // /v1/contacts/:id for external integrators through public-api.ts, as well
+    // as MCP `get_contact`. Deleting the include the way c456e0f and cb88ba9
+    // did would change an API response that humans and third-party systems
+    // read.
+    //
+    // The model-facing copy loses it: projectModelFacing() in
+    // backend/mcp/model-projection.ts strips names out of every MCP tool result
+    // at registerTool, so `get_contact` returns `assignee: { id }` and nothing
+    // more. One include, two audiences, one place where they diverge.
     include: { assignee: { select: { id: true, name: true } } },
   });
 
