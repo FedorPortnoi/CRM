@@ -105,6 +105,7 @@ export default function SequencesScreen(): JSX.Element {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.filterBar}
         contentContainerStyle={styles.filters}
       >
         {STATUS_FILTERS.map((value) => {
@@ -230,7 +231,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     padding: 14,
   },
   noticeText: { color: c.amber, fontSize: 14, lineHeight: 20 },
-  filters: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  // flexGrow:0 is load-bearing. This ScrollView is a direct child of `screen`
+  // (flex:1) and sits above the list, so without it the horizontal ScrollView
+  // claims the leftover vertical space and stretches every chip to ~400px tall.
+  // nearby.tsx does not need this only because its chip row is wrapped in a
+  // content-sized View. alignItems keeps the chips their natural height.
+  filterBar: { flexGrow: 0, flexShrink: 0 },
+  filters: { paddingHorizontal: 16, paddingVertical: 12, gap: 8, alignItems: 'center' },
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
