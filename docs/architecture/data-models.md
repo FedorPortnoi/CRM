@@ -1,6 +1,15 @@
 # Data Models
 
-All tables live in a single PostgreSQL schema. Every table has `organization_id` for multi-tenant isolation enforced via Row-Level Security. Timestamps are stored in UTC. UUIDs are used for all primary keys.
+All tables live in a single PostgreSQL schema. Every table has `organization_id` for multi-tenant isolation enforced via Row-Level Security. UUIDs are used for all primary keys.
+
+> **Column types below are design-era, not observed.** The shipped schema is defined by
+> `backend/prisma/schema.prisma` and the migrations under `backend/prisma/migrations/`.
+> In particular, the `TIMESTAMPTZ` types shown throughout this document are wrong: every
+> temporal column actually ships as naive `timestamp(3)`, and there are no `timestamptz`
+> columns left in the Prisma-managed schema. Timestamps are stored in UTC only as long as
+> the Postgres session time zone is UTC, which is not currently pinned anywhere in the
+> repository. See `docs/architecture/timestamp-storage.md` before acting on any timestamp
+> column type.
 
 ## Core Entities
 

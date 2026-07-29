@@ -21,6 +21,19 @@ Required before deploying any API environment:
 - `DATABASE_URL` points to the intended database environment.
 - `DIRECT_URL` is set for Prisma migrations when the provider requires a direct connection.
 - Yandex PostgreSQL SSL is configured with either `sslrootcert=` in `DATABASE_URL` or `PGSSLROOTCERT`.
+- The Postgres session time zone is UTC on the connection the API actually uses. Every
+  temporal column in the schema is naive `timestamp(3)`, and 34 of them default to
+  `CURRENT_TIMESTAMP`, so a non-UTC session skews server-generated timestamps by the UTC
+  offset. Pin it by appending `options=-c%20timezone%3DUTC` to every connection URL —
+  `DATABASE_URL`, `DIRECT_URL`, and the production pair `CLOUD_DATABASE_URL` /
+  `CLOUD_DIRECT_URL` — and confirm with `SHOW TimeZone;` **on the production connection**,
+  not a local one. `TZ=UTC` on the Node process does not do this. This has already bitten
+  once: dev was pinned, production was not, and the cluster ran `Europe/Moscow`.
+  Background: `docs/architecture/timestamp-storage.md`.
+- Every new migration has been reviewed for unguarded time-zone retypes. Any
+  `ALTER COLUMN ... SET DATA TYPE` that crosses time-zone awareness must carry an explicit
+  `USING (col AT TIME ZONE 'UTC')`; `prisma migrate diff` does not generate one, and the
+  bare form silently rewrites stored values through the session time zone.
 - Prisma migrations have been applied with:
 
 ```bash
