@@ -378,18 +378,33 @@ private and local hosts rejected (`:404-412`) — alongside `JWT_SECRET`, `TOKEN
 Yandex Cloud Managed PostgreSQL (`ru-central1`) and records 1.0.4 live in the App Store with 1.0.5
 submitted. There is a production database — this record's author has queried it.
 
-Whether there is a live *service* is a third thing, and measurement on 2026-07-28 says
-no: `4kub.ru` resolves to `111.88.149.122`, an address outside every Yandex Cloud range
-this project uses, and refuses TCP on **both** 443 and 80 from a machine whose
-connection to the project's own VM succeeds at the same moment. So the configuration is
-production-shaped and the store listing is real, but the endpoint the shipped app is
-built against does not answer.
+Whether there is a live *service* was left open on 2026-07-28 with two candidate readings —
+a released app pointing at a dead backend, or aspirational release claims. **Measurement on
+2026-07-29 settled it, and neither reading was right. There is a live service.**
 
-That is left stated rather than resolved, because the two readings have opposite
-consequences and only the owner can say which holds: either a released app is pointing
-at a dead backend, or `PROJECT_KNOWLEDGE.md`'s release claims are themselves aspirational
-— which would make this the fourth documentation claim in this pass that the tree does
-not support. Do not build a ФЗ-152 argument on either reading until it is settled.
+The 2026-07-28 text above is retained deliberately, because one of its own premises was
+false: `111.88.149.122` is **not** «an address outside every Yandex Cloud range this
+project uses». RIPE RDAP returns `RU-YANDEXCLOUD-20090612`, Yandex.Cloud LLC,
+`111.88.144.0/20`. It was this project's own VM — its *ephemeral* one-to-one NAT address,
+released back to the pool when the instance was stopped. The account now holds
+`51.250.26.203`, reserved static since 2026-07-28 20:38 UTC, while DNS at reg.ru still
+pointed `4kub.ru` at the address the project had lost. The refused TCP was a stale A
+record, nothing more.
+
+Behind that record the service was running the whole time: `pm2 crm-backend` online, nginx
+with `sites-enabled/4kub.ru`, a valid Let's Encrypt certificate for the domain, and the
+backend on `:3000`. Verified end-to-end on 2026-07-29 with `curl --resolve` against the
+current address — `https://4kub.ru/version` → 200 with a valid chain, and
+`POST /api/v1/auth/login` → 200. The App Store listing is real and live (`ascAppId
+6776447873`, v1.1.3, 2026-07-19).
+
+**So the ФЗ-152 questions are live, not theoretical.** A shipped application and a running
+production backend both exist. What does *not* exist is this surface: see below.
+
+One caution carries forward. Deployed code lagged `origin/main` by 38 commits until
+2026-07-29 — the box was serving pre-security-audit code from 20 June. Do not assume the
+running service matches the tree; check `git rev-parse HEAD` on the VM before reasoning
+from source about what production does.
 
 What is true is narrower, and it is about this surface rather than about the system: the assistant
 and its MCP tool layer landed in `d0e0fef` on 2026-07-25, six days after 1.0.5 went to Apple, so
@@ -789,3 +804,23 @@ touched in this pass either.
    on purpose and strips only operator (`User.name`) fields; `redactToolResult` does not touch them
    either. This record already said so in two places — the closing note of the Recommendation and the
    substring argument in (e) — and both were accurate, so they stand as written.
+
+### Revision, 2026-07-29 — the live-service question, settled by measurement
+
+6. **«There is no live service» withdrawn, and one of its premises was false.** The 2026-07-28 text
+   asserted that `111.88.149.122` is «an address outside every Yandex Cloud range this project uses».
+   RIPE RDAP returns `RU-YANDEXCLOUD-20090612`, Yandex.Cloud LLC, `111.88.144.0/20` — it was this
+   project's own VM, on the ephemeral NAT address it lost when the instance was stopped. The refused
+   TCP measured that day was a stale reg.ru A record, not a dead backend. Verified 2026-07-29 against
+   the current address `51.250.26.203`: `https://4kub.ru/version` → 200 with a valid certificate,
+   `POST /api/v1/auth/login` → 200. **The ст. 12 urgency moves up again: both a shipped app and a
+   running backend exist.** The legal reasoning is unchanged — it rests on the processor being
+   domestic — but nothing here is theoretical any more.
+7. **The store-version claims cited in item 3 are themselves unreliable.** That item repeated
+   `PROJECT_KNOWLEDGE.md`'s «1.0.4 live with 1.0.5 submitted». The public App Store listing for
+   `ascAppId 6776447873` shows **1.1.3**, released 2026-07-19, and the backend's own `/version`
+   endpoint returns a hardcoded `1.0.2`. Three sources, three answers, none reconcilable from this
+   tree. Do not cite a version number from this repository as fact without checking the store.
+8. **Deployed code lagged the tree by 38 commits.** Until 2026-07-29 production ran `576c31b`
+   (20 June), predating the entire security release. Any argument of the form «the code does X, so
+   production does X» was unsound for that whole period. Check `git rev-parse HEAD` on the VM first.
