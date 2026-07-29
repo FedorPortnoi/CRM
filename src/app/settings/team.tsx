@@ -11,7 +11,20 @@ import { API_URL } from '../../utils/api';
 import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors } from '../../theme';
 
-type Role = 'owner' | 'admin' | 'member' | 'viewer';
+/**
+ * Mirrors backend/services/capabilities.ts. The backend is authoritative — it
+ * refuses anything this list gets wrong — but the two must be edited together
+ * when a role is added, or the picker silently omits it.
+ */
+type Role =
+  | 'owner'
+  | 'admin'
+  | 'head'
+  | 'member'
+  | 'accountant'
+  | 'marketer'
+  | 'support'
+  | 'viewer';
 
 interface OrgMember {
   id: string;
@@ -27,21 +40,45 @@ interface CompanyCode {
   expires_at: string;
 }
 
+// Blue marks the account that owns the org; warm tones mark everyone who can
+// change data; muted grey marks the roles that can only look.
 const ROLE_COLORS: Record<Role, string> = {
   owner: '#3b82f6',
   admin: '#CC785C',
+  head: '#CC785C',
   member: '#D4A27F',
-  viewer: '#D4A27F',
+  marketer: '#D4A27F',
+  support: '#D4A27F',
+  accountant: '#8FA3AD',
+  viewer: '#8FA3AD',
 };
 
 const ROLE_LABELS: Record<Role, string> = {
   owner: 'Владелец',
   admin: 'Администратор',
+  head: 'Руководитель отдела',
   member: 'Менеджер',
+  accountant: 'Бухгалтер',
+  marketer: 'Маркетолог',
+  support: 'Поддержка',
   viewer: 'Только просмотр',
 };
 
-const ASSIGNABLE_ROLES: Role[] = ['admin', 'member', 'viewer'];
+/** One line each, so the picker explains the choice instead of just naming it. */
+const ROLE_HINTS: Record<Role, string> = {
+  owner: 'Полный доступ, включая передачу владения',
+  admin: 'Полный доступ, кроме назначения администраторов',
+  head: 'Как менеджер, плюс данные своих подчинённых',
+  member: 'Свои контакты, сделки и задачи',
+  accountant: 'Видит все деньги и выгрузки. Не может ничего менять',
+  marketer: 'Рассылки и шаблоны по всей базе. Без правки сделок',
+  support: 'Контакты и активность. Без воронки и сумм',
+  viewer: 'Видит свои данные. Не может ничего менять',
+};
+
+// `admin` is offered only to an owner; the backend enforces the same rule via
+// the team.manage_admins capability, so a tampered client gains nothing.
+const ASSIGNABLE_ROLES: Role[] = ['head', 'member', 'accountant', 'marketer', 'support', 'viewer'];
 
 export default function TeamScreen(): JSX.Element {
   const token = useUserStore((s) => s.token);
@@ -168,6 +205,10 @@ export default function TeamScreen(): JSX.Element {
   const canManage = currentUser?.role === 'owner' || currentUser?.role === 'admin';
   const isOwner = currentUser?.role === 'owner';
 
+  // Only an owner may hand out `admin`. The backend enforces the same rule, so
+  // this is presentation, not protection.
+  const offeredRoles: Role[] = isOwner ? ['admin', ...ASSIGNABLE_ROLES] : ASSIGNABLE_ROLES;
+
   const confirmDeactivate = useCallback((member: OrgMember) => {
     Alert.alert('Удалить доступ', `Убрать ${member.name} из команды?`, [
       { text: 'Отмена', style: 'cancel' },
@@ -176,11 +217,11 @@ export default function TeamScreen(): JSX.Element {
   }, [deactivateMutation]);
 
   const promptRoleChange = useCallback((member: OrgMember) => {
-    Alert.alert('Изменить роль', `Выберите роль для ${member.name}`, ASSIGNABLE_ROLES.map((r) => ({
+    Alert.alert('Изменить роль', `Выберите роль для ${member.name}`, offeredRoles.map((r) => ({
       text: ROLE_LABELS[r],
       onPress: () => roleMutation.mutate({ id: member.id, role: r }),
     })).concat([{ text: 'Отмена', onPress: () => undefined }]));
-  }, [roleMutation]);
+  }, [roleMutation, offeredRoles]);
 
   const promptManagerChange = useCallback((member: OrgMember, allMembers: OrgMember[]) => {
     const eligibleManagers = allMembers.filter((m) => m.id !== member.id);
@@ -345,10 +386,20 @@ export default function TeamScreen(): JSX.Element {
           <Text style={styles.label}>Фамилия</Text>
           <TextInput style={styles.input} value={inviteLastName} onChangeText={setInviteLastName} placeholder="Петров" placeholderTextColor={colors.placeholder} autoCapitalize="words" />
           <Text style={styles.label}>Роль</Text>
-          <View style={styles.roleRow}>
-            {ASSIGNABLE_ROLES.map((r) => (
-              <TouchableOpacity key={r} style={[styles.rolePill, inviteRole === r && styles.rolePillSelected]} onPress={() => setInviteRole(r)}>
-                <Text style={[styles.rolePillText, inviteRole === r && styles.rolePillTextSelected]}>{ROLE_LABELS[r]}</Text>
+          <View style={styles.roleList}>
+            {offeredRoles.map((r) => (
+              <TouchableOpacity
+                key={r}
+                style={[styles.roleOption, inviteRole === r && styles.roleOptionSelected]}
+                onPress={() => setInviteRole(r)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: inviteRole === r }}
+              >
+                <View style={[styles.roleDot, { backgroundColor: ROLE_COLORS[r] }]} />
+                <View style={styles.roleOptionText}>
+                  <Text style={[styles.rolePillText, inviteRole === r && styles.rolePillTextSelected]}>{ROLE_LABELS[r]}</Text>
+                  <Text style={styles.roleHint}>{ROLE_HINTS[r]}</Text>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
@@ -400,6 +451,22 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   label: { fontSize: 13, fontWeight: '600', color: c.text1, marginBottom: 6, marginTop: 12 },
   input: { backgroundColor: c.inputBg, borderRadius: 8, borderWidth: 1, borderColor: c.inputBorder, padding: 12, fontSize: 15, color: c.text1 },
   roleRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  roleList: { gap: 8 },
+  roleOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.bgPanel,
+  },
+  roleOptionSelected: { borderColor: c.orange, backgroundColor: c.orange },
+  roleOptionText: { flex: 1 },
+  roleDot: { width: 10, height: 10, borderRadius: 5 },
+  roleHint: { fontSize: 12, color: c.textMuted, marginTop: 2, lineHeight: 16 },
   rolePill: { borderRadius: 20, borderWidth: 1, borderColor: c.border, paddingHorizontal: 14, paddingVertical: 6 },
   rolePillSelected: { backgroundColor: c.orange, borderColor: c.orange },
   rolePillText: { fontSize: 13, color: c.text1 },
