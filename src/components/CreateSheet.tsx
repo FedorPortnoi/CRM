@@ -2,9 +2,10 @@ import React from 'react';
 import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { CheckSquare, UserPlus, Briefcase } from 'lucide-react-native';
+import { CheckSquare, UserPlus, Briefcase, UserCog } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
+import { useUserStore } from '../store/userStore';
 import { ThemeColors } from '../theme';
 
 interface Props {
@@ -23,10 +24,23 @@ export default function CreateSheet({ visible, onClose }: Props): JSX.Element {
     router.push(path as never);
   };
 
+  // Adding a person is owner/admin only — the same gate the team screen applies
+  // to its own button. Offering it to a member or viewer would put them one tap
+  // from a screen that refuses them, which reads as a broken app rather than a
+  // permission boundary.
+  const role = useUserStore((s) => s.user?.role);
+  const canManageTeam = role === 'owner' || role === 'admin';
+
   const options = [
     { label: t('tasks.add'), Icon: CheckSquare, path: '/task/new' },
     { label: t('contacts.add'), Icon: UserPlus, path: '/contact/new' },
     { label: t('deals.add'), Icon: Briefcase, path: '/deal/new' },
+    // `?add=1` opens the add-employee form straight away. Without it this is a
+    // shortcut to a screen where you still have to find the button, which is the
+    // discoverability problem it exists to solve.
+    ...(canManageTeam
+      ? [{ label: t('team.addMember'), Icon: UserCog, path: '/settings/team?add=1' }]
+      : []),
   ];
 
   return (

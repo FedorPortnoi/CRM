@@ -15,10 +15,21 @@ generator client {
 // Enums
 // ---------------------------------------------------------------------------
 
+// Ordered loosely by breadth of power, but the ordering carries no meaning —
+// authorization comes from backend/services/capabilities.ts, never from the
+// position of a value here. Adding a role is additive and safe; REMOVING one is
+// not, because existing rows would reference a dropped label.
+//
+// A role says what a user may DO. What they may SEE is the separate
+// manager_id hierarchy (see visibility.ts) — do not encode org structure here.
 enum UserRole {
   owner
   admin
-  member
+  head        // РОП / руководитель отдела — sales powers, reach via manager_id
+  member      // менеджер по продажам
+  accountant  // бухгалтер — org-wide read of money, no writes
+  marketer    // маркетолог — campaigns org-wide, no pipeline writes
+  support     // поддержка — contact record and activity only
   viewer
 }
 

@@ -1143,6 +1143,9 @@ const en = {
     failedToSave: 'Failed to save consent',
     readOnlyRole: 'Viewer access cannot change consent',
   },
+  team: {
+    addMember: 'Add employee',
+  },
   onboarding: {
     welcomeTitle: 'Welcome to CRM',
     welcomeSubtitle: 'Your mobile sales command center',

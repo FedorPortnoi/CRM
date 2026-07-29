@@ -3,6 +3,7 @@ import { db } from '../services/db';
 import { auditLog } from '../services/audit';
 import { validateAuthSession } from '../services/sessions';
 import { TRACKING_OPEN_PATH_PREFIX } from '../services/open-tracking';
+import { can, hasAnyWriteCapability, type Capability } from '../services/capabilities';
 
 // One-click opt-out from a marketing email. Kept next to the tracking prefix so both
 // public prefixes are visible in one place. The trailing slash is load-bearing: it makes
@@ -14,6 +15,33 @@ type AuthenticatedRole = 'owner' | 'admin' | 'member' | 'viewer';
 type AdminRoutePolicy = {
   action: string;
   reason: string;
+};
+
+/**
+ * Which capability each guarded route actually requires.
+ *
+ * Kept as one table rather than a `capability` field on every policy return, so
+ * the full authorization surface is legible in a single screen — and so a new
+ * guarded route that forgets its mapping FAILS CLOSED (see the lookup below)
+ * instead of silently becoming public.
+ *
+ * The mappings preserve today's behaviour exactly for owner/admin/member/viewer:
+ * every capability here is held by owner and admin and by no legacy role. The
+ * one deliberate widening is `data.export`, which accountant now also holds —
+ * reading and exporting the org's numbers is the job.
+ */
+const ACTION_CAPABILITY: Record<string, Capability> = {
+  'audit.read': 'audit.read',
+  'data.export': 'data.export',
+  'contacts.bulk_admin': 'contacts.bulk',
+  // Pipelines, stages, workflows and example-data resets are organisation
+  // configuration rather than day-to-day sales work — deliberately NOT
+  // 'deals.write', which would hand them to every sales manager.
+  'deals.pipeline_admin': 'org.manage',
+  'deals.stage_admin': 'org.manage',
+  'workflows.admin': 'org.manage',
+  'onboarding.clear_example_data': 'org.manage',
+  'org.update_settings': 'org.manage',
 };
 
 function isReadOnlyMethod(method: string): boolean {
@@ -229,7 +257,14 @@ export async function enforceAuthenticatedApiRequest(
   };
 
   const adminPolicy = adminRoutePolicy(request);
-  if (adminPolicy && !isAdminRole(activeUser.role as AuthenticatedRole)) {
+  // An unmapped guarded action falls back to `org.manage`, the narrowest gate
+  // that only owner and admin hold — so forgetting to add a mapping locks a
+  // route down rather than opening it up.
+  const requiredCapability: Capability | undefined = adminPolicy
+    ? ACTION_CAPABILITY[adminPolicy.action] ?? 'org.manage'
+    : undefined;
+
+  if (adminPolicy && requiredCapability && !can(activeUser.role, requiredCapability)) {
     await auditLog({
       action: adminPolicy.action,
       outcome: 'denied',
@@ -248,9 +283,16 @@ export async function enforceAuthenticatedApiRequest(
     });
   }
 
-  if (activeUser.role === 'viewer' && !isReadOnlyMethod(request.method.toUpperCase())) {
+  // Asks "may this role write?" rather than "is this role viewer?". The old form
+  // was a deny-list of one, so every role added later defaulted to writable —
+  // `accountant` would have walked straight through it. Read-only roles are now
+  // whatever holds no write capability, which the capability tests pin.
+  if (
+    !hasAnyWriteCapability(activeUser.role) &&
+    !isReadOnlyMethod(request.method.toUpperCase())
+  ) {
     return reply.status(403).send({
-      error: { code: 'FORBIDDEN', message: 'Viewer users have read-only access' },
+      error: { code: 'FORBIDDEN', message: 'This role has read-only access' },
     });
   }
 }

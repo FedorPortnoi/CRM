@@ -1143,6 +1143,9 @@ const ru = {
     failedToSave: 'Не удалось сохранить согласие',
     readOnlyRole: 'В режиме «только просмотр» изменить согласие нельзя',
   },
+  team: {
+    addMember: 'Добавить сотрудника',
+  },
   onboarding: {
     welcomeTitle: 'Добро пожаловать в CRM',
     welcomeSubtitle: 'Ваш мобильный центр продаж',

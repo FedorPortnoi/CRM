@@ -71,8 +71,44 @@ describe('enforceAuthenticatedApiRequest', () => {
 
     expect(reply.statusCode).toBe(403);
     expect(reply.payload).toEqual({
-      error: { code: 'FORBIDDEN', message: 'Viewer users have read-only access' },
+      error: { code: 'FORBIDDEN', message: 'This role has read-only access' },
     });
+  });
+
+  /**
+   * The gate used to read `role === 'viewer'`, so a role added later defaulted
+   * to writable. accountant is the first such role: org-wide read of the money,
+   * no writes. If this ever returns 200, the gate has regressed to a deny-list.
+   */
+  it('rejects write requests for accountant, not just viewer', async () => {
+    dbMock.user.findFirst.mockResolvedValue({
+      id: '00000000-0000-4000-a000-000000000001',
+      organization_id: '00000000-0000-4000-a000-000000000010',
+      role: 'accountant',
+    });
+    const request = createRequest('POST');
+    const reply = createReply();
+
+    await enforceAuthenticatedApiRequest(request as never, reply as never);
+
+    expect(reply.statusCode).toBe(403);
+    expect(reply.payload).toEqual({
+      error: { code: 'FORBIDDEN', message: 'This role has read-only access' },
+    });
+  });
+
+  it('still allows writes for a sales role', async () => {
+    dbMock.user.findFirst.mockResolvedValue({
+      id: '00000000-0000-4000-a000-000000000001',
+      organization_id: '00000000-0000-4000-a000-000000000010',
+      role: 'member',
+    });
+    const request = createRequest('POST');
+    const reply = createReply();
+
+    await enforceAuthenticatedApiRequest(request as never, reply as never);
+
+    expect(reply.statusCode).not.toBe(403);
   });
 
   it('allows read requests for viewer users', async () => {

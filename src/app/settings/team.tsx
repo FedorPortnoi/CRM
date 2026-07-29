@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Alert, Modal, TextInput, ListRenderItemInfo,
   Share, Clipboard,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
@@ -50,7 +50,11 @@ export default function TeamScreen(): JSX.Element {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
 
-  const [showInviteModal, setShowInviteModal] = useState(false);
+  // `/settings/team?add=1` (the Создать sheet shortcut) lands with the form
+  // already open. Read once into initial state rather than in an effect, so it
+  // does not reopen every time the param is still in the URL after a close.
+  const { add } = useLocalSearchParams<{ add?: string }>();
+  const [showInviteModal, setShowInviteModal] = useState(add === '1');
   const [inviteFirstName, setInviteFirstName] = useState('');
   const [inviteLastName, setInviteLastName] = useState('');
   const [inviteRole, setInviteRole] = useState<Role>('member');

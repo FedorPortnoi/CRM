@@ -1,17 +1,24 @@
 import { db } from './db';
+import { can } from './capabilities';
 
 export type VisibilityScope = 'direct' | 'subtree';
 
 export type Requester = {
   sub: string;
   org_id: string;
-  role: 'owner' | 'admin' | 'member' | 'viewer';
+  // Deliberately a plain string rather than a union of role literals. The union
+  // used to be ('owner'|'admin'|'member'|'viewer'), which made every new role a
+  // compile error here and, worse, invited callers to widen it by hand. What
+  // matters is the capability, resolved below.
+  role: string;
 };
 
 /**
  * Resolve the set of user IDs whose records `requester` is allowed to see.
  *
- *  - owner / admin → `null`, meaning "no per-user restriction" (org scope only).
+ *  - roles holding `visibility.all` → `null`, meaning "no per-user restriction"
+ *    (org scope only). Today: owner, admin, accountant, marketer — roles that are
+ *    org-wide by the nature of the job, not by seniority.
  *  - everyone else → themselves plus the people under them, always bounded to
  *    their own branch of the org chart:
  *      • scope 'direct'  → self + direct reports (one level down)   [default / "B"]
@@ -28,7 +35,7 @@ export async function getVisibleUserIds(
   requester: Requester,
   scope: VisibilityScope = 'direct',
 ): Promise<string[] | null> {
-  if (requester.role === 'owner' || requester.role === 'admin') {
+  if (can(requester.role, 'visibility.all')) {
     return null;
   }
 
