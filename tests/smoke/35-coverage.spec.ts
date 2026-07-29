@@ -49,7 +49,7 @@ test('biz-card 35: phone extracted from text', async ({ request }) => {
   const org = await registerVerifiedOrg(request, 'bc35-phone');
   const r = await request.post('/api/v1/contacts/business-card/scan', {
     headers: authHeaders(org.token),
-    data: { text: 'Maria Ivanova\nmaria@test.ru\n+7 985 222 33 44' },
+    data: { text: 'Maria Ivanova\nmaria@example.com\n+7 985 222 33 44' },
   });
   expect(r.status()).toBe(200);
   const body = (await r.json()) as BusinessCardBody;
@@ -77,7 +77,7 @@ test('biz-card 35: create_contact true → created contact has source business_c
   const org = await registerVerifiedOrg(request, 'bc35-source');
   const r = await request.post('/api/v1/contacts/business-card/scan', {
     headers: authHeaders(org.token),
-    data: { text: 'Olga Kuznetsova\nolga@corp.ru\n+7 911 100 20 30', create_contact: true },
+    data: { text: 'Olga Kuznetsova\nolga@example.com\n+7 911 100 20 30', create_contact: true },
   });
   expect(r.status()).toBe(200);
   const body = (await r.json()) as BusinessCardBody;

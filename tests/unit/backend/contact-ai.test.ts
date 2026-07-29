@@ -52,7 +52,7 @@ const member: ContactAiRequester = { sub: MANAGER_ID, org_id: ORG_ID, role: 'mem
 // columns look like on disk; the last two are the plaintext behind them.
 const CIPHERTEXT_EMAIL = 'v1:9f2c1a::V0hZIElTIFRISVMgSEVSRQ==';
 const CIPHERTEXT_PHONE = 'v1:41bb07::UEhPTkUgQ0lQSEVSVEVYVA==';
-const PLAINTEXT_EMAIL = 'ivan.petrov@romashka.ru';
+const PLAINTEXT_EMAIL = 'ivan.petrov@example.com';
 const PLAINTEXT_PHONE = '+7 495 123 45 67';
 
 // The assignee's ФИО — an OPERATOR's personal data, a `User.name`, not a

@@ -74,7 +74,7 @@ const CALLER: AssistantCaller = {
 const CONTACT_ID = '11111111-1111-4111-8111-111111111111';
 const DEAL_ID = '22222222-2222-4222-8222-222222222222';
 
-const RAW_EMAIL = 'ivan.petrov@romashka.ru';
+const RAW_EMAIL = 'ivan.petrov@example.com';
 const RAW_PHONE = '+7 916 123-45-67';
 const RAW_MOBILE = '+79037654321';
 
@@ -233,7 +233,7 @@ describe('tool results never carry decrypted PII to the model or to Postgres', (
           decryptedContact({
             id: '33333333-3333-4333-8333-333333333333',
             first_name: 'Пётр',
-            email: 'petr@romashka.ru',
+            email: 'petr@example.com',
             phone: '+7 495 000-11-22',
             mobile: null,
           }),
@@ -248,7 +248,7 @@ describe('tool results never carry decrypted PII to the model or to Postgres', (
     expect(result.ok).toBe(true);
     expectNoPlaintextPii();
     for (const sink of [outboundPayload(), persistedPayload()]) {
-      expect(sink).not.toContain('petr@romashka.ru');
+      expect(sink).not.toContain('petr@example.com');
       expect(sink).not.toContain('+7 495 000-11-22');
       // Still useful: the model sees who the contact is and that a phone exists.
       expect(sink).toContain(PII_PLACEHOLDER);

@@ -94,7 +94,7 @@ const OPERATOR_FIO = 'Евлампий Заозёрский-Тучков';
 /** The CUSTOMER. A surname the model is supposed to see and search on. */
 const CUSTOMER_LAST_NAME = 'Иванов';
 
-const RAW_EMAIL = 'i.ivanov@vasilek.ru';
+const RAW_EMAIL = 'i.ivanov@example.com';
 
 type StoredRow = {
   role: AssistantMessageRole;
