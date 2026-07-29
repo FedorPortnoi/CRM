@@ -1,3 +1,4 @@
+import { hasAnyWriteCapability } from '../services/capabilities';
 import { db } from '../services/db';
 import { validateAuthSession } from '../services/sessions';
 import type { McpUser } from './server';
@@ -116,8 +117,11 @@ export async function validateMcpWriteReferences(
 }
 
 export function requireMcpWrite(user: McpUser): McpToolError | null {
-  if (user.role === 'viewer') {
-    return mcpError('FORBIDDEN', 'Viewer role cannot perform write operations');
+  // Mirrors the HTTP write gate in authenticate.ts. Asking "is this viewer?"
+  // here would let a read-only role that is not literally named viewer (e.g.
+  // accountant) mutate data through the assistant while being refused over REST.
+  if (!hasAnyWriteCapability(user.role)) {
+    return mcpError('FORBIDDEN', 'This role cannot perform write operations');
   }
   return null;
 }

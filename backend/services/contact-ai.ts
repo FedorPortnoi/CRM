@@ -122,7 +122,7 @@ const AI_PROVIDER = 'yandexgpt';
 export type ContactAiRequester = {
   sub: string;
   org_id: string;
-  role: 'owner' | 'admin' | 'member' | 'viewer';
+  role: string;
 };
 
 export type GenerateTextResult =

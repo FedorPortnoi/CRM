@@ -17,7 +17,7 @@ type GroupByValue = 'day' | 'week' | 'month' | 'quarter';
  * visibility service expects, the same cast the deal tools use.
  */
 function visibilityCone(user: McpUser): Promise<string[] | null> {
-  const requester = user as { sub: string; org_id: string; role: 'owner' | 'admin' | 'member' | 'viewer' };
+  const requester = user as { sub: string; org_id: string; role: string };
   return getAccessibleUserIds(requester);
 }
 

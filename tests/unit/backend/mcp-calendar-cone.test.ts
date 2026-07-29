@@ -310,7 +310,13 @@ describe('MCP calendar tools respect the manager visibility cone', () => {
     it('refuses for an unknown role (fails closed)', async () => {
       const res = await tool('update_event')({ id: 'e-out', title: 'hijacked' }, unknownRoleUser);
 
-      expect(errorOf(res)?.code).toBe('EVENT_NOT_FOUND');
+      // Since the capability layer landed, an unrecognised role is refused by
+      // the write gate before the visibility cone is ever consulted — `can()`
+      // grants nothing to a role it cannot interpret. That is a strictly
+      // stronger refusal than the old EVENT_NOT_FOUND, and a more honest one:
+      // the caller is not permitted, rather than the record not existing.
+      // What this test actually guards is that the refusal happens at all.
+      expect(errorOf(res)?.code).toBe('FORBIDDEN');
       expectNoWrite();
     });
   });

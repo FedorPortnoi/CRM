@@ -2,6 +2,7 @@ import { FastifyRequest } from 'fastify';
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AuthController } from '../controllers/auth';
+import { ASSIGNABLE_ROLE_VALUES } from '../../services/capabilities';
 
 const PasswordSchema = z.string().min(8).max(100)
   .regex(/[a-z]/, 'Password must include a lowercase letter')
@@ -40,7 +41,7 @@ const JoinSchema = z.object({
 const InviteSchema = z.object({
   first_name: z.string().trim().min(1).max(100),
   last_name: z.string().trim().min(1).max(100),
-  role: z.enum(['admin', 'member', 'viewer']),
+  role: z.enum(ASSIGNABLE_ROLE_VALUES),
 });
 
 const SetCredentialsSchema = z.object({
@@ -114,7 +115,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   }, AuthController.inviteUser);
   fastify.patch('/users/:id/deactivate', AuthController.deactivateUser);
   fastify.patch('/users/:id/role', {
-    schema: { body: z.object({ role: z.enum(['admin', 'member', 'viewer']) }) },
+    schema: { body: z.object({ role: z.enum(ASSIGNABLE_ROLE_VALUES) }) },
   }, AuthController.changeUserRole);
   fastify.patch('/users/:id/manager', {
     schema: { body: SetManagerSchema },

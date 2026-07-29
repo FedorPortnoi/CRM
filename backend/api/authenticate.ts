@@ -11,7 +11,6 @@ import { can, hasAnyWriteCapability, type Capability } from '../services/capabil
 // `/api/v1/consent/contacts/:contactId` routes registered by the same plugin.
 const CONSENT_UNSUBSCRIBE_PATH_PREFIX = '/api/v1/consent/unsubscribe/';
 
-type AuthenticatedRole = 'owner' | 'admin' | 'member' | 'viewer';
 type AdminRoutePolicy = {
   action: string;
   reason: string;
@@ -115,10 +114,6 @@ function isPublicApiRoute(request: FastifyRequest): boolean {
   }
 
   return false;
-}
-
-function isAdminRole(role: AuthenticatedRole): boolean {
-  return role === 'owner' || role === 'admin';
 }
 
 function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
@@ -253,7 +248,7 @@ export async function enforceAuthenticatedApiRequest(
 
   request.user = {
     ...tokenUser,
-    role: activeUser.role as AuthenticatedRole,
+    role: activeUser.role,
   };
 
   const adminPolicy = adminRoutePolicy(request);

@@ -1,3 +1,4 @@
+import { can } from '../../services/capabilities';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { SequenceEnrollmentStatus, SequenceStatus } from '@prisma/client';
 import { auditLog } from '../../services/audit';
@@ -112,7 +113,7 @@ export function denySequenceAdmin(
   reply: FastifyReply,
 ): FastifyReply | null {
   const { role } = request.user;
-  if (role === 'owner' || role === 'admin') {
+  if (can(role, 'visibility.all')) {
     return null;
   }
 

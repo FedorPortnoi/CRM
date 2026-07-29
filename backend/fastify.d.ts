@@ -5,7 +5,7 @@ declare module '@fastify/jwt' {
     payload: {
       sub: string;
       org_id: string;
-      role: 'owner' | 'admin' | 'member' | 'viewer';
+      role: string;
       sid?: string;
       iat?: number;
       exp?: number;
@@ -13,7 +13,7 @@ declare module '@fastify/jwt' {
     user: {
       sub: string;
       org_id: string;
-      role: 'owner' | 'admin' | 'member' | 'viewer';
+      role: string;
       sid?: string;
       iat: number;
       exp: number;

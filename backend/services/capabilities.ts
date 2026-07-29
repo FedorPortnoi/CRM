@@ -163,8 +163,28 @@ export function hasAnyWriteCapability(role: string | null | undefined): boolean 
   return ROLE_CAPABILITIES[role].some((c) => WRITE_CAPABILITIES.includes(c));
 }
 
+/**
+ * Every role that may ever be assigned to somebody. `owner` is absent by design
+ * — it is established when the organisation is created and transferred, never
+ * handed out through the normal role endpoints.
+ *
+ * Exported as a tuple because zod's `z.enum` requires a non-empty literal tuple;
+ * schemas build from this so a new role becomes assignable by editing one list
+ * instead of hunting for hardcoded enums in route definitions.
+ */
+export const ASSIGNABLE_ROLE_VALUES = [
+  'admin',
+  'head',
+  'member',
+  'accountant',
+  'marketer',
+  'support',
+  'viewer',
+] as const satisfies readonly Role[];
+
 /** Roles a caller may assign. Only an owner can hand out `admin`; nobody assigns `owner`. */
 export function assignableRoles(callerRole: string | null | undefined): Role[] {
-  const base: Role[] = ['head', 'member', 'accountant', 'marketer', 'support', 'viewer'];
-  return can(callerRole, 'team.manage_admins') ? ['admin', ...base] : base;
+  return ASSIGNABLE_ROLE_VALUES.filter(
+    (r) => r !== 'admin' || can(callerRole, 'team.manage_admins'),
+  );
 }

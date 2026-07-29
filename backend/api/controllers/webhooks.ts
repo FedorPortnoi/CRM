@@ -1,3 +1,4 @@
+import { can } from '../../services/capabilities';
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { WebhookDeliveryStatus, WebhookStatus } from '@prisma/client';
 import { UnsafeWebhookUrlError } from '../../services/webhook-ssrf';
@@ -36,7 +37,7 @@ type DeliveryQuery = {
 // There is no visibility-cone dimension here — the rows are not user-owned.
 function requireWebhookAdmin(request: FastifyRequest, reply: FastifyReply): boolean {
   const { role } = request.user;
-  if (role !== 'owner' && role !== 'admin') {
+  if (!can(role, 'integrations.manage')) {
     reply.status(403).send({
       error: { code: 'FORBIDDEN', message: 'Only owner or admin can manage webhooks' },
     });

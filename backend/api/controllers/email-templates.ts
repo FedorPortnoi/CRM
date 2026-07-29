@@ -1,3 +1,4 @@
+import { can } from '../../services/capabilities';
 import { FastifyRequest, FastifyReply } from 'fastify';
 import {
   EmailTemplateInUseError,
@@ -58,7 +59,7 @@ function requesterOf(request: FastifyRequest): TemplateRequester {
  */
 function requireTemplateAdmin(request: FastifyRequest, reply: FastifyReply): boolean {
   const { role } = request.user;
-  if (role !== 'owner' && role !== 'admin') {
+  if (!can(role, 'sequences.manage')) {
     reply.status(403).send({
       error: { code: 'FORBIDDEN', message: 'Only owner or admin can manage email templates' },
     });

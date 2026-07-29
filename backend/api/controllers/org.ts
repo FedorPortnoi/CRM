@@ -1,3 +1,4 @@
+import { can } from '../../services/capabilities';
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { db } from '../../services/db';
@@ -12,7 +13,7 @@ async function getOrgSettings(request: FastifyRequest, reply: FastifyReply): Pro
 
 async function updateOrgSettings(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const { role } = request.user;
-  if (role !== 'owner' && role !== 'admin') {
+  if (!can(role, 'org.manage')) {
     reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Only owner or admin can update org settings' } });
     return;
   }

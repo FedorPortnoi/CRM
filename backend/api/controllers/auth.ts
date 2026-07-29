@@ -1,3 +1,4 @@
+import { assignableRoles, can, isRole } from '../../services/capabilities';
 import { FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
@@ -22,7 +23,7 @@ const LOCKOUT_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 // Compute a valid dummy hash once so absent-user checks still perform a full bcrypt comparison.
 const DUMMY_HASH = bcrypt.hashSync('a-non-secret-placeholder', saltRounds);
 
-type AuthRole = 'owner' | 'admin' | 'member' | 'viewer';
+type AuthRole = string;
 
 type PasswordAttemptUser = {
   id: string;
@@ -522,12 +523,15 @@ export const AuthController = {
 
     const { first_name, last_name, role } = request.body as { first_name: string; last_name: string; role: AuthRole };
 
-    const validRoles: AuthRole[] = ['admin', 'member', 'viewer'];
-    if (!validRoles.includes(role)) {
-      return reply.status(400).send({ error: { code: 'INVALID_ROLE', message: 'Role must be admin, member, or viewer' } });
-    }
-    if (callerRole === 'admin' && role === 'admin') {
-      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Admins cannot invite other admins' } });
+    // assignableRoles() already excludes `admin` unless the caller holds
+    // team.manage_admins, so the "admins cannot mint admins" rule is expressed
+    // once in the capability map rather than as a second, separate check that
+    // could drift away from it.
+    const validRoles = assignableRoles(callerRole);
+    if (!isRole(role) || !validRoles.includes(role)) {
+      return reply.status(400).send({
+        error: { code: 'INVALID_ROLE', message: `Role must be one of: ${validRoles.join(', ')}` },
+      });
     }
 
     const firstName = (first_name ?? '').trim();
@@ -696,7 +700,10 @@ export const AuthController = {
     if (!target) {
       return reply.status(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
     }
-    if (target.role === 'owner' && callerRole !== 'owner') {
+    // Only the owner may act on another owner. Expressed as the owner-only
+    // capability rather than a role-name comparison, so it stays consistent with
+    // every other gate.
+    if (target.role === 'owner' && !can(callerRole, 'team.manage_admins')) {
       return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Only the owner can deactivate another owner' } });
     }
 
@@ -716,9 +723,11 @@ export const AuthController = {
     }
 
     const { role } = request.body as { role: AuthRole };
-    const assignableRoles: AuthRole[] = ['admin', 'member', 'viewer'];
-    if (!assignableRoles.includes(role)) {
-      return reply.status(400).send({ error: { code: 'INVALID_ROLE', message: 'Role must be admin, member, or viewer' } });
+    const allowedRoles = assignableRoles(callerRole);
+    if (!isRole(role) || !allowedRoles.includes(role)) {
+      return reply.status(400).send({
+        error: { code: 'INVALID_ROLE', message: `Role must be one of: ${allowedRoles.join(', ')}` },
+      });
     }
 
     const target = await db.user.findFirst({

@@ -341,7 +341,7 @@ export function buildTemplateValues(
 export type TemplateRequester = {
   sub: string;
   org_id: string;
-  role: 'owner' | 'admin' | 'member' | 'viewer';
+  role: string;
 };
 
 /**

@@ -131,7 +131,7 @@ export async function listContactsForUser(
   } = filters;
 
   const visibleIds = await getVisibleUserIds(
-    { sub: requester.sub, org_id: orgId, role: requester.role as 'owner' | 'admin' | 'member' | 'viewer' },
+    { sub: requester.sub, org_id: orgId, role: requester.role as string },
     'direct',
   );
 
@@ -230,7 +230,7 @@ export async function getContactForUser(
   const accessibleIds = await getAccessibleUserIds({
     sub: requester.sub,
     org_id: orgId,
-    role: requester.role as 'owner' | 'admin' | 'member' | 'viewer',
+    role: requester.role as string,
   });
   if (accessibleIds !== null) {
     const canSeeIt = canSeeUser(accessibleIds, contact.assigned_to) || canSeeUser(accessibleIds, contact.created_by);
@@ -334,7 +334,7 @@ export async function updateContactForUser(
   const accessibleIds = await getAccessibleUserIds({
     sub: requestingUserId,
     org_id: orgId,
-    role: requester.role as 'owner' | 'admin' | 'member' | 'viewer',
+    role: requester.role as string,
   });
   if (accessibleIds !== null) {
     const canSeeIt = canSeeUser(accessibleIds, existing.assigned_to) || canSeeUser(accessibleIds, existing.created_by);
@@ -463,7 +463,7 @@ export async function archiveContactForUser(
   const accessibleIds = await getAccessibleUserIds({
     sub: requestingUserId,
     org_id: orgId,
-    role: requester.role as 'owner' | 'admin' | 'member' | 'viewer',
+    role: requester.role as string,
   });
   if (accessibleIds !== null) {
     const canSeeIt = canSeeUser(accessibleIds, existing.assigned_to) || canSeeUser(accessibleIds, existing.created_by);

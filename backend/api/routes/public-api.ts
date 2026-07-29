@@ -18,6 +18,7 @@
  * Registration is left to whoever wires backend/index.ts.
  */
 
+import { can } from '../../services/capabilities';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodTypeProvider, hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -324,7 +325,7 @@ async function requireApiKeyAdmin(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<FastifyReply | void> {
-  if (request.user.role === 'owner' || request.user.role === 'admin') {
+  if (can(request.user.role, 'integrations.manage')) {
     return;
   }
 

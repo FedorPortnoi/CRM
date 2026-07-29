@@ -1,3 +1,4 @@
+import { hasAnyWriteCapability } from './capabilities';
 import { AssistantMessageRole, Prisma } from '@prisma/client';
 import { db } from './db';
 import { DEFAULT_CURRENCY } from '../config/market';
@@ -77,7 +78,7 @@ const FORBIDDEN_TOOL_ARG_KEYS = new Set([
   'organisationid',
 ]);
 
-export type AssistantRole = 'owner' | 'admin' | 'member' | 'viewer';
+export type AssistantRole = string;
 
 export type AssistantCaller = {
   sub: string;
@@ -196,8 +197,8 @@ export function buildSystemPrompt(context: {
   role: AssistantRole;
 }): string {
   const readOnlyNote =
-    context.role === 'viewer'
-      ? 'У пользователя роль «наблюдатель»: любые попытки создать или изменить данные будут отклонены. Не предлагай изменения — только отвечай на вопросы.'
+    !hasAnyWriteCapability(context.role)
+      ? 'У пользователя роль только для чтения: любые попытки создать или изменить данные будут отклонены. Не предлагай изменения — только отвечай на вопросы.'
       : 'Перед созданием или изменением данных убедись, что запрос пользователя однозначен. Если не хватает данных — задай уточняющий вопрос вместо вызова инструмента.';
 
   return [
