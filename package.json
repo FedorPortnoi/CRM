@@ -20,6 +20,7 @@
     "test": "vitest",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration --passWithNoTests",
+    "test:smoke": "playwright test",
     "test:e2e": "detox test --configuration ios.sim.debug",
     "lint": "eslint src backend --ext .ts,.tsx",
     "lint:fix": "eslint src backend --ext .ts,.tsx --fix",
