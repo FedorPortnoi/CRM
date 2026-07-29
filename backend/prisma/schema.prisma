@@ -604,6 +604,29 @@ model WorkflowRun {
   @@index([workflow_id, created_at])
 }
 
+// phone_number here is deliberately NOT encrypted, unlike Contact.phone/mobile. A review
+// proposed encrypting it; it was examined and rejected, because half-applying it is worse
+// than leaving it in the clear:
+//
+//   - There is no phone_number_bidx column on this model, and BlindIndexKind in
+//     services/encryption.ts has exactly three kinds (email/phone/mobile), each mapped 1:1
+//     onto a Contact column. Encrypting with no index makes a capture unmatchable by number.
+//   - Ciphertext does not fail loudly if it reaches blindIndex(). That function normalizes
+//     by stripping non-digits, and "enc:v1:…" still contains digits, so it hashes to a
+//     plausible-looking hex string instead of returning null. Worse, encryptField uses a
+//     random IV per call, so one number yields a different bogus hash every time — the
+//     contact ends up permanently unfindable by phone rather than visibly broken.
+//   - Encrypting this column alone would not remove the number from the database anyway.
+//     The same capture phone sits in clear in three places:
+//       1. this column, written by POST /captures (controllers/captures.ts create)
+//       2. raw_data below — the phone/from/From keys that resolveRawPhoneNumber reads
+//       3. Message.body, which embeds the number verbatim when an email capture carries no
+//          body text (resolveMessageBody); that row is written when the capture is matched
+//
+// A capture is short-lived pre-contact data that has to stay joinable by raw number, and it
+// is protected by org scoping rather than field encryption. If it ever must be encrypted,
+// all three locations move together and a phone_number_bidx column plus a capture-scoped
+// BlindIndexKind land in the SAME migration — never one of them on its own.
 model PendingCapture {
   id           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   org_id       String                @db.Uuid

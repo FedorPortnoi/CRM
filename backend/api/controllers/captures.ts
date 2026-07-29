@@ -8,7 +8,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { db } from '../../services/db';
-import { encryptField, decryptField, blindIndex } from '../../services/encryption';
+import { decryptField } from '../../services/encryption';
 
 // --- Local request types ---
 
@@ -254,8 +254,9 @@ async function list(request: FastifyRequest, reply: FastifyReply): Promise<void>
   });
 
   // Contact.phone comes back as ciphertext. This used to be sent to the client verbatim
-  // and only looked correct because the create-contact path above wrote plaintext; a
-  // contact created through any other route rendered as "enc:v1:…" in the capture list.
+  // and only looked correct because a since-removed create-contact handler in this file
+  // wrote plaintext; a contact created through any other route rendered as "enc:v1:…" in
+  // the capture list.
   const data = captures.map((capture) =>
     capture.contact
       ? { ...capture, contact: { ...capture.contact, phone: decryptField(capture.contact.phone) } }
@@ -358,72 +359,6 @@ async function dismiss(request: FastifyRequest, reply: FastifyReply): Promise<vo
   }
 }
 
-async function createContact(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-  const { id } = request.params as IdParams;
-  const orgId = request.user.org_id;
-
-  const capture = await db.pendingCapture.findFirst({
-    where: { id, org_id: orgId },
-  });
-
-  if (!capture) {
-    reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Capture not found' } });
-    return;
-  }
-
-  if (capture.status !== PendingCaptureStatus.pending) {
-    sendAlreadyResolved(reply);
-    return;
-  }
-
-  const raw = rawDataRecord(capture.raw_data);
-  const first_name = firstRequiredString(raw.first_name, raw.name) ?? 'Unknown';
-  const rawPhone = resolveRawPhoneNumber(raw) ?? toRequiredString(capture.phone_number);
-
-  try {
-    const newContact = await db.$transaction(async (tx) => {
-      const contact = await tx.contact.create({
-        data: {
-          organization_id: orgId,
-          first_name,
-          // Contact.phone is an encrypted column everywhere else in the codebase, with a
-          // phone_bidx HMAC beside it so the value stays searchable. Until 2026-07-27 this
-          // path wrote the raw number straight in, which both stored PII in the clear and
-          // produced a contact that phone search could never find. decryptField passes
-          // unprefixed values through unchanged, so the damage read back as normal.
-          phone: rawPhone ? encryptField(rawPhone) : undefined,
-          phone_bidx: rawPhone ? blindIndex(rawPhone, 'phone') : undefined,
-          created_by: request.user.sub,
-        },
-      });
-
-      await tx.message.create({
-        data: buildMessageData(orgId, contact.id, capture),
-      });
-
-      await tx.task.create({
-        data: buildFollowUpTaskData(orgId, contact, request.user.sub),
-      });
-
-      await tx.pendingCapture.update({
-        where: { id, org_id: orgId, status: PendingCaptureStatus.pending },
-        data: { status: PendingCaptureStatus.matched, contact_id: contact.id },
-      });
-
-      return contact;
-    });
-
-    reply.status(201).send({ data: newContact, meta: { follow_up_task_created: true } });
-  } catch (error) {
-    if (isRecordNotFound(error)) {
-      sendAlreadyResolved(reply);
-      return;
-    }
-
-    throw error;
-  }
-}
-
 async function create(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const { type, raw_data, phone_number } = request.body as CreateBody;
   const resolvedPhoneNumber = resolveStoredPhoneNumber(raw_data, phone_number);
@@ -447,6 +382,5 @@ export const CapturesController = {
   list,
   match,
   dismiss,
-  createContact,
   create,
 };

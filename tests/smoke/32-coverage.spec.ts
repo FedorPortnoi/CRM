@@ -590,53 +590,6 @@ test.describe('auto-capture', () => {
     expect(orgAPending.data.find(c => c.id === capture.id)?.status).toBe('pending');
   });
 
-  test('captures: create-contact creates a contact, matches the capture, and creates a message', async ({ request }) => {
-    const { token } = await registerVerifiedOrg(request, 'cap-create-contact');
-    const phone = uniquePhone();
-    const capture = await createCapture(request, token, 'email', {
-      first_name: 'Captured',
-      phone,
-      Body: 'Imported from pending capture',
-    });
-
-    const createRes = await request.post(`/api/v1/captures/${capture.id}/create-contact`, {
-      headers: authHeaders(token),
-    });
-    expect(createRes.status()).toBe(201);
-    const created = await createRes.json() as Envelope<Contact>;
-    expect(created.meta.follow_up_task_created).toBe(true);
-    expect(created.data.first_name).toBe('Captured');
-    expect(created.data.phone).toBe(phone);
-
-    const allCaptures = await listCaptures(request, token, 'all');
-    const matched = allCaptures.data.find(c => c.id === capture.id);
-    expect(matched?.status).toBe('matched');
-    expect(matched?.contact_id).toBe(created.data.id);
-
-    const messages = await conversation(request, token, created.data.id);
-    expect(messages.find(m => m.channel === 'email' && m.body === 'Imported from pending capture')).toBeDefined();
-  });
-
-  test('captures: create-contact falls back to Unknown and uses the raw phone', async ({ request }) => {
-    const { token } = await registerVerifiedOrg(request, 'cap-create-contact-fallback');
-    const phone = uniquePhone();
-    const capture = await createCapture(request, token, 'email', {
-      From: phone,
-      Body: 'Nameless capture body',
-    });
-
-    const createRes = await request.post(`/api/v1/captures/${capture.id}/create-contact`, {
-      headers: authHeaders(token),
-    });
-    expect(createRes.status()).toBe(201);
-    const created = await createRes.json() as Envelope<Contact>;
-    expect(created.data.first_name).toBe('Unknown');
-    expect(created.data.phone).toBe(phone);
-
-    const messages = await conversation(request, token, created.data.id);
-    expect(messages.find(m => m.channel === 'email' && m.body === 'Nameless capture body')).toBeDefined();
-  });
-
   test('captures: unauthenticated GET is rejected', async ({ request }) => {
     const r = await request.get('/api/v1/captures');
     expect(r.status()).toBe(401);

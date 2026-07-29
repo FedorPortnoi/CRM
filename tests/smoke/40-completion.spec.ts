@@ -93,38 +93,3 @@ test('completion: stale deal scan fires deal_stale workflow once per deal', asyn
   const runs = await runsRes.json() as { data: Array<{ trigger_record_id: string; status: string }> };
   expect(runs.data.filter((run) => run.trigger_record_id === deal.id && run.status === 'success')).toHaveLength(1);
 });
-
-test('completion: create-contact from pending capture logs activity and creates follow-up task', async ({ request }) => {
-  const org = await registerVerifiedOrg(request, 's40-capture-create');
-  const phone = '+79004000040';
-  const captureRes = await request.post('/api/v1/captures', {
-    headers: authHeaders(org.token),
-    data: {
-      type: 'email',
-      raw_data: { from: phone, body: 'Captured email body', first_name: 'CapturedLead' },
-      phone_number: phone,
-    },
-  });
-  expect(captureRes.status()).toBe(201);
-  const capture = (await captureRes.json()) as { data: { id: string } };
-
-  const createRes = await request.post(`/api/v1/captures/${capture.data.id}/create-contact`, {
-    headers: authHeaders(org.token),
-  });
-  expect(createRes.status()).toBe(201);
-  const created = await createRes.json() as { data: { id: string; first_name: string }; meta: { follow_up_task_created: boolean } };
-  expect(created.data.first_name).toBe('CapturedLead');
-  expect(created.meta.follow_up_task_created).toBe(true);
-
-  const messagesRes = await request.get(`/api/v1/messages?contact_id=${created.data.id}`, {
-    headers: authHeaders(org.token),
-  });
-  expect(messagesRes.status()).toBe(200);
-  const messages = await messagesRes.json() as { data: Array<{ body: string; channel: string }> };
-  expect(messages.data.some((message) => message.channel === 'email' && message.body === 'Captured email body')).toBe(true);
-
-  const tasksRes = await request.get(`/api/v1/tasks?contact_id=${created.data.id}`, { headers: authHeaders(org.token) });
-  expect(tasksRes.status()).toBe(200);
-  const tasks = await tasksRes.json() as { data: Array<{ title: string; contact_id: string }> };
-  expect(tasks.data.some((task) => task.title === 'Follow up: CapturedLead')).toBe(true);
-});
