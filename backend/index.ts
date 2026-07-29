@@ -1,4 +1,6 @@
 ﻿import './config/env';
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { Prisma } from '@prisma/client';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
@@ -39,6 +41,36 @@ import trackingRoutes from './api/routes/tracking';
 import publicApiRoutes, { apiKeysRoutes } from './api/routes/public-api';
 import { wsRoutes } from './api/routes/ws';
 import { startScheduler } from './services/scheduler';
+
+// The version this endpoint advertises drives the "update available" alert in
+// src/app/_layout.tsx, which compares versionCode against the installed build. It is read
+// from app.json rather than repeated as a literal here: the literal drifted, and the
+// endpoint spent several releases reporting 1.0.2 / 5 while the shipped app was far ahead,
+// which silently disabled the prompt. app.json sits above backend/ rootDir, so it cannot be
+// imported — resolve it at runtime instead, from cwd first (how pm2 and tsx both start).
+function readAppVersion(): { version: string; versionCode: number } {
+  const candidates = [process.cwd(), resolve(__dirname, '..'), resolve(__dirname, '../..')];
+  for (const dir of candidates) {
+    try {
+      const parsed = JSON.parse(readFileSync(join(dir, 'app.json'), 'utf8')) as {
+        expo?: { version?: string; android?: { versionCode?: number } };
+      };
+      if (parsed.expo?.version) {
+        return {
+          version: parsed.expo.version,
+          versionCode: parsed.expo.android?.versionCode ?? 0,
+        };
+      }
+    } catch {
+      // Not here, or unreadable — try the next candidate.
+    }
+  }
+  // versionCode 0 never satisfies `body.versionCode > currentVersionCode`, so an unreadable
+  // app.json disables the prompt rather than nagging every client.
+  return { version: '0.0.0', versionCode: 0 };
+}
+
+const APP_VERSION = readAppVersion();
 
 type ApiError = Error & {
   code?: string;
@@ -246,8 +278,8 @@ async function start() {
 
   server.get('/version', async () => {
     return {
-      version: process.env.APP_VERSION ?? '1.0.2',
-      versionCode: parseInt(process.env.APP_VERSION_CODE ?? '5', 10),
+      version: process.env.APP_VERSION ?? APP_VERSION.version,
+      versionCode: parseInt(process.env.APP_VERSION_CODE ?? String(APP_VERSION.versionCode), 10),
     };
   });
 
