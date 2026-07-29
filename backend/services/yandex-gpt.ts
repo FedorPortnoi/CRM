@@ -114,7 +114,11 @@ type YandexWireToolResult = {
 };
 
 type YandexWireMessage = {
-  role?: string;
+  // Required, not optional. This field was optional and the tool-result branch of
+  // toWireMessage simply left it out, so the compiler had nothing to say about a
+  // payload the API rejects outright. Keeping it required is what makes that
+  // class of mistake a build error rather than a runtime 400.
+  role: string;
   text?: string;
   toolCallList?: { toolCalls?: YandexWireToolCall[] };
   toolResultList?: { toolResults?: YandexWireToolResult[] };
@@ -207,7 +211,18 @@ export function areToolsSupported(): boolean {
 
 function toWireMessage(message: AiMessage): YandexWireMessage {
   if (message.role === 'tool') {
+    // The role is REQUIRED here even though the payload carries no text. Omitting
+    // it makes Yandex reject the whole request with `invalid message role ''`,
+    // which killed every assistant turn that reached a second round — i.e. every
+    // question that actually touched CRM data, which is most of them.
+    //
+    // 'user' rather than 'assistant': the tool result is input being handed *to*
+    // the model, and it keeps the assistant/user alternation intact across
+    // multi-round tool use (assistant asks -> user answers -> assistant asks…).
+    // Both are accepted by the API for a single round; only 'user' avoids
+    // consecutive assistant turns once a second round happens.
     return {
+      role: 'user',
       toolResultList: {
         toolResults: message.tool_results.map((r) => ({
           functionResult: { name: r.name, content: r.content },
