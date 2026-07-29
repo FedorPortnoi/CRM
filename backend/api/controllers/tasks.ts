@@ -1,7 +1,8 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { TaskPriority, TaskStatus } from '@prisma/client';
 import { db } from '../../services/db';
-import { createCompletion, isYandexGptConfigured } from '../../services/yandex-gpt';
+import { isYandexGptConfigured } from '../../services/yandex-gpt';
+import { matchContactByName, type NameCandidate } from '../../services/contact-name-match';
 import {
   getVisibleUserIds,
   getAccessibleUserIds,
@@ -241,61 +242,47 @@ async function dueToday(
 
 // ─── Contact suggestion for a task title ─────────────────────────────────────
 
-/** How many candidate contacts are put in front of the model. */
+/**
+ * How many candidate contacts are read for one suggestion.
+ *
+ * This used to be the size of the list handed to a model, and the number that
+ * made the endpoint a ФЗ-152 problem. It is now only a memory and query bound:
+ * the names never leave the process. The cap and its alphabetical ordering are
+ * kept as they were, so an org past 300 contacts is truncated exactly where it
+ * always was rather than silently changing which contacts can be suggested.
+ */
 const SUGGEST_CONTACT_LIMIT = 300;
 
-/** The only useful reply is one UUID or the word "none" — nothing longer. */
-const SUGGEST_CONTACT_MAX_TOKENS = 50;
-
-/** An extraction, not a piece of writing: no reason to sample. */
-const SUGGEST_CONTACT_TEMPERATURE = 0;
+type SuggestedContact = NameCandidate;
 
 /**
- * Deliberately far below the client's 30s default. The operator is typing a
- * task title while this runs and every failure is a silent `null`, so waiting
- * longer buys a suggestion nobody is still looking at.
- */
-const SUGGEST_CONTACT_TIMEOUT_MS = 10_000;
-
-const SUGGEST_CONTACT_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const SUGGEST_CONTACT_SYSTEM_PROMPT = [
-  'Ты сопоставляешь заголовок задачи в CRM со списком контактов.',
-  'Если в заголовке явно назван один из контактов — ответь РОВНО его UUID из списка.',
-  'Если явного совпадения нет — ответь одним словом none.',
-  'Никакого другого текста, пояснений и знаков препинания.',
-].join('\n');
-
-type SuggestedContact = { id: string; first_name: string; last_name: string | null };
-
-/**
- * Adapter onto backend/services/yandex-gpt — the same `createCompletion` seam
- * the assistant and contact-ai.ts use, and the single provider client in the
- * backend.
+ * Matches the title against the org's contacts in process — see
+ * backend/services/contact-name-match.ts for the matching rules and for why
+ * PostgreSQL's 'russian' full-text config was evaluated and rejected.
  *
- * This endpoint previously built its own Anthropic client and posted up to 300
- * Russian customers' full names to api.anthropic.com on every call: a ст. 12
- * ФЗ-152 cross-border transfer with no filing behind it.
+ * Two providers have now been taken out of this route. It first built its own
+ * Anthropic client and posted up to 300 Russian customers' full names to
+ * api.anthropic.com on every call — a ст. 12 ФЗ-152 cross-border transfer with
+ * no filing behind it. Routing it through the domestic yandex-gpt seam closed
+ * that transfer but not the exposure: the same 300 names were still in a
+ * prompt, and Wave A repoints yandex-gpt.ts at OpenAI through
+ * workers/openai-proxy, which would have sent them abroad again without a line
+ * changing here. Matching locally is what actually ends it. This route now has
+ * no provider seam to repoint.
  *
- * Routing it here closes THAT transfer, because Yandex is domestic. It does not
- * make the exposure disappear. The same 300 names are still in the prompt, and
- * Wave A repoints yandex-gpt.ts at OpenAI through workers/openai-proxy — at
- * which point they cross the border again with no change to this file. Whether
- * contact names may reach a model at all is an open decision the owner has not
- * made (contact-ai.ts already sends them deliberately); this endpoint is now in
- * that same bucket rather than outside it.
- *
- * Returns `null` for every failure: the client cannot distinguish "no match"
- * from "no model", and nothing about an unrequested suggestion is worth
- * surfacing to the operator.
+ * Returns `null` for every failure and for every ambiguous title: the client
+ * cannot distinguish "no match" from "no suggestion available", and nothing
+ * about an unrequested suggestion is worth surfacing to the operator.
  */
 async function resolveSuggestedContact(
   orgId: string,
   title: string,
 ): Promise<SuggestedContact | null> {
-  // Checked before the query: with no provider configured there is nobody to
-  // ask, and reading 300 contacts only to drop them is pure waste.
+  // No model is called any more, so this is no longer "is there someone to
+  // ask". It is kept because it is the switch operators already use to keep the
+  // AI surfaces off — an unconfigured deployment, and every local dev machine,
+  // has never seen this modal, and quietly turning it on everywhere is not part
+  // of removing a provider. It goes when this route gets a setting of its own.
   if (!isYandexGptConfigured()) {
     return null;
   }
@@ -310,37 +297,7 @@ async function resolveSuggestedContact(
     orderBy: { first_name: 'asc' },
   });
 
-  if (contacts.length === 0) {
-    return null;
-  }
-
-  const contactList = contacts
-    .map((c) => `${c.id}: ${c.first_name}${c.last_name ? ' ' + c.last_name : ''}`)
-    .join('\n');
-
-  const result = await createCompletion({
-    messages: [
-      { role: 'system', text: SUGGEST_CONTACT_SYSTEM_PROMPT },
-      { role: 'user', text: `Задача: "${title}"\nКонтакты:\n${contactList}` },
-    ],
-    temperature: SUGGEST_CONTACT_TEMPERATURE,
-    max_tokens: SUGGEST_CONTACT_MAX_TOKENS,
-    timeout_ms: SUGGEST_CONTACT_TIMEOUT_MS,
-  });
-
-  if (!result.ok) {
-    return null;
-  }
-
-  // Strict on purpose: a bare UUID or nothing. A model that wraps the id in
-  // prose is a model that is guessing, and a wrong contact silently attached to
-  // a task is worse than no suggestion.
-  const text = (result.message.text ?? '').trim();
-  if (!SUGGEST_CONTACT_UUID_RE.test(text)) {
-    return null;
-  }
-
-  return contacts.find((c) => c.id === text) ?? null;
+  return matchContactByName(title, contacts);
 }
 
 async function suggestContact(
@@ -354,10 +311,11 @@ async function suggestContact(
   try {
     contact = await resolveSuggestedContact(request.user.org_id, title);
   } catch (err) {
-    // Widened from the Anthropic version, which caught only around the model
-    // call and let a database failure escape as a 500. A convenience the
-    // operator never asked for must not be able to fail their request — but the
-    // failure is logged rather than lost.
+    // Wider than the model call it replaced, which wrapped only the provider
+    // and let a database failure escape as a 500. The contact query is now the
+    // one thing here that can throw, and a convenience the operator never asked
+    // for must not be able to fail their request — but the failure is logged
+    // rather than lost.
     request.log.warn({ err }, 'suggest-contact failed; returning no suggestion');
   }
 
