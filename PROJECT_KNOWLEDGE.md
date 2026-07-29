@@ -441,7 +441,8 @@ All production profiles point the app at the same backend:
 **YandexGPT (`backend/services/yandex-gpt.ts`) — the only model provider in the backend:**
 - `YANDEX_API_KEY` + `YANDEX_FOLDER_ID` (the same pair as Vision; both required, otherwise `isYandexGptConfigured()` is false and every AI feature degrades quietly).
 - `YANDEX_GPT_MODEL` (default `yandexgpt/latest`), `YANDEX_GPT_TIMEOUT_MS` (default 30000).
-- Every model call in the backend goes through the `createCompletion` seam in this file — the assistant, `contact-ai.ts`, and the tasks `suggest-contact` endpoint. The provider is domestic, so ФЗ-152 ст. 12 (cross-border transfer) does not apply today; what applies is the ч. 5 ст. 5 minimisation duty. The planned Wave A swap to OpenAI via `workers/openai-proxy/` repoints this one file, and ст. 12 begins to apply at that moment.
+- Every model call in the backend goes through the `createCompletion` seam in this file, and it has exactly two consumers: `backend/services/assistant.ts` and `contact-ai.ts`. The provider is domestic, so ФЗ-152 ст. 12 (cross-border transfer) does not apply today; what applies is the ч. 5 ст. 5 minimisation duty. The planned Wave A swap to OpenAI via `workers/openai-proxy/` repoints this one file, and ст. 12 begins to apply at that moment.
+- The tasks `suggest-contact` endpoint used to be the third consumer and no longer calls a model at all. `resolveSuggestedContact` (`backend/api/controllers/tasks.ts`) now matches the task title against a local Prisma read with `matchContactByName` (`backend/services/contact-name-match.ts`), so up to 300 customers' full names stopped going into a prompt and that route has no provider seam left for Wave A to repoint. It still checks `isYandexGptConfigured()` — that is the switch operators already use to keep the AI surfaces off, not a model call.
 
 **Email (Resend — `backend/services/email.ts`):**
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (default `CRM <onboarding@resend.dev>`).

@@ -100,20 +100,20 @@ the same set.
 
 The path from the tool to the provider:
 
-1. `backend/services/assistant.ts:668` — `serializeToolResult(outcome.result)`.
-2. `backend/services/assistant.ts:382-388` — that function calls `redactToolResult` and stringifies.
-3. `backend/services/assistant.ts:374-376` — `redactToolResult` walks the object and masks a key when
-   `REDACTED_KEYS.has(key)` **or** `keyLooksLikePii(key)` (`assistant.ts:359`).
+1. `backend/services/assistant.ts:746` — `serializeToolResult(outcome.result)`.
+2. `backend/services/assistant.ts:402-408` — that function calls `redactToolResult` and stringifies.
+3. `backend/services/assistant.ts:394-396` — `redactToolResult` walks the object and masks a key when
+   `REDACTED_KEYS.has(key)` **or** `keyLooksLikePii(key)` (`assistant.ts:379`).
 
 Neither test matches `name`:
 
-- `REDACTED_KEYS` (`assistant.ts:264-272`) is an exact-match set: `email`, `phone`, `mobile`,
+- `REDACTED_KEYS` (`assistant.ts:284-292`) is an exact-match set: `email`, `phone`, `mobile`,
   `email_bidx`, `phone_bidx`, `mobile_bidx`, `unsubscribe_token`.
-- `PII_KEY_FRAGMENTS` (`assistant.ts:331`, used by `keyLooksLikePii` at `:333-336`) is
+- `PII_KEY_FRAGMENTS` (`assistant.ts:351`, used by `keyLooksLikePii` at `:353-356`) is
   `['email', 'phone', 'mobile', 'telephone', 'e_mail', 'tel_']`.
 
 So the row passes through unchanged, and the same serialized string is both sent to the provider
-and persisted into `AssistantMessage.content` as plain text (`assistant.ts:245-247`).
+and persisted into `AssistantMessage.content` as plain text (`assistant.ts:265-267`).
 
 **Adding `name` to the redaction set is still not available as a fix**, and `b6f22bf` confirmed it
 by building the projection somewhere else instead. `keyLooksLikePii` matches on *substring*, so a
@@ -149,7 +149,7 @@ What now exists is a declaration about a tool's **result** — `ToolModelFacingO
 it does not decide whether the model is offered the tool at all.
 
 What still does not exist is a gate on **availability**. `buildToolDefinitions`
-(`backend/services/assistant.ts:487-499`) offers the model everything `listMcpTools()` returns, and
+(`backend/services/assistant.ts:565-578`) offers the model everything `listMcpTools()` returns, and
 `listMcpTools` (`backend/mcp/server.ts:228-235`) returns the whole registry, populated by
 unconditional module imports in `loadMcpTools` (`backend/mcp/server.ts:191-203`). The same registry
 also backs the stdio MCP transport (`startMcp`, `backend/mcp/server.ts:205-209`). So "just turn this
@@ -269,8 +269,25 @@ model path is enforced by a seam rather than by absence. Three things have to ke
 1. **The projection stays the only door into the registry.** `tools[]` is module-private and
    `registerTool` is the only way in, which is why the wrap sits there rather than at the two
    dispatch sites. A future tool cannot opt out by forgetting something.
-2. **Nothing outside `backend/mcp/` imports `model-projection`.** A test asserts this, so the seam
-   cannot drift into the REST path and start stripping names the app needs.
+2. **The projection runs where the model reads and nowhere the app reads.** An earlier draft of this
+   item stated the rule as «nothing outside `backend/mcp/` imports `model-projection`, and a test
+   asserts this». Both halves are now false. `backend/services/assistant.ts:26` imports the module
+   directly — deliberately, and the reason is written at the import (`:7-25`) — and the guard in
+   `tests/unit/backend/task-contact-assignee-name-app-path.test.ts:222-251` carries an `ALLOWED`
+   allowlist (`:220`) holding exactly that one path, so it still passes.
+
+   The invariant that survived is narrower, and it is the one that was load-bearing all along: a
+   function the **app** reads from must not run the projection. Inside `assistant.ts` the split is
+   by function, not by module. `historyToAiMessages()` (`:512-559`) projects — through
+   `parseStoredToolCalls` (`:487`) and `redactStoredToolContent` (`:438`) — and its one consumer is
+   the prompt (`:663`). `getAssistantConversation()` (`:889`), which backs the transcript the app
+   renders, returns its rows untouched. `tests/unit/backend/assistant-history-operator-name.test.ts`
+   pins both directions independently: `:291` asserts a replayed ФИО does not reach the provider,
+   `:301-323` asserts the same ФИО is still in the conversation the app reads.
+
+   What must keep holding is that the allowlist stays at one entry. A REST controller or a shared
+   service that starts running the projection takes the name away from the app, which is the
+   over-correction the guard exists to catch.
 3. **Both directions stay pinned.** `tests/unit/backend/mcp-operator-name-projection.test.ts`
    asserts the model cannot get the name; `tests/unit/backend/task-contact-assignee-name-app-path.test.ts`
    asserts the app still can, and that the domain functions still ask Postgres for it. They fail
@@ -296,9 +313,20 @@ Operator carries the duties directly and cannot point at a client's instruction.
 **Today the provider is domestic.** `backend/services/yandex-gpt.ts` is the only model client in the
 backend, and its endpoint is `https://llm.api.cloud.yandex.net/foundationModels/v1/completion`
 (`yandex-gpt.ts:18-19`) — Yandex Cloud, a Russian legal entity, infrastructure in Russia. Its
-`createCompletion` seam has exactly three consumers — `backend/services/assistant.ts:8`,
-`backend/services/contact-ai.ts:87` and `backend/api/controllers/tasks.ts:4` — and no other provider
-SDK, hostname or API-key environment variable appears anywhere under `backend/`.
+`createCompletion` seam has exactly two consumers — `backend/services/assistant.ts:28` and
+`backend/services/contact-ai.ts:87` — and no other provider SDK, hostname or API-key environment
+variable appears anywhere under `backend/`.
+
+It had three until `608f924`, which removed the third: the tasks `suggest-contact` endpoint used to
+put up to 300 customers' full names (`SUGGEST_CONTACT_LIMIT`, `tasks.ts:254`) into a prompt on every
+call, and now matches the task title against a local Prisma read with no provider in the path at all
+(`resolveSuggestedContact`, `backend/api/controllers/tasks.ts:277-301`, calling `matchContactByName`
+from `backend/services/contact-name-match.ts`). That file still imports `isYandexGptConfigured`
+(`tasks.ts:4`) — it is the switch operators already use to keep the AI surfaces off, and the comment
+at `:281-285` says so — but no longer imports `createCompletion`, which
+`tests/unit/backend/tasks-suggest-contact.test.ts:293-295` pins. Worth naming here because it is the
+same question this record is about, answered the (d) way on a route where the client-side cost that
+makes (d) expensive for `get_rep_performance` did not exist.
 
 **Therefore ст. 12 does not apply today.** Трансграничная передача is defined in п. 11 ст. 3 ФЗ-152
 as transfer to a foreign state / foreign person. A transfer to a domestic processor is not one, and
@@ -339,9 +367,28 @@ Two secondary points about Wave A, both neutral facts rather than objections:
   here: it constrains where the *database* lives, and the database stays in Russia. Sending a copy
   abroad afterwards is governed by ст. 12, as `§8.1` notes.
 
-**Nothing is deployed.** There is no production database and no live service; today's system runs
-against local PostgreSQL with test data. Everything above is about what the code would do when it
-is run for real, which is why it is worth settling before that happens rather than after.
+**The product is deployed; this surface is not yet.** An earlier draft of this record said «nothing
+is deployed — there is no production database and no live service». That was wrong, and the
+repository contradicts it in three places: the `production`, `rustore` and `huawei` EAS profiles all
+point the app at `https://4kub.ru/api/v1` and `wss://4kub.ru` (`eas.json`);
+`validateProductionConfig` (`backend/config/security.ts:423-435`) refuses to boot under
+`NODE_ENV=production` without a remote `DATABASE_URL` — `postgresql:`/`postgres:`, password present,
+private and local hosts rejected (`:404-412`) — alongside `JWT_SECRET`, `TOKEN_ENCRYPTION_KEY`,
+`YANDEX_WEBHOOK_SECRET` and a CORS allowlist; and `PROJECT_KNOWLEDGE.md` names that database as
+Yandex Cloud Managed PostgreSQL (`ru-central1`) and records 1.0.4 live in the App Store with 1.0.5
+submitted. There is a production database and there is a live service.
+
+What is true is narrower, and it is about this surface rather than about the system: the assistant
+and its MCP tool layer landed in `d0e0fef` on 2026-07-25, six days after 1.0.5 went to Apple, so
+neither the live 1.0.4 nor the submitted 1.0.5 ships the chat screen that reaches them, and
+day-to-day development runs against a local PostgreSQL with test data. Whether the production
+backend has been redeployed since is not something this repository records.
+
+None of the reasoning above rests on either fact. **ст. 12 does not apply today because the
+processor is domestic**, not because the service is idle, and the ч. 5 ст. 5 minimisation duty
+attaches to the composition of processed data whether or not anyone has typed into the chat yet. The
+correction cuts against comfort rather than for it: this is worth settling before the surface
+reaches the live service, and the live service is already standing there waiting for it.
 
 ---
 
@@ -374,7 +421,7 @@ adding a model-facing allowlist.
 ### (b) Return handles from the tool, substitute names back server-side
 
 The tool emits `USER-<hex>` handles in place of names, using the existing
-`identityHandle('user', id)` (`backend/services/assistant.ts:165-167`). The model composes prose
+`identityHandle('user', id)` (`backend/services/assistant.ts:185-187`). The model composes prose
 referring to handles. Before the answer is returned, a server-side pass rewrites each handle back
 to the real name from a table built for that request.
 
@@ -385,7 +432,7 @@ This was initially filed alongside the reversible token vault that was rejected 
 the two are not the same problem. The vault was an **inbound** matcher: it held `Иванов` and had to
 recognise `Иванова`, `Иванову`, `Ивановым` in free user input. Russian inflection made it
 unreliable, and — decisively — its failure mode was **fail-open**: a missed match meant an
-unmasked name went out. The comment at `assistant.ts:141-146` records that reasoning, and it
+unmasked name went out. The comment at `assistant.ts:161-166` records that reasoning, and it
 remains correct for that direction.
 
 Handle→name substitution runs the other way:
@@ -406,7 +453,7 @@ The genuine costs, none of which are safety costs:
    USER-1a2b3c». Substituting a nominative ФИО yields grammatically wrong prose («результат Иван
    Иванов» instead of «Иванова»). Fixable only with a morphology library or by constraining the
    model to a fixed frame; otherwise accept slightly stilted output.
-2. **Prompt rules conflict.** Rule 6 (`assistant.ts:200`) currently instructs the model *not* to
+2. **Prompt rules conflict.** Rule 6 (`assistant.ts:220`) currently instructs the model *not* to
    show `ORG-…` / `USER-…` handles. Under this option it must show them for this tool's output and
    hide them elsewhere — a more delicate instruction, and instructions are not guarantees.
 3. **Persistence.** `AssistantMessage.content` stores the turn. A decision is needed on whether the
@@ -560,11 +607,14 @@ that moment `get_rep_performance` output crosses the border with **no change to
    filing in item 5 names that category explicitly.
 3. **The MCP boundary projection is still in place and still the only door.** Specifically:
    `registerTool` still wraps every handler in `projectModelFacing`
-   (`backend/mcp/server.ts:175-178`); `tests/unit/backend/mcp-operator-name-projection.test.ts` and
-   `tests/unit/backend/task-contact-assignee-name-app-path.test.ts` both pass; and the count of
-   `operatorNames: 'allowed'` declarations under `backend/mcp/tools/` is still exactly one — zero if
-   an option above removed it. This item covers the paths `b6f22bf` closed and is the reason they
-   need no further work; it fails loudly if that stops being true.
+   (`backend/mcp/server.ts:175-178`); `tests/unit/backend/mcp-operator-name-projection.test.ts`,
+   `tests/unit/backend/task-contact-assignee-name-app-path.test.ts` and
+   `tests/unit/backend/assistant-history-operator-name.test.ts` all pass; the `ALLOWED` allowlist in
+   the second of those files still holds exactly one entry, `backend/services/assistant.ts` (see the
+   shared-service section — a second entry means the projection has reached a surface the app reads);
+   and the count of `operatorNames: 'allowed'` declarations under `backend/mcp/tools/` is still
+   exactly one — zero if an option above removed it. This item covers the paths `b6f22bf` closed and
+   is the reason they need no further work; it fails loudly if that stops being true.
 4. **A regression test pins whatever is chosen for this tool.** In the shape of
    `tests/unit/backend/mcp-merge-contacts-pii.test.ts` and the two files in item 3 — a distinctive
    fixture ФИО, absent from the rest of the repository, asserted absent from the serialized tool
@@ -620,9 +670,9 @@ Recorded so that "no decision yet" is a visible state rather than an invisible o
   exemption explicit. See the shared-service section above.
 - `backend/mcp/model-projection.ts` — the projection's own header states what it deliberately does
   not cover and points back here.
-- `backend/services/assistant.ts:122-151` — why masking is by one-way handle and not a reversible
+- `backend/services/assistant.ts:142-171` — why masking is by one-way handle and not a reversible
   vault. Correct for the inbound direction; see option (b) for why the outbound direction differs.
-  Note that the header of that block (`:124-125`) lists ст. 12 among the duties in play; it predates
+  Note that the header of that block (`:144-145`) lists ст. 12 among the duties in play; it predates
   the correction in the Legal position section above and should be read as naming the duty that
   arrives at Wave A, not as a claim about the domestic path today.
 - `docs/privacy_policy.md` — `§4.2.1` (ФИО as user personal data), `§4.2.2` and `§3.2` (independent
@@ -672,8 +722,57 @@ What changed and why:
    `analytics.ts:447-511` → `:447-526`; `server.ts:147-159/161-165/184-192` →
    `:191-203/:205-209/:228-235`; `assistant.ts:488-499` → `:487-499`, `:334-336` → `:333-336`,
    `:142-146` → `:141-146`, `:126-152` → `:122-151`; `controllers/reporting.ts:20` → `:19-21`.
+   *(Read this item as a record of what that pass did, not as a statement about the tree today. The
+   targets were right at `b6f22bf`; `984cd1a` moved every `assistant.ts` number in the list two days
+   later. The second pass below carries the current ones.)*
 8. **Legal framing preserved unchanged in substance.** The domestic path is not a cross-border
    transfer; ч. 5 ст. 5 minimisation applies today; ст. 12 begins at Wave A. Two additions only: the
    "only model client" claim is now backed by the named consumers of the `createCompletion` seam,
    and a note in Related flags that a source comment predating this correction lists ст. 12 in a way
    a reader could misread.
+
+**2026-07-28 (second pass) — corrected against the tree after `984cd1a` and `608f924`.** Three
+factual claims in this record had gone false in the two days since the pass above, and one file's
+line references had all moved. This repository is public and this record is written to carry legal
+weight, so a stale claim in it is a claim on the record. Documentation only; no source file was
+touched in this pass either.
+
+1. **The «nothing outside `backend/mcp/` imports `model-projection`» invariant withdrawn and
+   replaced.** It was false on both halves: `backend/services/assistant.ts:26` imports the module,
+   and the test that was cited as asserting the rule now carries an `ALLOWED` allowlist naming
+   exactly that file, so it passes rather than failing. The rule was never the point; the point was
+   that a function the app reads from must not run the projection, and that still holds inside
+   `assistant.ts` by function — `historyToAiMessages()` projects and feeds only the prompt,
+   `getAssistantConversation()` does not project and feeds the transcript the app renders. The
+   load-bearing section states it that way now, and gate item 3 has gained the allowlist-stays-at-one
+   condition it needs to be checkable.
+2. **`createCompletion` has two consumers, not three.** `608f924` took the tasks `suggest-contact`
+   endpoint off the seam entirely — it now matches a task title against a local Prisma read via
+   `matchContactByName`, with no provider in the path. The Legal position section named
+   `backend/api/controllers/tasks.ts:4` as a consumer; that import is now `isYandexGptConfigured`
+   alone. The «only model client in the backend» conclusion is unaffected and was re-verified by
+   three independent searches (the identifier, the module path, and dynamic-import forms).
+3. **«Nothing is deployed» withdrawn.** `PROJECT_KNOWLEDGE.md`, `eas.json` and
+   `backend/config/security.ts` all say otherwise: production profiles point at `https://4kub.ru/api/v1`
+   and `wss://4kub.ru`, a remote PostgreSQL is hard-validated at boot in production, and 1.0.4 is
+   live with 1.0.5 submitted. The sentence is replaced by the narrower thing that is true — this
+   *surface* has not shipped — with an explicit note that the ст. 12 conclusion never rested on the
+   sentence in the first place. It rests on the processor being domestic, which is unchanged and
+   re-verified above. The legal reasoning is not adjusted in either direction by this correction;
+   only its stated urgency is, and that moves up rather than down.
+4. **Every `backend/services/assistant.ts` reference re-resolved.** `984cd1a` inserted about 20 lines
+   above the tool catalogue and about 78 below it, so every one of them was off:
+   `:668` → `:746`; `:487-499` → `:565-578`; `:382-388` → `:402-408`; `:374-376` → `:394-396`;
+   `:359` → `:379`; `:333-336` → `:353-356`; `:331` → `:351`; `:264-272` → `:284-292`;
+   `:245-247` → `:265-267`; `:200` → `:220`; `:165-167` → `:185-187`; `:141-146` → `:161-166`;
+   `:122-151` → `:142-171`; `:124-125` → `:144-145`; and the `createCompletion` import `:8` → `:28`.
+   Re-checked this pass and found **unchanged**: every reference into `analytics.ts`, `server.ts`,
+   `model-projection.ts`, `contact-domain.ts`, `task-domain.ts`, `reporting.ts`, `visibility.ts`,
+   `yandex-gpt.ts`, `schema.prisma`, `public-api.ts`, `controllers/contacts.ts`, `tools/contacts.ts`,
+   `tools/tasks.ts`, `tools/deals.ts`, `src/utils/assistantTools.ts`, `src/app/reports/index.tsx`,
+   the `mcp-analytics-cone.test.ts:390` fixture, and every `docs/privacy_policy.md` section cited.
+5. **Confirmed correct and deliberately not changed: the contact's own `first_name` / `last_name` are
+   NOT masked before reaching the model.** `backend/mcp/model-projection.ts:105-107` preserves them
+   on purpose and strips only operator (`User.name`) fields; `redactToolResult` does not touch them
+   either. This record already said so in two places — the closing note of the Recommendation and the
+   substring argument in (e) — and both were accurate, so they stand as written.
