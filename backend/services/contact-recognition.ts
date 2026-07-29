@@ -1,6 +1,6 @@
 import { WorkflowTrigger } from '@prisma/client';
 import { db } from './db';
-import { encryptField, decryptField } from './encryption';
+import { encryptField, decryptField, blindIndex } from './encryption';
 import { evaluateWorkflows } from './workflows';
 import { type ContactImportRow } from './contact-import';
 
@@ -340,13 +340,29 @@ export type BusinessCardScanResult = {
   contact: ScannedContact | null;
 };
 
+// Blind-index columns are keyed hashes of the contact's PII and must not leave
+// the server, for the same reason they are stripped in contacts.ts and sync.ts:
+// the hash is deterministic across the whole deployment, so echoing one back
+// turns this endpoint into an oracle. Anyone could scan arbitrary text and read
+// HMAC_k(number) for a number they do not own, correlating contacts across
+// organizations without ever holding the key. This spread is the only one of the
+// contact-writing paths that returns the created row to the caller, and the
+// route declares no response schema, so nothing downstream would drop them.
+const BLIND_INDEX_COLUMNS = ['email_bidx', 'phone_bidx', 'mobile_bidx'] as const;
+
 function decryptScannedContact(c: ScannedContact): ScannedContact {
-  return {
+  const out: Record<string, unknown> = {
     ...c,
     email: decryptField(c.email ?? undefined) ?? null,
     phone: decryptField(c.phone ?? undefined) ?? null,
     mobile: decryptField(c.mobile ?? undefined) ?? null,
   };
+
+  for (const column of BLIND_INDEX_COLUMNS) {
+    delete out[column];
+  }
+
+  return out as ScannedContact;
 }
 
 export async function scanBusinessCard(
@@ -377,6 +393,12 @@ export async function scanBusinessCard(
         company: extracted.company,
         email: extracted.email ? encryptField(extracted.email) : undefined,
         phone: extracted.phone ? encryptField(extracted.phone) : undefined,
+        // From `extracted`, which holds the plaintext the OCR produced — the same source the
+        // ciphertext above is built from. Hashing the encryptField() output instead would
+        // store an index nothing can match, and a scanned card whose only identifiers are a
+        // phone and an email would be unfindable by either.
+        email_bidx: extracted.email ? blindIndex(extracted.email, 'email') : undefined,
+        phone_bidx: extracted.phone ? blindIndex(extracted.phone, 'phone') : undefined,
         source: extracted.source,
         notes: extracted.notes,
       },

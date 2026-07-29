@@ -1,7 +1,7 @@
 import { db } from './db';
 import { paginateBitrix } from './bitrix-paginator';
 import { assertAllowedBitrixWebhookUrl } from '../config/security';
-import { encryptField } from './encryption';
+import { encryptField, blindIndex } from './encryption';
 
 export interface Bx24ImportResult {
   contacts_imported: number;
@@ -94,6 +94,12 @@ export async function importFromBitrix24(
             last_name: c.LAST_NAME?.trim() || undefined,
             phone: phone ? encryptField(phone) : undefined,
             email: email ? encryptField(email) : undefined,
+            // Indexed from the same trimmed plaintext that was encrypted above, never from
+            // the ciphertext: encryptField picks a random IV per call, so a hash of its
+            // output matches nothing. A Bitrix24 import is the one moment a whole customer
+            // base lands at once — unindexed, none of it is reachable by phone or email.
+            phone_bidx: phone ? blindIndex(phone, 'phone') : undefined,
+            email_bidx: email ? blindIndex(email, 'email') : undefined,
             company: c.COMPANY_TITLE?.trim() || undefined,
             source: c.SOURCE ? `bitrix24_${c.SOURCE.toLowerCase()}` : 'bitrix24',
             notes: c.COMMENTS?.trim() || undefined,

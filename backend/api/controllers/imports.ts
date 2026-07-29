@@ -2,7 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../services/db';
 import { tgSendCode, tgVerifyAndPull } from '../../services/importTelegram';
 import { importFromBitrix24 } from '../../services/importBitrix24';
-import { encryptField } from '../../services/encryption';
+import { encryptField, blindIndex } from '../../services/encryption';
 
 // ── Telegram ─────────────────────────────────────────────────────────────────
 
@@ -46,6 +46,11 @@ async function telegramVerify(request: FastifyRequest, reply: FastifyReply): Pro
             first_name: c.first_name || 'Telegram',
             last_name: c.last_name || undefined,
             phone: c.phone ? encryptField(c.phone) : undefined,
+            // Indexed from c.phone — the PLAINTEXT — not from the encryptField() result:
+            // encryptField uses a fresh IV per call, so hashing ciphertext would produce a
+            // value no lookup can ever reproduce. Without this line the imported contact is
+            // findable by name only, never by number. See contact-search.ts.
+            phone_bidx: c.phone ? blindIndex(c.phone, 'phone') : undefined,
             source: 'telegram',
             notes: c.username ? `Telegram: @${c.username}` : undefined,
           },
@@ -115,6 +120,9 @@ async function vcardImport(request: FastifyRequest, reply: FastifyReply): Promis
           last_name: c.last_name || undefined,
           phone: c.phone ? encryptField(c.phone) : undefined,
           email: c.email ? encryptField(c.email) : undefined,
+          // Blind indexes from the plaintext fields, alongside the ciphertext.
+          phone_bidx: c.phone ? blindIndex(c.phone, 'phone') : undefined,
+          email_bidx: c.email ? blindIndex(c.email, 'email') : undefined,
           company: c.company || undefined,
           source: 'vcard',
         },
@@ -152,6 +160,9 @@ async function whatsappImport(request: FastifyRequest, reply: FastifyReply): Pro
           first_name: parts[0] ?? c.name,
           last_name: parts.slice(1).join(' ') || undefined,
           phone: c.phone ? encryptField(c.phone) : undefined,
+          // Blind index from the plaintext number. A WhatsApp export is mostly numbers,
+          // so an unindexed row here is a contact with no usable identifier at all.
+          phone_bidx: c.phone ? blindIndex(c.phone, 'phone') : undefined,
           source: 'whatsapp',
           notes: c.message_count ? `${c.message_count} сообщений в WhatsApp` : undefined,
         },
