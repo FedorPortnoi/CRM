@@ -32,6 +32,14 @@ type AdminRoutePolicy = {
 const ACTION_CAPABILITY: Record<string, Capability> = {
   'audit.read': 'audit.read',
   'data.export': 'data.export',
+  // Held by owner, admin, head, member, accountant and marketer — everyone whose
+  // job involves money. Excludes support and viewer, matching the MCP gate on the
+  // six analytics tools so both surfaces answer the same question.
+  'analytics.read_revenue': 'revenue.view',
+  // owner, admin, head, member — the roles that work the pipeline. Excludes
+  // marketer, support, accountant and viewer, matching the MCP gate on
+  // create_deal / update_deal / move_deal_to_stage.
+  'deals.mutate': 'deals.write',
   'contacts.bulk_admin': 'contacts.bulk',
   // Pipelines, stages, workflows and example-data resets are organisation
   // configuration rather than day-to-day sales work — deliberately NOT
@@ -124,6 +132,22 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
     return { action: 'audit.read', reason: 'audit access requires owner or admin' };
   }
 
+  // Revenue analytics. Added after an adversarial review found the assistant
+  // refusing `support` the org's revenue (MCP gates these tools on revenue.view)
+  // while REST handed the same user the same numbers over HTTP — the assistant
+  // was stricter than the API behind it. Gating here is what makes
+  // "the assistant is exactly as powerful as the user" true of the live surface
+  // rather than only of the capability table.
+  //
+  // /analytics/export is matched by the data.export branch below and keeps that
+  // stronger gate; this covers the read paths.
+  if (
+    method === 'GET' &&
+    (path === '/api/v1/analytics/dashboard' || path.startsWith('/api/v1/reports/'))
+  ) {
+    return { action: 'analytics.read_revenue', reason: 'revenue analytics require a role that may see money' };
+  }
+
   if (
     (method === 'POST' && path === '/api/v1/analytics/export') ||
     (method === 'GET' && path.startsWith('/api/v1/analytics/export/')) ||
@@ -177,6 +201,22 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
 
   if (method === 'PATCH' && path === '/api/v1/org/settings') {
     return { action: 'org.update_settings', reason: 'updating org settings requires owner or admin' };
+  }
+
+  // Deal mutation. MUST stay below the /deals/pipelines and /deals/stages
+  // branches above, which carry the stronger org.manage gate — this one is the
+  // catch-all for the deals themselves.
+  //
+  // Added alongside the analytics gate: MCP already refused create_deal to
+  // marketer and support (deals.write), while POST /api/v1/deals let them
+  // through on the strength of the coarse any-write check. A support operator
+  // could tap + -> Сделка and succeed, then be refused the identical action by
+  // the assistant. Now both surfaces ask deals.write.
+  if (
+    path.startsWith('/api/v1/deals') &&
+    (method === 'POST' || method === 'PATCH' || method === 'DELETE')
+  ) {
+    return { action: 'deals.mutate', reason: 'creating or changing deals requires a sales role' };
   }
 
   return null;

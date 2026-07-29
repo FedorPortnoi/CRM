@@ -262,9 +262,22 @@ export default function SettingsScreen(): JSX.Element {
       {(user?.role === 'owner' || user?.role === 'admin') && (
         <>
           <Text style={styles.sectionHeader}>{t('settings.team')}</Text>
+          {/*
+            Route stays /settings/team — the Создать sheet and the ?add=1 deep
+            link both point at it. Only the wording changes: «Структура команды»
+            read as an org-chart viewer, so nobody found the screen that actually
+            hands out logins.
+          */}
           <TouchableOpacity style={styles.card} onPress={() => router.push('/settings/team' as never)} accessibilityRole="button">
             <View style={styles.row}>
-              <Text style={styles.rowLabel}>{t('settings.teamStructure')}</Text>
+              <View style={styles.rowMain}>
+                <Text style={styles.rowLabel}>
+                  {t('settings.teamMembers')}
+                </Text>
+                <Text style={styles.comingSoon}>
+                  {t('settings.teamMembersDesc')}
+                </Text>
+              </View>
               <Text style={styles.chevron}>{'>'}</Text>
             </View>
           </TouchableOpacity>

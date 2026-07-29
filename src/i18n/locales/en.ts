@@ -464,6 +464,10 @@ const en = {
     save: 'Save',
     team: 'Team',
     teamStructure: 'Team structure',
+    // Label of the row that opens /settings/team. "Team structure" read as an
+    // org-chart viewer, so nobody found the screen that hands out logins.
+    teamMembers: 'People and roles',
+    teamMembersDesc: 'Add an employee, set their role and manager',
     notifSignIn: 'Sign in to enable push notifications.',
     notifNotConfigured: 'Push notifications are not configured for this build.',
     notifEnabled: 'Push notifications are enabled. Disable them in system settings.',
@@ -904,6 +908,29 @@ const en = {
     toolDone_update_event: 'Updated a meeting',
     toolDone_cancel_event: 'Cancelled a meeting',
     toolDone_complete_event: 'Completed a meeting',
+  },
+  // AI help on the contact card: POST /api/v1/ai/contacts/:id/summary.
+  // Failures arrive as a code (see hooks/useContactAi.ts); this is its wording.
+  contactAi: {
+    title: 'AI summary',
+    intro: "The assistant reads this contact's deals, tasks and activity, then suggests a next step.",
+    generate: 'Summarize',
+    regenerate: 'Summarize again',
+    generating: 'Writing the summary…',
+    generatingHint: 'Usually a few seconds; we stop waiting after 20.',
+    nextActionLabel: 'Next step',
+    basis: 'Based on {{deals}} deal(s), {{tasks}} task(s), {{activities}} event(s)',
+    generatedAt: 'Summary from {{time}} · {{provider}}',
+    disclaimer: 'Written by a language model. Check the facts before you call.',
+    privacyNote: "The contact's email and phone are never sent to the model.",
+    notConfigured: 'AI summaries are not connected. Ask your administrator.',
+    notConfiguredHint: 'The administrator has to set the Yandex Cloud key and folder and grant the service account the ai.languageModels.user role.',
+    timeout: 'The model did not answer in time. Try again.',
+    rateLimited: 'Too many requests in a row. Try again in a minute.',
+    unavailable: 'The AI service is temporarily unavailable.',
+    notFound: 'This contact is unavailable — deleted, or outside your access.',
+    readOnlyRole: 'Viewer access cannot request a summary.',
+    failed: 'Could not write the summary',
   },
   sequences: {
     title: 'Email sequences',

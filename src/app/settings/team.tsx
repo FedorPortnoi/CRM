@@ -2,9 +2,11 @@ import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, Modal, TextInput, ListRenderItemInfo,
-  Share, Clipboard,
+  Share, Clipboard, ScrollView,
 } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ArrowLeft } from 'lucide-react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
@@ -86,6 +88,10 @@ export default function TeamScreen(): JSX.Element {
   const queryClient = useQueryClient();
   const { colors } = useTheme();
   const styles = makeStyles(colors);
+  // Read here, not inside the Modal: a full-screen Modal draws over the status
+  // bar, and the insets the navigator reports for this screen are the ones the
+  // modal header needs to clear it.
+  const insets = useSafeAreaInsets();
 
   // `/settings/team?add=1` (the Создать sheet shortcut) lands with the form
   // already open. Read once into initial state rather than in an effect, so it
@@ -208,6 +214,10 @@ export default function TeamScreen(): JSX.Element {
   // Only an owner may hand out `admin`. The backend enforces the same rule, so
   // this is presentation, not protection.
   const offeredRoles: Role[] = isOwner ? ['admin', ...ASSIGNABLE_ROLES] : ASSIGNABLE_ROLES;
+
+  // Every way out of the invite form — header arrow, «Отмена», Android hardware
+  // back — funnels through here so the three cannot drift apart.
+  const closeInviteModal = useCallback(() => setShowInviteModal(false), []);
 
   const confirmDeactivate = useCallback((member: OrgMember) => {
     Alert.alert('Удалить доступ', `Убрать ${member.name} из команды?`, [
@@ -378,41 +388,66 @@ export default function TeamScreen(): JSX.Element {
         </View>
       </Modal>
 
-      <Modal visible={showInviteModal} animationType="slide" onRequestClose={() => setShowInviteModal(false)}>
+      <Modal visible={showInviteModal} animationType="slide" onRequestClose={closeInviteModal}>
         <View style={styles.modal}>
-          <Text style={styles.modalTitle}>Добавить сотрудника</Text>
-          <Text style={styles.label}>Имя</Text>
-          <TextInput style={styles.input} value={inviteFirstName} onChangeText={setInviteFirstName} placeholder="Иван" placeholderTextColor={colors.placeholder} autoCapitalize="words" />
-          <Text style={styles.label}>Фамилия</Text>
-          <TextInput style={styles.input} value={inviteLastName} onChangeText={setInviteLastName} placeholder="Петров" placeholderTextColor={colors.placeholder} autoCapitalize="words" />
-          <Text style={styles.label}>Роль</Text>
-          <View style={styles.roleList}>
-            {offeredRoles.map((r) => (
+          {/*
+            A full-screen Modal covers the navigator, taking the global NavHeader
+            — and with it the only back arrow — off screen. NavHeader itself is
+            not reusable here: its arrow is route-driven (router.back()), which
+            would abandon the team screen rather than dismiss this form. So this
+            repeats NavHeader's geometry (52pt row, 26px arrow, 18/700 title) and
+            wires it to the modal instead.
+          */}
+          <View style={[styles.modalHeader, { paddingTop: insets.top }]}>
+            <View style={styles.modalHeaderRow}>
               <TouchableOpacity
-                key={r}
-                style={[styles.roleOption, inviteRole === r && styles.roleOptionSelected]}
-                onPress={() => setInviteRole(r)}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: inviteRole === r }}
+                onPress={closeInviteModal}
+                style={styles.modalBackBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Назад"
+                hitSlop={8}
               >
-                <View style={[styles.roleDot, { backgroundColor: ROLE_COLORS[r] }]} />
-                <View style={styles.roleOptionText}>
-                  <Text style={[styles.rolePillText, inviteRole === r && styles.rolePillTextSelected]}>{ROLE_LABELS[r]}</Text>
-                  <Text style={styles.roleHint}>{ROLE_HINTS[r]}</Text>
-                </View>
+                <ArrowLeft size={26} color={colors.text1} strokeWidth={2.4} />
               </TouchableOpacity>
-            ))}
+              <Text style={styles.modalHeaderTitle} numberOfLines={1}>Добавить сотрудника</Text>
+            </View>
           </View>
-          <TouchableOpacity
-            style={[styles.inviteButton, { marginTop: 24 }]}
-            onPress={() => inviteMutation.mutate({ first_name: inviteFirstName, last_name: inviteLastName, role: inviteRole })}
-            disabled={inviteMutation.isPending || !inviteFirstName.trim() || !inviteLastName.trim()}
-          >
-            <Text style={styles.inviteButtonText}>{inviteMutation.isPending ? 'Добавление…' : 'Добавить'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowInviteModal(false)}>
-            <Text style={styles.cancelBtnText}>Отмена</Text>
-          </TouchableOpacity>
+          {/* Up to seven role cards plus two inputs overflow a small screen,
+              which would otherwise strand «Добавить» below the fold. */}
+          <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
+            <Text style={styles.label}>Имя</Text>
+            <TextInput style={styles.input} value={inviteFirstName} onChangeText={setInviteFirstName} placeholder="Иван" placeholderTextColor={colors.placeholder} autoCapitalize="words" />
+            <Text style={styles.label}>Фамилия</Text>
+            <TextInput style={styles.input} value={inviteLastName} onChangeText={setInviteLastName} placeholder="Петров" placeholderTextColor={colors.placeholder} autoCapitalize="words" />
+            <Text style={styles.label}>Роль</Text>
+            <View style={styles.roleList}>
+              {offeredRoles.map((r) => (
+                <TouchableOpacity
+                  key={r}
+                  style={[styles.roleOption, inviteRole === r && styles.roleOptionSelected]}
+                  onPress={() => setInviteRole(r)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: inviteRole === r }}
+                >
+                  <View style={[styles.roleDot, { backgroundColor: ROLE_COLORS[r] }]} />
+                  <View style={styles.roleOptionText}>
+                    <Text style={[styles.rolePillText, inviteRole === r && styles.rolePillTextSelected]}>{ROLE_LABELS[r]}</Text>
+                    <Text style={styles.roleHint}>{ROLE_HINTS[r]}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={[styles.inviteButton, { marginTop: 24 }]}
+              onPress={() => inviteMutation.mutate({ first_name: inviteFirstName, last_name: inviteLastName, role: inviteRole })}
+              disabled={inviteMutation.isPending || !inviteFirstName.trim() || !inviteLastName.trim()}
+            >
+              <Text style={styles.inviteButtonText}>{inviteMutation.isPending ? 'Добавление…' : 'Добавить'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelBtn} onPress={closeInviteModal}>
+              <Text style={styles.cancelBtnText}>Отмена</Text>
+            </TouchableOpacity>
+          </ScrollView>
         </View>
       </Modal>
     </View>
@@ -446,8 +481,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   errorText: { color: c.red, textAlign: 'center', marginTop: 40, paddingHorizontal: 24 },
   inviteButton: { margin: 16, backgroundColor: c.orange, borderRadius: 10, padding: 14, alignItems: 'center' },
   inviteButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  modal: { flex: 1, backgroundColor: c.bg, padding: 24, paddingTop: 60 },
-  modalTitle: { fontSize: 22, fontWeight: '700', color: c.text1, marginBottom: 24 },
+  modal: { flex: 1, backgroundColor: c.bg },
+  // Kept numerically in step with NavHeader so the form reads as a pushed
+  // screen rather than a stray sheet; change these only alongside that file.
+  modalHeader: { backgroundColor: c.bgDark, borderBottomWidth: 1, borderBottomColor: c.border },
+  modalHeaderRow: { height: 52, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 },
+  modalBackBtn: { padding: 8 },
+  modalHeaderTitle: { fontSize: 18, fontWeight: '700', color: c.text1, marginLeft: 4, flex: 1 },
+  modalBody: { padding: 24, paddingBottom: 48 },
   label: { fontSize: 13, fontWeight: '600', color: c.text1, marginBottom: 6, marginTop: 12 },
   input: { backgroundColor: c.inputBg, borderRadius: 8, borderWidth: 1, borderColor: c.inputBorder, padding: 12, fontSize: 15, color: c.text1 },
   roleRow: { flexDirection: 'row', gap: 8, marginTop: 4 },

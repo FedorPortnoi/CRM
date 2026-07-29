@@ -1,7 +1,7 @@
 import { ContactStatus } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
-import { requireMcpWrite } from '../validation';
+import { requireMcpToolCapability } from '../validation';
 import {
   listContactsForUser,
   getContactForUser,
@@ -93,7 +93,7 @@ registerTool(
     required: ['first_name'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'create_contact');
     if (writeErr) return writeErr;
 
     const first_name = typeof args.first_name === 'string' ? args.first_name.trim() : '';
@@ -149,7 +149,7 @@ registerTool(
     required: ['id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'update_contact');
     if (writeErr) return writeErr;
 
     const id = typeof args.id === 'string' ? args.id : '';
@@ -193,7 +193,7 @@ registerTool(
     required: ['id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'archive_contact');
     if (writeErr) return writeErr;
 
     const id = typeof args.id === 'string' ? args.id : '';
@@ -222,7 +222,7 @@ registerTool(
     required: ['target_id', 'source_id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'merge_contacts');
     if (writeErr) return writeErr;
 
     const target_id = typeof args.target_id === 'string' ? args.target_id : '';

@@ -563,9 +563,11 @@ export function historyToAiMessages(rows: StoredMessage[]): AiMessage[] {
 // Tool catalogue
 // ---------------------------------------------------------------------------
 
-async function buildToolDefinitions(): Promise<AiToolDefinition[]> {
+// The catalogue is per-caller: listMcpTools() filters to the tools this role can
+// actually invoke, so a viewer is never offered create_deal in the first place.
+async function buildToolDefinitions(user: McpUser): Promise<AiToolDefinition[]> {
   try {
-    const tools = await listMcpTools();
+    const tools = await listMcpTools(user);
     return tools.map((tool) => ({
       name: tool.name,
       description: tool.description,
@@ -664,7 +666,7 @@ export async function sendAssistantMessage(
     history = historyToAiMessages(rows.reverse());
   }
 
-  const toolDefinitions = await buildToolDefinitions();
+  const toolDefinitions = await buildToolDefinitions(caller);
 
   // No profile read: the prompt masks the organisation and the operator behind
   // opaque handles, so User.name and Organization.name have nothing left to do

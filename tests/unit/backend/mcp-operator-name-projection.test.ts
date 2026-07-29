@@ -80,9 +80,16 @@ vi.mock('../../../backend/config/security', () => ({
 }));
 vi.mock('fast-jwt', () => ({ createVerifier: () => () => ({}) }));
 vi.mock('../../../backend/services/audit', () => ({ auditLog: vi.fn() }));
+// The whole surface backend/mcp/server and the tool files reach for. This factory
+// does NOT spread the real module, so a name missing here is not a permissive
+// stub — it is a vitest "no such export on the mock" throw at the first call. The
+// capability gate is pinned in mcp-capability-parity.test.ts; here it is opened
+// unconditionally so a refusal can never be what makes a projection assertion
+// pass.
 vi.mock('../../../backend/mcp/validation', () => ({
   validateMcpPrincipal: vi.fn(async () => null),
-  requireMcpWrite: vi.fn(() => null),
+  requireMcpToolCapability: vi.fn(() => null),
+  mcpToolAllowedForRole: vi.fn(() => true),
 }));
 vi.mock('../../../backend/services/db', () => ({ db: {} }));
 

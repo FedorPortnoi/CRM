@@ -1,11 +1,28 @@
 import { DealStatus, TaskStatus, Prisma } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
+import { requireMcpToolCapability } from '../validation';
 import { canSeeUser, getAccessibleUserIds } from '../../services/visibility';
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from '../../config/market';
 
 type PeriodValue = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
 type GroupByValue = 'day' | 'week' | 'month' | 'quarter';
+
+/**
+ * EVERY TOOL IN THIS FILE IS GATED ON `revenue.view`.
+ *
+ * The two questions are separate and both have to be asked. `revenue.view` — the
+ * gate, one line at the top of each handler via requireMcpToolCapability — decides
+ * whether this ROLE may see monetary figures at all. The visibility cone below
+ * decides WHOSE rows are aggregated once it may. Conflating them is exactly what
+ * let a `support` operator read the whole pipeline's value through the assistant:
+ * the cone happily scoped the query to their own branch and then handed over
+ * numbers their role is never shown in the app.
+ *
+ * The mapping itself lives in MCP_TOOL_CAPABILITIES (backend/mcp/validation.ts),
+ * not here, so the catalogue the model is offered and the gate that refuses it
+ * cannot disagree.
+ */
 
 /**
  * The acting user's visibility cone, exactly as the REST analytics controller
@@ -98,6 +115,9 @@ registerTool(
     properties: {},
   },
   async (_args: Record<string, unknown>, user: McpUser) => {
+    const gateErr = requireMcpToolCapability(user, 'get_dashboard');
+    if (gateErr) return gateErr;
+
     const orgId = user.org_id;
     const visibleIds = await visibilityCone(user);
 
@@ -209,6 +229,9 @@ registerTool(
     },
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const gateErr = requireMcpToolCapability(user, 'get_pipeline_health');
+    if (gateErr) return gateErr;
+
     const pipeline_id = typeof args.pipeline_id === 'string' ? args.pipeline_id : undefined;
     const orgId = user.org_id;
     const visibleIds = await visibilityCone(user);
@@ -289,6 +312,9 @@ registerTool(
     },
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const gateErr = requireMcpToolCapability(user, 'get_funnel');
+    if (gateErr) return gateErr;
+
     const period = isPeriod(args.period) ? args.period : 'month';
     const start = typeof args.start === 'string' ? args.start : undefined;
     const end = typeof args.end === 'string' ? args.end : undefined;
@@ -380,6 +406,9 @@ registerTool(
     },
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const gateErr = requireMcpToolCapability(user, 'get_revenue');
+    if (gateErr) return gateErr;
+
     const period = isPeriod(args.period) ? args.period : 'month';
     const group_by = isGroupBy(args.group_by) ? args.group_by : 'month';
     const currency = typeof args.currency === 'string'
@@ -456,6 +485,9 @@ registerTool(
     },
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const gateErr = requireMcpToolCapability(user, 'get_rep_performance');
+    if (gateErr) return gateErr;
+
     const period = isPeriod(args.period) ? args.period : 'month';
     const start = typeof args.start === 'string' ? args.start : undefined;
     const end = typeof args.end === 'string' ? args.end : undefined;
@@ -539,6 +571,9 @@ registerTool(
     },
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    const gateErr = requireMcpToolCapability(user, 'get_lead_sources');
+    if (gateErr) return gateErr;
+
     const period = isPeriod(args.period) ? args.period : 'month';
     const start = typeof args.start === 'string' ? args.start : undefined;
     const end = typeof args.end === 'string' ? args.end : undefined;

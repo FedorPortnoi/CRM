@@ -1,4 +1,4 @@
-import { hasAnyWriteCapability } from '../services/capabilities';
+import { can, type Capability } from '../services/capabilities';
 import { db } from '../services/db';
 import { validateAuthSession } from '../services/sessions';
 import type { McpUser } from './server';
@@ -116,12 +116,128 @@ export async function validateMcpWriteReferences(
   return null;
 }
 
-export function requireMcpWrite(user: McpUser): McpToolError | null {
-  // Mirrors the HTTP write gate in authenticate.ts. Asking "is this viewer?"
-  // here would let a read-only role that is not literally named viewer (e.g.
-  // accountant) mutate data through the assistant while being refused over REST.
-  if (!hasAnyWriteCapability(user.role)) {
-    return mcpError('FORBIDDEN', 'This role cannot perform write operations');
+// ─── Capability gate ─────────────────────────────────────────────────────────
+//
+// WHAT WAS HERE BEFORE, AND WHY IT WAS NOT ENOUGH
+//
+// `requireMcpWrite(user)` asked one binary question — hasAnyWriteCapability() —
+// for every write tool in the registry. That is the right shape for the HTTP
+// preHandler, which sees a method and a URL and nothing else, but it is far too
+// coarse here, because an MCP tool name says exactly WHICH entity is about to be
+// mutated. A `support` user holds contacts.write and tasks.write and NOT
+// deals.write; under one shared gate they passed it and created deals through
+// the assistant. The assistant was more powerful than the person using it, which
+// is the one thing it must never be.
+//
+// So the gate now asks per tool, and the question it asks lives in one table.
+//
+/**
+ * Which capability each MCP tool requires, keyed by tool name.
+ *
+ * Deliberately ONE table rather than a capability literal at each call site —
+ * the same reasoning as `ACTION_CAPABILITY` in backend/api/authenticate.ts: the
+ * whole authorization surface of the assistant is legible in a single screen,
+ * and it cannot drift from the gate that reads it.
+ *
+ * A tool ABSENT from this table is ungated: the plain entity reads
+ * (get_contacts, get_deal, get_events, get_pipelines …) are reachable by any
+ * role, and the visibility cone — not the role — decides which ROWS come back.
+ * See `requireMcpToolCapability` for what happens when a gated tool is missing a
+ * row, and `mcpToolAllowedForRole` for why absence means "offer it" there.
+ *
+ * The mappings mirror what the same operation costs elsewhere in the product:
+ *   - merge_contacts is contacts.bulk, NOT contacts.write. It archives one
+ *     record and rewrites the foreign keys of four tables; capabilities.ts calls
+ *     that out by name ("import, bulk assign/archive, merge") and
+ *     authenticate.ts already routes any POST …/merge to contacts.bulk. Owner
+ *     and admin only.
+ *   - calendar writes are tasks.write. There is no calendar capability, and a
+ *     meeting is scheduled work with a due time — the task tier, not the deal
+ *     tier. (activities.write would grant the identical set of roles today, so
+ *     nothing hinges on the choice; tasks.write is the honest name for it.)
+ *   - the six analytics tools are revenue.view because their payload carries
+ *     money: deal `total_value` in get_dashboard / get_funnel / get_lead_sources
+ *     / get_rep_performance and revenue itself in get_revenue.
+ *     get_pipeline_health is the one that carries no rouble figure — only
+ *     conversion rates — and is gated anyway: revenue.view is defined as
+ *     "monetary figures AND revenue analytics", and stage-by-stage conversion is
+ *     the latter. A `support` operator has no more business reading it than the
+ *     app gives them.
+ */
+export const MCP_TOOL_CAPABILITIES = {
+  create_contact: 'contacts.write',
+  update_contact: 'contacts.write',
+  archive_contact: 'contacts.write',
+  merge_contacts: 'contacts.bulk',
+
+  create_deal: 'deals.write',
+  update_deal: 'deals.write',
+  move_deal_to_stage: 'deals.write',
+
+  create_task: 'tasks.write',
+  update_task: 'tasks.write',
+  complete_task: 'tasks.write',
+
+  create_event: 'tasks.write',
+  update_event: 'tasks.write',
+  cancel_event: 'tasks.write',
+  complete_event: 'tasks.write',
+
+  get_dashboard: 'revenue.view',
+  get_funnel: 'revenue.view',
+  get_lead_sources: 'revenue.view',
+  get_pipeline_health: 'revenue.view',
+  get_rep_performance: 'revenue.view',
+  get_revenue: 'revenue.view',
+} as const satisfies Record<string, Capability>;
+
+export type McpGatedTool = keyof typeof MCP_TOOL_CAPABILITIES;
+
+/**
+ * The refusal text, exported so a caller can tell a capability denial apart from
+ * the other FORBIDDEN a tool can return (`validateMcpWriteReferences` uses the
+ * same code for a cross-org reference). The code stays 'FORBIDDEN' because that
+ * is what the existing tool-cone suites and the assistant's error handling read.
+ */
+export function mcpCapabilityDeniedMessage(capability: Capability): string {
+  return `This role is not permitted to perform this operation (requires ${capability})`;
+}
+
+/** The primitive: may this principal exercise this capability at all? */
+export function requireMcpCapability(user: McpUser, capability: Capability): McpToolError | null {
+  if (!can(user.role, capability)) {
+    return mcpError('FORBIDDEN', mcpCapabilityDeniedMessage(capability));
   }
   return null;
+}
+
+/**
+ * The form every gated tool actually calls. Looks the requirement up by tool
+ * name so the mapping exists in exactly one place.
+ *
+ * An unmapped name falls back to `org.manage` — owner and admin only — for the
+ * same reason authenticate.ts does: a write tool whose row somebody forgot LOCKS
+ * DOWN instead of opening up. It is a bug either way, and
+ * tests/unit/backend/mcp-capability-parity.test.ts fails on any mutating tool
+ * name that is missing from the table, so it is a bug that cannot ship quietly.
+ */
+export function requireMcpToolCapability(user: McpUser, tool: string): McpToolError | null {
+  const required: Capability = MCP_TOOL_CAPABILITIES[tool as McpGatedTool] ?? 'org.manage';
+  return requireMcpCapability(user, required);
+}
+
+/**
+ * Whether this role could invoke this tool at all — the question
+ * `listMcpTools()` asks so a role is never offered a tool that would refuse it.
+ *
+ * Absence from the table means "yes" here, because the catalogue must describe
+ * the gates that EXIST rather than invent a second policy: an ungated tool
+ * really is invocable by anyone. Note the deliberate asymmetry with
+ * `requireMcpToolCapability`, where absence means "no" — the two answer
+ * different questions. There, a handler has already declared that it needs
+ * gating, and the missing row is the mistake.
+ */
+export function mcpToolAllowedForRole(role: string | null | undefined, tool: string): boolean {
+  const required = MCP_TOOL_CAPABILITIES[tool as McpGatedTool];
+  return required === undefined || can(role, required);
 }

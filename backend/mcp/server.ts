@@ -7,7 +7,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { createVerifier } from 'fast-jwt';
 import { getJwtSecret } from '../config/security';
-import { validateMcpPrincipal } from './validation';
+import { validateMcpPrincipal, mcpToolAllowedForRole } from './validation';
 import { projectModelFacing } from './model-projection';
 import { auditLog } from '../services/audit';
 
@@ -60,6 +60,14 @@ export const mcpServer = new Server(
   { capabilities: { tools: {} } },
 );
 
+// The stdio catalogue CANNOT be filtered by role, and that is a property of the
+// transport rather than an omission: this server authenticates per CALL — the JWT
+// arrives as a tool argument (see the CallTool handler below) — so at list time
+// there is no principal to filter against. An external MCP client therefore sees
+// every tool and gets refused on the ones its role may not use. Filtering is a
+// prompt-hygiene measure for the in-process assistant (listMcpTools), never the
+// enforcement; enforcement is requireMcpToolCapability inside each handler, which
+// both doors run.
 mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: tools.map((t) => ({
@@ -225,13 +233,29 @@ export type McpInvocationResult =
   | { ok: true; result: unknown }
   | { ok: false; error: { code: string; message: string } };
 
-export async function listMcpTools(): Promise<McpToolDefinition[]> {
+/**
+ * The catalogue offered to the model, narrowed to what this principal's role
+ * could actually invoke.
+ *
+ * The user argument is REQUIRED, not optional. An offered-but-refused tool is
+ * not a harmless extra: the model calls create_deal because it was on the menu,
+ * eats a round of the MAX_TOOL_ROUNDS budget on a FORBIDDEN, and then has to
+ * explain a refusal to somebody who was never allowed to ask. A default would
+ * make forgetting the argument silent, so there is no default.
+ *
+ * This is a narrowing of the MENU only. Every gated handler still checks for
+ * itself, because the stdio transport above cannot filter and because nothing
+ * stops a model from naming a tool that was never offered.
+ */
+export async function listMcpTools(user: McpUser): Promise<McpToolDefinition[]> {
   await loadMcpTools();
-  return tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    inputSchema: t.inputSchema,
-  }));
+  return tools
+    .filter((t) => mcpToolAllowedForRole(user.role, t.name))
+    .map((t) => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+    }));
 }
 
 export async function invokeMcpTool(

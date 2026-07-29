@@ -1,7 +1,7 @@
 import { DealStatus, WorkflowTrigger } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
-import { requireMcpWrite } from '../validation';
+import { requireMcpToolCapability } from '../validation';
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from '../../config/market';
 import { evaluateWorkflows } from '../../services/workflows';
 import { logActivity } from '../../api/controllers/activities';
@@ -113,7 +113,7 @@ registerTool(
     required: ['title', 'contact_id', 'pipeline_id', 'stage_id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'create_deal');
     if (writeErr) return writeErr;
 
     const title = typeof args.title === 'string' ? args.title : '';
@@ -173,7 +173,7 @@ registerTool(
     required: ['id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'update_deal');
     if (writeErr) return writeErr;
 
     const id = typeof args.id === 'string' ? args.id : '';
@@ -219,7 +219,7 @@ registerTool(
     required: ['id', 'stage_id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'move_deal_to_stage');
     if (writeErr) return writeErr;
 
     const id = typeof args.id === 'string' ? args.id : '';

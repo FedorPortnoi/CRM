@@ -1,7 +1,7 @@
 import { Prisma, CalendarEventStatus } from '@prisma/client';
 import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
-import { validateMcpWriteReferences, requireMcpWrite } from '../validation';
+import { validateMcpWriteReferences, requireMcpToolCapability } from '../validation';
 import { getAccessibleUserIds, Requester } from '../../services/visibility';
 
 type CalendarStatusValue = 'scheduled' | 'completed' | 'cancelled';
@@ -154,7 +154,7 @@ registerTool(
     // read-only everywhere else — could create, update, cancel and complete events.
     // The assistant made these tools reachable over HTTP, which turned that into a
     // live hole. contacts/deals/tasks have gated their writes this way all along.
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'create_event');
     if (writeErr) return writeErr;
 
     const title = typeof args.title === 'string' ? args.title : '';
@@ -227,7 +227,7 @@ registerTool(
     // read-only everywhere else — could create, update, cancel and complete events.
     // The assistant made these tools reachable over HTTP, which turned that into a
     // live hole. contacts/deals/tasks have gated their writes this way all along.
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'update_event');
     if (writeErr) return writeErr;
 
     const id = typeof args.id === 'string' ? args.id : '';
@@ -292,7 +292,7 @@ registerTool(
     // read-only everywhere else — could create, update, cancel and complete events.
     // The assistant made these tools reachable over HTTP, which turned that into a
     // live hole. contacts/deals/tasks have gated their writes this way all along.
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'cancel_event');
     if (writeErr) return writeErr;
 
     const id = typeof args.id === 'string' ? args.id : '';
@@ -338,7 +338,7 @@ registerTool(
     // read-only everywhere else — could create, update, cancel and complete events.
     // The assistant made these tools reachable over HTTP, which turned that into a
     // live hole. contacts/deals/tasks have gated their writes this way all along.
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'complete_event');
     if (writeErr) return writeErr;
 
     const id = typeof args.id === 'string' ? args.id : '';

@@ -91,6 +91,13 @@ async function contactVisibleToRequester(
   orgId: string,
   accessibleIds: string[] | null,
 ): Promise<boolean> {
+  // Guard against being handed `undefined` by a caller that forgot the field is
+  // optional. Prisma treats `where: { id: undefined }` as "no id filter" and
+  // happily returns an unrelated row, which turns an absent contact into a
+  // visibility failure against a stranger. Callers must decide what an absent
+  // contact means; this function only answers for a contact that was named.
+  if (!contactId) return false;
+
   const contact = await db.contact.findFirst({
     where: { id: contactId, organization_id: orgId },
     select: { assigned_to: true, created_by: true },
@@ -247,7 +254,19 @@ export async function createDealForUser(
   const accessibleIds = await getAccessibleUserIds(requester);
 
   const [ownsContact, ownsPipeline, stageMatches, ownsAssignee] = await Promise.all([
-    contactVisibleToRequester(body.contact_id, orgId, accessibleIds),
+    // contact_id is OPTIONAL — a deal may exist before anyone is attached to it,
+    // and src/app/deal/new.tsx omits the field entirely when the user picks no
+    // contact. Calling the check with `undefined` made Prisma drop the `id`
+    // filter, match an ARBITRARY contact in the org, and then test whether that
+    // stranger was inside the caller's visibility cone. For a Менеджер it
+    // usually was not, so creating a contactless deal failed with
+    // "Contact does not belong to your organization" — naming a contact the user
+    // never chose. Roles holding visibility.all passed by accident, which is why
+    // this never showed up for an owner. The update path at :383 already guarded
+    // this; only create did not.
+    body.contact_id !== undefined
+      ? contactVisibleToRequester(body.contact_id, orgId, accessibleIds)
+      : Promise.resolve(true),
     pipelineBelongsToOrg(body.pipeline_id, orgId),
     stageBelongsToPipeline(body.stage_id, body.pipeline_id, orgId),
     body.assigned_to !== undefined && body.assigned_to !== requestingUserId

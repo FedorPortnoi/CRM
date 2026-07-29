@@ -1,6 +1,6 @@
 import { TaskStatus } from '@prisma/client';
 import { registerTool, McpUser } from '../server';
-import { requireMcpWrite } from '../validation';
+import { requireMcpToolCapability } from '../validation';
 import {
   listTasksForUser,
   getTaskForUser,
@@ -112,7 +112,7 @@ registerTool(
     required: ['title', 'assigned_to'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'create_task');
     if (writeErr) return writeErr;
 
     const title = typeof args.title === 'string' ? args.title : '';
@@ -158,7 +158,7 @@ registerTool(
     required: ['id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'update_task');
     if (writeErr) return writeErr;
 
     const id = typeof args.id === 'string' ? args.id : '';
@@ -196,7 +196,7 @@ registerTool(
     required: ['id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
-    const writeErr = requireMcpWrite(user);
+    const writeErr = requireMcpToolCapability(user, 'complete_task');
     if (writeErr) return writeErr;
 
     const id = typeof args.id === 'string' ? args.id : '';

@@ -1,14 +1,22 @@
 import { useState, useCallback, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, Linking, Alert, ActionSheetIOS, Platform } from 'react-native';
+import { ActivityIndicator, StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, Linking, Alert, ActionSheetIOS, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { MessageCircle } from 'lucide-react-native';
+import { MessageCircle, Sparkles } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
-import { formatMarketDate, formatMoney } from '../../market/profile';
+import { formatMarketDate, formatMarketTime, formatMoney } from '../../market/profile';
 import AttachmentsSection from '../../components/AttachmentsSection';
 import ContactConsentCard from '../../components/ContactConsentCard';
 import { useAuditLog } from '../../hooks/useAuditLog';
+import {
+  contactAiErrorCode,
+  isContactAiOffCode,
+  roleCanUseContactAi,
+  useAssistantStatus,
+  useContactSummary,
+  type ContactAiErrorCode,
+} from '../../hooks/useContactAi';
 import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors } from '../../theme';
 
@@ -78,6 +86,29 @@ function taskBadgeColor(status: 'pending' | 'in_progress' | 'done' | 'cancelled'
   return c.textMuted;
 }
 
+// The AI summary fails with a CODE; the server's message is operator-facing English
+// («the service account is missing ai.languageModels.user») and is never rendered. An
+// unmapped code falls through to contactAi.failed rather than putting AI_SOMETHING_NEW
+// on screen.
+const AI_ERROR_KEY_BY_CODE: Record<string, string> = {
+  SERVICE_NOT_CONFIGURED: 'contactAi.notConfigured',
+  AI_TIMEOUT: 'contactAi.timeout',
+  AI_RATE_LIMITED: 'contactAi.rateLimited',
+  AI_EMPTY_RESPONSE: 'contactAi.unavailable',
+  AI_INVALID_RESPONSE: 'contactAi.unavailable',
+  AI_REQUEST_FAILED: 'contactAi.unavailable',
+  NOT_FOUND: 'contactAi.notFound',
+  // On this route both mean the id in the URL is not a uuid the server will accept, which
+  // for the person reading the card is the same fact as "no such contact".
+  VALIDATION_ERROR: 'contactAi.notFound',
+  INVALID_ID: 'contactAi.notFound',
+  // Reachable only if the role gate in useContactAi drifts from capabilities.ts — the
+  // POST is refused for a role holding no write capability.
+  FORBIDDEN: 'contactAi.readOnlyRole',
+  UNAUTHORIZED: 'errors.unauthorized',
+  NETWORK_ERROR: 'errors.networkError',
+};
+
 interface SkeletonBoxProps { width: number; height: number; borderRadius?: number; marginRight?: number; marginBottom?: number; }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginRight = 0, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
@@ -90,6 +121,7 @@ export default function ContactDetailScreen(): JSX.Element {
   const styles = makeStyles(colors);
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useUserStore((s) => s.token);
+  const role = useUserStore((s) => s.user?.role);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [contact, setContact] = useState<Contact | null>(null);
@@ -102,6 +134,31 @@ export default function ContactDetailScreen(): JSX.Element {
   const [tasksError, setTasksError] = useState<string | null>(null);
   const { data: auditLog = [] } = useAuditLog('contact', id);
   const headers = { Authorization: 'Bearer ' + token };
+
+  // ── AI summary (POST /api/v1/ai/contacts/:id/summary) ──────────────────────
+  // Held in the mutation, not in state and not in a query: the summary retells this
+  // contact's history, and query results are dehydrated into the plaintext AsyncStorage
+  // cache while mutation results are not.
+  const aiStatus = useAssistantStatus();
+  const summaryMutation = useContactSummary(id);
+  const aiSummary = summaryMutation.data ?? null;
+  const aiErrorCode: ContactAiErrorCode | null = summaryMutation.isError
+    ? contactAiErrorCode(summaryMutation.error)
+    : null;
+  // Rendered only once the provider is known reachable AND this role may POST at all AND
+  // the contact itself has loaded — a summary of a record we could not even read would
+  // just earn the same 404. An unconfirmed probe — still pending, or failed because the
+  // device is offline — counts as "off": on a contact card the summary is an accessory,
+  // so a button that cannot work is worse than no section, and a broken provider gets
+  // diagnosed on the assistant screen, not here.
+  const showAiSection =
+    contact !== null && roleCanUseContactAi(role) && aiStatus.data?.configured === true;
+  // `configured` only reports that the env vars exist. A service account without
+  // ai.languageModels.user answers `true` and fails on the first real attempt — so that
+  // failure has to take the button away too, or it stays an invitation to retry forever.
+  const aiOff = isContactAiOffCode(aiErrorCode);
+  const aiErrorText =
+    aiErrorCode === null ? null : t(AI_ERROR_KEY_BY_CODE[aiErrorCode] ?? 'contactAi.failed');
 
   const fetchAll = useCallback(async (refreshing: boolean, signal?: AbortSignal): Promise<void> => {
     if (refreshing) { setIsRefreshing(true); } else { setIsLoading(true); }
@@ -270,6 +327,76 @@ export default function ContactDetailScreen(): JSX.Element {
             Rendered only once the contact has loaded so `email` is known rather than
             momentarily absent. */}
         {contact ? <ContactConsentCard contactId={contact.id} contactEmail={contact.email} /> : null}
+
+        {/* Above the raw activity feed on purpose: the summary exists to save reading that
+            feed, so placing it under the thing it replaces would bury it. Nothing is
+            generated until asked — every call spends model quota. */}
+        {showAiSection ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('contactAi.title')}</Text>
+            <View style={[styles.card, styles.aiCard]}>
+              {summaryMutation.isPending ? (
+                <>
+                  <View style={styles.aiLoadingRow}>
+                    <ActivityIndicator color={colors.orange} />
+                    <Text style={styles.aiHint}>{t('contactAi.generating')}</Text>
+                  </View>
+                  <Text style={styles.aiNote}>{t('contactAi.generatingHint')}</Text>
+                </>
+              ) : aiSummary ? (
+                <>
+                  <Text style={styles.aiSummaryText} selectable>{aiSummary.summary}</Text>
+                  {aiSummary.next_action ? (
+                    <View style={styles.aiNextAction}>
+                      <Text style={styles.aiNextActionLabel}>{t('contactAi.nextActionLabel')}</Text>
+                      <Text style={styles.aiNextActionText} selectable>{aiSummary.next_action}</Text>
+                    </View>
+                  ) : null}
+                  {/* What the model was actually given, the way the assistant screen shows
+                      what it actually did: prose is not evidence on its own. */}
+                  <Text style={styles.aiNote}>
+                    {t('contactAi.basis', {
+                      deals: aiSummary.context_counts.deals,
+                      tasks: aiSummary.context_counts.tasks,
+                      activities: aiSummary.context_counts.activities,
+                    })}
+                  </Text>
+                  <Text style={styles.aiNote}>
+                    {t('contactAi.generatedAt', {
+                      time: formatMarketTime(aiSummary.generated_at),
+                      provider: aiSummary.provider,
+                    })}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.aiHint}>{t('contactAi.intro')}</Text>
+              )}
+
+              {aiErrorText !== null ? <Text style={styles.errorText}>{aiErrorText}</Text> : null}
+              {aiOff ? <Text style={styles.aiNote}>{t('contactAi.notConfiguredHint')}</Text> : null}
+
+              {!summaryMutation.isPending && !aiOff ? (
+                <TouchableOpacity
+                  style={aiSummary ? styles.aiSecondaryButton : styles.aiButton}
+                  onPress={() => summaryMutation.mutate()}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                >
+                  {aiSummary ? null : <Sparkles size={16} color="#FFFFFF" strokeWidth={2.2} />}
+                  <Text style={aiSummary ? styles.aiSecondaryButtonText : styles.aiButtonText}>
+                    {aiSummary ? t('contactAi.regenerate') : t('contactAi.generate')}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {aiSummary ? <Text style={styles.aiNote}>{t('contactAi.disclaimer')}</Text> : null}
+              {/* True structurally, not by promise: backend/services/contact-ai.ts never
+                  reads the email/phone columns and masks anything phone- or
+                  address-shaped out of the free text (ФЗ-152 ст. 5 ч. 5). */}
+              <Text style={styles.aiNote}>{t('contactAi.privacyNote')}</Text>
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('contacts.activity')}</Text>
@@ -455,6 +582,35 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     gap: 8,
   },
   conversationButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  // AI summary. Same card as every other section; the primary button deliberately
+  // matches conversationButton so the screen keeps one primary-action shape.
+  aiCard: { gap: 10 },
+  aiLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  aiHint: { fontSize: 13, color: c.amber, lineHeight: 19 },
+  aiSummaryText: { fontSize: 15, color: c.text1, lineHeight: 22 },
+  aiNextAction: { borderTopWidth: 1, borderTopColor: c.border, paddingTop: 10, gap: 4 },
+  aiNextActionLabel: { fontSize: 11, fontWeight: '700', color: c.amber, textTransform: 'uppercase', letterSpacing: 0.5 },
+  aiNextActionText: { fontSize: 14, fontWeight: '500', color: c.text1, lineHeight: 20 },
+  aiNote: { fontSize: 11, color: c.textMuted, lineHeight: 16 },
+  aiButton: {
+    minHeight: 44,
+    borderRadius: 12,
+    backgroundColor: c.orange,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  aiButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  aiSecondaryButton: {
+    minHeight: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: c.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiSecondaryButtonText: { color: c.orange, fontSize: 14, fontWeight: '600' },
   activitySummary: { fontSize: 14, color: c.text1, marginBottom: 2 },
   activityDate: { fontSize: 12, color: c.textMuted },
   dealTitle: { fontSize: 15, fontWeight: '600', color: c.text1, marginBottom: 8 },
