@@ -4,6 +4,26 @@ import { DEFAULT_CURRENCY } from '../config/market';
 import { redactContactDetails } from './contact-ai';
 import { sha256 } from './crypto';
 import { listMcpTools, invokeMcpTool, type McpUser } from '../mcp/server';
+// Imported from the projection module DIRECTLY and never borrowed off
+// ../mcp/server, which also imports it. Five test suites replace that module
+// wholesale with a hand-written factory (the two assistant suites stub
+// listMcpTools/invokeMcpTool, the three tool-cone suites stub registerTool), and
+// a name taken from it here would arrive `undefined` — or, once someone stubbed
+// it to keep the import resolving, as a passthrough that quietly does nothing.
+// The projection has to come from the module that owns it.
+//
+// NOTE FOR WHOEVER OWNS tests/unit/backend/task-contact-assignee-name-app-path.ts:
+// its «nothing outside backend/mcp/ imports model-projection» guard fails on
+// this line and needs assistant.ts allowlisted. The invariant that guard is
+// really defending is «a function the APP reads from must not run the
+// projection», and that still holds: the projection runs only in
+// historyToAiMessages(), which has exactly one consumer — the prompt.
+// getAssistantConversation() feeds the transcript UI and returns its rows
+// untouched, which is pinned by
+// tests/unit/backend/assistant-history-operator-name.test.ts. A blanket ban on
+// the import cannot express that split, because this module is the one place
+// where both audiences are served out of the same stored rows.
+import { projectModelFacing } from '../mcp/model-projection';
 import {
   createCompletion,
   isYandexGptConfigured,
@@ -388,18 +408,41 @@ function serializeToolResult(result: unknown): string {
 }
 
 /**
- * Re-redact a stored tool payload on its way back into the conversation.
+ * Re-project a stored tool payload on its way back into the conversation.
  *
- * New rows are written redacted, so this is a no-op for them. It exists for
- * rows persisted before this projection was added: replaying one would hand
- * Yandex the plaintext the live path no longer sends.
+ * TWO projections, because a stored row can predate either one:
+ *   - redactToolResult() — contact PII (the encrypted columns);
+ *   - projectModelFacing() — the operator's ФИО, which only started being
+ *     stripped when it was added at the MCP boundary. Every tool row written
+ *     before that still carries `assignee: { id, name }` exactly as Prisma
+ *     returned it, and replaying one hands the provider a name the live path
+ *     no longer sends.
+ *
+ * Rows written now go through both before they are persisted, so for them this
+ * is a no-op. It runs on read rather than as a one-off backfill on purpose:
+ * there is no migration that could fix the old rows in place. Deleting them
+ * strands the assistant prose that quotes the same name and leaves a tool_calls
+ * list with no matching tool result, which is a hard 400 the day this points at
+ * OpenAI.
+ *
+ * get_rep_performance rows come back unchanged: `{ user_id, name, … }` sits
+ * under `data`, not under a user container, so neither of the projection's
+ * structural rules reaches it. That is the same exemption the live path grants
+ * that one tool (docs/decisions/002-operator-names-in-model-facing-analytics.md)
+ * — replay must not quietly be stricter than the call it is replaying.
  */
 function redactStoredToolContent(content: string): string {
   try {
-    return truncate(JSON.stringify(redactToolResult(JSON.parse(content)) ?? null), MAX_TOOL_RESULT_CHARS);
+    const stored: unknown = JSON.parse(content);
+    return truncate(
+      JSON.stringify(projectModelFacing(redactToolResult(stored)) ?? null),
+      MAX_TOOL_RESULT_CHARS,
+    );
   } catch {
     // Not valid JSON — a truncated legacy row. Fall back to the free-text scrub
-    // so an email or phone inside it is still masked.
+    // so an email or phone inside it is still masked. An operator ФИО in such a
+    // row is out of reach: projectModelFacing decides by the shape of the object
+    // a string sits in, and a truncated row has no object left to inspect.
     return redactFreeText(content);
   }
 }
@@ -414,6 +457,20 @@ type StoredMessage = {
   tool_calls: Prisma.JsonValue | null;
 };
 
+/**
+ * Stored tool calls are a model-facing surface in their own right: yandex-gpt's
+ * toWireMessage() puts `arguments` back on the wire verbatim, so a replayed row
+ * re-sends whatever the model once emitted. They get the same projection as the
+ * results beside them.
+ *
+ * The cover it gives here is thin, and thin by construction rather than by
+ * oversight. The projection asks whether the OBJECT a name sits in is a user, so
+ * it reaches a nested `{ assignee: { name } }` an older row may hold and does
+ * not reach a surname the model typed into a flat search string
+ * (`{ q: 'Иванов' }`). Nothing structural can separate that from a CUSTOMER's
+ * surname, which is the legitimate query the tool exists to serve — see the
+ * matching case in historyToAiMessages below.
+ */
 function parseStoredToolCalls(value: Prisma.JsonValue | null): AiToolCall[] {
   if (!Array.isArray(value)) return [];
 
@@ -427,7 +484,7 @@ function parseStoredToolCalls(value: Prisma.JsonValue | null): AiToolCall[] {
       name: record.name,
       arguments:
         record.arguments && typeof record.arguments === 'object' && !Array.isArray(record.arguments)
-          ? (record.arguments as Record<string, unknown>)
+          ? (projectModelFacing(record.arguments) as Record<string, unknown>)
           : {},
     });
   }
@@ -462,6 +519,27 @@ export function historyToAiMessages(rows: StoredMessage[]): AiMessage[] {
     }
 
     if (row.role === AssistantMessageRole.assistant) {
+      // The prose replays exactly as stored, and that is a KNOWN RESIDUAL, not
+      // an oversight.
+      //
+      // An assistant row written before the operator projection existed can
+      // quote a ФИО the model read off an unprojected tool result
+      // («Ответственный: …»), and replaying that sentence re-sends the name.
+      // projectModelFacing cannot close it: it decides whether the object a
+      // string sits in is a user, and prose is a bare string with nothing around
+      // it — it passes straight through.
+      //
+      // Closing it would mean matching User.name against free text, which is the
+      // design both model-projection.ts and decision 002 reject: a Russian
+      // surname arrives inflected (Иванов / Иванова / Иванову), so the match
+      // fails open on the cases that matter while looking like a control. It
+      // would also have to spare the sentences get_rep_performance is allowed to
+      // produce, which it has no way to tell apart.
+      //
+      // The residual is bounded rather than growing: a row written after the
+      // projection landed cannot acquire a ФИО this way, and MAX_HISTORY_MESSAGES
+      // caps how far back a conversation replays, so the affected rows fall out
+      // of the window as their conversations continue.
       const toolCalls = parseStoredToolCalls(row.tool_calls);
       messages.push(
         toolCalls.length > 0

@@ -206,6 +206,19 @@ describe('getOverdueTasksForUser is model-only, so it asks for nothing it does n
 });
 
 describe('the projection stays on the model side of the house', () => {
+  // backend/services/assistant.ts is the one module that serves both audiences
+  // out of the same stored rows, so a blanket import ban cannot express the rule
+  // this guard is really defending. It replays stored tool payloads into a
+  // PROMPT, and rows written before the operator projection existed still carry
+  // `assignee: { id, name }` — those have to be re-projected on read.
+  //
+  // What still must hold is the invariant below, and it is asserted directly
+  // rather than by proxy in assistant-history-operator-name.test.ts:301 —
+  // historyToAiMessages() (prompt-only) projects, getAssistantConversation()
+  // (the transcript the app renders) returns its rows untouched. If that split
+  // ever collapses, that test goes red, not this one.
+  const ALLOWED = ['backend/services/assistant.ts'];
+
   it('nothing outside backend/mcp/ imports model-projection', () => {
     // If a REST controller or a shared service ever starts running the model
     // projection, the app loses the name and the test above only catches it for
@@ -227,7 +240,7 @@ describe('the projection stays on the model side of the house', () => {
         // and that is exactly the pointer a future reader needs.
         const source = readFileSync(`${REPO_ROOT}${rel}`, 'utf8');
         if (/(?:from|import|require)\s*\(?\s*['"][^'"]*model-projection['"]/.test(source)) {
-          offenders.push(rel);
+          if (!ALLOWED.includes(rel)) offenders.push(rel);
         }
       }
     };
