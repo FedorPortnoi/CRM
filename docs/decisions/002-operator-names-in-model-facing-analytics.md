@@ -376,7 +376,20 @@ point the app at `https://4kub.ru/api/v1` and `wss://4kub.ru` (`eas.json`);
 private and local hosts rejected (`:404-412`) — alongside `JWT_SECRET`, `TOKEN_ENCRYPTION_KEY`,
 `YANDEX_WEBHOOK_SECRET` and a CORS allowlist; and `PROJECT_KNOWLEDGE.md` names that database as
 Yandex Cloud Managed PostgreSQL (`ru-central1`) and records 1.0.4 live in the App Store with 1.0.5
-submitted. There is a production database and there is a live service.
+submitted. There is a production database — this record's author has queried it.
+
+Whether there is a live *service* is a third thing, and measurement on 2026-07-28 says
+no: `4kub.ru` resolves to `111.88.149.122`, an address outside every Yandex Cloud range
+this project uses, and refuses TCP on **both** 443 and 80 from a machine whose
+connection to the project's own VM succeeds at the same moment. So the configuration is
+production-shaped and the store listing is real, but the endpoint the shipped app is
+built against does not answer.
+
+That is left stated rather than resolved, because the two readings have opposite
+consequences and only the owner can say which holds: either a released app is pointing
+at a dead backend, or `PROJECT_KNOWLEDGE.md`'s release claims are themselves aspirational
+— which would make this the fourth documentation claim in this pass that the tree does
+not support. Do not build a ФЗ-152 argument on either reading until it is settled.
 
 What is true is narrower, and it is about this surface rather than about the system: the assistant
 and its MCP tool layer landed in `d0e0fef` on 2026-07-25, six days after 1.0.5 went to Apple, so
