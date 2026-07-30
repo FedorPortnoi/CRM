@@ -233,6 +233,8 @@ model User {
   createdSequences        Sequence[]             @relation("SequenceCreatedBy")
   sequenceEnrollments     SequenceEnrollment[]   @relation("SequenceEnrollmentEnrolledBy")
   assistantConversations  AssistantConversation[] @relation("AssistantConversationUser")
+  createdInvites          Invite[]               @relation("InviteCreatedBy")
+  acceptedInvite          Invite[]               @relation("InviteAcceptedBy")
 
   // Employees log in by username, which only needs to be unique inside their org.
   @@unique([organization_id, username])
@@ -282,6 +284,7 @@ model Org {
   emailSends             EmailSend[]
   assistantConversations AssistantConversation[]
   assistantMessages      AssistantMessage[]
+  invites                Invite[]
 
   @@map("organizations")
 }
@@ -683,6 +686,67 @@ model Attachment {
   organization Org   @relation(fields: [organization_id], references: [id])
   uploader     User? @relation("AttachmentUploader", fields: [uploaded_by], references: [id])
   @@index([organization_id, entity_type, entity_id])
+}
+
+/// A pending co-worker invitation, delivered as a link.
+///
+/// No User row exists until the invite is accepted. A half-created account
+/// sitting in the team list with no credentials is a login target nobody is
+/// watching; keeping the pending state here means an unaccepted invite cannot be
+/// signed into, only redeemed.
+///
+/// THREE SECRETS, because the link has to survive three different journeys:
+///
+///   token_hash     the link itself. 32 bytes, carried in the URL FRAGMENT so it
+///                  never reaches nginx logs, Referer headers, or the link-preview
+///                  bots that fetch every URL posted into a messenger.
+///   handoff_hash   minted when the landing page opens. Rides through the store
+///                  install as the RuStore `referrerId`, or via the clipboard on
+///                  iOS. Separate from the link token because this one DOES travel
+///                  in a query string to rustore.ru and lands in their logs.
+///   claim_hash     six typeable characters, the floor for when every automatic
+///                  path fails. Short-lived precisely because it is short.
+///
+/// All three are stored as SHA-256. Reading this table gives an attacker nothing
+/// to redeem.
+model Invite {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String    @db.Uuid
+  /// Whom the owner typed in. Shown on the landing page so the recipient can tell
+  /// a real invite from a forwarded one meant for somebody else.
+  name            String
+  /// Bound at mint. The recipient never sends a role, or the link becomes an
+  /// escalation primitive for whoever forwards it.
+  role            UserRole
+  created_by      String    @db.Uuid
+
+  token_hash       String    @unique
+  /// Traded for a lookup only. Never resolves an accept — see invites.ts.
+  handoff_hash     String?   @unique
+  claim_hash       String?
+  claim_expires_at DateTime?
+  /// Minted by a successful lookup, spent by accept. Its own column so that a
+  /// secret which has been through RuStore's logs or the clipboard can never
+  /// create an account on its own.
+  accept_hash      String?   @unique
+  accept_expires_at DateTime?
+
+  expires_at      DateTime
+  /// First open of the landing page. Also the moment the handoff pair is minted.
+  opened_at       DateTime?
+  /// Set when credentials are accepted. Consumption is atomic on this column.
+  consumed_at     DateTime?
+  user_id         String?   @db.Uuid
+  revoked_at      DateTime?
+
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  organization Org   @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  creator      User  @relation("InviteCreatedBy", fields: [created_by], references: [id])
+  user         User? @relation("InviteAcceptedBy", fields: [user_id], references: [id])
+
+  @@index([organization_id, consumed_at])
 }
 
 model VerificationCode {

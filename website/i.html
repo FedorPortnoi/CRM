@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Приглашение — 4КУБ</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0E0E0D">
+<!-- The token lives in the URL fragment, which is never sent to a server. This
+     header closes the one remaining way it could escape the page: an outbound
+     request carrying the full URL in Referer. There are no third-party assets
+     here for exactly the same reason. -->
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='5' fill='%230E0E0D'/><path d='M12 4.5 19 8v8l-7 3.5L5 16V8l7-3.5Z' fill='none' stroke='%23CC785C' stroke-width='1.6' stroke-linejoin='round'/></svg>">
+<link rel="stylesheet" href="/css/base.css?v=2">
+<link rel="stylesheet" href="/css/invite.css?v=1">
+</head>
+<body>
+
+<div class="iv-shell">
+  <div class="iv-veil" aria-hidden="true"></div>
+
+  <a class="iv-brand" href="/">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2.5 21 7v10l-9 4.5L3 17V7l9-4.5Z" stroke="#CC785C" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M3 7l9 4.5L21 7M12 11.5V21.5" stroke="#CC785C" stroke-width="1.5" stroke-linejoin="round" opacity=".55"/>
+    </svg>
+    <span>4КУБ</span>
+  </a>
+
+  <!-- ═══════════ LOADING ═══════════ -->
+  <main class="iv-body" id="view-loading">
+    <div class="spinner spinner-lg" aria-hidden="true"></div>
+    <p class="iv-sub">Проверяем приглашение…</p>
+  </main>
+
+  <!-- ═══════════ INVITE ═══════════ -->
+  <main class="iv-body" id="view-invite" hidden>
+    <p class="iv-eyebrow">Приглашение в команду</p>
+    <h1 class="iv-title" id="iv-name">—</h1>
+    <p class="iv-sub">
+      вас приглашают в <strong id="iv-org">—</strong><br>
+      роль: <span class="iv-role" id="iv-role">—</span>
+    </p>
+
+    <div class="iv-steps">
+      <div class="iv-step"><span class="iv-num">1</span> Установите приложение</div>
+      <div class="iv-step"><span class="iv-num">2</span> Откройте его и укажите телефон, email и пароль</div>
+    </div>
+
+    <a class="btn btn-primary btn-lg btn-full iv-store" id="iv-store" href="#" rel="noopener">
+      <span id="iv-store-label">Установить приложение</span>
+    </a>
+
+    <!-- The floor. Every automatic path above can fail; this one is six
+         characters a person can retype. Shown collapsed so it does not compete
+         with the button that usually makes it unnecessary. -->
+    <details class="iv-fallback">
+      <summary>Приложение уже установлено или код не подхватился?</summary>
+      <p class="iv-fallback-text">
+        Откройте 4КУБ и введите этот код на экране приглашения:
+      </p>
+      <div class="iv-code" id="iv-claim">——————</div>
+      <p class="iv-fallback-note">Код действует 15 минут.</p>
+    </details>
+
+    <p class="iv-legal">
+      Продолжая, вы соглашаетесь с <a href="/privacy">политикой конфиденциальности</a>.
+    </p>
+  </main>
+
+  <!-- ═══════════ DEAD LINK ═══════════ -->
+  <main class="iv-body" id="view-dead" hidden>
+    <div class="iv-mark iv-mark-dead" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 8v5m0 3.5v.5M12 3 2 20h20L12 3Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <h1 class="iv-title" tabindex="-1">Ссылка недействительна</h1>
+    <p class="iv-sub" id="iv-dead-text">
+      Приглашение истекло, уже использовано или было отозвано.
+      Попросите руководителя прислать новое.
+    </p>
+    <a class="btn btn-ghost btn-lg" href="/">На главную</a>
+  </main>
+</div>
+
+<script>
+/* ==========================================================================
+   Invite landing.
+
+   THE TOKEN IS IN THE FRAGMENT. `location.hash` is never transmitted, so it
+   reaches the backend only in the POST body below — not in nginx's access log,
+   not in a Referer header, and not to the link-preview crawlers that fetch every
+   URL the moment it is pasted into a messenger.
+
+   Contract, must match backend/api/controllers/invites.ts:
+     POST /api/v1/auth/invites/open  { token } → { name, role, org_name,
+       claim_code, handoff, store: { android, ios } }
+   Neither claim_code nor handoff can create an account on its own; both are
+   only redeemable at /invites/lookup, which mints the separate accept token.
+   ========================================================================== */
+const API = '/api/v1';
+
+const ROLE_LABELS = {
+  owner: 'Владелец', admin: 'Администратор', head: 'Руководитель отдела',
+  member: 'Менеджер', accountant: 'Бухгалтер', marketer: 'Маркетолог',
+  support: 'Поддержка', viewer: 'Наблюдатель',
+};
+
+function show(id) {
+  for (const v of ['view-loading', 'view-invite', 'view-dead']) {
+    document.getElementById(v).hidden = v !== id;
+  }
+}
+
+function isIOS() {
+  // iPadOS 13+ reports itself as a Mac, so the touch check is not optional.
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+(async () => {
+  const token = window.location.hash.slice(1);
+
+  // Drop the token out of the address bar as soon as it is read, so it is not
+  // in a screenshot, a shared tab, or the browser's own history entry.
+  history.replaceState(null, '', window.location.pathname);
+
+  if (!token) { show('view-dead'); return; }
+
+  let data;
+  try {
+    const res = await fetch(API + '/auth/invites/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    if (!res.ok) { show('view-dead'); return; }
+    ({ data } = await res.json());
+  } catch {
+    document.getElementById('iv-dead-text').textContent =
+      'Не удалось связаться с сервером. Проверьте соединение и откройте ссылку снова.';
+    show('view-dead');
+    return;
+  }
+
+  document.getElementById('iv-name').textContent = data.name;
+  document.getElementById('iv-org').textContent = data.org_name;
+  document.getElementById('iv-role').textContent = ROLE_LABELS[data.role] || data.role;
+  document.getElementById('iv-claim').textContent = data.claim_code;
+
+  const ios = isIOS();
+  const store = document.getElementById('iv-store');
+  store.href = ios ? data.store.ios : data.store.android;
+  document.getElementById('iv-store-label').textContent =
+    ios ? 'Установить в App Store' : 'Установить в RuStore';
+
+  /* On Android the handoff rides the install as ?referrerId= and the clipboard
+     is not needed. On iOS there is no install-referrer API at all, so the
+     clipboard is the fallback the app reads on first launch — and if the user
+     clears it on the way, the claim code above still works. */
+  if (ios) {
+    store.addEventListener('click', () => {
+      navigator.clipboard?.writeText(data.handoff).catch(() => {});
+    });
+  }
+
+  show('view-invite');
+})();
+</script>
+
+</body>
+</html>

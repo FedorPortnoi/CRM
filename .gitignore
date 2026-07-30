@@ -89,3 +89,17 @@ expo-env.d.ts
 
 # Claude Code local scratch / worktrees (~85MB, never commit)
 .claude/
+
+# Signing and publishing credentials. Named individually below for history, but
+# these globs are what actually stop the next one: eas.json points Android
+# submit at ./google-play-service-account.json, a path nothing covered until
+# this line — so creating that file to make submission work would have pushed a
+# Play publishing key to a PUBLIC repo.
+*service-account*.json
+*.p8
+*.jks
+*.keystore
+credentials.json
+id_rsa*
+*.key
+backend-log.txt

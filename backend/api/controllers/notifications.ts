@@ -41,10 +41,30 @@ async function registerToken(request: FastifyRequest, reply: FastifyReply): Prom
     return;
   }
 
+  // De-duplication is scoped to the caller's org. A push token identifies a
+  // device, not a person, so the same token must not stay attached to a second
+  // user who no longer holds that device — otherwise this org's notifications
+  // keep landing on it. Inside the org the caller is a member, so clearing a
+  // colleague's stale row is an authorized write.
+  //
+  // It must NOT reach across orgs. Knowing a token string is not proof of
+  // holding the device: without organization_id here, anyone in any org could
+  // POST a victim's Expo/FCM token and null it out, silently killing the
+  // victim's push notifications from a tenant they have no relationship with.
+  //
+  // SECURITY TODO: that leaves the legitimate case where a device really does
+  // move between orgs (an employee leaves org A, joins org B, same phone) —
+  // org A's row keeps the token and org A keeps pushing to a device someone
+  // else now uses. The DEVICE_NOT_REGISTERED receipt path below only clears it
+  // once the app is uninstalled, not on a re-login. That case cannot be closed
+  // from this handler without re-introducing the unauthenticated cross-tenant
+  // write; the fix belongs where possession IS provable — clearing push_token
+  // on logout/deactivation, or a proof-of-possession challenge push.
   const [clearedDuplicates] = await db.$transaction([
     db.user.updateMany({
       where: {
         push_token: token,
+        organization_id: request.user.org_id,
         id: { not: request.user.sub },
       },
       data: { push_token: null },

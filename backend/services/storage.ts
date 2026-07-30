@@ -63,6 +63,34 @@ export function getPublicUrl(key: string): string {
 }
 
 /**
+ * Fully percent-decode a key, or null if it cannot be decoded.
+ *
+ * Decoding is repeated until it reaches a fixed point so a double-encoded
+ * traversal (`%252e%252e`) cannot survive a single pass, and a malformed escape
+ * is treated as invalid rather than ignored — buildKey never emits `%`, so a key
+ * we minted always decodes to itself.
+ */
+function fullyDecodeKey(key: string): string | null {
+  let current = key;
+  for (let i = 0; i < 4; i++) {
+    let next: string;
+    try {
+      next = decodeURIComponent(current);
+    } catch {
+      return null; // malformed percent-escape — never a key we minted
+    }
+    if (next === current) return current;
+    current = next;
+  }
+  return null; // pathologically nested encoding — not a key we minted
+}
+
+/** True if any `/`- or `\`-separated segment of the key is a `..` traversal. */
+function hasTraversalSegment(key: string): boolean {
+  return key.split(/[/\\]/).includes('..');
+}
+
+/**
  * Derive the S3 object key from a stored file_url and verify it belongs to the
  * given org. Returns the key ONLY when the URL points at this app's own storage
  * endpoint + bucket AND the key lives under this org's prefix
@@ -70,18 +98,37 @@ export function getPublicUrl(key: string): string {
  * URL that fails these checks: an external/arbitrary host, a different bucket,
  * or another tenant's object. Used to reject cross-tenant / external file_url
  * values on create and to gate cross-tenant S3 deletes.
+ *
+ * The prefix test alone is not enough: `uploads/<myOrg>/../<victimOrg>/x`
+ * starts with this org's prefix but resolves out of it once any consumer
+ * normalises the path per RFC 3986 (and `%2e%2e` behaves identically). Such a
+ * key is rejected outright rather than sanitised — buildKey cannot produce a
+ * `..` segment, so a key containing one is never legitimate.
  */
 export function deriveOrgScopedKey(fileUrl: string, orgId: string): string | null {
   const endpoint = process.env.S3_ENDPOINT ?? 'https://storage.yandexcloud.net';
   const prefix = `${endpoint}/${getBucket()}/`;
   if (!fileUrl.startsWith(prefix)) return null;
   const key = fileUrl.slice(prefix.length);
-  if (!key.startsWith(`uploads/${orgId}/`)) return null;
+
+  const decoded = fullyDecodeKey(key);
+  if (decoded === null) return null;
+  if (hasTraversalSegment(key) || hasTraversalSegment(decoded)) return null;
+
+  // Both forms must sit under the org prefix, so an escape hidden in the
+  // encoding cannot pass the check in one form and resolve in the other.
+  const orgPrefix = `uploads/${orgId}/`;
+  if (!key.startsWith(orgPrefix) || !decoded.startsWith(orgPrefix)) return null;
   return key;
 }
 
 export function buildKey(orgId: string, entityType: string, filename: string): string {
-  const ext = filename.includes('.') ? filename.slice(filename.lastIndexOf('.')) : '';
+  const rawExt = filename.includes('.') ? filename.slice(filename.lastIndexOf('.')) : '';
+  // The extension gets the same charset filter as the base name. Untouched it
+  // could carry a `%` (a filename like `Q3 margin 12.5%` has extension `.5%`),
+  // which deriveOrgScopedKey reads as a malformed percent-escape and rejects —
+  // a key we minted ourselves must always survive that check.
+  const ext = rawExt.replace(/[^a-zA-Z0-9._-]/g, '_');
   const baseName = filename.slice(0, filename.lastIndexOf('.') > -1 ? filename.lastIndexOf('.') : filename.length);
   const safeName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
   const uuid = crypto.randomUUID();

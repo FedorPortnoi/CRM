@@ -15,10 +15,15 @@
  *
  * Consent lives on the Contact and is org-wide: an unsubscribe stops every sequence in the
  * organization, not just the one whose message triggered it.
+ *
+ * The two directions are NOT symmetric. Granting is capability-gated
+ * (GRANT_CONSENT_CAPABILITY) because it is the act that reverses a refusal; withdrawing is
+ * ungated and must stay that way. Opting out is never made harder than opting in.
  */
 
 import crypto from 'node:crypto';
 import { SequenceEnrollmentStatus } from '@prisma/client';
+import { can, type Capability } from './capabilities';
 import { db } from './db';
 import { decryptField } from './encryption';
 import { ownerVisibilityWhere } from './visibility';
@@ -40,6 +45,32 @@ export type ConsentSource = (typeof CONSENT_SOURCES)[number];
 
 export const UNSUBSCRIBE_TOKEN_ENTROPY_BYTES = 32;
 
+/**
+ * The capability required to GRANT marketing consent — i.e. to write the record that makes
+ * a mailing lawful, and, on a contact who previously opted out, to clear `unsubscribed_at`
+ * and put them back in scope.
+ *
+ * Why `sequences.manage` and not `contacts.write` (which is what used to guard this by
+ * accident): granting consent is not contact bookkeeping, it is an act on the marketing
+ * surface with a per-message fine attached. `contacts.write` is held by member (менеджер),
+ * head (РОП) and support — roles whose job never involves a mailing, and any one of whom
+ * could reverse a recipient's legal refusal by POSTing a free-text `source`.
+ * `sequences.manage` is held by owner, admin and marketer: exactly the roles that may
+ * create and run the sequences this consent authorises.
+ *
+ * Why not `org.manage` (owner + admin only, and narrower still): that capability means
+ * "organisation settings, join code, plan" — a different axis entirely. Using it would lock
+ * out marketer, the one role whose actual job is collecting consent at a form or an event
+ * and recording it, leaving a role that may send the mailing but not record the evidence
+ * that legalises it. `sequences.manage` is the narrowest capability whose MEANING is this
+ * surface.
+ *
+ * WITHDRAWAL IS DELIBERATELY NOT GATED. ФЗ-38 art. 18 requires refusal to be immediate and
+ * effortless; opting out must never be harder than opting in, so `withdrawMarketingConsent`
+ * and the public token link stay open to everyone who can reach them.
+ */
+export const GRANT_CONSENT_CAPABILITY: Capability = 'sequences.manage';
+
 /** base64url alphabet, length-bounded — cheap rejection before the token reaches the DB. */
 const UNSUBSCRIBE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{20,128}$/;
 
@@ -60,6 +91,18 @@ export class InvalidUnsubscribeTokenError extends Error {
   constructor(message = 'Unsubscribe link is invalid or has expired') {
     super(message);
     this.name = 'InvalidUnsubscribeTokenError';
+  }
+}
+
+/** Raised when a role without GRANT_CONSENT_CAPABILITY tries to record consent. */
+export class ConsentGrantForbiddenError extends Error {
+  readonly code = 'FORBIDDEN';
+
+  constructor(
+    message = 'Recording marketing consent requires a role that manages email sequences',
+  ) {
+    super(message);
+    this.name = 'ConsentGrantForbiddenError';
   }
 }
 
@@ -355,12 +398,29 @@ export async function getConsentState(
 }
 
 /**
+ * May this role record consent? The GRANTING direction only — see
+ * GRANT_CONSENT_CAPABILITY for why it is gated and why withdrawal is not.
+ *
+ * Lives here rather than in the controller so the capability choice sits with the ledger it
+ * protects, and so both the HTTP gate and the service check ask one question.
+ */
+export function canGrantMarketingConsent(role: string | null | undefined): boolean {
+  return can(role, GRANT_CONSENT_CAPABILITY);
+}
+
+/**
  * Record consent. `source` and `consentedAt` ARE the legal evidence — they are stored
  * verbatim and never inferred.
  *
  * Recording consent for a contact who previously unsubscribed clears `unsubscribed_at`:
  * this call represents a fresh, later act of consent, and the new timestamp/source is what
- * evidences it. The caller is responsible for only doing that on a real re-opt-in.
+ * evidences it. The caller is responsible for only doing that on a real re-opt-in — which
+ * is exactly why `actorRole` is checked here as well as at the route.
+ *
+ * `actorRole` is checked whenever the KEY IS PRESENT, including when it is explicitly
+ * `undefined`: a request-driven caller that forgets to read the role off `request.user`
+ * then fails closed rather than granting. Omitting the key entirely marks a call that has
+ * no acting user at all (seeds, migrations) and skips the check.
  */
 export async function recordMarketingConsent(input: {
   contactId: string;
@@ -368,7 +428,12 @@ export async function recordMarketingConsent(input: {
   source: string;
   consentedAt?: Date;
   accessibleUserIds?: string[] | null;
+  actorRole?: string | null;
 }): Promise<ConsentState> {
+  if ('actorRole' in input && !canGrantMarketingConsent(input.actorRole)) {
+    throw new ConsentGrantForbiddenError();
+  }
+
   const contact = await loadContactForConsent(input.contactId, input.organizationId, {
     accessibleUserIds: input.accessibleUserIds,
   });

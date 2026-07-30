@@ -1,19 +1,23 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { ContactStatus, DealStatus, Prisma, TaskStatus } from '@prisma/client';
+import { ContactStatus, DealStatus, Prisma } from '@prisma/client';
 import { db } from '../../services/db';
 import { paginate } from '../../services/db-paginate';
 import { decryptField } from '../../services/encryption';
 import { getContactIdsLastContactedBefore, getLastContactedMap } from '../../services/lastContacted';
 import {
   getVisibleUserIds,
+  getAccessibleUserIds,
   ownerVisibilityWhere,
   type VisibilityScope,
+  type Requester,
 } from '../../services/visibility';
 import { contactBlindIndexClauses, buildContactPhoneSearchWhere } from '../../services/contact-search';
 import { findNearbyContacts } from '../../services/nearby';
 import { importCsvRows, type ContactImportRow } from '../../services/contact-import';
 import { userBelongsToOrg, bulkAssignContacts, bulkArchiveContacts } from '../../services/contact-bulk';
-import { getContactTimeline } from '../../services/contact-timeline';
+import { getContactTimeline, type TimelineItem } from '../../services/contact-timeline';
+import { listDealsForUser } from '../../services/deal-domain';
+import { listTasksForUser } from '../../services/task-domain';
 import { scanBusinessCard, ServiceNotConfiguredError, type BusinessCardBody } from '../../services/contact-recognition';
 import {
   getContactForUser,
@@ -116,6 +120,83 @@ async function findContactIdsByPlaintextPhone(orgId: string, searchKeys: Set<str
   `);
 
   return rows.map((row) => row.id);
+}
+
+// The child routes below (/:id/deals, /:id/tasks) have no pagination in their
+// contract — src/app/contact/[id].tsx reads `data` as a plain array — so the
+// shared list helpers are asked for a single page large enough to be one. Stated
+// explicitly rather than inheriting their 20-row default, which would silently
+// truncate a busy contact.
+const CONTACT_CHILDREN_PAGE_SIZE = 500;
+
+/**
+ * Drop timeline entries whose owner sits outside the caller's cone.
+ *
+ * getContactTimeline() is org-scoped and takes no requester, so a contact the
+ * caller may legitimately see used to hand back every message, task and meeting
+ * attached to it, including another branch's. The filtering happens on the way
+ * out rather than by widening that service's signature.
+ *
+ * Rows with a NULL owner are KEPT. An inbound message has no user_id at all —
+ * the capture-match path in captures.ts writes exactly such a Message — and an
+ * imported meeting has no created_by; both belong to the contact rather than to
+ * an operator, and the contact is already inside the cone by the time we get
+ * here. That is the one place this differs from the org-wide feeds, where a NULL
+ * owner is attributable to nobody and the row is excluded.
+ */
+async function filterTimelineToCone(
+  requester: Requester,
+  items: TimelineItem[],
+): Promise<TimelineItem[]> {
+  const accessibleIds = await getAccessibleUserIds(requester);
+
+  // owner/admin and every role holding visibility.all — no per-user restriction.
+  if (accessibleIds === null) {
+    return items;
+  }
+
+  const idsOfType = (type: TimelineItem['type']): string[] =>
+    items.filter((item) => item.type === type).map((item) => item.id);
+
+  const messageIds = idsOfType('message');
+  const taskIds = idsOfType('task');
+  const eventIds = idsOfType('meeting');
+
+  const [messages, tasks, events] = await Promise.all([
+    messageIds.length > 0
+      ? db.message.findMany({
+          where: {
+            id: { in: messageIds },
+            organization_id: requester.org_id,
+            OR: [{ user_id: null }, { user_id: { in: accessibleIds } }],
+          },
+          select: { id: true },
+        })
+      : Promise.resolve([]),
+    taskIds.length > 0
+      ? db.task.findMany({
+          where: {
+            id: { in: taskIds },
+            organization_id: requester.org_id,
+            assigned_to: { in: accessibleIds },
+          },
+          select: { id: true },
+        })
+      : Promise.resolve([]),
+    eventIds.length > 0
+      ? db.calendarEvent.findMany({
+          where: {
+            id: { in: eventIds },
+            organization_id: requester.org_id,
+            OR: [{ created_by: null }, { created_by: { in: accessibleIds } }],
+          },
+          select: { id: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const visibleIds = new Set([...messages, ...tasks, ...events].map((row) => row.id));
+  return items.filter((item) => visibleIds.has(item.id));
 }
 
 // Blind-index lookup for encrypted phone/mobile. Org-scoped here as well as in
@@ -404,8 +485,12 @@ export const ContactsController = {
       throw err;
     }
 
+    // Seeing the contact is not the same as seeing everything hung off it: the
+    // timeline is assembled org-wide, so it is coned before it goes out.
     const timeline = await getContactTimeline(request.user.org_id, id);
-    return reply.send({ data: timeline });
+    const items = await filterTimelineToCone(request.user, timeline.items);
+
+    return reply.send({ data: { ...timeline, items } });
   },
 
   getDeals: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -420,12 +505,14 @@ export const ContactsController = {
       throw err;
     }
 
-    const deals = await db.deal.findMany({
-      where: { contact_id: id, organization_id: request.user.org_id },
-      include: {
-        pipeline: { select: { id: true, name: true } },
-        stage: { select: { id: true, name: true, position: true } },
-      },
+    // The contact being visible never made every deal on it visible — this used to
+    // return another branch's deal, value and all, to anyone who knew the contact
+    // id. listDealsForUser applies the same cone GET /deals does; 'subtree' so the
+    // reach matches the one getContactForUser just used on the contact itself.
+    const { data: deals } = await listDealsForUser(request.user.org_id, request.user, {
+      contact_id: id,
+      scope: 'subtree',
+      per_page: CONTACT_CHILDREN_PAGE_SIZE,
     });
 
     return reply.send({ data: deals });
@@ -443,13 +530,13 @@ export const ContactsController = {
       throw err;
     }
 
-    const tasks = await db.task.findMany({
-      where: {
-        contact_id: id,
-        organization_id: request.user.org_id,
-        status: { not: TaskStatus.cancelled },
-      },
-      orderBy: { due_date: 'asc' },
+    // Same leak as getDeals above, on the tasks side. listTasksForUser reproduces
+    // this query exactly — omitting `status` gives it the same `{ not: cancelled }`
+    // filter and the same due_date-ascending order — and adds the cone.
+    const { data: tasks } = await listTasksForUser(request.user.org_id, request.user, {
+      contact_id: id,
+      scope: 'subtree',
+      per_page: CONTACT_CHILDREN_PAGE_SIZE,
     });
 
     return reply.send({ data: tasks });

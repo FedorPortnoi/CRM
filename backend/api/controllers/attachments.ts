@@ -32,12 +32,16 @@ const UploadUrlSchema = z.object({
   size: z.number().int().positive(),
 });
 
+// Mirrors UploadUrlSchema's caps. This route records the metadata for a file
+// the upload route already gated, so anything the upload route refuses must be
+// refused here too — otherwise the caps are bypassable by calling POST
+// /attachments directly with a fabricated filename or MIME type.
 const CreateAttachmentSchema = z.object({
   entity_type: z.enum(['contact', 'deal', 'task', 'calendar_event']),
   entity_id: z.string().uuid(),
-  filename: z.string().min(1),
+  filename: z.string().min(1).max(255),
   file_url: z.string().url().refine(isSafePublicUrl, { message: 'file_url must be a public http/https URL' }),
-  mime_type: z.string().optional(),
+  mime_type: z.string().min(1).refine(isAllowedUploadMimeType, { message: 'File type is not allowed' }).optional(),
   size: z.number().int().positive().optional(),
 });
 
@@ -131,6 +135,17 @@ export async function getUploadUrl(
   if (size > maxBytes) {
     reply.status(413).send({
       error: { code: 'FILE_TOO_LARGE', message: `File exceeds ${process.env.MAX_UPLOAD_SIZE_MB ?? 10} MB limit` },
+    });
+    return;
+  }
+
+  // Same gate the other three handlers apply: a valid uuid is not permission.
+  // Without this, a member could mint a presigned upload for an entity outside
+  // their cone (or outside their org) and learn it exists from the 200. Same
+  // ENTITY_NOT_FOUND/404 as listAttachments so the response is not an oracle.
+  if (!(await canSeeEntity(request, entity_type, entity_id))) {
+    reply.status(404).send({
+      error: { code: 'ENTITY_NOT_FOUND', message: 'Entity not found' },
     });
     return;
   }

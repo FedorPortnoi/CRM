@@ -183,6 +183,20 @@ export const MCP_TOOL_CAPABILITIES = {
   cancel_event: 'tasks.write',
   complete_event: 'tasks.write',
 
+  // Pipeline READS. The mutating deal tools above were gated from the start and
+  // these were not, on the assumption that "read" needed no gate — but a deal
+  // row carries `value` and `currency`, so listing deals is a way to read the
+  // org's money one record at a time, which is exactly what `revenue.view`
+  // below exists to prevent. `support` holds neither capability.
+  //
+  // The REST twin of this gate is the `deals.read` branch of adminRoutePolicy in
+  // ../api/authenticate.ts. Both surfaces must answer the same question, or the
+  // assistant becomes either a softer door than the API or a stricter one — and
+  // both have been real bugs in this codebase.
+  get_deals: 'deals.read',
+  get_deal: 'deals.read',
+  get_pipelines: 'deals.read',
+
   get_dashboard: 'revenue.view',
   get_funnel: 'revenue.view',
   get_lead_sources: 'revenue.view',

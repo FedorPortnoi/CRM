@@ -1,4 +1,4 @@
-import { hasAnyWriteCapability } from './capabilities';
+import { hasAnyWriteCapability, type Role } from './capabilities';
 import { AssistantMessageRole, Prisma } from '@prisma/client';
 import { db } from './db';
 import { DEFAULT_CURRENCY } from '../config/market';
@@ -133,12 +133,31 @@ export type AssistantTurnResult =
 // System prompt (Russian — the product is a Russian sales CRM)
 // ---------------------------------------------------------------------------
 
-const ROLE_LABELS: Record<AssistantRole, string> = {
+/**
+ * Typed as `Record<Role, string>`, NOT `Record<AssistantRole, string>`.
+ *
+ * `AssistantRole` is an alias for `string`, so the previous annotation accepted
+ * a partial map and the compiler said nothing when four business roles were
+ * added later — leaving the system prompt to interpolate `undefined` and tell
+ * the model «роль — undefined» for head, accountant, marketer and support.
+ * Keying on the real union from capabilities.ts makes the next added role a
+ * build error here instead of a silent hole in the prompt.
+ */
+const ROLE_LABELS: Record<Role, string> = {
   owner: 'владелец',
   admin: 'администратор',
+  head: 'руководитель отдела',
   member: 'менеджер',
+  accountant: 'бухгалтер (доступ к финансовым данным, без изменений в сделках)',
+  marketer: 'маркетолог (кампании и рассылки, без изменений в сделках)',
+  support: 'поддержка (контакты и задачи, без доступа к деньгам)',
   viewer: 'наблюдатель (только чтение)',
 };
+
+/** Falls back to the raw value rather than `undefined` if a role ever escapes the map. */
+function roleLabel(role: AssistantRole): string {
+  return (ROLE_LABELS as Record<string, string | undefined>)[role] ?? role;
+}
 
 function formatToday(): string {
   const now = new Date();
@@ -215,7 +234,7 @@ export function buildSystemPrompt(context: {
     'Контекст:',
     `- Сегодня: ${formatToday()} (UTC).`,
     `- Организация: ${identityHandle('org', context.orgId)} — условное обозначение; название организации не передаётся.`,
-    `- Пользователь: ${identityHandle('user', context.userId)}, роль — ${ROLE_LABELS[context.role]}. Имя пользователя не передаётся: обращайся на «вы», без имени, и не пытайся его угадать.`,
+    `- Пользователь: ${identityHandle('user', context.userId)}, роль — ${roleLabel(context.role)}. Имя пользователя не передаётся: обращайся на «вы», без имени, и не пытайся его угадать.`,
     `- Идентификатор этого же пользователя для фильтров вида «мои сделки»: ${context.userId}.`,
     `- Валюта по умолчанию: ${DEFAULT_CURRENCY} (₽).`,
     '',

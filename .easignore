@@ -11,6 +11,23 @@ node_modules/
 .env
 .env.local
 .env.*.local
+# .easignore REPLACES .gitignore for EAS uploads — it does not stack on top of
+# it. Every secret rule in .gitignore therefore has to be repeated here or the
+# file ships to Expo's build servers. This block drifted once already:
+# .gitignore gained `.env.bak*` on 28 Jul, this file did not, and
+# .env.bak-20260727 (41 credentials) was uploaded on every build until 30 Jul.
+.env.bak*
+.env.production
+*.pem
+*.p8
+*.jks
+*.keystore
+credentials.json
+*service-account*.json
+google-play-service-account.json
+id_rsa*
+*.key
+backend-log.txt
 firebase-service-account.json
 google-services.json
 

@@ -6,6 +6,7 @@ import { DEFAULT_CURRENCY, normalizeCurrencyCode } from '../../config/market';
 import { evaluateWorkflows } from '../../services/workflows';
 import { logActivity } from '../../api/controllers/activities';
 import { dispatchNotification, dealCtx } from '../../services/notificationEngine';
+import { getAccessibleUserIds, canSeeUser } from '../../services/visibility';
 import {
   listDealsForUser,
   getDealForUser,
@@ -39,6 +40,12 @@ registerTool(
     },
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    // Same gate as the REST route (adminRoutePolicy in ../../api/authenticate.ts):
+    // a deal row carries `value` and `currency`, so reading the pipeline is a way
+    // of reading the org's money one record at a time. `support` holds neither
+    // `deals.read` nor `revenue.view`.
+    const readErr = requireMcpToolCapability(user, 'get_deals');
+    if (readErr) return readErr;
     const pipeline_id = typeof args.pipeline_id === 'string' ? args.pipeline_id : undefined;
     const stage_id = typeof args.stage_id === 'string' ? args.stage_id : undefined;
     const assigned_to = typeof args.assigned_to === 'string' ? args.assigned_to : undefined;
@@ -76,6 +83,12 @@ registerTool(
     required: ['id'],
   },
   async (args: Record<string, unknown>, user: McpUser) => {
+    // Same gate as the REST route (adminRoutePolicy in ../../api/authenticate.ts):
+    // a deal row carries `value` and `currency`, so reading the pipeline is a way
+    // of reading the org's money one record at a time. `support` holds neither
+    // `deals.read` nor `revenue.view`.
+    const readErr = requireMcpToolCapability(user, 'get_deal');
+    if (readErr) return readErr;
     const id = typeof args.id === 'string' ? args.id : '';
     const requester = user as { sub: string; org_id: string; role: string };
 
@@ -233,6 +246,17 @@ registerTool(
       return { error: { code: 'DEAL_NOT_FOUND', message: 'Deal not found' } };
     }
 
+    // The REST twin (backend/api/controllers/deals.ts, moveStage) cones the deal
+    // immediately after the org lookup; this tool only ever scoped it to the org,
+    // so the assistant could move a deal the API behind it would refuse. Same
+    // check, same position, same not-found answer — the assistant must never be
+    // more permissive than the endpoint it stands in front of.
+    const requester = user as { sub: string; org_id: string; role: string };
+    const accessibleIds = await getAccessibleUserIds(requester);
+    if (!canSeeUser(accessibleIds, deal.assigned_to) && !canSeeUser(accessibleIds, deal.created_by)) {
+      return { error: { code: 'DEAL_NOT_FOUND', message: 'Deal not found' } };
+    }
+
     if (deal.status !== DealStatus.open) {
       return { error: { code: 'DEAL_NOT_OPEN', message: 'Only open deals can be moved between stages' } };
     }
@@ -294,6 +318,12 @@ registerTool(
     properties: {},
   },
   async (_args: Record<string, unknown>, user: McpUser) => {
+    // Same gate as the REST route (adminRoutePolicy in ../../api/authenticate.ts):
+    // a deal row carries `value` and `currency`, so reading the pipeline is a way
+    // of reading the org's money one record at a time. `support` holds neither
+    // `deals.read` nor `revenue.view`.
+    const readErr = requireMcpToolCapability(user, 'get_pipelines');
+    if (readErr) return readErr;
     const pipelines = await db.pipeline.findMany({
       where: { organization_id: user.org_id },
       include: {

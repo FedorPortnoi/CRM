@@ -9,6 +9,11 @@ import {
 } from '@prisma/client';
 import { db } from '../../services/db';
 import { decryptField } from '../../services/encryption';
+import {
+  getAccessibleUserIds,
+  canSeeUser,
+  ownerVisibilityWhere,
+} from '../../services/visibility';
 
 // --- Local request types ---
 
@@ -240,10 +245,30 @@ async function list(request: FastifyRequest, reply: FastifyReply): Promise<void>
   const { status } = request.query as ListQuery;
   const statusFilter = resolveStatusFilter(status);
 
+  // The cone. This list joins the linked Contact in and decrypts its phone below,
+  // so org scoping alone let ANY role read the name and plaintext number of a
+  // contact in another branch. PendingCapture has no owner column of its own —
+  // org_id and contact_id are the only scoping it carries — so the cone is applied
+  // through the contact, on the same assigned_to/created_by pair the contacts,
+  // deals and tasks list endpoints use.
+  //
+  // The route has no `scope` query parameter, so there is nothing to toggle: the
+  // caller gets their full subtree rather than the 'direct' default the toggled
+  // list endpoints fall back to.
+  const accessibleIds = await getAccessibleUserIds(request.user);
+  const contactVisibility = ownerVisibilityWhere(accessibleIds);
+
   const captures = await db.pendingCapture.findMany({
     where: {
       org_id: request.user.org_id,
       ...(statusFilter ? { status: statusFilter } : {}),
+      // An UNMATCHED capture belongs to nobody yet — it is precisely the shared
+      // inbox this screen exists to work through, and it carries no contact PII —
+      // so it stays visible to everyone in the org. Only a capture already
+      // pointing at somebody else's contact is filtered out.
+      ...(contactVisibility && {
+        OR: [{ contact_id: null }, { contact: contactVisibility }],
+      }),
     },
     include: {
       contact: {
@@ -287,10 +312,21 @@ async function match(request: FastifyRequest, reply: FastifyReply): Promise<void
 
   const contact = await db.contact.findFirst({
     where: { id: contact_id, organization_id: orgId },
-    select: { id: true, first_name: true, last_name: true },
+    select: { id: true, first_name: true, last_name: true, assigned_to: true, created_by: true },
   });
 
   if (!contact) {
+    reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
+    return;
+  }
+
+  // Matching is a WRITE against the contact — it staples a Message and a follow-up
+  // Task onto it below — so org scoping alone let a user fabricate activity on
+  // another branch's record. Looked up org-wide and then tested against the cone,
+  // exactly as the deals controller does, so an out-of-cone contact answers with
+  // the same 404 as a nonexistent one and the response is not an existence oracle.
+  const accessibleIds = await getAccessibleUserIds(request.user);
+  if (!canSeeUser(accessibleIds, contact.assigned_to) && !canSeeUser(accessibleIds, contact.created_by)) {
     reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Contact not found' } });
     return;
   }

@@ -41,6 +41,12 @@ const ACTION_CAPABILITY: Record<string, Capability> = {
   // create_deal / update_deal / move_deal_to_stage.
   'deals.mutate': 'deals.write',
   'contacts.bulk_admin': 'contacts.bulk',
+  'deals.read': 'deals.read',
+  // Minting an invite link IS adding a member — the account it creates is real
+  // the moment the link is redeemed. Gated identically to the rest of team
+  // administration so the link route cannot become a softer door into the org
+  // than the button beside it.
+  'team.invite': 'team.manage',
   // Pipelines, stages, workflows and example-data resets are organisation
   // configuration rather than day-to-day sales work — deliberately NOT
   // 'deals.write', which would hand them to every sales manager.
@@ -71,7 +77,15 @@ function isPublicApiRoute(request: FastifyRequest): boolean {
       path === '/api/v1/auth/login' ||
       path === '/api/v1/auth/join' ||
       path === '/api/v1/auth/verify' ||
-      path === '/api/v1/auth/verify/resend'
+      path === '/api/v1/auth/verify/resend' ||
+      // Invite redemption. The person on the other end has no account yet — that
+      // is the entire point — so there is no token they could present. Each of
+      // these instead requires a single-use secret from the invite itself, and
+      // each returns one indistinguishable error so the endpoint cannot be used
+      // to probe which tokens exist. See controllers/invites.ts.
+      path === '/api/v1/auth/invites/open' ||
+      path === '/api/v1/auth/invites/lookup' ||
+      path === '/api/v1/auth/invites/accept'
     )
   ) {
     return true;
@@ -106,8 +120,15 @@ function isPublicApiRoute(request: FastifyRequest): boolean {
 
   // One-click unsubscribe (ФЗ-38 «О рекламе» ст. 18). The link is clicked from a mail
   // client, which likewise has no session; without this entry every opt-out click 401s and
-  // the message stops being lawful to send. GET performs the unsubscribe as well as POST
-  // (RFC 8058 List-Unsubscribe-Post) — see the comment on consentRoutes.
+  // the message stops being lawful to send.
+  //
+  // BOTH methods stay public, but they no longer do the same thing. GET now renders a
+  // confirmation page and writes NOTHING; POST performs the withdrawal. That split exists
+  // because enterprise mail scanners (Defender Safe Links, Proofpoint) fetch every link on
+  // delivery — under the old GET-mutates design they silently opted out every recipient at
+  // a scanner-protected domain, which is a deliverability and consent-record disaster that
+  // looks exactly like normal unsubscribes. RFC 8058 one-click still bypasses the page by
+  // POSTing `List-Unsubscribe=One-Click`.
   //
   // Why this cannot over-match: same shape as above. The prefix ends in a slash, so the
   // sibling routes on this plugin ('/api/v1/consent/contacts/:contactId', all three
@@ -130,6 +151,41 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
 
   if (method === 'GET' && path === '/api/v1/auth/audit') {
     return { action: 'audit.read', reason: 'audit access requires owner or admin' };
+  }
+
+  // Invite links. The three public redemption routes below (/invites/open,
+  // /invites/lookup, /invites/accept) are NOT matched here — they are
+  // unauthenticated by necessity, since the person redeeming has no account yet,
+  // and they carry their own single-use secrets instead.
+  if (path === '/api/v1/auth/invites' || path.startsWith('/api/v1/auth/invites/')) {
+    const isRedemption =
+      path === '/api/v1/auth/invites/open' ||
+      path === '/api/v1/auth/invites/lookup' ||
+      path === '/api/v1/auth/invites/accept';
+    if (!isRedemption) {
+      return { action: 'team.invite', reason: 'managing invites requires a role that may manage the team' };
+    }
+  }
+
+  // Reading the pipeline. `deals.read` was declared in capabilities.ts and
+  // enforced NOWHERE, which two independent audits found separately — so
+  // `support`, whose whole definition is "contact record and activity, no
+  // pipeline, no money", could list every deal with its `value` and `currency`.
+  //
+  // That also silently defeated the `revenue.view` gate below: blocking
+  // /analytics/dashboard achieves nothing while the same numbers are readable
+  // one route over, a deal at a time. Gating the read here is what makes the
+  // capability table describe the system rather than merely document an
+  // intention.
+  //
+  // `deals.read` is held by every role except `support`, so this narrows exactly
+  // one role and matches that role's stated design. The MCP twin of this gate
+  // lives in mcp/validation.ts — both doors, or neither.
+  if (
+    method === 'GET' &&
+    (path === '/api/v1/deals' || path === '/api/v1/deals/pipelines' || /^\/api\/v1\/deals\/[^/]+$/.test(path))
+  ) {
+    return { action: 'deals.read', reason: 'reading the pipeline requires deals.read' };
   }
 
   // Revenue analytics. Added after an adversarial review found the assistant

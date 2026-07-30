@@ -124,7 +124,7 @@ async function ensureFreshJoinCode(org: {
 }
 
 // Build a unique-within-org username from a person's name (e.g. "Ivan Petrov", "Ivan Petrov 2").
-async function uniqueUsernameForOrg(orgId: string, baseName: string): Promise<string> {
+export async function uniqueUsernameForOrg(orgId: string, baseName: string): Promise<string> {
   const base = baseName.replace(/\s+/g, ' ').trim();
   for (let attempt = 0; attempt < 50; attempt++) {
     const candidate = attempt === 0 ? base : `${base} ${attempt + 1}`;
@@ -144,7 +144,7 @@ function invalidCredentials(reply: FastifyReply) {
   });
 }
 
-function normalizeEmail(email: string): string {
+export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
@@ -185,7 +185,7 @@ async function verifyPasswordWithLockout(
   return outcome;
 }
 
-async function signSessionToken(
+export async function signSessionToken(
   request: FastifyRequest,
   reply: FastifyReply,
   user: { id: string; organization_id: string; role: AuthRole },

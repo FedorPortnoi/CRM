@@ -153,17 +153,25 @@ export default async function sequencesRoutes(fastify: FastifyInstance): Promise
  * preHandler 401s every unsubscribe click — which is exactly the ФЗ-38 art. 18 failure
  * (refusal must be possible at any moment) that the fines are written for.
  *
- * GET performs the unsubscribe, not just POST: a plain link is the only thing that works
- * from a mail client, and the action is idempotent. A link-prefetching client can therefore
- * unsubscribe a recipient who did not click — that error is the safe direction, since an
- * unwanted unsubscribe costs a contact and a failed one costs a per-message fine. POST is
- * provided for RFC 8058 `List-Unsubscribe-Post` one-click headers.
+ * GET RENDERS A CONFIRMATION PAGE; POST PERFORMS THE WITHDRAWAL. GET used to do the
+ * withdrawal itself, on the reasoning that a plain link is all a mail client can offer and
+ * an unwanted unsubscribe is the safe direction. It is not: enterprise scanners (Microsoft
+ * Defender Safe Links, Proofpoint URL Defense) fetch every link in a message at delivery,
+ * so recipients were being opted out before they had read the email — invisibly, since the
+ * resulting audit row is indistinguishable from a real click. The page keeps the plain link
+ * working (one tap, no login, no account) while requiring one deliberate action.
+ *
+ * POST also serves RFC 8058 one-click: a body of `List-Unsubscribe=One-Click` acts
+ * immediately with no page, which is what the mail providers' `List-Unsubscribe-Post`
+ * header promises. Both routes are method-matched in `isPublicApiRoute()` already.
  */
 export async function consentRoutes(fastify: FastifyInstance): Promise<void> {
   const f = fastify.withTypeProvider<ZodTypeProvider>();
 
   f.get('/contacts/:contactId', { preHandler: [authenticate] }, ConsentController.consentState);
 
+  // Granting is capability-gated in the controller (GRANT_CONSENT_CAPABILITY); withdrawing
+  // below is not, and must not become so.
   f.post('/contacts/:contactId', {
     preHandler: [authenticate],
     schema: { body: RecordConsentSchema },
@@ -172,6 +180,9 @@ export async function consentRoutes(fastify: FastifyInstance): Promise<void> {
   f.delete('/contacts/:contactId', { preHandler: [authenticate] }, ConsentController.revokeConsent);
 
   // PUBLIC — no preHandler by design.
-  f.get('/unsubscribe/:token', ConsentController.unsubscribe);
+  // Deliberately no body schema on the POST: the RFC 8058 one-click body
+  // (`List-Unsubscribe=One-Click`), the form's own submission and an empty body must all be
+  // accepted, and a schema here would reject the very clients this exists for.
+  f.get('/unsubscribe/:token', ConsentController.unsubscribePage);
   f.post('/unsubscribe/:token', ConsentController.unsubscribe);
 }

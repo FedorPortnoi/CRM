@@ -402,12 +402,28 @@ describe('listMcpTools offers a role only what that role can invoke', () => {
     }
   });
 
-  it('a viewer is offered no gated tool at all — including create_deal', async () => {
+  it('a viewer is offered exactly the gated tools its capabilities allow', async () => {
     const viewer = await names('viewer');
 
+    // This used to assert "a viewer is offered NO gated tool", which held only
+    // while every gated tool was a WRITE. `deals.read` is now gated too — a deal
+    // row carries `value`, so listing the pipeline is a way of reading the money
+    // — and a viewer legitimately holds it. The old blanket assertion had in
+    // fact started contradicting the `toContain('get_deals')` line directly
+    // below it.
+    //
+    // Driving the expectation off `can()` is the stronger invariant anyway: the
+    // menu must match the capability table exactly, rather than match a
+    // hand-maintained idea of which tools are "write-ish".
     expect(viewer).not.toContain('create_deal');
-    for (const [tool] of GATED) expect(viewer, tool).not.toContain(tool);
-    // …but the plain entity reads are still there: read-only is not no-op.
+    for (const [tool, capability] of GATED) {
+      if (can('viewer', capability)) {
+        expect(viewer, `${tool} is gated on ${capability}, which viewer holds`).toContain(tool);
+      } else {
+        expect(viewer, `${tool} is gated on ${capability}, which viewer lacks`).not.toContain(tool);
+      }
+    }
+    // …and the plain entity reads are still there: read-only is not no-op.
     expect(viewer).toContain('get_contacts');
     expect(viewer).toContain('get_deals');
     expect(viewer).toContain('get_tasks');
@@ -431,9 +447,14 @@ describe('listMcpTools offers a role only what that role can invoke', () => {
 
     expect(accountant).toContain('get_revenue');
     expect(accountant).toContain('get_rep_performance');
+    // Same correction as the viewer case above: skip every capability the
+    // accountant actually holds, not just `revenue.view`. An accountant holds
+    // `deals.read` — reading the pipeline is the job — so `get_deals` being on
+    // the menu is correct, and hardcoding one capability name here would have
+    // to be edited again the next time a read is gated.
     for (const [tool, capability] of GATED) {
-      if (capability === 'revenue.view') continue;
-      expect(accountant, tool).not.toContain(tool);
+      if (can('accountant', capability)) continue;
+      expect(accountant, `${tool} is gated on ${capability}`).not.toContain(tool);
     }
   });
 

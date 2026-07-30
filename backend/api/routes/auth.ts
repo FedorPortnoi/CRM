@@ -2,6 +2,7 @@ import { FastifyRequest } from 'fastify';
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AuthController } from '../controllers/auth';
+import { InviteController } from '../controllers/invites';
 import { ASSIGNABLE_ROLE_VALUES } from '../../services/capabilities';
 
 const PasswordSchema = z.string().min(8).max(100)
@@ -30,6 +31,42 @@ const ResendVerificationSchema = z.object({
 const LoginSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   password: z.string().min(1),
+});
+
+// ── Invite links ───────────────────────────────────────────────────────────
+
+const CreateInviteSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  role: z.enum(ASSIGNABLE_ROLE_VALUES),
+});
+
+const OpenInviteSchema = z.object({
+  token: z.string().min(20).max(200),
+});
+
+// Exactly one credential, never a mixture. `.refine` rather than a union so a
+// caller that sends two gets a validation error instead of silently having the
+// first branch win — a request carrying two is a client bug worth surfacing,
+// not something to guess at.
+const LookupInviteSchema = z
+  .object({
+    token: z.string().min(20).max(200).optional(),
+    handoff: z.string().min(10).max(200).optional(),
+    claim_code: z.string().min(4).max(16).optional(),
+  })
+  .refine(
+    (b) => [b.token, b.handoff, b.claim_code].filter(Boolean).length === 1,
+    { message: 'Supply exactly one of token, handoff or claim_code' },
+  );
+
+const AcceptInviteSchema = z.object({
+  accept_token: z.string().min(10).max(200),
+  // Required by product decision. It cannot be verified — this deployment has no
+  // SMS provider at all — so `phone_verified` stays false and this is contact
+  // information, never a factor.
+  phone: z.string().trim().min(10).max(20),
+  email: z.string().trim().toLowerCase().email(),
+  password: PasswordSchema,
 });
 
 const JoinSchema = z.object({
@@ -120,6 +157,32 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.patch('/users/:id/manager', {
     schema: { body: SetManagerSchema },
   }, AuthController.setUserManager);
+  // ── Invite links ─────────────────────────────────────────────────────────
+  // The three redemption routes are public (see isPublicApiRoute) and rate
+  // limited hard: each one accepts a secret, so each one is a guessing surface.
+  // The claim code is only six characters, which is what sets the budget here —
+  // the 32-byte link token would tolerate far more.
+  fastify.post('/invites', {
+    schema: { body: CreateInviteSchema },
+  }, InviteController.create);
+  fastify.get('/invites', InviteController.list);
+  fastify.delete('/invites/:id', {
+    schema: { params: z.object({ id: z.string().uuid() }) },
+  }, InviteController.revoke);
+
+  fastify.post('/invites/open', {
+    config: { rateLimit: authRateLimit(20, '15 minutes') },
+    schema: { body: OpenInviteSchema },
+  }, InviteController.open);
+  fastify.post('/invites/lookup', {
+    config: { rateLimit: authRateLimit(20, '15 minutes') },
+    schema: { body: LookupInviteSchema },
+  }, InviteController.lookup);
+  fastify.post('/invites/accept', {
+    config: { rateLimit: authRateLimit(10, '15 minutes') },
+    schema: { body: AcceptInviteSchema },
+  }, InviteController.accept);
+
   fastify.get('/company-code', AuthController.getCompanyCode);
   fastify.post('/company-code/rotate', AuthController.rotateCompanyCode);
   fastify.patch('/me/password', {

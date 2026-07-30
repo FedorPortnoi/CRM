@@ -11,6 +11,8 @@
  *   • Consent is re-checked immediately before EVERY individual send, not just at
  *     enrollment. Weeks can pass between step 1 and step 5 and the contact may have
  *     unsubscribed in the meantime; the enrollment-time check is worthless by then.
+ *   • A contact who unsubscribed cannot be put back into a sequence by re-adding them. The
+ *     terminal `unsubscribed` enrollment is only restarted when consent is live again.
  *   • Every message carries a working one-click unsubscribe link (art. 18). If the body
  *     does not place one itself, a footer is appended.
  *   • An unsubscribe is org-wide and cascades to every active enrollment — see
@@ -848,8 +850,29 @@ export async function enrollContact(input: {
       throw new AlreadyEnrolledError();
     }
 
+    // ФЗ-38 gate #1b. An `unsubscribed` row is not merely a finished run — it is a recorded
+    // refusal, and re-adding the contact to the sequence is precisely the move that would
+    // quietly overwrite it. Restart it ONLY on consent that is live right now
+    // (`unsubscribed_at` null AND `marketing_consent` true).
+    //
+    // The check at the top of this function already asked that question, so re-asking looks
+    // redundant — it is not. Between the two lies a create round-trip, and the whole point
+    // of this branch is that a withdrawal may have landed inside it; a withdrawal racing a
+    // re-enrollment has to win. The other terminal states (completed / cancelled / failed)
+    // carry no refusal and keep their existing restart behaviour untouched.
+    if (existing.status === SequenceEnrollmentStatus.unsubscribed) {
+      const stillConsented = await canSendMarketingEmail(input.contactId, input.organizationId);
+      if (!stillConsented.allowed) {
+        throw stillConsented.reason === 'CONTACT_UNSUBSCRIBED'
+          ? new ContactUnsubscribedError(
+              'Contact unsubscribed from this sequence and cannot be re-enrolled until a new consent is recorded (ФЗ-38)',
+            )
+          : consentRefusalToError(stillConsented.reason, stillConsented.message);
+      }
+    }
+
     // The previous run ended (completed / cancelled / unsubscribed / failed) and consent
-    // has since been re-established — the check above just passed — so restart them.
+    // has since been re-established — both checks above just passed — so restart them.
     await db.sequenceEnrollment.updateMany({
       where: { id: existing.id, organization_id: input.organizationId },
       data: { ...enrollmentData, enrolled_by: input.enrolledBy ?? undefined, enrolled_at: now },
