@@ -84,6 +84,12 @@ import { TaskStatus } from '@prisma/client';
 import { db } from './db';
 import { DEFAULT_CURRENCY } from '../config/market';
 import { canSeeUser, getAccessibleUserIds } from './visibility';
+import { aliasForContactId, rehydrateAliases } from './contact-alias';
+import {
+  assertPersonalNamesMayBeSent,
+  CrossBorderPersonalDataError,
+  personalNamesMayBeSent,
+} from './model-jurisdiction';
 import { createCompletion } from './yandex-gpt';
 
 // ---------------------------------------------------------------------------
@@ -450,9 +456,19 @@ export async function buildContactContext(
     .join(' ')
     .trim();
 
+  // This context object exists only to be rendered into a prompt, so the name it
+  // carries is the name that reaches the provider. Under a domestic provider
+  // that is the real one and the summary reads naturally; under any other it is
+  // the contact's alias, which summarizeContact swaps back before the operator
+  // sees the prose. This path never passes through the MCP projection — it is a
+  // direct createCompletion — so the decision has to be made here as well.
+  const modelFacingName = personalNamesMayBeSent()
+    ? displayName || contact.first_name || '—'
+    : aliasForContactId(contact.id);
+
   return {
     contact_id: contact.id,
-    display_name: displayName || contact.first_name || '—',
+    display_name: modelFacingName,
     company: clean(contact.company, 200),
     type: contact.type,
     status: contact.status,
@@ -752,6 +768,19 @@ function notFound(): ContactAiFailure {
 }
 
 function unexpected(error: unknown): ContactAiFailure {
+  // The jurisdiction gate is a refusal, not a fault: the deployment is pointed
+  // at a provider this feature may not use. 503 with its own code so an operator
+  // reading logs sees a configuration decision rather than a broken model.
+  if (error instanceof CrossBorderPersonalDataError) {
+    return {
+      ok: false,
+      status: 503,
+      code: error.code,
+      message:
+        'Распознавание контакта недоступно: текущий провайдер модели находится за пределами РФ.',
+    };
+  }
+
   return {
     ok: false,
     status: 500,
@@ -801,12 +830,26 @@ export async function summarizeContact(params: {
 
     const now = deps?.now?.() ?? new Date();
 
+    // One-entry map: this prompt was about exactly one contact, so that is the
+    // only alias the model could have been given. Empty — and therefore a
+    // no-op — whenever the provider is domestic and no alias was ever issued.
+    const aliasMap = new Map<string, string>();
+    if (!personalNamesMayBeSent()) {
+      const realName = [contact.first_name, contact.last_name]
+        .filter((part): part is string => Boolean(part && part.trim()))
+        .join(' ')
+        .trim();
+      if (realName) aliasMap.set(aliasForContactId(contact.id), realName);
+    }
+    const forOperator = (text: string): string =>
+      rehydrateAliases(redactContactDetails(text), aliasMap);
+
     return {
       ok: true,
       data: {
         contact_id: contact.id,
-        summary: redactContactDetails(summary),
-        next_action: nextAction ? redactContactDetails(nextAction) : null,
+        summary: forOperator(summary),
+        next_action: nextAction ? forOperator(nextAction) : null,
         provider: AI_PROVIDER,
         generated_at: isoInstant(now) ?? new Date().toISOString(),
         context_counts: {
@@ -839,6 +882,18 @@ export async function suggestContactFields(params: {
     if (!trimmed) {
       return { ok: false, status: 400, code: 'TEXT_REQUIRED', message: 'text is required' };
     }
+
+    // The ONE path in this codebase that cannot be fixed by aliasing.
+    //
+    // Everywhere else the name is already in the database, so it has an id and
+    // therefore an alias. Here the whole job is to READ a name out of text the
+    // user pasted — a business card, an email signature — and a name that is not
+    // yet a record cannot be given a handle. There is nothing to substitute.
+    //
+    // So this feature is gated rather than masked: under a non-domestic provider
+    // it refuses. Losing autofill is a smaller cost than sending a stranger's
+    // ФИО across the border, and the refusal is loud instead of silent.
+    assertPersonalNamesMayBeSent();
 
     // Redact BEFORE the prompt is built — the model is asked for name, company
     // and position only, so an address or a phone number in the source text is

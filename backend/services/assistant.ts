@@ -26,6 +26,13 @@ import { listMcpTools, invokeMcpTool, type McpUser } from '../mcp/server';
 // where both audiences are served out of the same stored rows.
 import { projectModelFacing } from '../mcp/model-projection';
 import {
+  loadAliasContext,
+  aliasWith,
+  rehydrateForDisplay,
+  rehydrateMessagesForDisplay,
+  type AliasContext,
+} from './contact-alias-resolver';
+import {
   createCompletion,
   isYandexGptConfigured,
   serviceNotConfiguredError,
@@ -510,18 +517,38 @@ function parseStoredToolResults(content: string): AiToolResult[] {
   }
 }
 
-export function historyToAiMessages(rows: StoredMessage[]): AiMessage[] {
+/**
+ * `aliases` is the org's contact-name context, or null when the provider is
+ * domestic and no aliasing applies. It is threaded in rather than looked up here
+ * so one turn pays for one query no matter how long the history is.
+ *
+ * It covers the two PROSE surfaces — the user's own past messages and the
+ * assistant's past answers. Rows written under a foreign provider already hold
+ * aliases and pass through unchanged; rows written earlier, under a domestic
+ * one, hold real names and are aliased on the way out. Without this, switching
+ * providers would leak every contact name in the existing history on the first
+ * turn of every ongoing conversation.
+ */
+export function historyToAiMessages(
+  rows: StoredMessage[],
+  aliases: AliasContext | null = null,
+): AiMessage[] {
   const messages: AiMessage[] = [];
 
   for (const row of rows) {
     if (row.role === AssistantMessageRole.user) {
-      messages.push({ role: 'user', text: row.content });
+      messages.push({ role: 'user', text: aliasWith(aliases, row.content) });
       continue;
     }
 
     if (row.role === AssistantMessageRole.assistant) {
-      // The prose replays exactly as stored, and that is a KNOWN RESIDUAL, not
-      // an oversight.
+      // Contact names in this prose ARE now handled — aliasWith matches them
+      // against the org's contact table, which is the one thing prose can be
+      // matched against reliably enough to be worth doing.
+      //
+      // An OPERATOR's ФИО in the same prose remains a KNOWN RESIDUAL, not an
+      // oversight, and the reasoning below is why the same trick is not extended
+      // to it.
       //
       // An assistant row written before the operator projection existed can
       // quote a ФИО the model read off an unprojected tool result
@@ -542,10 +569,11 @@ export function historyToAiMessages(rows: StoredMessage[]): AiMessage[] {
       // caps how far back a conversation replays, so the affected rows fall out
       // of the window as their conversations continue.
       const toolCalls = parseStoredToolCalls(row.tool_calls);
+      const text = aliasWith(aliases, row.content);
       messages.push(
         toolCalls.length > 0
-          ? { role: 'assistant', text: row.content, tool_calls: toolCalls }
-          : { role: 'assistant', text: row.content },
+          ? { role: 'assistant', text, tool_calls: toolCalls }
+          : { role: 'assistant', text },
       );
       continue;
     }
@@ -631,6 +659,15 @@ export async function sendAssistantMessage(
     return { ok: false, error: serviceNotConfiguredError() };
   }
 
+  // Contact-name aliasing, resolved once for the whole turn. `null` under a
+  // domestic provider, which is the configuration today — so this costs one
+  // synchronous jurisdiction check and no query on the live path.
+  const aliases = await loadAliasContext(caller.org_id);
+
+  // What the provider is allowed to see. Every string that reaches the wire on
+  // this turn is derived from this one, never from `input.message`.
+  const wireText = aliasWith(aliases, userText);
+
   // A conversation belongs to one user inside one org — both are part of the
   // lookup, so another org's (or teammate's) id resolves to NOT_FOUND.
   let conversationId = input.conversation_id ?? null;
@@ -663,7 +700,7 @@ export async function sendAssistantMessage(
       select: { role: true, content: true, tool_calls: true },
     });
 
-    history = historyToAiMessages(rows.reverse());
+    history = historyToAiMessages(rows.reverse(), aliases);
   }
 
   const toolDefinitions = await buildToolDefinitions(caller);
@@ -689,11 +726,16 @@ export async function sendAssistantMessage(
   const conversation: AiMessage[] = [
     { role: 'system', text: systemPrompt },
     ...history,
-    { role: 'user', text: userText },
+    { role: 'user', text: wireText },
   ];
 
+  // The ALIASED text is what gets persisted, not what the user typed. That is
+  // the property that makes replay safe by construction: a stored row can only
+  // contain what the provider was already allowed to see, so re-sending it can
+  // never be a fresh disclosure. The transcript UI rehydrates on read
+  // (getAssistantConversation), so the user still sees their own sentence.
   const pending: PendingMessage[] = [
-    { role: AssistantMessageRole.user, content: userText, tool_calls: null },
+    { role: AssistantMessageRole.user, content: wireText, tool_calls: null },
   ];
 
   const executed: AssistantToolCallRecord[] = [];
@@ -766,6 +808,9 @@ export async function sendAssistantMessage(
     });
   }
 
+  // Stored as the model wrote it — which, when aliasing is active, already
+  // refers to «Клиент K7F3» and never to a real person. Rehydration happens
+  // once, on the way out, below.
   const answer = finalText || EMPTY_ANSWER_FALLBACK;
   pending.push({ role: AssistantMessageRole.assistant, content: answer, tool_calls: null });
 
@@ -814,16 +859,28 @@ export async function sendAssistantMessage(
 
   conversationId = persisted.conversationId;
 
+  // The single point where aliases become names again. Keyed on the text rather
+  // than on `aliases`, because an operator alias can be present when the contact
+  // context is null: get_rep_performance aliases at the tool, not by matching
+  // prose. Short-circuits without a query when the answer holds no alias, which
+  // is every answer on today's live path.
+  const displayRow = persisted.assistantRow
+    ? {
+        ...persisted.assistantRow,
+        content: await rehydrateForDisplay(caller.org_id, persisted.assistantRow.content),
+      }
+    : null;
+
   return {
     ok: true,
     turn: {
       conversation_id: conversationId,
       conversation_title: conversationTitle,
       message:
-        persisted.assistantRow ?? {
+        displayRow ?? {
           id: conversationId,
           role: AssistantMessageRole.assistant,
-          content: answer,
+          content: await rehydrateForDisplay(caller.org_id, answer),
           tool_calls: null,
           created_at: new Date(),
         },
@@ -914,9 +971,14 @@ export async function getAssistantConversation(
     select: { id: true, role: true, content: true, tool_calls: true, created_at: true },
   });
 
+  // Stored rows hold whatever the provider was allowed to see, so under a
+  // foreign provider they hold aliases. This is the read side of that trade:
+  // the transcript is put back into the user's own language before it is
+  // rendered. A no-op — and, crucially, no extra query — when no row contains an
+  // alias, which is every conversation held under a domestic provider.
   return {
     ...conversation,
     message_count: messages.length,
-    messages,
+    messages: await rehydrateMessagesForDisplay(caller.org_id, messages),
   };
 }

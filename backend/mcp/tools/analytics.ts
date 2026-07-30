@@ -3,6 +3,8 @@ import { db } from '../../services/db';
 import { registerTool, McpUser } from '../server';
 import { requireMcpToolCapability } from '../validation';
 import { canSeeUser, getAccessibleUserIds } from '../../services/visibility';
+import { aliasForUserId } from '../../services/contact-alias';
+import { personalNamesMayBeSent } from '../../services/model-jurisdiction';
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from '../../config/market';
 
 type PeriodValue = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
@@ -535,7 +537,18 @@ registerTool(
       const deals_lost = lostMap.get(uid) ?? 0;
       const total_value = r._sum.value ? Math.round(parseFloat(r._sum.value.toString()) * 100) / 100 : 0;
       const win_rate = deals_total > 0 ? Math.round((deals_won / deals_total) * 10_000) / 100 : 0;
-      return [{ user_id: uid, name: userMap.get(uid) ?? 'Unknown', deals_total, deals_won, deals_lost, total_value, win_rate }];
+      // The one operator ФИО in the model-facing surface, and the reason this
+      // tool carries the exemption below. Under a non-domestic provider it is
+      // replaced by an alias which the assistant swaps back before the answer
+      // reaches the user — option (b) of decision 002, scoped to the border it
+      // was written for. Under the domestic provider the name goes through
+      // unchanged: ст. 12 is not engaged, and whether ч. 5 ст. 5 minimisation
+      // alone justifies aliasing here is the open product question that record
+      // leaves to the owner. Making that call silently is not this change's job.
+      const modelFacingName = personalNamesMayBeSent()
+        ? userMap.get(uid) ?? 'Unknown'
+        : aliasForUserId(uid);
+      return [{ user_id: uid, name: modelFacingName, deals_total, deals_won, deals_lost, total_value, win_rate }];
     });
 
     return { data, meta: {} };

@@ -403,6 +403,41 @@ describe('MCP analytics tools respect the manager visibility cone', () => {
       const userWhere = dbMock.user.findMany.mock.calls[0]?.[0] as { where: { id: { in: string[] } } };
       expect(userWhere.where.id.in).not.toContain(OUT);
     });
+
+    // ── The Wave A gate for this tool ────────────────────────────────────────
+    // This is the only tool whose result skips projectModelFacing — it declares
+    // `{ operatorNames: 'allowed' }` because the ФИО IS its answer. So the
+    // border check has to live at the handler, and this is the regression test
+    // decision 002's Gate item 4 asks for: a fixture ФИО asserted absent from
+    // the serialized result. The two assertions above, which pin the NAME being
+    // present, are the domestic half of the same pair and must keep passing.
+
+    it('emits aliases instead of ФИО once the provider is not domestic', async () => {
+      const previous = process.env.MODEL_PROVIDER;
+      process.env.MODEL_PROVIDER = 'openai';
+
+      try {
+        const res = await tool('get_rep_performance')({}, ownerUser);
+        const serialized = JSON.stringify(res);
+
+        for (const fio of ['Owner', 'Manager', 'Rep', 'Outsider']) {
+          expect(serialized, `ФИО "${fio}" reached the wire`).not.toContain(`"${fio}"`);
+        }
+
+        const data = res.data as Array<{ user_id: string; name: string }>;
+        // Still one row per rep, still keyed on the uuid the model chains on —
+        // the feature is intact, only the label changed.
+        expect(data.map((r) => r.user_id).sort()).toEqual([MGR, REP, OUT].sort());
+        for (const row of data) {
+          expect(row.name).toMatch(/^Сотрудник [A-Z2-9]{4}$/u);
+        }
+        // Distinct reps get distinct aliases, or the leaderboard is meaningless.
+        expect(new Set(data.map((r) => r.name)).size).toBe(data.length);
+      } finally {
+        if (previous === undefined) delete process.env.MODEL_PROVIDER;
+        else process.env.MODEL_PROVIDER = previous;
+      }
+    });
   });
 
   // ─── get_lead_sources ───────────────────────────────────────────────────────

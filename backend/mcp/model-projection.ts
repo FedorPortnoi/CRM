@@ -102,10 +102,33 @@
  * declares `{ operatorNames: 'allowed' }` at its registration so the exemption
  * is explicit and greppable rather than an accident of shape.
  *
- * The CONTACT's own `first_name` / `last_name` are untouched wherever they are
- * not inside a user container. They are the subject the model is asked about,
- * and that is a separate, already-made decision (see contact-ai.ts).
+ * ---------------------------------------------------------------------------
+ * THE CONTACT'S OWN NAME
+ * ---------------------------------------------------------------------------
+ * Handled by a second, conditional rule added when the Wave A precondition was
+ * built. A contact's `first_name` is the SUBJECT of the question rather than a
+ * passenger, so dropping it the way an operator's ФИО is dropped would delete
+ * the feature: «с кем давно не связывались?» answerable only in uuids is not an
+ * answer. Under a domestic provider there is also nothing to fix — ст. 12 does
+ * not apply and the name may lawfully be processed.
+ *
+ * So the contact rule is switched by jurisdiction (../services/model-jurisdiction):
+ *
+ *   domestic provider  → names pass through exactly as before. No behaviour
+ *                        change on the live path, and no query cost.
+ *   anything else      → the name is replaced by a stable alias derived from the
+ *                        contact id (../services/contact-alias), which the
+ *                        assistant swaps back for the real name on the way to
+ *                        the human.
+ *
+ * The switch is read from configuration rather than hardcoded so that repointing
+ * the provider CANNOT skip it. That is the whole point: the precondition is not
+ * "remember to mask before Wave A", it is "the unmasked state is unreachable
+ * once the provider changes".
  */
+
+import { aliasForContactId } from '../services/contact-alias';
+import { personalNamesMayBeSent } from '../services/model-jurisdiction';
 
 /**
  * Every field in backend/prisma/schema.prisma whose type is `User`, `User?` or
@@ -203,6 +226,58 @@ export const USER_ROW_MARKER_KEYS: ReadonlySet<string> = new Set([
   'is_verified',
 ]);
 
+/**
+ * Keys that hold a CONTACT's own name. Replaced by an alias — never deleted —
+ * when the provider is not domestic.
+ *
+ * `name` is deliberately absent: no Contact column is called `name`, while
+ * `pipeline: { name }` and `stage: { name }` are legitimate and must survive.
+ * Detection below keys on `first_name`, which in this schema belongs to Contact
+ * and to nothing else, so the rule cannot reach a pipeline in the first place.
+ */
+export const CONTACT_NAME_KEYS: ReadonlySet<string> = new Set([
+  'first_name',
+  'last_name',
+  'middle_name',
+  'patronymic',
+  'display_name',
+  'displayname',
+  'full_name',
+  'fullname',
+  'fio',
+]);
+
+/**
+ * `first_name` exists on exactly one model in backend/prisma/schema.prisma
+ * (Contact), so its presence identifies a contact row wherever it was found —
+ * top level, nested under `contact`, or inside a list. Same structural logic as
+ * `looksLikeUserRow`, and pinned by the same schema-parsing test.
+ */
+function looksLikeContactRow(value: Record<string, unknown>): boolean {
+  return Object.keys(value).some((key) => key.toLowerCase() === 'first_name');
+}
+
+/**
+ * The alias is derived from the row's own identifier, so it is stable across
+ * turns and conversations without anything being stored.
+ *
+ * `contact_id` is accepted alongside `id` because hand-assembled payloads
+ * (contact-ai.ts's context object) name it that way.
+ *
+ * No identifier means no alias can be derived, and then the name is DROPPED
+ * rather than passed through. That is the failure direction this whole file
+ * exists to guarantee.
+ */
+function contactAliasFor(value: Record<string, unknown>): string | null {
+  for (const key of ['id', 'contact_id']) {
+    const raw = value[key];
+    if (typeof raw === 'string' && raw.trim()) {
+      return aliasForContactId(raw);
+    }
+  }
+  return null;
+}
+
 // Tool results are Prisma rows: a handful of levels at most. The cap only
 // exists so a pathological structure cannot blow the stack, and it matches the
 // one redactToolResult uses.
@@ -231,12 +306,21 @@ function looksLikeUserRow(value: Record<string, unknown>): boolean {
  * `containerKey` is the key this value was found under. Array elements inherit
  * their array's key, so `reports: [{ name }]` and `report: { name }` are
  * treated identically.
+ *
+ * `aliasContacts` is resolved ONCE per projection rather than per node: it is a
+ * property of the configured provider, not of the data, and re-reading it at
+ * every level would let one deep tree be projected under two different rules.
  */
-function project(value: unknown, containerKey: string | undefined, depth: number): unknown {
+function project(
+  value: unknown,
+  containerKey: string | undefined,
+  depth: number,
+  aliasContacts: boolean,
+): unknown {
   if (Array.isArray(value)) {
     return depth >= MAX_PROJECTION_DEPTH
       ? null
-      : value.map((entry) => project(entry, containerKey, depth + 1));
+      : value.map((entry) => project(entry, containerKey, depth + 1, aliasContacts));
   }
 
   // Date / Decimal / anything with its own prototype is passed through: it
@@ -251,26 +335,56 @@ function project(value: unknown, containerKey: string | undefined, depth: number
 
   const isUser = isUserContainerKey(containerKey) || looksLikeUserRow(value);
 
+  // A user container wins: its `first_name` belongs to an operator, and that one
+  // is dropped outright regardless of jurisdiction. Only a non-user row gets the
+  // contact treatment.
+  const isContact = !isUser && aliasContacts && looksLikeContactRow(value);
+  const alias = isContact ? contactAliasFor(value) : null;
+
   const out: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
-    if (isUser && OPERATOR_NAME_KEYS.has(key.toLowerCase())) {
+    const lower = key.toLowerCase();
+
+    if (isUser && OPERATOR_NAME_KEYS.has(lower)) {
       // Dropped, not blanked: the id sitting beside it already says an operator
       // is attached, so there is no fact left to preserve.
       continue;
     }
-    out[key] = project(entry, key, depth + 1);
+
+    if (isContact && CONTACT_NAME_KEYS.has(lower)) {
+      // The whole alias lands on `first_name` and every other name key is
+      // dropped, so the model reads one token instead of assembling «Клиент»
+      // and «K7F3» out of two fields and possibly writing them apart. `alias`
+      // is null only when the row carried no id, and then the name goes with it.
+      if (lower === 'first_name' && alias) {
+        out[key] = alias;
+      }
+      continue;
+    }
+
+    out[key] = project(entry, key, depth + 1, aliasContacts);
   }
 
   return out;
 }
 
 /**
- * Strip operator names out of a tool result, at any depth and in any shape.
+ * Strip operator names out of a tool result, at any depth and in any shape, and
+ * — when the configured provider is not a declared domestic processor — replace
+ * contact names with stable aliases.
  *
  * Applied once, by `registerTool` in ./server.ts, so every tool is covered the
  * day it is written and both model transports get the same treatment. A tool
  * that genuinely needs to emit an operator name has to say so at registration.
+ *
+ * `aliasContacts` defaults to the configured provider's jurisdiction. It is an
+ * explicit parameter only so tests can exercise the foreign-provider branch
+ * without mutating process.env, and so callers that have already resolved the
+ * decision once do not re-read it.
  */
-export function projectModelFacing(result: unknown): unknown {
-  return project(result, undefined, 0);
+export function projectModelFacing(
+  result: unknown,
+  aliasContacts: boolean = !personalNamesMayBeSent(),
+): unknown {
+  return project(result, undefined, 0, aliasContacts);
 }

@@ -2,6 +2,13 @@
 
 ## Status
 
+**Partially Accepted — option (b) implemented for the cross-border case on 2026-07-30; whether it
+should also apply under the domestic provider is still open and still the owner's call. See the
+2026-07-30 revision at the foot of this file.**
+
+The rest of this section describes the state before that change and is kept as written, because the
+options and the legal reasoning below are what the decision was made against.
+
 **Proposed — open, and now narrowed to one tool.**
 
 When this record was written, `get_rep_performance` was one of several places where an operator's
@@ -824,3 +831,49 @@ touched in this pass either.
 8. **Deployed code lagged the tree by 38 commits.** Until 2026-07-29 production ran `576c31b`
    (20 June), predating the entire security release. Any argument of the form «the code does X, so
    production does X» was unsound for that whole period. Check `git rev-parse HEAD` on the VM first.
+
+### Revision, 2026-07-30 — option (b) implemented, scoped to the border
+
+9. **Status moves from Proposed to Partially Accepted.** Option (b) — the tool emits handles, the
+   server substitutes names back before the answer reaches the user — is now built and tested. It is
+   scoped to the cross-border case: `get_rep_performance` emits `Сотрудник XXXX` when the configured
+   provider is not a declared domestic processor, and the real ФИО when it is.
+
+   What that settles and what it does not:
+
+   - **Gate item 2 is satisfied for Wave A.** After a repoint, no operator ФИО is in the
+     model-facing composition from this tool. The transfer becomes uuids, aggregates and opaque
+     handles, which is the same legal property options (a) and (d) would have bought.
+   - **Gate item 4 is satisfied.** `tests/unit/backend/mcp-analytics-cone.test.ts` now pins both
+     halves: the ФИО present under the domestic provider (the two pre-existing assertions this
+     record predicted would need updating did NOT need updating, because the domestic path is
+     unchanged) and every fixture ФИО absent from the serialized result under a foreign one.
+   - **Gate item 7 is satisfied.** This tool is now inside the set the masking condition covers
+     rather than an unexamined exception to it.
+   - **What is deliberately NOT settled: whether ч. 5 ст. 5 minimisation alone justifies aliasing
+     under the domestic provider too.** The Recommendation argues for (b) unconditionally. Doing
+     that would change what a shipped production assistant answers today, and the only cost of
+     waiting is the one this record already accepted for the whole period it sat open. That is the
+     owner's call, and implementing it silently inside a change requested as "fix the Wave A
+     precondition" would have been making it for them. The switch is one condition in
+     `analytics.ts`; flipping it needs no new machinery.
+   - **`{ operatorNames: 'allowed' }` stays, and the count stays at exactly one.** The Recommendation
+     said to remove it once the tool emits handles. That holds only if the tool ALWAYS emits handles;
+     under the scoping above it still emits a real ФИО on the domestic path, so the exemption is
+     still true and removing it would be a false claim in the one place this exception is greppable
+     from. Remove it in the same change that makes aliasing unconditional, not before.
+
+10. **The mechanism is shared with contact-name masking, not a second copy of it.**
+    `backend/services/contact-alias.ts` issues both `Клиент XXXX` and `Сотрудник XXXX` from one
+    id-derived token, and `backend/services/contact-alias-resolver.ts` resolves both in a single
+    pass, so an answer naming a rep and a customer in one sentence comes back whole. Two prefixes
+    rather than one shared `USER-<hex>`: the system prompt's rule 6 tells the model not to print
+    machine handles, and this record's own cost #2 flagged that reusing them would need that
+    instruction to be true for one tool and false for another.
+
+11. **Persistence question (cost #3) answered: the stored copy holds handles.** `AssistantMessage`
+    rows are written with whatever the provider saw, and `getAssistantConversation` rehydrates on
+    read. This is the more expensive of the two options at read time and was chosen anyway, because
+    it makes replay safe by construction — a stored row cannot contain a name the provider was not
+    already allowed to see, so re-sending history is never a fresh disclosure. The read cost is two
+    narrow queries, paid only when a transcript actually contains an alias.
