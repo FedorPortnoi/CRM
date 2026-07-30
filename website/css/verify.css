@@ -1,0 +1,161 @@
+/* ============================================================================
+   4КУБ — email verification page island
+   ----------------------------------------------------------------------------
+   Loaded only by verify.html, alongside base.css. Cannot affect the landing
+   page or the register page.
+   ========================================================================== */
+
+.vf-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(1.5rem, 4vw, 3rem);
+  position: relative;
+  overflow: hidden;
+}
+.vf-veil {
+  position: absolute;
+  inset: -25% -20% auto;
+  height: 80%;
+  z-index: -1;
+  background: radial-gradient(45% 55% at 50% 22%, rgba(204, 120, 92, 0.14), transparent 70%);
+  pointer-events: none;
+}
+
+.vf-back {
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  min-height: 44px;
+  color: var(--ink-muted);
+  transition: color 0.2s var(--ease-out);
+}
+.vf-back:hover { color: var(--ink); }
+.vf-back svg { width: 22px; height: 22px; }
+.vf-back span { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; color: var(--ink); }
+
+.vf-body {
+  width: 100%;
+  max-width: 27rem;
+  margin: auto;
+  padding-block: 2.5rem;
+  text-align: center;
+}
+
+/* The envelope, drawn. Signals "check your mail" before any text is read. */
+.vf-icon {
+  width: 66px; height: 66px;
+  margin: 0 auto 1.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  display: grid; place-items: center;
+  background: var(--panel);
+  color: var(--accent);
+}
+.vf-icon svg { width: 30px; height: 30px; }
+
+.vf-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 1.4rem + 1.2vw, 2.2rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  margin: 0;
+}
+.vf-sub { color: var(--ink-muted); margin: 0.7rem 0 0; font-size: 0.99rem; overflow-wrap: anywhere; }
+
+/* ---- OTP cells --------------------------------------------------------- */
+
+.vf-code {
+  display: flex;
+  justify-content: center;
+  gap: clamp(0.35rem, 2vw, 0.6rem);
+  margin: 2.2rem 0 0;
+}
+.vf-code input {
+  width: clamp(42px, 13vw, 54px);
+  height: clamp(52px, 15vw, 64px);
+  padding: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: clamp(1.25rem, 1rem + 1vw, 1.6rem);
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  transition: border-color 0.2s var(--ease-out), background-color 0.2s var(--ease-out);
+  -moz-appearance: textfield;
+}
+.vf-code input::-webkit-outer-spin-button,
+.vf-code input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.vf-code input:focus { outline: none; border-color: var(--accent); background: var(--panel-raised); }
+.vf-code input.filled { border-color: var(--accent-warm); color: var(--accent-quiet); }
+.vf-code input.is-error { border-color: var(--danger); }
+
+.vf-error {
+  display: none;
+  margin-top: 1.2rem;
+  background: rgba(204, 82, 71, 0.10);
+  border: 1px solid rgba(204, 82, 71, 0.4);
+  color: #F0B4AE;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  font-size: 0.92rem;
+}
+.vf-error.show { display: block; }
+
+.vf-submit { margin-top: 1.6rem; }
+
+.vf-resend {
+  margin-top: 1.5rem;
+  font-size: 0.92rem;
+  color: var(--ink-faint);
+}
+.vf-resend button {
+  background: none;
+  border: 0;
+  padding: 0.4rem 0;
+  min-height: 44px;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.vf-resend button:disabled { color: var(--ink-faint); cursor: default; text-decoration: none; }
+
+.vf-hint { margin: 1.9rem 0 0; font-size: 0.85rem; color: var(--ink-faint); line-height: 1.55; }
+
+/* ---- success ----------------------------------------------------------- */
+
+.vf-ok-mark {
+  width: 74px; height: 74px;
+  margin: 0 auto 1.7rem;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(204, 120, 92, 0.12);
+  border: 1px solid rgba(204, 120, 92, 0.45);
+  color: var(--accent);
+}
+.vf-ok-mark svg { width: 34px; height: 34px; }
+.vf-stores { display: grid; gap: 0.7rem; margin-top: 2rem; }
+.vf-store {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem;
+  min-height: 52px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  font-size: 0.96rem;
+  color: var(--ink);
+  transition: border-color 0.25s var(--ease-out), background-color 0.25s var(--ease-out);
+}
+.vf-store:hover { border-color: var(--accent); background: var(--panel); }
+.vf-store svg { width: 18px; height: 18px; }
+
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid rgba(23, 17, 14, 0.35);
+  border-top-color: #17110E;
+  border-radius: 50%;
+  animation: vf-spin 0.7s linear infinite;
+}
+@keyframes vf-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 1.8s; } }

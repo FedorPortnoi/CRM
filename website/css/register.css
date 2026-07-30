@@ -1,0 +1,160 @@
+/* ============================================================================
+   4КУБ — registration page island
+   ----------------------------------------------------------------------------
+   Its own file: this page shares only base.css with the landing page, so a
+   change here cannot reach the landing sections and vice versa.
+   ========================================================================== */
+
+.reg-shell {
+  min-height: 100dvh;
+  display: grid;
+  align-items: stretch;
+}
+@media (min-width: 960px) {
+  /* Form leads on the left; the reassurance column is deliberately narrower so
+     it reads as support, not as a second pitch. */
+  .reg-shell { grid-template-columns: 1.08fr 0.92fr; }
+}
+
+/* ---- left: the form ---------------------------------------------------- */
+
+.reg-main {
+  display: flex;
+  flex-direction: column;
+  padding: clamp(1.5rem, 4vw, 3rem);
+}
+.reg-back {
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  font-size: 0.92rem; color: var(--ink-muted);
+  min-height: 44px;
+  transition: color 0.2s var(--ease-out);
+}
+.reg-back:hover { color: var(--ink); }
+.reg-back svg { width: 22px; height: 22px; }
+.reg-back span { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; color: var(--ink); }
+
+.reg-body { width: 100%; max-width: 30rem; margin: auto; padding-block: 2.5rem; }
+.reg-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 1.4rem + 1.5vw, 2.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  margin: 0;
+}
+.reg-sub { color: var(--ink-muted); margin: 0.7rem 0 0; font-size: 0.99rem; }
+
+.reg-form { margin-top: 2rem; display: grid; gap: 1.05rem; }
+.reg-field label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 0.5rem;
+}
+.reg-input-wrap { position: relative; }
+.reg-field input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 1rem;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 1rem;
+  transition: border-color 0.2s var(--ease-out), background-color 0.2s var(--ease-out);
+}
+.reg-field input::placeholder { color: var(--ink-faint); }
+.reg-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--panel-raised);
+}
+.reg-input-wrap.is-error input { border-color: var(--danger); }
+.reg-field input[type='password'],
+.reg-field input#password { padding-right: 3.25rem; }
+
+.reg-toggle {
+  position: absolute;
+  right: 6px; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: 0; border-radius: 10px;
+  color: var(--ink-faint); cursor: pointer;
+  transition: color 0.2s var(--ease-out);
+}
+.reg-toggle:hover { color: var(--ink); }
+.reg-toggle svg { width: 20px; height: 20px; }
+
+.reg-hint { margin: 0.5rem 0 0; font-size: 0.83rem; color: var(--ink-faint); }
+
+.reg-error {
+  display: none;
+  background: rgba(204, 82, 71, 0.10);
+  border: 1px solid rgba(204, 82, 71, 0.4);
+  color: #F0B4AE;
+  border-radius: 12px;
+  padding: 0.8rem 1rem;
+  font-size: 0.93rem;
+}
+.reg-error.show { display: block; }
+
+.reg-submit { margin-top: 0.4rem; }
+.reg-legal { margin: 1.1rem 0 0; font-size: 0.83rem; color: var(--ink-faint); line-height: 1.55; }
+.reg-legal a { color: var(--ink-muted); text-decoration: underline; text-underline-offset: 3px; }
+.reg-legal a:hover { color: var(--ink); }
+
+/* Spinner shown inside the button while the request is in flight. */
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid rgba(23, 17, 14, 0.35);
+  border-top-color: #17110E;
+  border-radius: 50%;
+  animation: reg-spin 0.7s linear infinite;
+}
+@keyframes reg-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 1.8s; }
+}
+
+/* ---- right: reassurance ------------------------------------------------ */
+
+.reg-aside {
+  display: none;
+  background: var(--bg-deep);
+  border-left: 1px solid var(--line);
+  padding: clamp(2rem, 4vw, 3.5rem);
+  position: relative;
+  overflow: hidden;
+}
+@media (min-width: 960px) { .reg-aside { display: flex; flex-direction: column; justify-content: center; } }
+.reg-aside-veil {
+  position: absolute; inset: auto -20% -30% -20%;
+  height: 60%;
+  background: radial-gradient(50% 60% at 50% 100%, rgba(204, 120, 92, 0.14), transparent 70%);
+  pointer-events: none;
+}
+.reg-aside-inner { position: relative; max-width: 26rem; }
+.reg-steps { list-style: none; margin: 1.8rem 0 0; padding: 0; display: grid; gap: 1.4rem; counter-reset: reg-step; }
+.reg-steps li { display: grid; grid-template-columns: 30px 1fr; gap: 0.9rem; align-items: start; }
+.reg-steps li::before {
+  counter-increment: reg-step;
+  content: counter(reg-step);
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+.reg-steps b { display: block; font-weight: 600; margin-bottom: 0.15rem; }
+.reg-steps p { margin: 0; color: var(--ink-muted); font-size: 0.93rem; }
+.reg-aside-foot {
+  margin-top: 2.6rem; padding-top: 1.6rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.88rem; color: var(--ink-faint);
+}

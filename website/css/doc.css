@@ -1,0 +1,106 @@
+/* ============================================================================
+   4КУБ — legal / document page island
+   ----------------------------------------------------------------------------
+   Loaded only by privacy.html (and any future terms page), alongside base.css.
+
+   This is the one page where a LIGHT ROOM is not a stylistic choice: a legal
+   document is read, printed and forwarded, so it is set on porcelain with a
+   generous measure. It borrows the room tokens from base.css rather than
+   inventing a second palette.
+   ========================================================================== */
+
+.doc-page {
+  background: var(--room-bg);
+  color: var(--room-ink);
+  min-height: 100dvh;
+}
+
+.doc-bar {
+  border-bottom: 1px solid var(--room-line);
+  background: var(--room-panel);
+}
+.doc-bar-inner {
+  max-width: 52rem;
+  margin-inline: auto;
+  padding: 0 clamp(1.25rem, 4vw, 2rem);
+  height: 64px;
+  display: flex;
+  align-items: center;
+}
+.doc-back {
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  min-height: 44px;
+  color: var(--room-muted);
+  transition: color 0.2s var(--ease-out);
+}
+.doc-back:hover { color: var(--room-ink); }
+.doc-back svg { width: 22px; height: 22px; }
+.doc-back span { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; color: var(--room-ink); }
+
+.doc-body {
+  max-width: 52rem;
+  margin-inline: auto;
+  padding: clamp(2.5rem, 6vw, 4.5rem) clamp(1.25rem, 4vw, 2rem) 5rem;
+}
+
+.doc-body h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 1.5rem + 1.4vw, 2.5rem);
+  line-height: 1.14;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  margin: 0;
+  color: var(--room-ink);
+}
+.doc-updated {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--room-muted);
+  margin: 0.85rem 0 2.4rem;
+  padding-bottom: 1.6rem;
+  border-bottom: 1px solid var(--room-line);
+}
+.doc-body h2 {
+  font-family: var(--font-display);
+  font-size: 1.16rem;
+  font-weight: 700;
+  margin: 2.6rem 0 0.7rem;
+  color: var(--room-ink);
+}
+/* 68ch keeps legal prose at a readable measure instead of edge to edge. */
+.doc-body p,
+.doc-body li { font-size: 1rem; line-height: 1.72; color: #4A413B; max-width: 68ch; }
+.doc-body p { margin: 0 0 1rem; }
+.doc-body ul { margin: 0 0 1rem; padding-left: 1.3rem; }
+.doc-body li { margin-bottom: 0.5rem; }
+.doc-body strong { color: var(--room-ink); font-weight: 600; }
+.doc-body a {
+  color: var(--room-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.doc-body a:hover { color: var(--room-ink); }
+
+.doc-foot {
+  max-width: 52rem;
+  margin-inline: auto;
+  padding: 1.6rem clamp(1.25rem, 4vw, 2rem) 3rem;
+  border-top: 1px solid var(--room-line);
+  font-size: 0.88rem;
+  color: var(--room-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.4rem;
+  justify-content: space-between;
+}
+.doc-foot a { color: var(--room-muted); text-decoration: underline; text-underline-offset: 3px; }
+.doc-foot a:hover { color: var(--room-ink); }
+
+/* Printed copies should not carry the chrome. */
+@media print {
+  .doc-bar, .doc-foot { display: none; }
+  .doc-page { background: #fff; }
+  .doc-body { padding-top: 0; }
+}
