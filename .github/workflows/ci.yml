@@ -1,0 +1,143 @@
+# The gate that did not exist.
+#
+# `test`, `lint` and `typecheck` were all defined in package.json and nothing
+# invoked any of them — so a release was `eas build` followed by
+# `scripts/rustore-publish.js publish`, both of which succeed with a red suite.
+# A security audit found this before a broken build did.
+#
+# Deliberately NOT a deploy pipeline. Deployment stays a human action: this repo
+# ships to the App Store and RuStore under review, and to a single VM by hand.
+# Automating that would need store credentials and a production SSH key in
+# GitHub secrets — a real supply-chain surface, on a PUBLIC repo, to save one
+# command. This file only answers "is main green".
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Manual runs, so a release can be gated on a fresh green rather than on
+  # whatever the last push happened to leave behind.
+  workflow_dispatch:
+
+# Read-only. This workflow never needs to write to the repo, and a public repo
+# should hand its jobs the narrowest token that works.
+permissions:
+  contents: read
+
+# A second push to the same branch makes the first run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # Pinned to a commit SHA, not a tag. A tag is mutable: whoever controls
+      # the action's repo can repoint v4 at new code, which then runs with this
+      # job's token and sees anything in the workspace. The audit called out
+      # unpinned third-party actions as a supply-chain risk and this is the
+      # answer to it. Comments record which release each SHA is.
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+          cache: npm
+
+      # `npm ci` — not `npm install`. The lockfile is the point: with ~70
+      # floating ^/~ ranges, `install` can resolve different code than the
+      # lockfile records, which is exactly how a dependency-confusion or
+      # compromised-release problem reaches a build unnoticed.
+      - name: Install dependencies
+        run: npm ci
+
+      # The Prisma client is generated, not committed, and typecheck cannot
+      # resolve model types without it.
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # Unit tests only. The integration and e2e suites need a live Postgres and
+      # a built app; wiring those is worth doing, but a gate that runs is worth
+      # more today than a perfect one that is still being written.
+      - name: Unit tests
+        run: npm run test:unit
+
+  # Advisory, and deliberately non-blocking. `npm audit` reports transitive
+  # advisories in build-time tooling (expo, react-native) that have no reachable
+  # path in the deployed backend — the audit traced every current HIGH and
+  # CRITICAL and found none reachable. Failing the build on them would train
+  # everyone to ignore a red X, which is worse than not checking.
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Production dependencies only: this is the set that actually ships.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  # A committed credential is not something to discover during an audit. This
+  # job exists because one already happened here: .easignore did not mirror
+  # .gitignore's `.env.bak*` rule, and a file holding 41 live credentials
+  # uploaded to Expo's build servers on every build for two days.
+  secrets-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: No secret-shaped file may be tracked
+        run: |
+          set -euo pipefail
+          # Tracked files only. Untracked local keys are the developer's
+          # business; a tracked one is everybody's, permanently, in history.
+          matches=$(git ls-files | grep -iE '(^|/)\.env($|\.)|\.pem$|\.p8$|\.jks$|\.keystore$|service-account.*\.json$|^credentials\.json$|(^|/)id_rsa' | grep -v '\.env\.example$' || true)
+          if [ -n "$matches" ]; then
+            echo "::error::Secret-shaped files are tracked in git:"
+            echo "$matches"
+            exit 1
+          fi
+          echo "No secret-shaped files tracked."
+
+      # The drift that caused the real incident. .easignore REPLACES .gitignore
+      # for EAS uploads rather than stacking on it, so every secret rule has to
+      # exist in both. This catches the next divergence instead of an audit.
+      - name: .easignore must cover .gitignore's secret rules
+        run: |
+          set -euo pipefail
+          missing=0
+          for rule in '.env' '.env.bak*' '*.pem' '*.p8' '*.jks' '*.keystore' 'credentials.json'; do
+            if grep -qxF "$rule" .gitignore 2>/dev/null && ! grep -qxF "$rule" .easignore 2>/dev/null; then
+              echo "::error::.gitignore has '$rule' but .easignore does not — it would upload to EAS."
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] && echo ".easignore mirrors .gitignore's secret rules."

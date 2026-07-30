@@ -26,6 +26,10 @@ import { EmailSendStatus, Prisma, SequenceEnrollmentStatus, SequenceStatus } fro
 import { db } from './db';
 import { decryptField } from './encryption';
 import { sendEmail } from './email';
+// The Subject line of a sequence message is a mail header, and services/email-templates.ts
+// already owns the control that makes a header value safe. It is imported rather than
+// reimplemented: a second copy would be the one that misses a character class.
+import { sanitizeHeaderValue } from './email-templates';
 // The token minted here is the same token the public pixel endpoint validates, so both
 // sides come from ONE generator. A second local copy could drift in length or alphabet and
 // silently make every open unrecordable.
@@ -52,6 +56,10 @@ export const SEQUENCE_TICK_BATCH_SIZE = 100;
  * A claimed enrollment has next_send_at pushed this far out before the send is attempted.
  * The claim is the atomic compare-and-set; a worker that dies mid-send releases the row
  * when the lease expires instead of stranding it.
+ *
+ * The window is counted from the moment the row is CLAIMED, never from the start of the
+ * tick — see processEnrollment. A lease measured from a stale tick timestamp can be written
+ * already expired, which is a duplicate send, not a late one.
  */
 export const SEQUENCE_SEND_LEASE_MS = 5 * 60_000;
 /** Backoff before retrying the SAME step after a provider failure. */
@@ -217,6 +225,11 @@ export type SequenceTickSummary = {
   skipped: number;
   unsubscribed: number;
   completed: number;
+  /**
+   * Set only when this call did nothing because another tick was still running. Optional so
+   * that a normal tick's summary keeps the shape every existing caller reads.
+   */
+  overlapped?: boolean;
 };
 
 type EnrollmentOutcome = 'sent' | 'failed' | 'skipped' | 'unsubscribed' | 'completed';
@@ -323,6 +336,46 @@ export function withUnsubscribeFooter(body: string, unsubscribeUrl: string): str
   }
 
   return `${body}\n\n---\nВы получили это письмо, так как дали согласие на получение рассылки.\nОтказаться от рассылки: ${unsubscribeUrl}`;
+}
+
+/**
+ * RFC 8058 one-click unsubscribe, ADVERTISED.
+ *
+ * api/controllers/sequences.ts already acts on a `List-Unsubscribe=One-Click` POST, but a
+ * mail client only shows the button when the message asks for it, and nothing did. Two
+ * headers do the asking: `List-Unsubscribe` (RFC 2369) carries the URI — the same one the
+ * body links to, from the same builder — and `List-Unsubscribe-Post` (RFC 8058) declares
+ * that POSTing to it acts immediately with no page in between.
+ *
+ * `List-Unsubscribe-Post` is emitted ONLY for an https URI. RFC 8058 §3 requires https, and
+ * a provider POSTing an opt-out token over plaintext would hand that token to anyone on the
+ * path. A dev box on http://localhost still gets the plain `List-Unsubscribe`, which is
+ * valid RFC 2369 on its own — the opt-out link in the body is unaffected either way.
+ *
+ * Anything that is not a parseable http(s) URL yields no headers at all: a malformed header
+ * is worse than an absent one, and ФЗ-38 art. 18 is already satisfied by the link in the
+ * body that withUnsubscribeFooter guarantees. Parsing through `URL` is also what makes the
+ * value header-safe — the WHATWG parser strips tab/CR/LF rather than passing them through.
+ */
+export function buildListUnsubscribeHeaders(unsubscribeUrl: string): Record<string, string> {
+  let parsed: URL;
+  try {
+    parsed = new URL(unsubscribeUrl);
+  } catch {
+    return {};
+  }
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return {};
+  }
+
+  const headers: Record<string, string> = { 'List-Unsubscribe': `<${parsed.toString()}>` };
+
+  if (parsed.protocol === 'https:') {
+    headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+  }
+
+  return headers;
 }
 
 const HTML_ESCAPES: Record<string, string> = {
@@ -1026,21 +1079,51 @@ export async function listEnrollments(
 // ─── The scheduler tick ───────────────────────────────────────────────────────
 
 /**
+ * ONE TICK AT A TIME, per process.
+ *
+ * services/scheduler.ts re-fires the tick every 60 s and does not wait for the previous
+ * call to finish. A tick that walks SEQUENCE_TICK_BATCH_SIZE enrollments per organization,
+ * awaiting a provider round-trip on each, routinely outlives 60 s — and two overlapping
+ * ticks read the same due rows before either has claimed them.
+ *
+ * The database claim in processEnrollment is still the authority (it is the only thing that
+ * works across two backend instances). This flag is the cheap in-process half: it stops the
+ * same worker from racing itself, which is where the overlap actually came from.
+ */
+let tickInFlight = false;
+
+function emptyTickSummary(): SequenceTickSummary {
+  return { processed: 0, sent: 0, failed: 0, skipped: 0, unsubscribed: 0, completed: 0 };
+}
+
+/**
  * One pass over everything that is due. Called from the existing 60 s loop in
  * services/scheduler.ts — this file installs no timer of its own.
  *
+ * A call made while a previous tick is still running does nothing and comes back with
+ * `overlapped: true`; the caller can report that the send loop is falling behind its
+ * interval. The flag is released in a `finally`, so a tick that throws does not wedge the
+ * mailing permanently.
+ */
+export async function runSequenceTick(now: Date = new Date()): Promise<SequenceTickSummary> {
+  if (tickInFlight) {
+    return { ...emptyTickSummary(), overlapped: true };
+  }
+
+  tickInFlight = true;
+  try {
+    return await runDueEnrollments(now);
+  } finally {
+    tickInFlight = false;
+  }
+}
+
+/**
  * Each enrollment is processed inside its own try/catch: one contact's bad address, dead
  * provider or malformed step must never stop the rest of the mailing.
  */
-export async function runSequenceTick(now: Date = new Date()): Promise<SequenceTickSummary> {
-  const summary: SequenceTickSummary = {
-    processed: 0,
-    sent: 0,
-    failed: 0,
-    skipped: 0,
-    unsubscribed: 0,
-    completed: 0,
-  };
+async function runDueEnrollments(now: Date): Promise<SequenceTickSummary> {
+  const summary = emptyTickSummary();
 
   const dueWhere: Prisma.SequenceEnrollmentWhereInput = {
     status: SequenceEnrollmentStatus.active,
@@ -1093,6 +1176,20 @@ async function processEnrollment(
   now: Date,
 ): Promise<EnrollmentOutcome> {
   // Atomic claim: whoever flips next_send_at owns this enrollment for the lease window.
+  //
+  // The lease is measured from HERE, not from `now`. `now` is captured once when the tick
+  // starts and the tick then walks up to SEQUENCE_TICK_BATCH_SIZE enrollments per
+  // organization, awaiting a network send on each, so by the time the hundredth row is
+  // claimed `now` can be many minutes stale. A lease written as `now + 5 min` was then
+  // already in the past at the moment it was written: the row still read as due, the next
+  // tick re-claimed it while this one was mid-send, and the contact received the same
+  // advertising message twice — a per-recipient ФЗ-38 exposure plus a duplicate EmailSend
+  // ledger row that makes the statistics lie about it.
+  //
+  // The `where` still tests against `now`. That is deliberately the narrower predicate: the
+  // row has to have been due when the tick decided to look at it, so a row another worker
+  // has already leased or advanced cannot be stolen back.
+  const claimedAt = new Date();
   const claim = await db.sequenceEnrollment.updateMany({
     where: {
       id: candidate.id,
@@ -1100,7 +1197,7 @@ async function processEnrollment(
       status: SequenceEnrollmentStatus.active,
       next_send_at: { lte: now },
     },
-    data: { next_send_at: new Date(now.getTime() + SEQUENCE_SEND_LEASE_MS) },
+    data: { next_send_at: new Date(claimedAt.getTime() + SEQUENCE_SEND_LEASE_MS) },
   });
 
   if (claim.count === 0) {
@@ -1180,7 +1277,14 @@ async function processEnrollment(
   );
   const unsubscribeUrl = buildUnsubscribeUrl(token);
   const vars = buildTemplateVars(decision.contact, unsubscribeUrl);
-  const subject = renderTemplate(content.subject, vars);
+  // The rendered subject becomes a mail header, and the values substituted into it are
+  // contact data — a first_name or a company the customer typed, which the contact schemas
+  // allow to contain control characters. "Здравствуйте, {{first_name}}" with a first_name of
+  // "Иван\r\nBcc: attacker@example.com" is header injection: an attacker-chosen recipient,
+  // or a forged body, on a message we sign. Folded here with the same sanitiser
+  // services/email-templates.ts applies on the template path, so the ledger row and the
+  // outbound header hold the identical, header-safe string.
+  const subject = sanitizeHeaderValue(renderTemplate(content.subject, vars));
   const body = withUnsubscribeFooter(renderTemplate(content.body, vars), unsubscribeUrl);
 
   // Minted once, here: the token stored on the ledger row and the token embedded in the
@@ -1219,7 +1323,9 @@ async function processEnrollment(
     console.warn('[sequences] open tracking pixel skipped', error);
   }
 
-  const result = await sendEmail(decision.contact.email, subject, body, html);
+  const result = await sendEmail(decision.contact.email, subject, body, html, {
+    headers: buildListUnsubscribeHeaders(unsubscribeUrl),
+  });
 
   if (result.success) {
     await db.emailSend.updateMany({

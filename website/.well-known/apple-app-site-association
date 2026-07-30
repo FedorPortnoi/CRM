@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["C924RZ5S3J.com.fedorportnoi.crm"],
+        "components": [
+          {
+            "/": "/i",
+            "comment": "Invite landing. The invite token rides in the URL fragment, which iOS passes through to the app intact via NSUserActivity.webpageURL — so an invitee who already has 4КУБ installed skips the browser and the store entirely."
+          }
+        ]
+      }
+    ]
+  }
+}

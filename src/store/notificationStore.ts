@@ -1,4 +1,11 @@
 import { create } from 'zustand';
+// This store used to resolve its own base URL from the environment, with a loopback default,
+// which made it the one caller in the app that skipped resolveApiUrl() in src/utils/api.ts —
+// the guard that refuses loopback, 0.0.0.0 and placeholder hosts in a production build. A
+// release built without the URL configured therefore pointed every notification request at the
+// build machine while the rest of the app failed loudly at startup. There is one API base and
+// it comes from the shared resolver.
+import { API_URL } from '../utils/api';
 import { useUserStore } from './userStore';
 
 export interface AppNotification {
@@ -26,10 +33,6 @@ interface NotificationState {
   fetchUnreadCount: () => Promise<void>;
 }
 
-function apiBase() {
-  return process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1';
-}
-
 function authHeaders() {
   const token = useUserStore.getState().token;
   return { Authorization: `Bearer ${token ?? ''}`, 'Content-Type': 'application/json' };
@@ -48,7 +51,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     set({ loading: true });
 
     try {
-      const res = await fetch(`${apiBase()}/notifications?page=${nextPage}&per_page=30`, {
+      const res = await fetch(`${API_URL}/notifications?page=${nextPage}&per_page=30`, {
         headers: authHeaders(),
       });
       if (!res.ok) return;
@@ -69,7 +72,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       notifications: s.notifications.map((n) => n.id === id ? { ...n, is_read: true } : n),
       unreadCount: Math.max(0, s.unreadCount - (s.notifications.find((n) => n.id === id)?.is_read ? 0 : 1)),
     }));
-    await fetch(`${apiBase()}/notifications/${id}/read`, {
+    await fetch(`${API_URL}/notifications/${id}/read`, {
       method: 'PATCH',
       headers: { Authorization: authHeaders().Authorization },
     });
@@ -80,7 +83,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       notifications: s.notifications.map((n) => ({ ...n, is_read: true })),
       unreadCount: 0,
     }));
-    await fetch(`${apiBase()}/notifications/read-all`, {
+    await fetch(`${API_URL}/notifications/read-all`, {
       method: 'PATCH',
       headers: { Authorization: authHeaders().Authorization },
     });
@@ -88,7 +91,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
   fetchUnreadCount: async () => {
     try {
-      const res = await fetch(`${apiBase()}/notifications/unread-count`, { headers: authHeaders() });
+      const res = await fetch(`${API_URL}/notifications/unread-count`, { headers: authHeaders() });
       if (!res.ok) return;
       const json = await res.json() as { data: { count: number } };
       set({ unreadCount: json.data.count });

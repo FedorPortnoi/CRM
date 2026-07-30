@@ -13,15 +13,21 @@ function getTicketWsUrl(ticket: string): string {
   return `${wsBase()}/api/v1/ws?ticket=${encodeURIComponent(ticket)}`;
 }
 
-// DEPRECATED fallback: puts the long-lived JWT in the URL. Kept only for backends older than
-// the /ws/ticket endpoint; remove once every deployed backend serves tickets.
-function getTokenWsUrl(token: string): string {
-  return `${wsBase()}/api/v1/ws?token=${encodeURIComponent(token)}`;
+// The handshake URL, or null when there is no ticket to hand over.
+//
+// There used to be a `?token=` fallback here for backends predating /ws/ticket. It is gone and
+// must not come back: a query string is written to proxy logs, server access logs and client
+// history, so that fallback published the long-lived bearer JWT to every hop on the path. Worse,
+// it triggered on ANY failure of /ws/ticket — a transient 500 or a timeout was enough. There is
+// a single deployed backend and it serves tickets, so a missing ticket now means "retry", never
+// "downgrade": the connection fails closed.
+export function resolveWsUrl(ticket: string | null): string | null {
+  return ticket === null ? null : getTicketWsUrl(ticket);
 }
 
 // Exchange the JWT (sent in the Authorization header, never in a URL) for a short-lived,
-// single-use handshake ticket. Returns null when the backend has no ticket endpoint (404) or
-// the request fails, in which case the caller falls back to the legacy ?token= URL.
+// single-use handshake ticket. Returns null on any failure, which the caller treats as a
+// connection failure to be retried with backoff.
 async function fetchWsTicket(token: string): Promise<string | null> {
   try {
     const res = await fetch(`${API_URL}/ws/ticket`, {
@@ -59,7 +65,16 @@ export function useOrgWebSocket(onMessage: MessageHandler): void {
       // The token may have been cleared (logout) while the ticket request was in flight.
       if (!mountedRef.current) return;
 
-      const ws = new WebSocket(ticket ? getTicketWsUrl(ticket) : getTokenWsUrl(token));
+      const url = resolveWsUrl(ticket);
+      if (url === null) {
+        // Fail closed: no ticket, no socket. Reuse the same backoff as a dropped connection so
+        // a backend that is briefly unhealthy produces the usual 1s→30s curve instead of a
+        // tight retry loop, and so live updates resume by themselves once it recovers.
+        scheduleRetry();
+        return;
+      }
+
+      const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {

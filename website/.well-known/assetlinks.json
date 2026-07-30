@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.fedorportnoi.crm",
+      "sha256_cert_fingerprints": [
+        "8D:13:32:7D:60:F6:4E:DD:9E:5E:2F:CA:AB:4C:14:6E:ED:EF:CD:B9:55:AC:37:D0:1D:8C:45:A8:4A:6D:94:9C"
+      ]
+    }
+  }
+]

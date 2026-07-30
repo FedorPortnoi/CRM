@@ -27,7 +27,11 @@
         "NSCameraUsageDescription": "CRM uses the camera to scan business cards.",
         "NSPhotoLibraryUsageDescription": "CRM lets you choose business card images from your photo library.",
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "associatedDomains": [
+        "applinks:4kub.ru",
+        "applinks:www.4kub.ru"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -47,6 +51,37 @@
         "android.permission.READ_CONTACTS",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.POST_NOTIFICATIONS"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "4kub.ru",
+              "pathPrefix": "/i"
+            },
+            {
+              "scheme": "https",
+              "host": "www.4kub.ru",
+              "pathPrefix": "/i"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR",
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "web": {

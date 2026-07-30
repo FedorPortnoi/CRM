@@ -152,7 +152,7 @@ export const InviteController = {
       where: { token_hash: hashSecret(token) },
       select: {
         id: true, name: true, role: true, expires_at: true, consumed_at: true,
-        revoked_at: true, opened_at: true,
+        revoked_at: true, opened_at: true, organization_id: true,
         organization: { select: { name: true } },
       },
     });
@@ -163,6 +163,7 @@ export const InviteController = {
     if (rejection) {
       await auditLog({
         action: 'invite.open', outcome: 'denied', request,
+        organizationId: invite.organization_id,
         metadata: { invite_id: invite.id, reason: rejection },
       });
       return inviteUnavailable(reply);
@@ -182,10 +183,14 @@ export const InviteController = {
       },
     });
 
+    // Org-scoped, and every open is recorded — not just the first. Repeated opens
+    // are the signal of a link forwarded into a group chat, and `open` hands any
+    // holder the invitee's name, the organisation name and the assigned role. The
+    // owner cannot react to what they cannot see.
     await auditLog({
       action: 'invite.open', outcome: 'success', request,
-      organizationId: undefined,
-      metadata: { invite_id: invite.id },
+      organizationId: invite.organization_id,
+      metadata: { invite_id: invite.id, repeat_open: invite.opened_at !== null },
     });
 
     return reply.send({
@@ -219,7 +224,7 @@ export const InviteController = {
 
     const select = {
       id: true, name: true, role: true, expires_at: true, consumed_at: true, revoked_at: true,
-      claim_expires_at: true,
+      claim_expires_at: true, organization_id: true,
       organization: { select: { name: true } },
     } as const;
 
@@ -231,6 +236,7 @@ export const InviteController = {
       consumed_at: Date | null;
       revoked_at: Date | null;
       claim_expires_at: Date | null;
+      organization_id: string;
       organization: { name: string };
     };
 
@@ -269,6 +275,7 @@ export const InviteController = {
     if (rejection) {
       await auditLog({
         action: 'invite.lookup', outcome: 'denied', request,
+        organizationId: invite.organization_id,
         metadata: { invite_id: invite.id, reason: rejection, via },
       });
       return inviteUnavailable(reply);
@@ -283,20 +290,68 @@ export const InviteController = {
     // Neither may survive into the step that actually creates the user, so both
     // are nulled here and only `accept_hash` — which has never left this server
     // except in this response — can be spent at `accept`.
+    // THE HANDOFF DIES HERE; THE CLAIM CODE DOES NOT. They look symmetrical and
+    // they are not, because they have been to different places.
+    //
+    // The handoff has ridden through RuStore's query string and the iOS system
+    // clipboard — somebody else's logs, and any app on the device. It must be
+    // spendable exactly once.
+    //
+    // The claim code has only ever been on the invitee's own screen. Keeping it
+    // alive until the invite is actually consumed is what makes this flow
+    // RECOVERABLE: if the app is killed between lookup and submit — a phone call,
+    // a backgrounded install, a dropped connection — the accept token in memory
+    // is gone, and without a surviving credential the invite would be stranded
+    // while the owner's list still showed it as pending. The invitee can now
+    // simply retype the code. It is 15-minute, rate-limited, and can only ever
+    // be traded for a fresh accept token, never spent directly.
+    //
+    // The write is CONDITIONAL so two concurrent lookups cannot both mint. The
+    // app deliberately tries several credentials in order of reliability, so a
+    // Universal Link opening alongside a stored install referrer is an ordinary
+    // race, not an edge case — and the loser must not silently invalidate the
+    // accept token the winner just handed to the form.
     const accept_token = generateHandoffToken();
-    await db.invite.update({
-      where: { id: invite.id },
+    const acceptExpiry = new Date(now.getTime() + ACCEPT_TTL_MS);
+    const minted = await db.invite.updateMany({
+      where: {
+        id: invite.id,
+        consumed_at: null,
+        revoked_at: null,
+        // Only mint when no accept token is currently live. A second lookup
+        // inside the window is a no-op rather than a rotation.
+        OR: [{ accept_hash: null }, { accept_expires_at: { lte: now } }],
+      },
       data: {
         accept_hash: hashSecret(accept_token),
-        accept_expires_at: new Date(now.getTime() + ACCEPT_TTL_MS),
+        accept_expires_at: acceptExpiry,
         handoff_hash: null,
-        claim_hash: null,
-        claim_expires_at: null,
       },
     });
 
+    if (minted.count === 0) {
+      // Another lookup won. Do not hand back a token that was never stored —
+      // that would produce a form which 404s on submit for no visible reason.
+      await auditLog({
+        action: 'invite.lookup', outcome: 'denied', request,
+        organizationId: invite.organization_id,
+        metadata: { invite_id: invite.id, reason: 'accept_token_already_issued', via },
+      });
+      return reply.code(409).send({
+        error: {
+          code: 'INVITE_IN_PROGRESS',
+          message: 'Приглашение уже открыто на другом устройстве. Завершите регистрацию там или откройте ссылку заново.',
+        },
+      });
+    }
+
     await auditLog({
       action: 'invite.lookup', outcome: 'success', request,
+      // Org-scoped so the OWNER can see it. listAuditEvents filters hard on
+      // organization_id, so a row written without one is invisible to the only
+      // person who would act on it — which made the audit trail useless for
+      // exactly the two unauthenticated surfaces that most need watching.
+      organizationId: invite.organization_id,
       metadata: { invite_id: invite.id, via },
     });
 
@@ -373,11 +428,30 @@ export const InviteController = {
       // the WHERE is an atomic compare-and-set: two devices redeeming the same
       // token concurrently produce one winner and one count === 0, rather than
       // two accounts.
-      const claim = await tx.invite.updateMany({
-        where: { id: invite.id, consumed_at: null, revoked_at: null },
-        data: { consumed_at: new Date() },
+      // Both expiries are re-checked HERE, not only before the transaction. The
+      // pre-flight check runs, then bcrypt.hash at cost 12 takes 250-400 ms, and
+      // an invite that lapses inside that window would otherwise still create an
+      // account. Revocation was already covered by this CAS; expiry was not.
+      //
+      // The claim code is burned in the same statement — its job was to survive
+      // as far as a successful accept, and it ends here.
+      const claimed = await tx.invite.updateMany({
+        where: {
+          id: invite.id,
+          consumed_at: null,
+          revoked_at: null,
+          expires_at: { gt: new Date() },
+          accept_expires_at: { gt: new Date() },
+        },
+        data: {
+          consumed_at: new Date(),
+          accept_hash: null,
+          accept_expires_at: null,
+          claim_hash: null,
+          claim_expires_at: null,
+        },
       });
-      if (claim.count === 0) return null;
+      if (claimed.count === 0) return null;
 
       const user = await tx.user.create({
         data: {

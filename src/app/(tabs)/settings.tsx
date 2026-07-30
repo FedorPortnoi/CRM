@@ -138,8 +138,19 @@ export default function SettingsScreen(): JSX.Element {
   };
 
   const handleLogout = async (): Promise<void> => {
-    await logout();
-    router.replace('/login');
+    // The full teardown — offline queue and its SecureStore bodies, the react-query cache and
+    // the delta-sync watermark — lives inside userStore.logout() rather than here, so that
+    // every exit path gets it (this button, the 401 handler in useCreateMutation, anything
+    // added later) instead of only the one screen that remembered to do it.
+    //
+    // Navigation is in `finally`: if any teardown step throws, leaving the user parked on an
+    // authenticated screen is strictly worse than sending them to /login with a session that
+    // was cleared credentials-first.
+    try {
+      await logout();
+    } finally {
+      router.replace('/login');
+    }
   };
 
   const handleExport = async (kind: ExportKind): Promise<void> => {

@@ -254,17 +254,36 @@ async function rotateExpiredJoinCodes(): Promise<void> {
   }
 }
 
+/**
+ * This interval does not await anything, so a tick that outruns the 60 s period would
+ * otherwise be running alongside its own successor — and two sequence ticks reading the
+ * same due enrollments is how a contact gets the same advertising message twice.
+ * runSequenceTick refuses to start a second pass while one is in flight (services/
+ * sequences.ts owns that guard, so every caller gets it, not just this loop). What is left
+ * to do here is not swallow the refusal: a tick that keeps being skipped means the send
+ * loop no longer fits in its interval, and that is only visible if it is said out loud.
+ */
+function tickSequences(): void {
+  void runSequenceTick()
+    .then((summary) => {
+      if (summary.overlapped) {
+        console.warn('[scheduler] sequence tick skipped — the previous tick is still running');
+      }
+    })
+    .catch(console.error);
+}
+
 export function startScheduler(): void {
   // Outbound webhook retries and email-sequence sends share this loop rather than adding
   // second and third timers.
   void runWebhookDeliveryTick().catch(console.error);
-  void runSequenceTick().catch(console.error);
+  tickSequences();
   setInterval(() => {
     void runReminders().catch(console.error);
     void runRecurrence().catch(console.error);
     void runDeadlineNotifications().catch(console.error);
     void runWebhookDeliveryTick().catch(console.error);
-    void runSequenceTick().catch(console.error);
+    tickSequences();
   }, 60_000);
 
   // Hourly cleanup of orgs whose owner never verified within 24 h, plus join-code rotation

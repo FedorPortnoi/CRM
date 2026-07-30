@@ -1,6 +1,14 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { API_URL } from '../utils/api';
+import { clearQueue } from '../utils/offlineQueue';
+import { queryClient } from '../utils/queryClient';
+
+// Mirrors LAST_SYNC_KEY in src/utils/backgroundSync.ts. It is duplicated rather than imported
+// because importing that module runs TaskManager.defineTask() as an import side effect, which
+// must not happen just because somebody signed out.
+const LAST_SYNC_KEY = 'crm-last-sync-at';
 
 function isTokenExpired(token: string): boolean {
   try {
@@ -198,6 +206,37 @@ export const useUserStore = create<UserState>()((set) => ({
 
     await SecureStore.deleteItemAsync('crm_auth_token');
     await SecureStore.deleteItemAsync('crm_auth_user');
+
+    // Credentials alone are not the session. Three things outlive them, all of them scoped to
+    // the account that just left, and all of them visible to whoever signs in next on this
+    // device — a shared phone is the normal case for this product, not an edge case.
+    //
+    // Ordering: credentials go first because that is the step that must never be skipped; each
+    // step below is independently guarded so that one failure cannot strand the app in a
+    // half-logged-out state where `user` is still set.
+    //
+    // 1. The offline queue. flush() re-reads the bearer token at send time, so a queue left
+    //    behind by user A is replayed under user B's token, into B's org, from a background
+    //    task with no UI. clearQueue() also deletes the per-item SecureStore bodies, which are
+    //    keyed separately and would otherwise be unreachable garbage holding A's payloads.
+    //    flush() additionally refuses to send items stamped with a different owner, which is
+    //    what covers a logout interrupted before this line runs.
+    await clearQueue().catch(() => undefined);
+
+    // 2. The in-memory react-query cache. The persisted half already excludes PII collections
+    //    (see queryClient.ts), but the live cache still holds A's contacts, deals and reports
+    //    and would render them to B for as long as it takes the first refetch to land.
+    try {
+      queryClient.clear();
+    } catch {
+      // Never let a cache failure keep the user signed in.
+    }
+
+    // 3. The delta-sync watermark. It is device-global, so B's first delta sync would ask the
+    //    server for "everything since A last synced" and permanently skip every record that
+    //    changed before that moment — a silent, unrecoverable gap in B's data.
+    await AsyncStorage.removeItem(LAST_SYNC_KEY).catch(() => undefined);
+
     set({ user: null, token: null, error: null });
   },
 
