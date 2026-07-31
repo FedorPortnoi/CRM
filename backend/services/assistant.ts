@@ -841,7 +841,15 @@ export async function sendAssistantMessage(
         data: {
           organization_id: caller.org_id,
           user_id: caller.sub,
-          title: toTitle(userText),
+          // wireText, NOT userText. The invariant this whole path rests on is
+          // that a stored row can only contain what the provider was already
+          // allowed to see — and the title is a stored row like any other. It
+          // was the one place still holding the raw sentence, so under a foreign
+          // provider «что там по Иванову?» sat in AssistantConversation.title
+          // while every AssistantMessage beside it correctly held the alias.
+          // Nothing rehydrates titles, which is exactly why it read fine and
+          // nobody noticed.
+          title: toTitle(wireText),
         },
         select: { id: true, title: true },
       });

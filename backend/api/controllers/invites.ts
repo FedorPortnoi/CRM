@@ -281,15 +281,12 @@ export const InviteController = {
       return inviteUnavailable(reply);
     }
 
-    // Mint the accept token into its OWN column, and burn both transit secrets
-    // in the same write.
+    // Mint the accept token into its OWN column and burn the handoff.
     //
     // This is the fix for the flaw that made the handoff a complete
-    // account-creation credential. The handoff has by now been through RuStore's
-    // query string or the iOS clipboard; the claim code has been on a screen.
-    // Neither may survive into the step that actually creates the user, so both
-    // are nulled here and only `accept_hash` — which has never left this server
-    // except in this response — can be spent at `accept`.
+    // account-creation credential: only `accept_hash` — which has never left
+    // this server except in the response below — can be spent at `accept`.
+    //
     // THE HANDOFF DIES HERE; THE CLAIM CODE DOES NOT. They look symmetrical and
     // they are not, because they have been to different places.
     //

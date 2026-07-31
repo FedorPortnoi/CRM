@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, usePathname } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
@@ -35,6 +35,7 @@ Notifications.setNotificationHandler({
 
 export default function RootLayout() {
   const router = useRouter();
+  const pathname = usePathname();
   const { token, user, restoreSession } = useUserStore();
   const fetchOnboarding = useOnboardingStore((s) => s.fetch);
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
@@ -64,11 +65,28 @@ export default function RootLayout() {
       .catch(() => {});
   }, [restoreSession]);
 
+  /**
+   * Routes an unauthenticated user may legitimately be on.
+   *
+   * WITHOUT this exemption the invite flow is unreachable on a cold start, and
+   * silently so. An invitee has `token === null` by definition — that is the
+   * whole point of an invite — so the redirect below fires on them. On a warm
+   * link the redirect has already run and its deps never change again, which is
+   * why hand-testing a running app shows the invite screen working perfectly;
+   * on a COLD start from the link, React runs child effects before parent ones,
+   * so InviteScreen mounts, consumes the RuStore install referrer (which the SDK
+   * hands over exactly once), fires a lookup that mints an accept token — and is
+   * then thrown away by this redirect. The referrer is gone, the accept token is
+   * stranded, and the invitee lands on a login screen for an account that does
+   * not exist.
+   */
+  const UNAUTHENTICATED_ROUTES = ['/login', '/i', '/invite', '/language-select'];
+
   useEffect(() => {
-    if (!isRestoring && token === null) {
-      router.replace('/login');
-    }
-  }, [token, isRestoring, router]);
+    if (isRestoring || token !== null) return;
+    if (UNAUTHENTICATED_ROUTES.includes(pathname)) return;
+    router.replace('/login');
+  }, [token, isRestoring, router, pathname]);
 
   useEffect(() => {
     if (!isRestoring && token !== null && user?.onboarding_completed === false) {
