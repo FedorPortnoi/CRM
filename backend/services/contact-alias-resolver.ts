@@ -93,6 +93,14 @@ async function loadOrgUsers(orgId: string): Promise<Array<{ id: string; name: st
  * Both are needed because one answer can carry both kinds — «Сотрудник K7F3
  * закрыл сделку с Клиентом M2QX» — and resolving only half of it would leave a
  * raw handle in the middle of an otherwise finished Russian sentence.
+ *
+ * Note the case in that example, which is the ordinary way to write it and not a
+ * typo: «с Клиентом», not «с Клиент». The matcher in contact-alias.ts covers the
+ * declined forms of both words and normalises them back to the nominative before
+ * looking a name up, which is what makes the sentence above resolve as a whole.
+ * It did not always: while the pattern was nominative-only this docstring
+ * described a property the code did not have, and the second half of its own
+ * example came out unresolved.
  */
 async function loadRehydrationMap(orgId: string): Promise<AliasMap> {
   const [contacts, users] = await Promise.all([loadOrgContacts(orgId), loadOrgUsers(orgId)]);

@@ -66,14 +66,49 @@ type EventContext =
 
 interface NotificationPayload { title: string; body: string }
 
+/**
+ * The zone every deadline in a push notification is rendered in.
+ *
+ * `toLocaleDateString('ru-RU')` pins the LANGUAGE and nothing else: with no `timeZone` the
+ * formatter falls back to the host's zone. Production runs on a box set to Etc/UTC, so
+ * "нужно сдать до 09:00" was printed for a task due at 12:00 Moscow time — every deadline
+ * shown three hours early, to every user, on every scheduled reminder. It is invisible in
+ * development because a developer's laptop is already on Moscow time and therefore renders
+ * the correct string by accident; the defect only exists on the deployed box.
+ *
+ * Storage is unaffected and stays UTC — every timestamp column is TIMESTAMPTZ and every
+ * comparison in the scheduler is done on Date instants. This constant is a presentation
+ * decision only: it says which wall clock a Russian user reads these strings against.
+ *
+ * Moscow, not the user's own zone, because there is nowhere to read a per-user zone from —
+ * User has no timezone column. Russia spans eleven offsets, so a customer in Novosibirsk
+ * still sees MSK; fixing that needs a stored preference, not a different constant here. MSK
+ * is the right default in the meantime: it is what the product's own UI and its customers'
+ * business hours are quoted in.
+ *
+ * If a second place ever needs to render a date for a user, this belongs in
+ * backend/config/market.ts beside DEFAULT_CURRENCY and the default pipeline names — it is
+ * the same kind of "which market is this product for" fact. It is kept local while this is
+ * the only caller.
+ */
+export const DISPLAY_TIME_ZONE = 'Europe/Moscow';
+
 function formatDate(d: Date | null | undefined): string {
   if (!d) return '';
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  return d.toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: DISPLAY_TIME_ZONE,
+  });
 }
 
 function formatTime(d: Date | null | undefined): string {
   if (!d) return '';
-  return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: DISPLAY_TIME_ZONE,
+  });
 }
 
 function buildMessages(ctx: EventContext): Array<{ recipientId: string; role: string; msg: NotificationPayload }> {
@@ -298,39 +333,90 @@ function entityIdFor(ctx: EventContext): string {
 
 // ─── Main dispatcher ──────────────────────────────────────────────────────────
 
+/**
+ * Claim the right to notify one recipient about one scheduled event, exactly once.
+ *
+ * This used to be findUnique → `if (exists) continue` → create, which is a check-then-act:
+ * the unique index on (event_type, entity_id, recipient_id) is the only thing that actually
+ * decides, and it decides at INSERT time, long after the read said "not there yet". The
+ * scheduler runs runDeadlineNotifications on a 60 s interval that never awaited its previous
+ * pass, so a slow pass overlapped its own successor over the same due tasks and both read
+ * "not sent". The loser's P2002 then escaped dispatchNotification, killed the loop for every
+ * remaining recipient of that event, and was swallowed by the `.catch(console.error)` on the
+ * interval — permanently, because the winner's row now exists, so the retry on the next tick
+ * skips the duplicate and never reaches the recipients that were cut off.
+ *
+ * `createMany({ skipDuplicates: true })` is one INSERT ... ON CONFLICT DO NOTHING, so the
+ * decision is made where the constraint lives: `count === 1` means this caller won the row
+ * and owes the recipient a notification, `count === 0` means someone already sent it. There
+ * is no window between the two, and no exception to swallow.
+ */
+async function claimScheduledNotification(
+  eventType: NotificationEventType,
+  entityId: string,
+  recipientId: string,
+): Promise<boolean> {
+  const claimed = await db.notificationSent.createMany({
+    data: [{ event_type: eventType, entity_id: entityId, recipient_id: recipientId }],
+    skipDuplicates: true,
+  });
+
+  return claimed.count === 1;
+}
+
 export async function dispatchNotification(ctx: EventContext): Promise<void> {
   const entityType = entityTypeFor(ctx.eventType);
   const entityId = entityIdFor(ctx);
   const messages = buildMessages(ctx);
+  const deduplicated = SCHEDULED_EVENTS.has(ctx.eventType);
 
   for (const { recipientId, role, msg } of messages) {
-    // Deduplicate scheduled events — skip if already sent
-    if (SCHEDULED_EVENTS.has(ctx.eventType)) {
-      const exists = await db.notificationSent.findUnique({
-        where: { event_type_entity_id_recipient_id: { event_type: ctx.eventType, entity_id: entityId, recipient_id: recipientId } },
-      });
-      if (exists) continue;
+    // Per-recipient isolation, for the same reason services/sequences.ts isolates each
+    // enrollment: one recipient's failure — a deleted user, a transient write error — must
+    // not decide whether the other people on this event hear about it at all. An event with
+    // an assignee and an assigner has two independent deliveries, not one transaction.
+    try {
+      // Scheduled events fire repeatedly by design (the 24 h / 2 h / overdue windows overlap
+      // several ticks), so they are deduplicated. Everything else is emitted by a domain
+      // write that happened once and needs no claim.
+      if (deduplicated && !(await claimScheduledNotification(ctx.eventType, entityId, recipientId))) {
+        continue;
+      }
 
-      await db.notificationSent.create({
-        data: { event_type: ctx.eventType, entity_id: entityId, recipient_id: recipientId },
-      });
+      try {
+        await db.notification.create({
+          data: {
+            organization_id: ctx.orgId,
+            recipient_id: recipientId,
+            event_type: ctx.eventType,
+            role,
+            title: msg.title,
+            body: msg.body,
+            entity_type: entityType,
+            entity_id: entityId,
+            data: { entityType, entityId },
+          },
+        });
+      } catch (error) {
+        // The claim is only meaningful if it is followed by a delivery. Having taken the row
+        // and then failed to write the notification, release it so the next tick can retry —
+        // otherwise the dedup row is a tombstone for a message nobody ever received.
+        if (deduplicated) {
+          await db.notificationSent
+            .deleteMany({
+              where: { event_type: ctx.eventType, entity_id: entityId, recipient_id: recipientId },
+            })
+            .catch(() => undefined);
+        }
+        throw error;
+      }
+
+      // Push is best-effort and already fire-and-forget: an unreachable device must not undo
+      // the in-app notification that was just written.
+      void sendPushToUser(recipientId, ctx.orgId, { title: msg.title, body: msg.body, data: { entityType, entityId } });
+    } catch (error) {
+      console.error(`[notifications] ${ctx.eventType} delivery to one recipient failed`, error);
     }
-
-    await db.notification.create({
-      data: {
-        organization_id: ctx.orgId,
-        recipient_id: recipientId,
-        event_type: ctx.eventType,
-        role,
-        title: msg.title,
-        body: msg.body,
-        entity_type: entityType,
-        entity_id: entityId,
-        data: { entityType, entityId },
-      },
-    });
-
-    void sendPushToUser(recipientId, ctx.orgId, { title: msg.title, body: msg.body, data: { entityType, entityId } });
   }
 }
 

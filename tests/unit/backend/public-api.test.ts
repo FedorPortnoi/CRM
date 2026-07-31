@@ -183,7 +183,12 @@ import {
   parseApiKeyScopes,
   revokeApiKey,
 } from '../../../backend/services/api-keys';
-import { resetPublicApiRateLimits } from '../../../backend/services/public-api-auth';
+import {
+  consumePublicApiRateLimit,
+  getPublicApiRateLimitMax,
+  getPublicApiRateLimitWindowMs,
+  resetPublicApiRateLimits,
+} from '../../../backend/services/public-api-auth';
 import { sha256 } from '../../../backend/services/crypto';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -458,6 +463,133 @@ describe('public API authentication', () => {
     expect(response.statusCode).toBe(403);
     expect(response.json().error.code).toBe('INSUFFICIENT_SCOPE');
     expect(store.tables.contact).toHaveLength(0);
+
+    await app.close();
+  });
+});
+
+// ─── 2b. Per-key rate limiting ────────────────────────────────────────────────
+//
+// The file header of public-api-auth.ts calls the per-key bucket one of the
+// three things that contain org-level API access ("one integration cannot
+// exhaust the org's budget"), so it needs a test that goes red when the bucket
+// is removed. getPublicApiRateLimitMax() takes an `env`, so the ceiling that
+// actually ships can be read directly rather than inferred from the 10_000 the
+// suite runs under.
+
+describe('public API rate limiting', () => {
+  const env = (values: Record<string, string>): NodeJS.ProcessEnv =>
+    values as unknown as NodeJS.ProcessEnv;
+
+  it('ships a 60-request minute, not the 10_000 the test suite runs under', () => {
+    expect(getPublicApiRateLimitMax(env({ NODE_ENV: 'production' }))).toBe(60);
+    expect(getPublicApiRateLimitMax(env({ NODE_ENV: 'development' }))).toBe(60);
+    expect(getPublicApiRateLimitWindowMs(env({ NODE_ENV: 'production' }))).toBe(60_000);
+
+    // Tunable, but only to a positive integer — a misconfigured value must fall
+    // back to 60 rather than to "no limit".
+    const overrides: Array<[string, number]> = [
+      ['120', 120],
+      ['1', 1],
+      ['0', 60],
+      ['-5', 60],
+      ['', 60],
+      ['unlimited', 60],
+    ];
+    for (const [raw, expected] of overrides) {
+      expect(
+        getPublicApiRateLimitMax(env({ NODE_ENV: 'production', PUBLIC_API_RATE_LIMIT_MAX_REQUESTS: raw })),
+        `PUBLIC_API_RATE_LIMIT_MAX_REQUESTS=${raw}`,
+      ).toBe(expected);
+    }
+
+    // The escape hatch is keyed on NODE_ENV and nothing else.
+    expect(getPublicApiRateLimitMax(env({ NODE_ENV: 'test' }))).toBe(10_000);
+  });
+
+  it('spends a budget per key, refuses past it, and reopens on the next window', () => {
+    const WINDOW = 60_000;
+    const at = 1_000_000;
+
+    expect(consumePublicApiRateLimit('key-a', at, 2, WINDOW)).toMatchObject({ allowed: true, remaining: 1 });
+    expect(consumePublicApiRateLimit('key-a', at, 2, WINDOW)).toMatchObject({ allowed: true, remaining: 0 });
+
+    const refused = consumePublicApiRateLimit('key-a', at, 2, WINDOW);
+    expect(refused.allowed).toBe(false);
+    expect(refused).toMatchObject({ retry_after_ms: WINDOW, reset_at: at + WINDOW });
+
+    // A second key has its own budget — the bucket is keyed by key id, not shared.
+    expect(consumePublicApiRateLimit('key-b', at, 2, WINDOW).allowed).toBe(true);
+
+    // One millisecond before the window closes it is still refused; after, it reopens.
+    expect(consumePublicApiRateLimit('key-a', at + WINDOW - 1, 2, WINDOW).allowed).toBe(false);
+    expect(consumePublicApiRateLimit('key-a', at + WINDOW, 2, WINDOW).allowed).toBe(true);
+  });
+
+  it('answers 429 once a key has spent its budget, and refuses before the handler runs', async () => {
+    const key = seedKey({ organizationId: ORG_A, createdBy: ADMIN_A });
+    seedContact(ORG_A, 'Anna');
+    const app = await buildApp();
+    const keyId = store.tables.apiKey[0].id;
+
+    // Spend the whole bucket through the same limiter the preHandler consumes,
+    // at whatever ceiling this environment carries — no env stubbing, no 10_000
+    // HTTP round trips.
+    const max = getPublicApiRateLimitMax();
+    for (let i = 0; i < max; i += 1) consumePublicApiRateLimit(keyId);
+    expect(consumePublicApiRateLimit(keyId).allowed).toBe(false);
+
+    const response = await app.inject({ method: 'GET', url: '/public/v1/contacts', headers: auth(key) });
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json()).toEqual({
+      error: { code: 'RATE_LIMITED', message: 'Public API rate limit exceeded' },
+    });
+    // A caller has to be told when to come back, or it retries immediately.
+    expect(Number(response.headers['retry-after'])).toBeGreaterThan(0);
+
+    // The refusal happens in the preHandler: no rows leave, and last_used_at is
+    // not stamped by a request that was never served.
+    expect(response.body).not.toContain('Anna');
+    expect(store.tables.apiKey[0].last_used_at).toBeNull();
+    expect(store.db.contact.findMany).not.toHaveBeenCalled();
+
+    await app.close();
+  });
+
+  it('lets the same key straight through again once its buckets are dropped', async () => {
+    const key = seedKey({ organizationId: ORG_A, createdBy: ADMIN_A });
+    seedContact(ORG_A, 'Anna');
+    const app = await buildApp();
+    const keyId = store.tables.apiKey[0].id;
+
+    for (let i = 0; i < getPublicApiRateLimitMax(); i += 1) consumePublicApiRateLimit(keyId);
+    expect((await app.inject({ method: 'GET', url: '/public/v1/contacts', headers: auth(key) })).statusCode).toBe(429);
+
+    resetPublicApiRateLimits();
+    const after = await app.inject({ method: 'GET', url: '/public/v1/contacts', headers: auth(key) });
+
+    expect(after.statusCode).toBe(200);
+    expect(after.json().data).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('rate-limits per key, so one integration cannot spend another key\'s budget', async () => {
+    const noisy = seedKey({ organizationId: ORG_A, createdBy: ADMIN_A });
+    const quiet = seedKey({ organizationId: ORG_A, createdBy: ADMIN_A });
+    seedContact(ORG_A, 'Anna');
+    const app = await buildApp();
+
+    for (let i = 0; i < getPublicApiRateLimitMax(); i += 1) {
+      consumePublicApiRateLimit(store.tables.apiKey[0].id);
+    }
+
+    const blocked = await app.inject({ method: 'GET', url: '/public/v1/contacts', headers: auth(noisy) });
+    const allowed = await app.inject({ method: 'GET', url: '/public/v1/contacts', headers: auth(quiet) });
+
+    expect(blocked.statusCode).toBe(429);
+    expect(allowed.statusCode).toBe(200);
 
     await app.close();
   });

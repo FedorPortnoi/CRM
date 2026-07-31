@@ -54,7 +54,9 @@ export const WEBHOOK_USER_AGENT = '4KUB-CRM-Webhooks/1.0';
 
 // A claimed delivery gets its next_attempt_at pushed this far out; the claim is the
 // atomic compare-and-set, and a worker that dies mid-send releases the row after the lease.
-const WEBHOOK_LEASE_MS = 5 * 60_000;
+// Exported so a test can assert the lease is measured from the claim rather than from the
+// instant the tick started — see processWebhookDelivery().
+export const WEBHOOK_LEASE_MS = 5 * 60_000;
 const WEBHOOK_TICK_BATCH_SIZE = 100;
 const WEBHOOK_TICK_SCAN_SIZE = 1000;
 const WEBHOOK_SEND_CONCURRENCY = 5;
@@ -699,6 +701,25 @@ async function processWebhookDelivery(
 ): Promise<void> {
   // Atomic claim: only the worker that flips next_attempt_at into the future wins,
   // and a worker that dies mid-send releases the row when the lease expires.
+  //
+  // The lease is measured from HERE, not from `now`. This is the same defect that was fixed
+  // for the mailer in services/sequences.ts (processEnrollment) and it was still live on this
+  // side: `now` is captured once when the tick starts (runWebhookDeliveryTick's default
+  // argument) and the tick then scans up to WEBHOOK_TICK_SCAN_SIZE rows, walks every
+  // organization that has due work, and awaits up to WEBHOOK_TICK_BATCH_SIZE deliveries per
+  // org in waves of WEBHOOK_SEND_CONCURRENCY with a WEBHOOK_TIMEOUT_MS deadline on each. A
+  // single org with a full batch of dead endpoints is already 100/5 × 10 s = 200 s; a handful
+  // of such orgs puts the tick well past the 5-minute lease. Written as `now + 5 min`, the
+  // lease was then ALREADY IN THE PAST at the moment it was stored: the row still read as due,
+  // the next 60 s tick re-claimed it while this one was still mid-POST, and the customer's
+  // endpoint received the same event twice. Worse, each re-claim increments `attempts`, so the
+  // delivery burns through MAX_WEBHOOK_ATTEMPTS without ever having failed and
+  // recordWebhookEndpointFailure() eventually pauses a perfectly healthy endpoint.
+  //
+  // The `where` still tests against `now`, deliberately: the row has to have been due when
+  // this tick decided to look at it, so a row that another worker has already leased — or that
+  // has been rescheduled, delivered or failed in the meantime — cannot be stolen back.
+  const claimedAt = new Date();
   const claimed = await db.webhookDelivery.updateMany({
     where: {
       id: candidate.id,
@@ -708,7 +729,7 @@ async function processWebhookDelivery(
     },
     data: {
       attempts: { increment: 1 },
-      next_attempt_at: new Date(now.getTime() + WEBHOOK_LEASE_MS),
+      next_attempt_at: new Date(claimedAt.getTime() + WEBHOOK_LEASE_MS),
     },
   });
 

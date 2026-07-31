@@ -28,7 +28,96 @@ function nextOccurrence(rule: string, after: Date): Date | null {
   }
 }
 
-async function runReminders(): Promise<void> {
+// ─── Overlap guard ────────────────────────────────────────────────────────────
+
+/**
+ * Which jobs are running right now, by name.
+ *
+ * The 60 s interval below fires its jobs with `void` and does not await them, which is the
+ * only thing it can do — a setInterval callback cannot hold the timer back. So a job that
+ * outruns its own period used to run ALONGSIDE ITS OWN SUCCESSOR, on one instance, with no
+ * second process involved: two passes reading the same due rows and both acting on them.
+ * runDeadlineNotifications is the loudest example — it fetches a context per task and awaits
+ * a database round trip for each — but runRecurrence and the webhook tick have the same
+ * shape, and the webhook tick can legitimately run for minutes against slow endpoints.
+ *
+ * services/sequences.ts already owns this guard for the mailer, inside the service, so every
+ * caller of runSequenceTick gets it. The jobs here have no such internal guard, so the
+ * scheduler holds it for them.
+ *
+ * WHAT THIS IS NOT: it is a lock in ONE process. Production runs a single pm2 fork, so it is
+ * a complete answer there — but nothing in the repo pins the instance count, and a
+ * `pm2 scale` would put a second copy of every job in a second process where this Set is
+ * empty. Where a cheap per-row claim exists, the jobs below take one as well, and those are
+ * marked; where one does not (runRecurrence), it is called out at the site.
+ */
+const jobsInFlight = new Set<string>();
+
+/**
+ * Run `job` unless it is already running, and never let it reject into the timer.
+ *
+ * A skip is warned about rather than passed over in silence, for the reason tickSequences
+ * gives: a job that keeps being skipped means it no longer fits in its interval, and that is
+ * only visible if it is said out loud.
+ */
+export async function runExclusively(name: string, job: () => Promise<void>): Promise<void> {
+  if (jobsInFlight.has(name)) {
+    console.warn(`[scheduler] ${name} skipped — the previous run is still in flight`);
+    return;
+  }
+
+  jobsInFlight.add(name);
+  try {
+    await job();
+  } catch (error) {
+    console.error(`[scheduler] ${name} failed`, error);
+  } finally {
+    // Released in a finally: a job that throws must not wedge itself off forever.
+    jobsInFlight.delete(name);
+  }
+}
+
+/**
+ * Claim the right to fire one scheduled push about one entity, to one user, exactly once.
+ *
+ * The unique index on NotificationSent (event_type, entity_id, recipient_id) is the claim,
+ * and `skipDuplicates` makes taking it a single INSERT ... ON CONFLICT DO NOTHING: `count`
+ * of 1 means this run won and owes the push, 0 means it was already sent. Unlike the in-
+ * process guard above this holds across processes, which is why the reminder job uses it.
+ *
+ * It is also the fix for a duplicate that needed no concurrency at all: the reminder window
+ * below is 60 s wide (±30 s) and the interval is 60 s, so a reminder sitting near a window
+ * edge is picked up by two consecutive ticks and the phone buzzed twice for one task.
+ */
+async function claimScheduledPush(
+  eventType: string,
+  entityId: string,
+  recipientId: string,
+): Promise<boolean> {
+  const claimed = await db.notificationSent.createMany({
+    data: [{ event_type: eventType, entity_id: entityId, recipient_id: recipientId }],
+    skipDuplicates: true,
+  });
+
+  return claimed.count === 1;
+}
+
+/**
+ * The claim is per REMINDER INSTANT, not per task.
+ *
+ * Keying it on the task alone would mean one reminder per task per user for the lifetime of
+ * the row: an employee who pushes a reminder back an hour would get nothing at the new time,
+ * because the old claim still stands and NotificationSent has no reaper. Folding reminder_at
+ * into the event type makes "the same reminder" mean the same task at the same moment, which
+ * is what the deduplication is actually for — a rescheduled reminder is a different reminder
+ * and fires, while the same one seen by two overlapping windows does not.
+ */
+function reminderEventType(reminderAt: Date): string {
+  return `task.reminder:${reminderAt.getTime()}`;
+}
+
+/** Exported for the tests only — startScheduler is the sole caller in the running server. */
+export async function runReminders(): Promise<void> {
   const now = new Date();
   const windowStart = new Date(now.getTime() - 30_000);
   const windowEnd = new Date(now.getTime() + 30_000);
@@ -38,7 +127,7 @@ async function runReminders(): Promise<void> {
       reminder_at: { gte: windowStart, lte: windowEnd },
       status: { not: TaskStatus.done },
     },
-    select: { id: true, title: true, assigned_to: true },
+    select: { id: true, title: true, assigned_to: true, reminder_at: true },
   });
 
   const assigneeIds = [...new Set(tasks.map(t => t.assigned_to).filter((id): id is string => Boolean(id)))];
@@ -49,17 +138,61 @@ async function runReminders(): Promise<void> {
   const userMap = new Map(users.map(u => [u.id, u]));
 
   for (const task of tasks) {
-    if (!task.assigned_to) continue;
+    if (!task.assigned_to || !task.reminder_at) continue;
     const user = userMap.get(task.assigned_to);
     if (!user?.push_token) continue;
+
+    const eventType = reminderEventType(task.reminder_at);
+    if (!(await claimScheduledPush(eventType, task.id, task.assigned_to))) {
+      continue;
+    }
+
     const result = await sendPush(user.push_token, 'Напоминание', task.title, { taskId: task.id });
+
     if (!result.ok && result.code === 'DEVICE_NOT_REGISTERED') {
       await db.user.update({ where: { id: task.assigned_to }, data: { push_token: null } });
+      continue;
+    }
+
+    if (!result.ok) {
+      // A provider-side failure is transient and the task is probably still inside its
+      // window on the next tick, so give the claim back rather than silently dropping the
+      // only reminder this task gets. A device that is simply gone (above) is not retried:
+      // there is nothing left to deliver to.
+      await db.notificationSent
+        .deleteMany({
+          where: { event_type: eventType, entity_id: task.id, recipient_id: task.assigned_to },
+        })
+        .catch(() => undefined);
     }
   }
 }
 
-async function runRecurrence(): Promise<void> {
+/**
+ * Spawn the next occurrence of every completed recurring task.
+ *
+ * THE CLAIM THIS JOB DOES NOT HAVE. "Look for a sibling, and create one if there isn't"
+ * is a check-then-act, and there is no unique constraint on Task that could turn the create
+ * into the decision — nothing like (organization_id, title, assigned_to, due_date) exists.
+ * At one instance the overlap guard in startScheduler is a complete answer: the read and the
+ * write are in the same sequential pass and no second pass can interleave with it. At two
+ * instances both would read "no sibling" and both would create one, and the only real fix is
+ * that missing unique index — a schema change, not something this function can arrange.
+ *
+ * The sibling test itself was also its own duplicate source, with no concurrency involved.
+ * It asked for a sibling due in the FUTURE, but the occurrence it creates can land in the
+ * past: a weekly task completed months after its due date gets `rrule.after(due_date)`, a
+ * date still in the past, and the sibling it just wrote therefore does not answer the next
+ * tick's question either. That produced one new task every 60 s, forever — 1440 a day off a
+ * single stale recurring task. The test now also accepts an OPEN sibling regardless of when
+ * it is due, which is the honest reading of "this chain has already advanced": the next
+ * occurrence is created when that sibling is completed, not before.
+ *
+ * Exported for the tests only — startScheduler is the sole caller in the running server.
+ */
+export async function runRecurrence(): Promise<void> {
+  const now = new Date();
+
   const tasks = await db.task.findMany({
     where: {
       status: TaskStatus.done,
@@ -84,14 +217,19 @@ async function runRecurrence(): Promise<void> {
   for (const task of tasks) {
     if (!task.due_date || !task.recurrence_rule) continue;
 
-    // Skip if a future sibling already exists
+    // Skip if this chain has already advanced: a sibling due in the future, or one that is
+    // still open whatever its due date (see the note above — an occurrence computed from a
+    // long-past due_date is itself in the past, and only the second clause catches it).
     const existing = await db.task.findFirst({
       where: {
         title: task.title,
         assigned_to: task.assigned_to,
         organization_id: task.organization_id,
-        due_date: { gt: new Date() },
         is_recurring: true,
+        OR: [
+          { due_date: { gt: now } },
+          { status: { notIn: [TaskStatus.done, TaskStatus.cancelled] } },
+        ],
       },
       select: { id: true },
     });
@@ -235,17 +373,27 @@ async function runDeadlineNotifications(): Promise<void> {
   }
 }
 
-// Auto-rotate company join codes that have passed their 7-day TTL.
+/**
+ * Auto-rotate company join codes that have passed their 7-day TTL.
+ *
+ * The rotation is its own claim: the UPDATE repeats the "has expired" predicate, so whoever
+ * writes first moves join_code_expires_at a week out and every other runner's WHERE stops
+ * matching. Two runs can no longer rotate the same organization twice in a row and hand a
+ * second new code to an owner who was reading the first. That holds across processes, not
+ * just inside this one — it is decided by the row, not by a flag in memory.
+ */
 async function rotateExpiredJoinCodes(): Promise<void> {
+  const now = new Date();
+
   const expired = await db.org.findMany({
-    where: { join_code_expires_at: { lte: new Date() } },
+    where: { join_code_expires_at: { lte: now } },
     select: { id: true, name: true },
   });
 
   for (const org of expired) {
     try {
-      await db.org.update({
-        where: { id: org.id },
+      await db.org.updateMany({
+        where: { id: org.id, join_code_expires_at: { lte: now } },
         data: { join_code: buildJoinCode(org.name), join_code_expires_at: new Date(Date.now() + JOIN_CODE_TTL_MS) },
       });
     } catch {
@@ -273,27 +421,43 @@ function tickSequences(): void {
     .catch(console.error);
 }
 
+/**
+ * Every job on both timers goes through runExclusively, so none of them can overlap itself.
+ * They are still started concurrently with each other — the guard is per job name, and a slow
+ * webhook tick has no reason to hold up reminders.
+ *
+ * The two `void`s that remain are deliberate: neither timer can await, and runExclusively
+ * already converts a rejection into a logged line, so there is no unhandled rejection here.
+ */
 export function startScheduler(): void {
+  const minuteJobs = (): void => {
+    void runExclusively('reminders', runReminders);
+    void runExclusively('recurrence', runRecurrence);
+    // Deduplication for these lives one level down, in notificationEngine's per-recipient
+    // claim on NotificationSent, which is atomic and holds across processes.
+    void runExclusively('deadline-notifications', runDeadlineNotifications);
+    // The webhook tick claims each delivery row before sending, so N>1 is safe there; this
+    // guard is about the tick not being started again while it is still working through a
+    // backlog it has already scanned.
+    void runExclusively('webhook-delivery', runWebhookDeliveryTick);
+    tickSequences();
+  };
+
+  const hourlyJobs = (): void => {
+    void runExclusively('stale-account-cleanup', cleanupStaleUnverifiedAccounts);
+    void runExclusively('join-code-rotation', rotateExpiredJoinCodes);
+    void runExclusively('idempotency-reaper', async () => {
+      await reapIdempotencyKeys();
+    });
+  };
+
   // Outbound webhook retries and email-sequence sends share this loop rather than adding
   // second and third timers.
-  void runWebhookDeliveryTick().catch(console.error);
-  tickSequences();
-  setInterval(() => {
-    void runReminders().catch(console.error);
-    void runRecurrence().catch(console.error);
-    void runDeadlineNotifications().catch(console.error);
-    void runWebhookDeliveryTick().catch(console.error);
-    tickSequences();
-  }, 60_000);
+  minuteJobs();
+  setInterval(minuteJobs, 60_000);
 
   // Hourly cleanup of orgs whose owner never verified within 24 h, plus join-code rotation
   // and the public-API idempotency TTL sweep.
-  void cleanupStaleUnverifiedAccounts().catch(console.error);
-  void rotateExpiredJoinCodes().catch(console.error);
-  void reapIdempotencyKeys().catch(console.error);
-  setInterval(() => {
-    void cleanupStaleUnverifiedAccounts().catch(console.error);
-    void rotateExpiredJoinCodes().catch(console.error);
-    void reapIdempotencyKeys().catch(console.error);
-  }, 60 * 60_000);
+  hourlyJobs();
+  setInterval(hourlyJobs, 60 * 60_000);
 }

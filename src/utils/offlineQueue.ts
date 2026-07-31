@@ -70,12 +70,26 @@ function bodyKeyFor(id: string): string {
   return `${BODY_KEY_PREFIX}${id}`;
 }
 
+// Why the signed-in account's id is, or is not, known.
+//
+//   'known'      — read and parsed; `userId` holds it.
+//   'absent'     — there is no user record on the device at all.
+//   'unreadable' — a record exists but its id could not be recovered: SecureStore threw, the
+//                  JSON did not parse, or `id` was not a string.
+//
+// The last two are the same value (`userId: null`) and opposite facts. 'absent' is "nobody is
+// signed in"; 'unreadable' is "somebody IS signed in and we cannot tell who" — which is the one
+// case where an unstamped queue item must never be adopted. See flush().
+type SessionIdentity = 'known' | 'absent' | 'unreadable';
+
 type SessionSnapshot = {
   // Present iff credentials are on the device. Deliberately not the token value — nothing here
   // sends it; authHeaders() re-reads it for that.
   hasToken: boolean;
-  // Id of the signed-in account, or null when it cannot be determined.
+  // Id of the signed-in account, or null when it cannot be determined. Never compare against
+  // this without consulting `identity`: null is ambiguous and the ambiguity is exploitable.
   userId: string | null;
+  identity: SessionIdentity;
 };
 
 // Reads whose credentials are on the device right now.
@@ -94,20 +108,31 @@ async function currentSession(): Promise<SessionSnapshot> {
     hasToken = false;
   }
 
+  let userJson: string | null;
   try {
-    const userJson = await SecureStore.getItemAsync(AUTH_USER_KEY);
-    if (!userJson) {
-      return { hasToken, userId: null };
-    }
-
-    const parsed: unknown = JSON.parse(userJson);
-    return {
-      hasToken,
-      userId: isRecord(parsed) && typeof parsed.id === 'string' ? parsed.id : null,
-    };
+    userJson = await SecureStore.getItemAsync(AUTH_USER_KEY);
   } catch {
-    return { hasToken, userId: null };
+    // A read that threw says nothing about whether the record exists. Unreadable, not absent.
+    return { hasToken, userId: null, identity: 'unreadable' };
   }
+
+  if (!userJson) {
+    return { hasToken, userId: null, identity: 'absent' };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(userJson);
+  } catch {
+    // A record is there; it is corrupt (truncated write, partially overwritten keystore).
+    return { hasToken, userId: null, identity: 'unreadable' };
+  }
+
+  if (!isRecord(parsed) || typeof parsed.id !== 'string') {
+    return { hasToken, userId: null, identity: 'unreadable' };
+  }
+
+  return { hasToken, userId: parsed.id, identity: 'known' };
 }
 
 async function withQueueLock<T>(operation: () => Promise<T>): Promise<T> {
@@ -241,8 +266,16 @@ export async function clearQueue(): Promise<void> {
   await withQueueLock(async () => {
     const bodyKeys = await referencedBodyKeys();
 
-    await AsyncStorage.removeItem(STORAGE_KEY);
-
+    // Bodies first, index last, and the order is the whole point. logout() is best-effort and
+    // interruptible — force-quit, crash, OS kill — as flush() already documents. Removing the
+    // index first means an interruption in the gap leaves the previous account's payloads in
+    // SecureStore with the only thing that could enumerate them already gone: unreachable,
+    // undeletable, and full of PII. That is the exact outcome this function exists to prevent.
+    //
+    // In this order an interruption can only leave the opposite state — an index pointing at
+    // bodies that are already deleted — and that one is already handled: readQueue() skips any
+    // entry whose body reads back null, and the next clearQueue() deletes the index. Crash-safe
+    // in both halves rather than only in the one that happens to finish.
     for (const bodyKey of bodyKeys) {
       try {
         await SecureStore.deleteItemAsync(bodyKey);
@@ -250,6 +283,8 @@ export async function clearQueue(): Promise<void> {
         // A single body that refuses to delete must not abandon the rest of the sweep.
       }
     }
+
+    await AsyncStorage.removeItem(STORAGE_KEY);
   });
 }
 
@@ -454,6 +489,24 @@ export async function flush(): Promise<void> {
       return;
     }
 
+    // Credentials are on the device but the account behind them cannot be identified. Fail
+    // closed and send nothing.
+    //
+    // The owner check below is stated as "drop on positive evidence of a mismatch", and that
+    // only holds while `session.userId` means what it says. It used to collapse three different
+    // situations into null — no user record, unparseable JSON, a non-string id — so a signed-in
+    // user B with a corrupt crm_auth_user compared EQUAL to an unstamped item left by user A,
+    // and the item was sent under B's token into B's org: the cross-account write the check
+    // exists to stop, reached through the check itself.
+    //
+    // Skipped rather than dropped, for the same reason as the no-token path above: the queue may
+    // hold work its owner can still finish, and an unreadable record is often transient (a
+    // locked keychain, a half-written login). Nothing is lost — the next flush() re-reads it,
+    // and once the id is legible again the owner check answers properly.
+    if (session.identity === 'unreadable') {
+      return;
+    }
+
     const queue: QueuedMutation[] = await readQueue();
     const remaining: QueuedMutation[] = [...queue];
     const processedBodyKeys: string[] = [];
@@ -473,7 +526,8 @@ export async function flush(): Promise<void> {
       // has a known id — adopting it is exactly the cross-account write this check exists to
       // stop, and the loss is bounded to writes left pending across a single app upgrade. It is
       // only sent when the current session's id is *also* unknown, i.e. there is no evidence
-      // the account changed at all.
+      // the account changed at all — and by the guard above, only when that unknown is 'absent'
+      // (no user record at all), never 'unreadable' (a record we could not decipher).
       if ((mutation.owner ?? null) !== session.userId) {
         recordDrop(mutation, 'foreign-session');
         remaining.shift();

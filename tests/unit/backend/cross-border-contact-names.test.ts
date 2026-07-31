@@ -443,6 +443,158 @@ describe('contact-alias-resolver — free text in both directions', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 5a. Declension — the alias words are Russian words, and Russian declines them
+//
+// The alias is EMITTED in the nominative («Клиент K7F3») and the model writes it
+// into whatever case the sentence needs («с Клиентом K7F3», «позвонить Клиенту
+// K7F3», «у Клиента K7F3»). That is not the model mangling the token, it is the
+// model writing correct Russian around it — and it is the direct consequence of
+// choosing a Russian word as the substrate, on the grounds that such a word
+// "survives being written".
+//
+// While the matcher was nominative-only it therefore missed most real sentences.
+// Two distinct failures came out of that, and both are covered below:
+//
+//   1. HALF-RESOLVED PROSE. rehydrateAliases() swapped the nominative alias and
+//      left the inflected one, producing exactly the sentence the resolver's
+//      docstring uses to explain why that cannot happen.
+//   2. NO RESOLUTION AT ALL. containsAlias() shares the pattern, so an answer
+//      whose aliases were all inflected reported "clean" and rehydrateForDisplay
+//      returned it untouched without ever loading the map.
+// ---------------------------------------------------------------------------
+
+/** «Клиент K7F3» + «ом» → «Клиентом K7F3», the way the model would write it. */
+function inflect(alias: string, ending: string): string {
+  const [word, token] = alias.split(' ');
+  return `${word}${ending} ${token}`;
+}
+
+describe('contact-alias — declined alias forms resolve', () => {
+  const NAME = `${CONTACT_FIRST} ${CONTACT_LAST}`;
+  const map = () =>
+    new Map([
+      ...buildAliasMap([{ id: CONTACT_ID, first_name: CONTACT_FIRST, last_name: CONTACT_LAST }]),
+      ...buildUserAliasMap([{ id: OPERATOR_ID, name: OPERATOR_FIO }]),
+    ]);
+
+  it("resolves BOTH halves of the resolver docstring's own worked example", () => {
+    // «Сотрудник K7F3 закрыл сделку с Клиентом M2QX» — the sentence
+    // contact-alias-resolver.ts uses to justify loading contacts and operators
+    // together. Note «с Клиентом», which is the only way to write it: the
+    // preposition «с» governs the instrumental. Under the nominative-only
+    // pattern the first half became a name and the second stayed a handle.
+    const sentence = `${aliasForUserId(OPERATOR_ID)} закрыл сделку с ${inflect(
+      aliasForContactId(CONTACT_ID),
+      'ом',
+    )}`;
+
+    expect(containsAlias(sentence)).toBe(true);
+    expect(rehydrateAliases(sentence, map())).toBe(`${OPERATOR_FIO} закрыл сделку с ${NAME}`);
+    expect(rehydrateAliases(sentence, map())).not.toContain('Клиент');
+  });
+
+  it('resolves every case form of «Клиент» that prose actually uses', () => {
+    const alias = aliasForContactId(CONTACT_ID);
+    const sentences = [
+      { ending: '', before: '', after: ' ждёт коммерческое предложение.' },
+      { ending: 'а', before: 'У ', after: ' истёк договор.' },
+      { ending: 'у', before: 'Позвонить ', after: ' в пятницу.' },
+      { ending: 'ом', before: 'Сделка с ', after: ' закрыта.' },
+      { ending: 'е', before: 'О ', after: ' ничего нового.' },
+      { ending: 'ов', before: 'Список ', after: ' на неделю.' },
+      { ending: 'ы', before: '', after: ' не отвечают.' },
+      { ending: 'ам', before: 'Написать ', after: ' сегодня.' },
+      { ending: 'ами', before: 'Занимается ', after: ' отдел продаж.' },
+      { ending: 'ах', before: 'В ', after: ' есть дубликаты.' },
+    ];
+
+    for (const { ending, before, after } of sentences) {
+      const text = `${before}${inflect(alias, ending)}${after}`;
+      expect(containsAlias(text), `containsAlias: ${text}`).toBe(true);
+      expect(rehydrateAliases(text, map()), `rehydrate: ${text}`).toBe(
+        `${before}${NAME}${after}`,
+      );
+    }
+  });
+
+  it('resolves the declined forms of «Сотрудник» too', () => {
+    const alias = aliasForUserId(OPERATOR_ID);
+    for (const ending of ['', 'а', 'у', 'ом', 'е', 'ов', 'и', 'ам', 'ами', 'ах']) {
+      const text = `Отчёт ${inflect(alias, ending)} готов.`;
+      expect(containsAlias(text), `containsAlias: ${text}`).toBe(true);
+      expect(rehydrateAliases(text, map()), `rehydrate: ${text}`).toBe(
+        `Отчёт ${OPERATOR_FIO} готов.`,
+      );
+    }
+  });
+
+  it('sees an answer whose aliases are ALL inflected, so the map still gets loaded', async () => {
+    // The short-circuit bug, at the level it actually bit. rehydrateForDisplay
+    // asks containsAlias() first; a false there is not a degraded answer, it is
+    // NO answer — the query never runs and the handle reaches the screen.
+    setProvider(FOREIGN);
+    dbMock.contact.findMany.mockResolvedValue([
+      { id: CONTACT_ID, first_name: CONTACT_FIRST, last_name: CONTACT_LAST },
+    ]);
+    dbMock.user.findMany.mockResolvedValue([]);
+
+    const answer = `Нужно позвонить ${inflect(aliasForContactId(CONTACT_ID), 'у')} сегодня.`;
+    expect(containsAlias(answer)).toBe(true);
+
+    const shown = await rehydrateForDisplay(ORG_ID, answer);
+
+    expect(dbMock.contact.findMany).toHaveBeenCalled();
+    expect(shown).toBe(`Нужно позвонить ${NAME} сегодня.`);
+    expect(containsAlias(shown)).toBe(false);
+  });
+
+  it('substitutes the name in the NOMINATIVE and accepts the stilted result', () => {
+    // Recorded as a test so it is not "fixed" by reaching for a morphology
+    // library. Correct Russian would be «с Аполлинарией Загряжской-Тучковой»;
+    // decision 002 ("genuine costs", item 1) weighed exactly this and took the
+    // stilted output. The requirement is that the name APPEAR.
+    const sentence = `Сделка с ${inflect(aliasForContactId(CONTACT_ID), 'ом')}.`;
+    expect(rehydrateAliases(sentence, map())).toBe(`Сделка с ${NAME}.`);
+  });
+
+  it('leaves an ordinary «Клиенту» alone when what follows is not a live alias', () => {
+    // The over-matching hazard, and the reason the endings are enumerated rather
+    // than written as `Клиент\w*`. «ACME» is four characters drawn entirely from
+    // the alias alphabet, so the PATTERN does match here — and the lookup is the
+    // second guard: it resolves to nothing and the sentence is returned verbatim.
+    // Rewriting this into somebody's name would invent a person who was never
+    // mentioned, which is worse than the missed rehydration being fixed.
+    const sentence = 'Отправить Клиенту ACME счёт на оплату.';
+    expect(rehydrateAliases(sentence, map())).toBe(sentence);
+    expect(rehydrateAliases('Сделка с Клиентом ЭТАП-4 закрыта.', map())).toBe(
+      'Сделка с Клиентом ЭТАП-4 закрыта.',
+    );
+  });
+
+  it('does not read a longer word that merely ends in the alias word', () => {
+    const token = aliasForContactId(CONTACT_ID).split(' ')[1];
+    for (const text of [
+      `Субклиенту ${token} ничего не отправлять.`,
+      `Клиентура ${token} растёт.`,
+      `Клиентский ${token} отдел.`,
+      `Сотрудничество ${token} продолжается.`,
+    ]) {
+      expect(containsAlias(text), text).toBe(false);
+      expect(rehydrateAliases(text, map()), text).toBe(text);
+    }
+  });
+
+  it('tolerates whatever whitespace the model put between the word and the token', () => {
+    // The key is rebuilt from the two captures, not read off the matched text, so
+    // a newline or a double space no longer produces a match that then fails its
+    // own lookup.
+    const [word, token] = aliasForContactId(CONTACT_ID).split(' ');
+    expect(rehydrateAliases(`Ответ: ${word}  ${token}.`, map())).toBe(`Ответ: ${NAME}.`);
+    expect(rehydrateAliases(`Ответ: ${word}\n${token}.`, map())).toBe(`Ответ: ${NAME}.`);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5b. get_rep_performance — the one tool the MCP projection does not stand behind
 // ---------------------------------------------------------------------------
 

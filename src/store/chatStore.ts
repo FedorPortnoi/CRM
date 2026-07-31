@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { API_URL, authHeaders } from '../utils/api';
+import { fetchWsTicket, resolveWsUrl } from '../utils/websocket';
 
 export type ChatMessage = {
   id: string;
@@ -18,16 +19,15 @@ export type Channel = {
   unread: number;
 };
 
-function wsUrl(): string {
-  const base = API_URL.replace(/^https/, 'wss').replace(/^http/, 'ws');
-  return `${base}/ws`;
-}
-
 interface ChatState {
   channels: Channel[];
   messages: Record<string, ChatMessage[]>; // channel → newest-first
   hasMore: Record<string, boolean>;
   ws: WebSocket | null;
+  // Token whose ticket exchange is in flight, or null when none is. The exchange is async and
+  // `ws` only becomes non-null at the very end of it, so `ws` alone cannot answer "is a
+  // connection already being set up?" — see connect().
+  connectingToken: string | null;
   loadingChannels: boolean;
 
   connect: (token: string) => void;
@@ -43,28 +43,63 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   messages: {},
   hasMore: {},
   ws: null,
+  connectingToken: null,
   loadingChannels: false,
 
   connect: (token: string) => {
-    const existing = get().ws;
-    if (existing) return;
+    const { ws, connectingToken } = get();
+    // Already connected — the Chat tab calls connect() on every visit.
+    if (ws) return;
+    // ...and an exchange for this same session is already running. `ws` is null for the whole
+    // round trip below, so without this two visits in quick succession would open two sockets.
+    if (connectingToken === token) return;
 
-    const socket = new WebSocket(`${wsUrl()}?token=${encodeURIComponent(token)}`);
+    set({ connectingToken: token });
 
-    socket.onopen = () => {};
-    socket.onclose = () => set({ ws: null });
-    socket.onerror = () => set({ ws: null });
+    void (async () => {
+      // The same exchange the org socket uses (src/utils/websocket.ts), against the same
+      // /api/v1/ws endpoint: the JWT goes in the Authorization header and a short-lived,
+      // single-use ticket goes in the URL.
+      //
+      // This used to open the socket with the bearer JWT in the query string. That is the
+      // fallback websocket.ts deleted and documented as "must not come back" — a query string is
+      // written to proxy logs, server access logs and client history, so it published a
+      // long-lived credential to every hop on the path. It had not come back so much as never
+      // left: this was a second implementation of the same handshake, and only the first one was
+      // migrated. There is now one implementation, imported here.
+      const ticket = await fetchWsTicket(token);
 
-    socket.onmessage = (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data as string) as { type: string; message?: ChatMessage };
-        if (data.type === 'chat:message' && data.message) {
-          get()._addIncoming(data.message);
-        }
-      } catch { /* ignore */ }
-    };
+      // A different session started connecting while the exchange was in flight — logout
+      // followed by somebody else signing in on the same device re-runs the Chat tab's effect.
+      // The ticket was minted for `token`, so it must be dropped rather than used to open a
+      // socket the new user then reads other people's messages from.
+      if (get().connectingToken !== token) return;
 
-    set({ ws: socket });
+      const url = resolveWsUrl(ticket);
+      if (url === null) {
+        // Fail closed: no ticket, no socket, and no downgrade path. A missing ticket means
+        // "try again the next time the tab is opened", never "send the JWT instead".
+        set({ connectingToken: null });
+        return;
+      }
+
+      const socket = new WebSocket(url);
+
+      socket.onopen = () => {};
+      socket.onclose = () => set({ ws: null });
+      socket.onerror = () => set({ ws: null });
+
+      socket.onmessage = (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data as string) as { type: string; message?: ChatMessage };
+          if (data.type === 'chat:message' && data.message) {
+            get()._addIncoming(data.message);
+          }
+        } catch { /* ignore */ }
+      };
+
+      set({ ws: socket, connectingToken: null });
+    })();
   },
 
   fetchChannels: async () => {

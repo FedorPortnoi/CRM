@@ -26,8 +26,15 @@ import crypto from 'node:crypto';
  *     must not be the credential that also opens the invite from scratch.
  *
  *   CLAIM CODE — 6 characters a human can retype when every automatic path has
- *     failed. Short means low entropy, so it gets the shortest life and the
- *     tightest rate limit of the three. It is the floor, not the mechanism.
+ *     failed. Short means low entropy, so it gets a short life and the tightest
+ *     rate limit of the three. It is the floor, not the mechanism.
+ *
+ *     It is also the RECOVERY credential, and that is a role the other two
+ *     cannot fill. See the TTL arithmetic below and the re-mint rule in
+ *     controllers/invites.ts: the claim code is the only one of the four that
+ *     has never left the invitee's own screen, so it is the only one whose
+ *     presentation is evidence that the SAME PERSON is asking again rather than
+ *     that a second holder has appeared.
  *
  *   ACCEPT TOKEN — 16 bytes, minted ONLY by a successful `lookup` and stored in
  *     its own column. This separation is the correction to a real flaw: the
@@ -57,8 +64,16 @@ import crypto from 'node:crypto';
  * reason api-keys.ts gives: these are full-entropy random strings, not
  * human-chosen passwords, so there is no dictionary to slow down and a fast hash
  * is correct. The claim code is the one that is NOT full entropy, which is
- * exactly why its defence is a 15-minute life and a call budget rather than the
+ * exactly why its defence is a bounded life and a call budget rather than the
  * hash cost.
+ *
+ * All four hash columns are also UNIQUE. For the three full-entropy ones that is
+ * bookkeeping; for claim_hash it is load-bearing, because the claim-code lookup
+ * is unauthenticated and therefore has no organization_id to narrow on. The
+ * ONLY thing that ties a typed code to one tenant is that no other tenant holds
+ * the same code — so that has to be a constraint the database enforces, not a
+ * probability the reader is asked to accept. See the note on the claim branch of
+ * `lookup` for what happens if it is ever violated anyway.
  */
 
 /** 32 bytes. The link. */
@@ -75,18 +90,71 @@ export const CLAIM_CODE_LENGTH = 6;
 
 /** How long the emailed/messaged link stays redeemable. */
 export const INVITE_TTL_MS = 24 * 60 * 60 * 1000;
-/**
- * The claim code's life starts when the landing page is opened, not when the
- * invite is minted: it exists to cover the walk from the browser to the freshly
- * installed app, which is minutes.
- */
-export const CLAIM_TTL_MS = 15 * 60 * 1000;
 
 /**
  * The accept token's life. Minted by `lookup`, spent by `accept` — the invitee
  * is looking at the form in between, so this is minutes, not hours.
  */
 export const ACCEPT_TTL_MS = 30 * 60 * 1000;
+
+/**
+ * The longest walk from "tapped the link in a messenger" to "the app is open
+ * and has called lookup": read the landing page, cross to RuStore or the App
+ * Store, download, install, launch, grant whatever the OS asks for. On a phone
+ * on mobile data this is the part of the flow that takes real time.
+ */
+export const INSTALL_BUDGET_MS = 15 * 60 * 1000;
+
+/**
+ * ─── THE CLAIM CODE'S LIFE IS DERIVED, AND THE DERIVATION IS THE FIX ────────
+ *
+ * The claim code's clock starts when the LANDING PAGE OPENS; the accept token's
+ * clock starts at LOOKUP, which is always later. Written as two independent
+ * constants — 15 minutes and 30 minutes — those two facts silently made the
+ * documented recovery path unreachable, and nobody did this arithmetic:
+ *
+ *   open at t = 0, lookup at t = I (the install, 0 ≤ I ≤ INSTALL_BUDGET)
+ *     claim code alive on  [0, CLAIM_TTL)
+ *     accept token alive on [I, I + ACCEPT_TTL]
+ *
+ *   With CLAIM_TTL = 15 and ACCEPT_TTL = 30 the accept token outlives the claim
+ *   code for every I ≥ 0. Retype inside 15 minutes and the invite still holds a
+ *   live accept token, so the mint is refused (409); wait for that token to
+ *   lapse and the code needed to ask again died 15+ minutes earlier (404). The
+ *   window was EMPTY, not merely narrow, and no test noticed because no test
+ *   ever asked what happens at t = I + ε.
+ *
+ * Deriving it fixes the arithmetic by construction:
+ *
+ *   CLAIM_TTL = INSTALL_BUDGET + ACCEPT_TTL = 45 min
+ *   ⇒ I + ACCEPT_TTL ≤ INSTALL_BUDGET + ACCEPT_TTL = CLAIM_TTL for all I in
+ *     the budget
+ *   ⇒ the accept token's ENTIRE life [I, I + ACCEPT_TTL] lies inside the claim
+ *     code's life [0, CLAIM_TTL), with CLAIM_TTL − (I + ACCEPT_TTL) = 15 − I
+ *     minutes of slack left over after the form has already expired.
+ *
+ * So at every instant at which an invitee could be sitting in front of a form
+ * they can no longer submit, the code that buys them a new one is still alive.
+ * That is the whole claim, and it is now an inequality rather than a hope. The
+ * second half — that presenting the code is actually ALLOWED to mint again — is
+ * the re-mint rule in controllers/invites.ts; either half alone leaves the
+ * window empty.
+ *
+ * COST, stated rather than assumed. Tripling the window triples the number of
+ * live 6-character codes in existence at any instant, and a guess is a hit with
+ * probability (live codes)/32⁶ = (live codes)/2³⁰ per attempt. The lookup route
+ * allows 20 attempts per 15 minutes per IP, so one IP gets 60 attempts across a
+ * whole code lifetime: for a tenant population producing ~30 live codes at once
+ * that is ~2·10⁻⁶ per IP per window, against ~2·10⁻⁷ before. The defence was
+ * never the window — it is the call budget, and now also the UNIQUE constraint
+ * on claim_hash, without which "live codes/2³⁰" was not even the right
+ * expression because two invites could share one code.
+ *
+ * An invitee who runs past 45 minutes is not stranded either: the LINK is good
+ * for 24 hours, and re-opening the landing page mints a fresh code with a fresh
+ * 45 minutes. The claim code is the convenient recovery path, not the only one.
+ */
+export const CLAIM_TTL_MS = INSTALL_BUDGET_MS + ACCEPT_TTL_MS;
 
 export function generateLinkToken(): string {
   return crypto.randomBytes(LINK_TOKEN_BYTES).toString('base64url');

@@ -49,7 +49,16 @@ describe('offlineQueue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mocks.fetch);
-    mocks.getItemAsync.mockResolvedValue('auth-token');
+    // One value for EVERY SecureStore key meant `crm_auth_user` read back the
+    // literal string 'auth-token', which JSON.parse throws on — i.e. the fixture
+    // was accidentally modelling "a session exists and its user record is
+    // CORRUPT", not the "token present, no user record" it was written to mean.
+    // That distinction became load-bearing when flush() started refusing to send
+    // an unstamped write under an unreadable session, so the mock now says what
+    // these fixtures always intended.
+    mocks.getItemAsync.mockImplementation(async (key: string) =>
+      (key === 'crm_auth_user' ? null : 'auth-token'),
+    );
     mocks.setItemAsync.mockResolvedValue(undefined);
     mocks.deleteItemAsync.mockResolvedValue(undefined);
   });

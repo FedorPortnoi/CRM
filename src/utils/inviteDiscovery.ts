@@ -58,6 +58,20 @@ export type InviteLookupResult =
   | { ok: false; code: string; message: string };
 
 /**
+ * The link token is 32 bytes base64url, which is 43 characters and never any
+ * other number: unpadded base64 of 32 bytes is ceil(32 × 4 / 3) = 43. See
+ * LINK_TOKEN_BYTES in backend/services/invites.ts, which is the only thing that
+ * mints one.
+ *
+ * The length is stated rather than bracketed because it is knowable. An earlier
+ * `{20,200}` came with a comment claiming "anything shorter is a fragment that
+ * means something else" while accepting a 20-character anchor and a
+ * 200-character router artefact alike — the comment described this regex, not
+ * that one.
+ */
+const LINK_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+/**
  * The invite token rides in the URL FRAGMENT (`https://4kub.ru/i#<token>`) so it
  * is never sent to a server and never lands in an access log. Both platforms
  * hand the app the complete URL including the fragment, so it survives the trip.
@@ -67,19 +81,42 @@ export function tokenFromUrl(url: string | null | undefined): string | null {
   const hash = url.indexOf('#');
   if (hash === -1) return null;
   const token = url.slice(hash + 1).trim();
-  // Link tokens are 32 bytes base64url. Anything shorter is a fragment that
-  // means something else — an anchor, a router artefact — not an invite.
-  return /^[A-Za-z0-9_-]{20,200}$/.test(token) ? token : null;
+  return LINK_TOKEN_PATTERN.test(token) ? token : null;
 }
 
-/** Recognises a handoff token sitting on the clipboard, and nothing else. */
+/**
+ * The handoff is 16 bytes base64url: 22 characters, and the last of them carries
+ * only 2 bits of the final byte, so it is always one of A, Q, g, w. Both halves
+ * of that are checked — the tail costs nothing on a real handoff and rejects
+ * three quarters of everything else of the right length.
+ */
+const HANDOFF_PATTERN = /^[A-Za-z0-9_-]{21}[AQgw]$/;
+
+/**
+ * Recognises a handoff token sitting on the clipboard.
+ *
+ * WHAT THIS GUARD ACTUALLY EXCLUDES. It exists so the app does not POST whatever
+ * the user happened to copy last, but it is a shape test and shape is all it can
+ * see. It rejects anything containing a space or a punctuation mark outside
+ * `-_`, anything of a different length, and anything whose last character the
+ * encoder could not have produced: messages, URLs, phone numbers, card numbers,
+ * ordinary human-chosen passwords, and three quarters of everything left over.
+ *
+ * It does NOT exclude a 22-character string drawn from the same alphabet whose
+ * last character happens to land in A/Q/g/w — a password-manager password with
+ * symbols disabled, a base64url-encoded UUID, a short API key. There is no
+ * marker on the clipboard to test for (the landing page copies the bare token,
+ * see website/i.html), so the client cannot narrow this further on its own.
+ *
+ * What bounds the damage is on the other side rather than here: the value goes
+ * to this product's own `/auth/invites/lookup` and nowhere else, it is compared
+ * as a SHA-256 against the invite table, and a string that is not a live handoff
+ * gets the same 404 an invented token gets.
+ */
 export function handoffFromClipboard(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const value = raw.trim();
-  // 16 bytes base64url = 22 chars. The guard matters: we do NOT want to POST
-  // whatever the user happened to copy last — a password, a message — to the
-  // server on the off chance it is an invite.
-  return /^[A-Za-z0-9_-]{22}$/.test(value) ? value : null;
+  return HANDOFF_PATTERN.test(value) ? value : null;
 }
 
 export async function readClipboardHandoff(): Promise<string | null> {

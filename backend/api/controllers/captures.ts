@@ -198,11 +198,96 @@ function buildMessageData(
   };
 }
 
-function followUpDueDate(): Date {
-  const dueDate = new Date();
-  dueDate.setDate(dueDate.getDate() + 1);
-  dueDate.setHours(9, 0, 0, 0);
-  return dueDate;
+/**
+ * Where "09:00 tomorrow" is measured.
+ *
+ * `Europe/Moscow` is the market's zone — the same value `src/market/profile.ts`
+ * and `docs/architecture/market-profile.md` carry for the RU profile.
+ * `backend/config/market.ts` holds the market constants on this side of the wire
+ * (currency, the default pipeline and its stages) but no zone, so there was no
+ * existing backend constant to reuse; when a per-organisation or per-user zone
+ * arrives, this is the line it replaces.
+ */
+const FOLLOW_UP_TIME_ZONE = 'Europe/Moscow';
+const FOLLOW_UP_HOUR = 9;
+
+/**
+ * How far `timeZone`'s wall clock is ahead of UTC at `instant`, in milliseconds.
+ *
+ * Done through `Intl` with an explicit zone rather than a hard-coded +03:00, so
+ * this stays correct if the offset ever moves again — Russia has changed it twice
+ * in living memory — and so the same helper is right for a zone that observes
+ * DST, which `America/New_York` in the US profile does.
+ *
+ * `hourCycle: 'h23'` rather than `hour12: false`: some ICU builds render midnight
+ * as «24» under the latter, which would silently push the answer a day out.
+ */
+function zoneOffsetMs(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant);
+
+  const field = (type: Intl.DateTimeFormatPartTypes): number =>
+    Number(parts.find((part) => part.type === type)?.value ?? 0);
+
+  const wallClockAsUtc = Date.UTC(
+    field('year'),
+    field('month') - 1,
+    field('day'),
+    field('hour') % 24,
+    field('minute'),
+    field('second'),
+  );
+
+  // formatToParts resolves to whole seconds, so the instant is truncated to
+  // seconds too rather than letting its milliseconds leak into the offset.
+  return wallClockAsUtc - Math.floor(instant.getTime() / 1000) * 1000;
+}
+
+/**
+ * The auto follow-up a matched capture staples onto the contact: 09:00 tomorrow.
+ *
+ * "Tomorrow at nine" is a claim about the OPERATOR'S wall clock, and this used to
+ * be measured on the server's: `new Date()` + `setDate(+1)` + `setHours(9,0,0,0)`
+ * are all local-time operations, and production runs `Etc/UTC` (the DB session is
+ * pinned to UTC per docs/architecture/timestamp-storage.md, and the box follows).
+ * So the task appeared at 12:00 Moscow — three hours into the working day it was
+ * promised for, right through lunch. Between 21:00 and 00:00 Moscow it was also
+ * the wrong DAY, because the date being incremented was the UTC date, not the
+ * one the operator was living in.
+ *
+ * `now` is a parameter so the calculation can be tested at a fixed instant; every
+ * caller uses the default.
+ */
+function followUpDueDate(now: Date = new Date()): Date {
+  const offsetNow = zoneOffsetMs(now, FOLLOW_UP_TIME_ZONE);
+
+  // Today's date in the MARKET's zone, then tomorrow at FOLLOW_UP_HOUR, as a bare
+  // wall clock. Shifting the instant and then reading it back with getUTC* is
+  // what keeps the server's own zone out of the arithmetic entirely — no method
+  // below consults it.
+  const wallClockNow = new Date(now.getTime() + offsetNow);
+  const wallClockDue = Date.UTC(
+    wallClockNow.getUTCFullYear(),
+    wallClockNow.getUTCMonth(),
+    wallClockNow.getUTCDate() + 1,
+    FOLLOW_UP_HOUR,
+  );
+
+  // And back to an instant. The offset is re-read AT the target, because a DST
+  // boundary can fall between now and tomorrow morning and the two offsets then
+  // differ. Europe/Moscow has not observed DST since 2014, so today this second
+  // read always returns the first one — it is here so the helper is not quietly
+  // wrong for the first zone that does.
+  const offsetDue = zoneOffsetMs(new Date(wallClockDue - offsetNow), FOLLOW_UP_TIME_ZONE);
+  return new Date(wallClockDue - offsetDue);
 }
 
 function contactFullName(contact: CaptureContact): string {

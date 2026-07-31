@@ -723,7 +723,26 @@ model Invite {
   token_hash       String    @unique
   /// Traded for a lookup only. Never resolves an accept — see invites.ts.
   handoff_hash     String?   @unique
-  claim_hash       String?
+  /// UNIQUE, and that is not symmetry with the other three — it is the only
+  /// thing that makes the claim-code lookup single-tenant.
+  ///
+  /// That lookup is unauthenticated, so it has no organization_id to put in the
+  /// WHERE: a typed code is matched against every invite in the product. While
+  /// this column was a bare `String?` the safety argument was silently "no two
+  /// live 6-character codes are ever equal anywhere", which is an assumption
+  /// about 2^30 values and not a fact — and its failure mode was the worst
+  /// available, because Postgres would hand back whichever row it reached first
+  /// and the invitee would be minted an accept token for a company that never
+  /// invited them. Being unindexed as well, it was a sequential scan over the
+  /// whole table on an endpoint anyone on the internet can call 20 times per
+  /// quarter hour. One @unique closes both: it makes the assumption true and it
+  /// is the index.
+  ///
+  /// Uniqueness that is enforced has to be uniqueness that is handled, so `open`
+  /// draws again on a collision rather than surfacing a 500, and the claim
+  /// branch of `lookup` still refuses a multi-row match rather than choosing —
+  /// this constraint is not deployed everywhere the code is.
+  claim_hash       String?   @unique
   claim_expires_at DateTime?
   /// Minted by a successful lookup, spent by accept. Its own column so that a
   /// secret which has been through RuStore's logs or the clipboard can never

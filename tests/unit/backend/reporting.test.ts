@@ -221,6 +221,12 @@ describe('report queries are org-scoped and cone-restricted', () => {
 
     const result = await getRepPerformance(member, {});
 
+    // Guard first: `for (const … of [])` and `[0]?.x` are both vacuously true on
+    // an empty call set, so every loop below has to be told that queries were
+    // actually made before it can mean anything.
+    expect(allWheres().length).toBeGreaterThan(0);
+    expect(wheresOf(dbMock.deal.groupBy).length).toBeGreaterThan(0);
+
     for (const where of allWheres()) {
       expect(where.organization_id).toBe(ORG_ID);
     }
@@ -240,6 +246,18 @@ describe('report queries are org-scoped and cone-restricted', () => {
   it('leaves owner queries unrestricted apart from the org boundary', async () => {
     await getRepPerformance(owner, {});
 
+    // Everything below is either a `for … of` over the recorded calls or an
+    // `[0]?.field).toBeUndefined()`, and BOTH of those are satisfied by an empty
+    // call set: no loop body runs, and `undefined?.field` is undefined. Without
+    // this guard, replacing getRepPerformance with `async () => ({})` — no org
+    // filter, no queries, no report — leaves this test green. Same guard the
+    // cone test below already carries at its own `dealWheres`.
+    expect(allWheres().length).toBeGreaterThan(0);
+    expect(wheresOf(dbMock.deal.groupBy).length).toBeGreaterThan(0);
+    expect(dbMock.task.groupBy).toHaveBeenCalled();
+    expect(dbMock.activityLog.groupBy).toHaveBeenCalled();
+    expect(dbMock.user.findMany).toHaveBeenCalled();
+
     expect(dbMock.$queryRaw).not.toHaveBeenCalled();
     for (const where of allWheres()) {
       expect(where.organization_id).toBe(ORG_ID);
@@ -247,7 +265,12 @@ describe('report queries are org-scoped and cone-restricted', () => {
     for (const where of wheresOf(dbMock.deal.groupBy)) {
       expect(where.assigned_to).toEqual({ not: null });
     }
+    // An owner has no cone, so these carry no per-user narrowing — assertions
+    // only worth making now that the queries are known to have happened. The
+    // activity log still excludes system rows, which is a `not: null`, not a
+    // cone.
     expect(wheresOf(dbMock.task.groupBy)[0]?.assigned_to).toBeUndefined();
+    expect(wheresOf(dbMock.activityLog.groupBy)[0]?.user_id).toEqual({ not: null });
     expect(wheresOf(dbMock.user.findMany)[0]?.id).toBeUndefined();
   });
 
@@ -284,6 +307,7 @@ describe('report queries are org-scoped and cone-restricted', () => {
 
   it('never reads another org, even when the cone is wide open', async () => {
     await getSalesFunnel({ ...owner, org_id: OTHER_ORG_ID }, {});
+    expect(allWheres().length).toBeGreaterThan(0);
     for (const where of allWheres()) {
       expect(where.organization_id).toBe(OTHER_ORG_ID);
     }

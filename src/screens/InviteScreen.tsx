@@ -23,6 +23,7 @@ import {
   discoverInvite,
   lookupInvite,
   tokenFromUrl,
+  type InviteLookupResult,
   type InvitePreview,
 } from '../utils/inviteDiscovery';
 
@@ -82,6 +83,56 @@ const ROLE_LABELS: Record<string, string> = {
 
 function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;
+}
+
+/**
+ * Run one lookup and apply its result — the single path BOTH racers take.
+ *
+ * A link arriving while this screen is open and a code typed into the form hit
+ * the same endpoint, and the server hands the loser of that race a 409 instead
+ * of a second accept token (the `minted.count === 0` branch in
+ * backend/api/controllers/invites.ts). Two rules follow, and each one previously
+ * held on only one of the two paths, which is why they live here now:
+ *
+ *   THE SPINNER IS CLEARED BEFORE THE STALENESS CHECK, never after it. Nothing
+ *   else in this screen ever sets `isLookingUp` back to false — `restartWithCode`
+ *   does not touch it — so a guarded return that skipped the reset left
+ *   «Продолжить» disabled behind a spinner with no recovery short of killing the
+ *   app.
+ *
+ *   A RESULT THAT ARRIVES AFTER THE OTHER RACER HAS PAINTED THE FORM IS DROPPED.
+ *   `lookupError` renders inside the `found` block as well as the `code` block,
+ *   so a late 409 would otherwise put a red "приглашение уже открыто на другом
+ *   устройстве" underneath a form the invitee is halfway through filling in —
+ *   an error about a race they cannot see, on the one screen where there is no
+ *   account to fall back to.
+ *
+ * The previous error is cleared BEFORE the request rather than after it, so the
+ * screen never shows a stale failure next to a live spinner.
+ *
+ * Module-level and dependency-injected rather than a hook: that ordering is the
+ * entire content of the function, and this way it can be tested by driving the
+ * promise directly instead of through a renderer.
+ */
+export async function settleInviteLookup(
+  lookup: () => Promise<InviteLookupResult>,
+  handlers: {
+    setIsLookingUp: (value: boolean) => void;
+    setLookupError: (message: string | null) => void;
+    applyPreview: (preview: InvitePreview) => void;
+    isStale: () => boolean;
+  },
+): Promise<void> {
+  handlers.setLookupError(null);
+  handlers.setIsLookingUp(true);
+  const result = await lookup();
+  handlers.setIsLookingUp(false);
+  if (handlers.isStale()) return;
+  if (result.ok) {
+    handlers.applyPreview(result.preview);
+  } else {
+    handlers.setLookupError(result.message);
+  }
 }
 
 /**
@@ -216,17 +267,12 @@ export default function InviteScreen() {
     if (token === null) return;
 
     let cancelled = false;
-    void (async () => {
-      setIsLookingUp(true);
-      const result = await lookupInvite({ via: 'link', token });
-      if (cancelled || previewRef.current !== null) return;
-      setIsLookingUp(false);
-      if (result.ok) {
-        applyPreview(result.preview);
-      } else {
-        setLookupError(result.message);
-      }
-    })();
+    void settleInviteLookup(() => lookupInvite({ via: 'link', token }), {
+      setIsLookingUp,
+      setLookupError,
+      applyPreview,
+      isStale: () => cancelled || previewRef.current !== null,
+    });
 
     return () => {
       cancelled = true;
@@ -294,15 +340,14 @@ export default function InviteScreen() {
 
   const handleCodeSubmit = useCallback(async () => {
     if (code.length !== CLAIM_CODE_LENGTH || isLookingUp) return;
-    setLookupError(null);
-    setIsLookingUp(true);
-    const result = await lookupInvite({ via: 'code', claim_code: code });
-    setIsLookingUp(false);
-    if (result.ok) {
-      applyPreview(result.preview);
-    } else {
-      setLookupError(result.message);
-    }
+    await settleInviteLookup(() => lookupInvite({ via: 'code', claim_code: code }), {
+      setIsLookingUp,
+      setLookupError,
+      applyPreview,
+      // A link can arrive and win while this request is in flight; the 409 it
+      // leaves behind must not land under the form the link already filled in.
+      isStale: () => previewRef.current !== null,
+    });
   }, [code, isLookingUp, applyPreview]);
 
   /** Back to the code screen — the recovery path when an accept token expires. */
@@ -681,9 +726,23 @@ export default function InviteScreen() {
                     />
                   </View>
 
+                  {/* Where the clock started, because it did not start here.
+                      CLAIM_TTL_MS is written into claim_expires_at by
+                      InviteController.open — that is, when the landing page was
+                      loaded, before the store download that got the invitee to
+                      this screen. Saying only "the code lasts N minutes" hands
+                      them a budget several minutes of which is already spent.
+                      Re-opening the link mints a fresh code with a fresh N
+                      (the retry loop in `open`), which is the way out and is why
+                      it is offered in the same breath.
+                      The number is the server's: tests/unit/mobile/invite-screen.test.ts
+                      asserts this sentence against CLAIM_TTL_MS, so the two
+                      cannot drift apart in silence the way they already did once. */}
                   <Text style={styles.hint}>
                     Буквы и цифры, без пробелов и дефисов. Букв «O» и «I» и цифр «0» и «1» в коде
-                    не бывает — их слишком легко перепутать. Код действует 15 минут.
+                    не бывает — их слишком легко перепутать. Код живёт 45 минут с того момента, как
+                    открылась страница приглашения, — если он больше не подходит, откройте ссылку
+                    заново: код обновится.
                   </Text>
 
                   {lookupError !== null && (

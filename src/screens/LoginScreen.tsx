@@ -350,6 +350,22 @@ export default function LoginScreen() {
                   }
                 </LinearGradient>
               </Pressable>
+
+              {/* The manual-code path's only door.
+                  `/invite` is reachable from a verified link, from the RuStore
+                  install referrer and from the iOS clipboard — all three of which
+                  are automatic and all three of which can fail. Somebody left
+                  holding the six characters off the invite web page and nothing
+                  else had no way in at all until this link existed. */}
+              <Pressable
+                accessibilityLabel="Перейти к вводу кода приглашения"
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={() => router.push('/invite' as never)}
+                style={({ pressed }) => [styles.inviteLinkButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.inviteLinkText}>Меня пригласили — ввести код приглашения</Text>
+              </Pressable>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -549,6 +565,23 @@ const styles = StyleSheet.create({
     fontSize: 19,
     fontWeight: '900',
     letterSpacing: 0.1,
+  },
+
+  // Invite door — same treatment as the link buttons on InviteScreen, so the two
+  // screens that point at each other look like they belong together.
+  inviteLinkButton: {
+    marginTop: 10,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  inviteLinkText: {
+    color: COLORS.darkBrown,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    textDecorationLine: 'underline',
   },
   pressed: { opacity: 0.82 },
   disabled: { opacity: 0.66 },

@@ -225,6 +225,8 @@ describe('the projection stays on the model side of the house', () => {
     // these two functions. Keep the seam where it is.
     const roots = ['backend/api', 'backend/services', 'src'];
     const offenders: string[] = [];
+    const importers: string[] = [];
+    const scanned: string[] = [];
 
     const visit = (dir: string): void => {
       for (const entry of readdirSync(`${REPO_ROOT}${dir}`, { withFileTypes: true })) {
@@ -239,7 +241,9 @@ describe('the projection stays on the model side of the house', () => {
         // name this module in a comment explaining where their ФИО is stripped,
         // and that is exactly the pointer a future reader needs.
         const source = readFileSync(`${REPO_ROOT}${rel}`, 'utf8');
+        scanned.push(rel);
         if (/(?:from|import|require)\s*\(?\s*['"][^'"]*model-projection['"]/.test(source)) {
+          importers.push(rel);
           if (!ALLOWED.includes(rel)) offenders.push(rel);
         }
       }
@@ -247,6 +251,23 @@ describe('the projection stays on the model side of the house', () => {
 
     for (const root of roots) visit(root);
 
+    // Sanity, the same guard mcp-operator-name-projection.test.ts:299 puts in
+    // front of its own scan: an empty `offenders` is only evidence of a clean
+    // tree if the walk actually read files and the pattern actually matches an
+    // import. A renamed root, a moved module, or a regex that stopped matching
+    // all produce a green "no offenders" from a scanner that examined nothing.
+    expect(scanned.length).toBeGreaterThan(100);
+    for (const root of roots) {
+      expect(scanned.some((file) => file.startsWith(`${root}/`)), `${root} was never walked`).toBe(true);
+    }
+    // Positive control: the one permitted importer must be FOUND, not assumed.
+    // It is the proof the pattern can still recognise a real import statement.
+    expect(importers).toContain('backend/services/assistant.ts');
+    expect(readFileSync(`${REPO_ROOT}backend/services/assistant.ts`, 'utf8')).toContain('model-projection');
+
     expect(offenders).toEqual([]);
+    // Stated positively as well, so a NEW allowed entry has to be added on
+    // purpose rather than by widening ALLOWED and moving on.
+    expect(importers.sort()).toEqual([...ALLOWED].sort());
   });
 });

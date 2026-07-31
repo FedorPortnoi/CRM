@@ -44,7 +44,42 @@ import {
   recordEmailOpen,
   stripPixelExtension,
 } from '../../../backend/services/open-tracking';
-import { TrackingRouteHandlers, openTrackingRateLimit } from '../../../backend/api/routes/tracking';
+import trackingRoutes, {
+  TrackingRouteHandlers,
+  openTrackingRateLimit,
+} from '../../../backend/api/routes/tracking';
+
+/**
+ * openTrackingRateLimit() reads process.env at call time and has no `env`
+ * parameter (unlike config/security.ts, whose helpers all take one), so the only
+ * way to read the branch that actually ships is to swap the variables around the
+ * call and put them back. Restores the previous values — including "was not
+ * set" — so nothing leaks into the next test.
+ */
+function withEnv(overrides: Record<string, string | undefined>, run: () => void): void {
+  const saved = new Map<string, string | undefined>();
+
+  for (const [name, value] of Object.entries(overrides)) {
+    saved.set(name, process.env[name]);
+    if (value === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = value;
+    }
+  }
+
+  try {
+    run();
+  } finally {
+    for (const [name, value] of saved) {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
+  }
+}
 
 /** Records everything a handler does to the reply. */
 function makeReply() {
@@ -170,10 +205,72 @@ describe('the tracking endpoint always returns a valid GIF', () => {
     await expect(recordEmailOpen(VALID_TOKEN)).resolves.toBe('ignored');
   });
 
-  it('is rate limited', () => {
-    const limit = openTrackingRateLimit();
-    expect(limit.timeWindow).toBe('1 minute');
-    expect(limit.max).toBeGreaterThan(0);
+  it('is rate limited to 120 requests a minute per IP in production', () => {
+    // Under NODE_ENV=test the module deliberately opens the bucket to 10_000 so
+    // the suite is never throttled. Asserting that number — or merely that it is
+    // above zero — says nothing about the ceiling that ships, and stays green
+    // with the production branch deleted. Read the production branch instead.
+    withEnv({ NODE_ENV: 'production', TRACKING_PIXEL_RATE_LIMIT_MAX: undefined }, () => {
+      const limit = openTrackingRateLimit();
+      expect(limit.max).toBe(120);
+      expect(limit.timeWindow).toBe('1 minute');
+    });
+
+    // The test-only escape hatch is exactly that: keyed on NODE_ENV, nothing else.
+    withEnv({ NODE_ENV: 'test', TRACKING_PIXEL_RATE_LIMIT_MAX: undefined }, () => {
+      expect(openTrackingRateLimit().max).toBe(10_000);
+    });
+    withEnv({ NODE_ENV: 'development', TRACKING_PIXEL_RATE_LIMIT_MAX: undefined }, () => {
+      expect(openTrackingRateLimit().max).toBe(120);
+    });
+  });
+
+  it('lets an operator retune the ceiling, but only to a positive integer', () => {
+    // A misconfigured value must fall back to 120, not to "no limit".
+    const cases: Array<[string | undefined, number]> = [
+      ['30', 30],
+      ['1', 1],
+      ['0', 120],
+      ['-5', 120],
+      ['unlimited', 120],
+      ['', 120],
+      [undefined, 120],
+    ];
+
+    for (const [raw, expected] of cases) {
+      withEnv({ NODE_ENV: 'production', TRACKING_PIXEL_RATE_LIMIT_MAX: raw }, () => {
+        expect(openTrackingRateLimit().max, `TRACKING_PIXEL_RATE_LIMIT_MAX=${raw}`).toBe(expected);
+      });
+    }
+  });
+
+  it('attaches that bucket to the route itself, not merely exports it', async () => {
+    // Exporting a limit nothing is wired to would leave the one unauthenticated,
+    // un-allowlisted endpoint in this backend completely unthrottled.
+    const registered: Array<{ path: string; options: Record<string, any>; handler: unknown }> = [];
+    const fastify = {
+      get(path: string, options: Record<string, any>, handler: unknown) {
+        registered.push({ path, options, handler });
+      },
+    };
+
+    await trackingRoutes(fastify as never);
+
+    expect(registered).toHaveLength(1);
+    expect(registered[0].path).toBe('/open/:token');
+    expect(registered[0].handler).toBe(TrackingRouteHandlers.openPixel);
+    expect(registered[0].options.config?.rateLimit).toEqual(openTrackingRateLimit());
+
+    withEnv({ NODE_ENV: 'production', TRACKING_PIXEL_RATE_LIMIT_MAX: undefined }, () => {
+      const wired: Array<Record<string, any>> = [];
+      const productionFastify = {
+        get(_path: string, options: Record<string, any>) {
+          wired.push(options);
+        },
+      };
+      void trackingRoutes(productionFastify as never);
+      expect(wired[0]?.config?.rateLimit).toEqual({ max: 120, timeWindow: '1 minute' });
+    });
   });
 
   it('strips an image extension appended by a mail client', () => {

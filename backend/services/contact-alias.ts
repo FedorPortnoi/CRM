@@ -105,11 +105,74 @@ export function aliasForUserId(userId: string): string {
   return `${ALIAS_PREFIXES.user} ${aliasToken(userId)}`;
 }
 
-/** Matches any alias this module can emit, for the rehydration sweep. */
+/**
+ * The case endings Russian will attach to an alias word.
+ *
+ * -----------------------------------------------------------------------------
+ * WHY THE PATTERN IS NOT SIMPLY «Клиент|Сотрудник»
+ * -----------------------------------------------------------------------------
+ * The Russian-word substrate was chosen above precisely because such a word
+ * "survives being written" by a model that is not trying to preserve it. That
+ * choice has a consequence the first version of this pattern did not draw: a
+ * word the model is happy to write is a word it will DECLINE. Prose does not say
+ * «сделка с Клиент K7F3»; it says «сделка с Клиентом K7F3», «позвонить Клиенту
+ * K7F3», «у Клиента K7F3». The alias is EMITTED in the nominative and the model
+ * puts it into whatever case the sentence needs — that is not the model mangling
+ * anything, it is the model writing correct Russian around our token.
+ *
+ * A nominative-only pattern therefore failed on the exact sentence the resolver's
+ * own docstring uses as its worked example: «Сотрудник K7F3 закрыл сделку с
+ * Клиентом M2QX» matched the first half and missed the second, producing the
+ * half-resolved sentence that comment says cannot happen. And because
+ * containsAlias() shares this pattern, an answer whose aliases were ALL inflected
+ * — one «Клиенту K7F3» and nothing else — reported "no aliases here", so
+ * rehydrateForDisplay short-circuited before the map was even loaded and the user
+ * was shown the raw handle.
+ *
+ * ENDINGS, NOT `\w*`. The obvious widening — `Клиент\w*\s+[TOKEN]` — is a worse
+ * bug than the one it fixes. It matches the ordinary word «Клиенту» wherever four
+ * token-shaped characters happen to follow (an order code, an abbreviation) and
+ * would rewrite that into somebody's real name: inventing a person where none was
+ * mentioned, which is a fabrication rather than a degradation. The list below is
+ * the actual paradigm of a second-declension masculine animate noun, shared by
+ * both words, so «Клиентура», «Клиентский» and «Сотрудничество» are not alias
+ * forms and do not match. The map lookup in rehydrateAliases() is the second
+ * guard: a four-character token that is not a live alias resolves to nothing and
+ * the text comes back untouched.
+ *
+ * Ordered longest-first so «Клиентами» is consumed whole rather than as
+ * «Клиента» + a stranded «ми».
+ */
+const ALIAS_CASE_ENDINGS = ['ами', 'ам', 'ах', 'ом', 'ов', 'а', 'у', 'е', 'ы', 'и'] as const;
+
+/**
+ * Matches any alias this module can emit, in any case form, for the rehydration
+ * sweep. Two captures: the alias WORD and the TOKEN, which is everything the
+ * lookup key needs (see aliasKey below).
+ *
+ * The lookbehind stops a longer word that merely ends in an alias word —
+ * «Субклиенту K7F3» — from being read as one. `\b` cannot do that job here: JS
+ * defines it over `[A-Za-z0-9_]`, so it does not consider a Cyrillic letter a
+ * word character at all and `\bКлиент` would never match in Russian text.
+ */
 const ALIAS_PATTERN = new RegExp(
-  `(?:${ALIAS_PREFIXES.contact}|${ALIAS_PREFIXES.user})\\s+[${ALPHABET}]{4}`,
+  `(?<![А-Яа-яЁё])(${ALIAS_PREFIXES.contact}|${ALIAS_PREFIXES.user})` +
+    `(?:${ALIAS_CASE_ENDINGS.join('|')})?\\s+([${ALPHABET}]{4})`,
   'g',
 );
+
+/**
+ * The nominative form of a matched alias — the shape buildAliasMap() keys by.
+ *
+ * Rebuilding the key from the two captures rather than looking up the matched
+ * text is what makes «Клиентом M2QX» find the same entry as «Клиент M2QX». It
+ * also normalises the separator, so «Клиент⏎K7F3» and «Клиент  K7F3» now resolve
+ * too — both matched the old pattern and then failed the lookup, because the key
+ * it searched for carried the model's own whitespace.
+ */
+function aliasKey(word: string, token: string): string {
+  return `${word} ${token}`;
+}
 
 export type ContactIdentity = {
   id: string;
@@ -201,14 +264,40 @@ export function aliasNamesInText(text: string, contacts: readonly ContactIdentit
  * An alias with no entry in the map is left exactly as it is rather than being
  * blanked: it means the model invented or mangled a token, and showing the
  * placeholder is honest, whereas erasing it would hide that the answer referred
- * to something we could not identify.
+ * to something we could not identify. That same branch is what keeps the widened
+ * pattern safe — «Клиенту ACME» in a sentence that was never about an alias
+ * resolves to nothing and is returned verbatim.
+ *
+ * THE NAME COMES BACK IN THE NOMINATIVE, whatever case the alias was in:
+ * «сделка с Клиентом M2QX» becomes «сделка с Мария Соколова», not «с Марией
+ * Соколовой». That is accepted, not overlooked. Declining a Russian surname
+ * correctly needs a morphology dependency, and that exact trade-off was already
+ * weighed for the operator half in
+ * docs/decisions/002-operator-names-in-model-facing-analytics.md — "genuine
+ * costs", item 1: "Fixable only with a morphology library or by constraining the
+ * model to a fixed frame; otherwise accept slightly stilted output." The
+ * requirement is that the name APPEAR; agreement with its preposition is
+ * cosmetic, and the alternative — leaving «Клиентом M2QX» on the screen — is the
+ * failure this function exists to prevent. Please do not re-open this with a
+ * morphology library.
  */
 export function rehydrateAliases(text: string, map: AliasMap): string {
   if (!text || map.size === 0) return text;
-  return text.replace(ALIAS_PATTERN, (match) => map.get(match) ?? match);
+  return text.replace(
+    ALIAS_PATTERN,
+    (match: string, word: string, token: string) => map.get(aliasKey(word, token)) ?? match,
+  );
 }
 
-/** True when a string still carries an alias — used by tests and assertions. */
+/**
+ * True when a string still carries an alias — used by tests and assertions, and
+ * by rehydrateForDisplay() to decide whether a database round-trip is needed.
+ *
+ * It MUST stay on the same ALIAS_PATTERN as rehydrateAliases(). If the two ever
+ * drift, the narrower one silently wins: a text this predicate calls clean is a
+ * text the resolver never loads a map for, so a form that only rehydrateAliases()
+ * knows about is a form the user never sees resolved.
+ */
 export function containsAlias(text: string): boolean {
   ALIAS_PATTERN.lastIndex = 0;
   return ALIAS_PATTERN.test(text);
