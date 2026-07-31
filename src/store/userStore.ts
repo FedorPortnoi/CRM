@@ -41,6 +41,7 @@ interface UserState {
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
   join: (companyCode: string, username: string, password: string) => Promise<void>;
+  acceptInvite: (input: { acceptToken: string; phone: string; email: string; password: string }) => Promise<void>;
   verifyOtp: (userId: string, code: string, channel: 'email') => Promise<void>;
   resendVerification: (userId: string, channel: 'email') => Promise<void>;
   changePassword: (newPassword: string) => Promise<void>;
@@ -83,6 +84,49 @@ export const useUserStore = create<UserState>()((set) => ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
+      });
+      const body: unknown = await response.json();
+      if (!response.ok) {
+        throw new Error(extractErrorMessage(body, response.status));
+      }
+      const { data } = body as { data: { user: AuthUser; token: string } };
+      const { user, token } = data;
+      await SecureStore.setItemAsync('crm_auth_token', token);
+      await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(user));
+      set({ user, token, isLoading: false });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      set({ error: msg, isLoading: false });
+    }
+  },
+
+  /**
+   * Redeem an invite: the invitee supplies their own phone, email and password,
+   * and the account is created at the role the owner bound at mint time.
+   *
+   * Deliberately shaped like `join` rather than like `login`: no account exists
+   * until this call succeeds, so there is nothing to authenticate against
+   * beforehand. The role is NEVER sent — it lives on the server's invite row,
+   * and accepting a client-supplied role would make a forwarded link an
+   * escalation primitive.
+   */
+  acceptInvite: async (input: {
+    acceptToken: string;
+    phone: string;
+    email: string;
+    password: string;
+  }): Promise<void> => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await fetch(`${API_URL}/auth/invites/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accept_token: input.acceptToken,
+          phone: input.phone.trim(),
+          email: input.email.trim().toLowerCase(),
+          password: input.password,
+        }),
       });
       const body: unknown = await response.json();
       if (!response.ok) {
