@@ -31,6 +31,7 @@ interface ChatState {
   loadingChannels: boolean;
 
   connect: (token: string) => void;
+  disconnect: () => void;
   fetchChannels: () => Promise<void>;
   fetchMessages: (channel: string, before?: string) => Promise<void>;
   sendMessage: (channel: string, body: string) => Promise<void>;
@@ -45,6 +46,31 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   ws: null,
   connectingToken: null,
   loadingChannels: false,
+
+  /**
+   * Close the socket and drop everything read over it.
+   *
+   * Called from logout(). Without it, `connect()`'s `if (ws) return;` guard —
+   * correct on its own, since the Chat tab calls connect() on every visit —
+   * meant user A's socket survived user B signing in: still open, still
+   * authenticated as A, still pushing A's organisation's messages into the
+   * store B is reading. Same cross-account shape as the offline queue, and it
+   * needed a teardown rather than a smarter guard, because there is nothing
+   * wrong with the guard.
+   *
+   * Channels and messages are cleared too. Closing the pipe while leaving A's
+   * conversations in memory would still paint them for B on the first render.
+   */
+  disconnect: () => {
+    const { ws } = get();
+    try {
+      ws?.close();
+    } catch {
+      // Already closing or already dead — nothing to do, and logout must not
+      // fail on it.
+    }
+    set({ ws: null, connectingToken: null, channels: [], messages: {} });
+  },
 
   connect: (token: string) => {
     const { ws, connectingToken } = get();

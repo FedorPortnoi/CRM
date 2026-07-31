@@ -33,8 +33,12 @@ import {
 
 type OpenParams = { token?: string };
 
-function readPositiveIntEnv(name: string, fallback: number): number {
-  const value = Number.parseInt(process.env[name] ?? '', 10);
+function readPositiveIntEnv(
+  name: string,
+  fallback: number,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const value = Number.parseInt(env[name] ?? '', 10);
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
@@ -43,12 +47,23 @@ function readPositiveIntEnv(name: string, fallback: number): number {
  * plugin default) because there is no account to key on; a shared corporate
  * mail gateway is the reason the ceiling is not lower than this.
  */
-export function openTrackingRateLimit(): { max: number; timeWindow: string } {
+/**
+ * `env` is a parameter, not a read of the ambient process, so a test can
+ * exercise the PRODUCTION branch. That matters here more than almost anywhere:
+ * this is the only unauthenticated, un-allowlisted endpoint in the API, and its
+ * one test used to assert `max > 0` against the 10_000 that
+ * `NODE_ENV === 'test'` substitutes — i.e. it asserted `10000 > 0` and passed
+ * with the real 120 ceiling deleted entirely. Same shape as the helpers in
+ * config/security.ts, and for the same reason.
+ */
+export function openTrackingRateLimit(
+  env: NodeJS.ProcessEnv = process.env,
+): { max: number; timeWindow: string } {
   return {
     max:
-      process.env.NODE_ENV === 'test'
+      env.NODE_ENV === 'test'
         ? 10_000
-        : readPositiveIntEnv('TRACKING_PIXEL_RATE_LIMIT_MAX', 120),
+        : readPositiveIntEnv('TRACKING_PIXEL_RATE_LIMIT_MAX', 120, env),
     timeWindow: '1 minute',
   };
 }

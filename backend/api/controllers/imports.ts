@@ -10,7 +10,15 @@ async function telegramSendCode(request: FastifyRequest, reply: FastifyReply): P
   const { phone } = request.body as { phone: string };
 
   try {
-    const result = await tgSendCode(phone);
+    // Scope the in-flight login to this caller. The service keys its pending map
+    // on org + user + phone + code-hash; without a scope two tenants naming the
+    // same phone number rely on the code hash alone to stay apart, and the entry
+    // holds a connected Telegram client — a credential that is full account
+    // takeover for that person's personal Telegram.
+    const result = await tgSendCode(phone, {
+      orgId: request.user.org_id,
+      userId: request.user.sub,
+    });
     reply.send({ data: result, meta: {} });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Ошибка отправки кода';
@@ -22,7 +30,10 @@ async function telegramVerify(request: FastifyRequest, reply: FastifyReply): Pro
   const { phone, code, phoneCodeHash } = request.body as { phone: string; code: string; phoneCodeHash: string };
 
   try {
-    const { session, contacts } = await tgVerifyAndPull(phone, code, phoneCodeHash);
+    const { session, contacts } = await tgVerifyAndPull(phone, code, phoneCodeHash, {
+      orgId: request.user.org_id,
+      userId: request.user.sub,
+    });
 
     // Save session in user preferences (encrypted storage already in DB)
     const user = await db.user.findUnique({ where: { id: request.user.sub }, select: { preferences: true } });

@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { API_URL } from '../utils/api';
 import { clearQueue } from '../utils/offlineQueue';
+import { useChatStore } from './chatStore';
 import { queryClient } from '../utils/queryClient';
 
 // Mirrors LAST_SYNC_KEY in src/utils/backgroundSync.ts. It is duplicated rather than imported
@@ -283,6 +284,13 @@ export const useUserStore = create<UserState>()((set) => ({
       //    keyed separately and would otherwise be unreachable garbage holding A's payloads.
       //    flush() additionally refuses to send items stamped with a different owner, which is
       //    what covers a logout interrupted before this line runs.
+      // Close the chat socket BEFORE anything else is torn down. It is
+      // authenticated as the departing user and keeps pushing their
+      // organisation's messages until it is closed — connect()'s `if (ws)
+      // return;` guard means the next user's Chat tab visit will not replace
+      // it, so nothing else in the app ever would.
+      await bestEffort(async () => useChatStore.getState().disconnect());
+
       await bestEffort(() => clearQueue());
 
       // 2. The in-memory react-query cache. The persisted half already excludes PII collections

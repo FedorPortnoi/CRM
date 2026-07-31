@@ -249,7 +249,6 @@ export async function authenticatePublicApiKey(
     return reply.status(429).send({
       error: { code: 'RATE_LIMITED', message: 'Public API rate limit exceeded' },
     });
-    return;
   }
 
   const touched = await db.apiKey.updateMany({
