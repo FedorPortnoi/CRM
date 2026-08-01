@@ -97,6 +97,7 @@
       "expo-font",
       "expo-secure-store",
       "expo-notifications",
+      "./plugins/withRuStorePush",
       "expo-background-fetch",
       "expo-task-manager",
       "expo-location",

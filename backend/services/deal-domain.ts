@@ -23,6 +23,7 @@ import {
   type VisibilityScope,
   type Requester,
 } from './visibility';
+import { fireAmoOutbound } from './amocrm/sync-worker';
 
 // ─── Shared include shape ─────────────────────────────────────────────────────
 
@@ -121,7 +122,14 @@ export async function stageBelongsToPipeline(
   orgId: string,
 ): Promise<boolean> {
   const row = await db.pipelineStage.findFirst({
-    where: { id: stageId, pipeline_id: pipelineId, pipeline: { organization_id: orgId } },
+    // Archived stages remain queryable for history and reports, but they are no
+    // longer valid destinations for new or moved deals.
+    where: {
+      id: stageId,
+      pipeline_id: pipelineId,
+      is_archived: false,
+      pipeline: { organization_id: orgId },
+    },
     select: { id: true },
   });
   return row !== null;
@@ -253,7 +261,7 @@ export async function createDealForUser(
   const requestingUserId = requester.sub;
   const accessibleIds = await getAccessibleUserIds(requester);
 
-  const [ownsContact, ownsPipeline, stageMatches, ownsAssignee] = await Promise.all([
+  const [ownsContact, ownsPipeline, stageMatches, ownsAssignee, stageDefaults] = await Promise.all([
     // contact_id is OPTIONAL — a deal may exist before anyone is attached to it,
     // and src/app/deal/new.tsx omits the field entirely when the user picks no
     // contact. Calling the check with `undefined` made Prisma drop the `id`
@@ -274,6 +282,17 @@ export async function createDealForUser(
         ? userBelongsToOrg(body.assigned_to, orgId)
         : Promise.resolve(false)
       : Promise.resolve(true),
+    body.probability === undefined
+      ? db.pipelineStage.findFirst({
+          where: {
+            id: body.stage_id,
+            pipeline_id: body.pipeline_id,
+            is_archived: false,
+            pipeline: { organization_id: orgId },
+          },
+          select: { probability: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   if (!ownsContact) {
@@ -317,7 +336,8 @@ export async function createDealForUser(
       value: body.value,
       currency: body.currency,
       expected_close: body.expected_close ? new Date(body.expected_close) : undefined,
-      probability: body.probability,
+      // A stage probability is a default, never a lock: an explicitly supplied deal value wins.
+      probability: body.probability ?? stageDefaults?.probability ?? undefined,
       next_action: body.next_action,
       next_action_due: body.next_action_due ? new Date(body.next_action_due) : undefined,
       source: body.source,
@@ -350,6 +370,14 @@ export async function createDealForUser(
       if (ctx) void dispatchNotification({ eventType: 'deal.assigned', orgId, deal: ctx });
     });
   }
+
+  fireAmoOutbound({
+    organizationId: orgId,
+    entityType: 'lead',
+    operation: 'create',
+    localId: deal.id,
+    record: deal as unknown as Record<string, unknown>,
+  });
 
   return deal as CreateDealResult;
 }
@@ -484,6 +512,16 @@ export async function updateDealForUser(
       if (ctx) void dispatchNotification({ eventType: 'deal.reassigned', orgId, deal: ctx });
     });
   }
+
+  fireAmoOutbound({
+    organizationId: orgId,
+    entityType: 'lead',
+    operation: patch.stage_id !== undefined || patch.pipeline_id !== undefined
+      ? 'stage_change'
+      : 'update',
+    localId: updated.id,
+    record: updated as unknown as Record<string, unknown>,
+  });
 
   return updated as UpdateDealResult;
 }

@@ -234,7 +234,11 @@ INSERT INTO "TaskReminder" (
 )
 SELECT
   t."id", t."organization_id", t."assigned_to", 'once'::"ReminderFrequency",
-  to_char(t."reminder_at" AT TIME ZONE 'Europe/Moscow', 'HH24:MI'),
+  -- Prisma stores UTC instants in PostgreSQL TIMESTAMP WITHOUT TIME ZONE
+  -- columns. Interpret that wall value as UTC first, then render it in Moscow;
+  -- a single AT TIME ZONE would instead interpret the UTC digits as Moscow and
+  -- backfill the wrong wall-clock time.
+  to_char(t."reminder_at" AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Moscow', 'HH24:MI'),
   ARRAY[]::INTEGER[], 'Europe/Moscow', t."reminder_at", t."reminder_at",
   (t."status" NOT IN ('done', 'cancelled')), NOW()
 FROM "Task" t

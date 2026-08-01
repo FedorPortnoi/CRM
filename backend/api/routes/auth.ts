@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { AuthController } from '../controllers/auth';
 import { InviteController } from '../controllers/invites';
 import { ASSIGNABLE_ROLE_VALUES } from '../../services/capabilities';
+import { isValidTimeZone } from '../../services/reminders';
 
 const PasswordSchema = z.string().min(8).max(100)
   .regex(/[a-z]/, 'Password must include a lowercase letter')
@@ -93,6 +94,15 @@ const ChangePasswordSchema = z.object({
 
 const SetManagerSchema = z.object({
   manager_id: z.string().uuid().nullable(),
+});
+
+const SetTimezoneSchema = z.object({
+  timezone: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .refine(isValidTimeZone, 'timezone must be a valid IANA zone name'),
 });
 
 const OnboardingSchema = z.object({
@@ -191,6 +201,9 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.patch('/me/credentials', {
     schema: { body: SetCredentialsSchema },
   }, AuthController.setCredentials);
+  fastify.patch('/me/timezone', {
+    schema: { body: SetTimezoneSchema },
+  }, AuthController.setTimezone);
   fastify.post('/verify', {
     config: { rateLimit: authRateLimit(10, '15 minutes') },
     schema: { body: VerifyOtpSchema },

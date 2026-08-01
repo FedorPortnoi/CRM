@@ -6,7 +6,18 @@ import { authenticate } from '../preHandlers';
 const notificationsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     '/register',
-    { preHandler: [authenticate], schema: { body: z.object({ token: z.string().min(1) }) } },
+    {
+      preHandler: [authenticate],
+      schema: {
+        body: z.object({
+          token: z.string().trim().min(16).max(4096),
+          provider: z.enum(['rustore', 'apns', 'expo', 'fcm']).optional(),
+          platform: z.enum(['android', 'ios', 'web']).optional(),
+          app_version: z.string().trim().min(1).max(64).optional(),
+          device_name: z.string().trim().min(1).max(200).optional(),
+        }),
+      },
+    },
     NotificationsController.registerToken,
   );
 

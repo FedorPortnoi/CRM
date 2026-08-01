@@ -651,7 +651,8 @@ export const InviteController = {
         },
         select: {
           id: true, email: true, username: true, name: true, role: true,
-          organization_id: true, must_change_password: true, must_change_email: true,
+          organization_id: true, timezone: true,
+          must_change_password: true, must_change_email: true,
         },
       });
 
@@ -674,6 +675,23 @@ export const InviteController = {
       role: created.role,
     });
 
-    return reply.code(201).send({ data: { user: created, token }, meta: {} });
+    return reply.code(201).send({
+      data: {
+        user: {
+          id: created.id,
+          email: created.email,
+          username: created.username,
+          name: created.name,
+          role: created.role,
+          org_id: created.organization_id,
+          timezone: created.timezone,
+          onboarding_completed: false,
+          must_change_password: created.must_change_password,
+          must_change_email: created.must_change_email,
+        },
+        token,
+      },
+      meta: {},
+    });
   },
 };

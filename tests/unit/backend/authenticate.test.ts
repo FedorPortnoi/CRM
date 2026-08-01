@@ -75,6 +75,26 @@ describe('enforceAuthenticatedApiRequest', () => {
     });
   });
 
+  it.each([
+    ['POST', '/api/v1/auth/logout'],
+    ['POST', '/api/v1/auth/logout-all'],
+    ['PATCH', '/api/v1/auth/me/password'],
+    ['PATCH', '/api/v1/auth/me/credentials'],
+    ['PATCH', '/api/v1/auth/me/timezone'],
+  ])('allows a read-only user to maintain their own account: %s %s', async (method, url) => {
+    dbMock.user.findFirst.mockResolvedValue({
+      id: '00000000-0000-4000-a000-000000000001',
+      organization_id: '00000000-0000-4000-a000-000000000010',
+      role: 'viewer',
+    });
+    const request = createRequest(method, url);
+    const reply = createReply();
+
+    await enforceAuthenticatedApiRequest(request as never, reply as never);
+
+    expect(reply.send).not.toHaveBeenCalled();
+  });
+
   /**
    * The gate used to read `role === 'viewer'`, so a role added later defaulted
    * to writable. accountant is the first such role: org-wide read of the money,
@@ -187,6 +207,46 @@ describe('enforceAuthenticatedApiRequest', () => {
 
     expect(reply.send).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['GET', '/api/v1/amocrm/status'],
+    ['POST', '/api/v1/amocrm/reconcile'],
+  ])('rejects non-admin amoCRM access: %s %s', async (method, url) => {
+    dbMock.user.findFirst.mockResolvedValue({
+      id: '00000000-0000-4000-a000-000000000001',
+      organization_id: '00000000-0000-4000-a000-000000000010',
+      role: 'member',
+    });
+    const request = createRequest(method, url);
+    const reply = createReply();
+
+    await enforceAuthenticatedApiRequest(request as never, reply as never);
+
+    expect(reply.statusCode).toBe(403);
+    expect(reply.payload).toEqual({
+      error: {
+        code: 'FORBIDDEN',
+        message: 'managing the amoCRM integration requires owner or admin',
+      },
+    });
+  });
+
+  it('allows a task-capable role to change a visible task reminder', async () => {
+    dbMock.user.findFirst.mockResolvedValue({
+      id: '00000000-0000-4000-a000-000000000001',
+      organization_id: '00000000-0000-4000-a000-000000000010',
+      role: 'support',
+    });
+    const request = createRequest(
+      'POST',
+      '/api/v1/tasks/00000000-0000-4000-a000-000000000011/reminders',
+    );
+    const reply = createReply();
+
+    await enforceAuthenticatedApiRequest(request as never, reply as never);
+
+    expect(reply.send).not.toHaveBeenCalled();
+  });
 });
 
 /**
@@ -290,6 +350,8 @@ describe('isPublicApiRoute exemptions', () => {
     ['GET', '/api/v1/tracking/open/AbC-123_xyz?utm=mail'],
     ['GET', '/api/v1/consent/unsubscribe/AbC-123_xyz'],
     ['POST', '/api/v1/consent/unsubscribe/AbC-123_xyz'],
+    ['GET', '/api/v1/amocrm/callback?code=one-time&state=signed'],
+    ['POST', '/api/v1/integrations/amocrm/webhook?amocrm_token=secret'],
   ];
 
   it.each(exempt)('%s %s is public', async (method, url) => {
@@ -323,6 +385,8 @@ describe('isPublicApiRoute exemptions', () => {
     ['POST', '/api/v1/ai/contacts/autofill'],
     ['GET', '/api/v1/sequences'],
     ['GET', '/api/v1/email-templates'],
+    ['POST', '/api/v1/amocrm/callback'],
+    ['GET', '/api/v1/integrations/amocrm/webhook'],
   ];
 
   it.each(enforced)('%s %s still requires a JWT', async (method, url) => {

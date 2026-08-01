@@ -17,6 +17,15 @@ import {
   type CreateTaskBody,
   type UpdateTaskPatch,
 } from '../../services/task-domain';
+import {
+  listTaskReminders,
+  createTaskReminder,
+  updateTaskReminder,
+  deleteTaskReminder,
+  type ReminderError,
+  type ReminderInput,
+  type ReminderPatch,
+} from '../../services/reminders';
 
 // ─── Local request types ──────────────────────────────────────────────────────
 
@@ -240,6 +249,109 @@ async function dueToday(
   reply.send({ data: tasks, meta: {} });
 }
 
+// ─── Reminders ───────────────────────────────────────────────────────────────
+
+type ReminderIdParams = { id: string; reminderId: string };
+
+/**
+ * A reminder is reachable exactly when its task is.
+ *
+ * Every handler below goes through getTaskForUser first rather than querying TaskReminder by
+ * id and checking the org afterwards. The org is not the boundary here — the visibility cone
+ * is — and TaskReminder carries an organization_id but nothing that says whose cone the task
+ * sits in. Asking the task means the reminder sub-resource can never be a softer door onto a
+ * task than GET /tasks/:id is.
+ */
+async function requireVisibleTask(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<{ id: string } | null> {
+  const { id } = request.params as IdParams;
+  const task = await getTaskForUser(id, request.user.org_id, request.user);
+
+  if (!task) {
+    reply.status(404).send({ error: { code: 'TASK_NOT_FOUND', message: 'Task not found' } });
+    return null;
+  }
+
+  return { id: task.id };
+}
+
+function statusForReminderError(error: ReminderError): number {
+  if (error.kind === 'not_found') return 404;
+  if (error.kind === 'forbidden') return 403;
+  return 422;
+}
+
+async function listReminders(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const task = await requireVisibleTask(request, reply);
+  if (!task) return;
+
+  const reminders = await listTaskReminders(task.id, request.user.org_id);
+  reply.send({ data: reminders, meta: { total: reminders.length } });
+}
+
+async function createReminder(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const task = await requireVisibleTask(request, reply);
+  if (!task) return;
+
+  const result = await createTaskReminder(
+    task.id,
+    request.user.org_id,
+    request.body as ReminderInput,
+    request.user,
+  );
+
+  if (!result.ok) {
+    reply.status(statusForReminderError(result.error)).send({
+      error: { code: result.error.code, message: result.error.message },
+    });
+    return;
+  }
+
+  reply.status(201).send({ data: result.reminder, meta: {} });
+}
+
+async function updateReminder(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const task = await requireVisibleTask(request, reply);
+  if (!task) return;
+
+  const { reminderId } = request.params as ReminderIdParams;
+  const result = await updateTaskReminder(
+    reminderId,
+    task.id,
+    request.user.org_id,
+    request.body as ReminderPatch,
+    request.user,
+  );
+
+  if (!result.ok) {
+    reply.status(statusForReminderError(result.error)).send({
+      error: { code: result.error.code, message: result.error.message },
+    });
+    return;
+  }
+
+  reply.send({ data: result.reminder, meta: {} });
+}
+
+async function deleteReminder(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const task = await requireVisibleTask(request, reply);
+  if (!task) return;
+
+  const { reminderId } = request.params as ReminderIdParams;
+  const result = await deleteTaskReminder(reminderId, task.id, request.user.org_id);
+
+  if (!result.ok) {
+    reply.status(statusForReminderError(result.error)).send({
+      error: { code: result.error.code, message: result.error.message },
+    });
+    return;
+  }
+
+  reply.status(204).send();
+}
+
 // ─── Contact suggestion for a task title ─────────────────────────────────────
 
 /**
@@ -334,4 +446,8 @@ export const TasksController = {
   cancel,
   dueToday,
   suggestContact,
+  listReminders,
+  createReminder,
+  updateReminder,
+  deleteReminder,
 };

@@ -1,4 +1,5 @@
 import { db } from './db';
+import { DEFAULT_TIME_ZONE } from '../config/market';
 import { sendPushToUser } from './push';
 
 // ─── Event types ──────────────────────────────────────────────────────────────
@@ -10,6 +11,7 @@ export type NotificationEventType =
   | 'task.deadline_24h'
   | 'task.deadline_2h'
   | 'task.overdue'
+  | 'task.expired'
   | 'deal.assigned'
   | 'deal.reassigned'
   | 'deal.stage_changed'
@@ -25,6 +27,7 @@ const SCHEDULED_EVENTS = new Set<NotificationEventType>([
   'task.deadline_24h',
   'task.deadline_2h',
   'task.overdue',
+  'task.expired',
   'deal.close_7d',
   'deal.close_1d',
 ]);
@@ -58,7 +61,7 @@ interface ContactCtx {
 }
 
 type EventContext =
-  | { eventType: 'task.assigned' | 'task.reassigned' | 'task.completed' | 'task.deadline_24h' | 'task.deadline_2h' | 'task.overdue'; orgId: string; task: TaskCtx }
+  | { eventType: 'task.assigned' | 'task.reassigned' | 'task.completed' | 'task.deadline_24h' | 'task.deadline_2h' | 'task.overdue' | 'task.expired'; orgId: string; task: TaskCtx }
   | { eventType: 'deal.assigned' | 'deal.reassigned' | 'deal.stage_changed' | 'deal.won' | 'deal.lost' | 'deal.close_7d' | 'deal.close_1d'; orgId: string; deal: DealCtx }
   | { eventType: 'contact.assigned' | 'contact.reassigned'; orgId: string; contact: ContactCtx };
 
@@ -80,18 +83,11 @@ interface NotificationPayload { title: string; body: string }
  * comparison in the scheduler is done on Date instants. This constant is a presentation
  * decision only: it says which wall clock a Russian user reads these strings against.
  *
- * Moscow, not the user's own zone, because there is nowhere to read a per-user zone from —
- * User has no timezone column. Russia spans eleven offsets, so a customer in Novosibirsk
- * still sees MSK; fixing that needs a stored preference, not a different constant here. MSK
- * is the right default in the meantime: it is what the product's own UI and its customers'
- * business hours are quoted in.
- *
- * If a second place ever needs to render a date for a user, this belongs in
- * backend/config/market.ts beside DEFAULT_CURRENCY and the default pipeline names — it is
- * the same kind of "which market is this product for" fact. It is kept local while this is
- * the only caller.
+ * Per-reminder scheduling now carries its own user-zone snapshot. These legacy notification
+ * templates still render in the market default until their event contexts carry a recipient
+ * zone, but the default itself has one source of truth shared with the scheduler.
  */
-export const DISPLAY_TIME_ZONE = 'Europe/Moscow';
+export const DISPLAY_TIME_ZONE = DEFAULT_TIME_ZONE;
 
 function formatDate(d: Date | null | undefined): string {
   if (!d) return '';
@@ -192,6 +188,13 @@ function buildMessages(ctx: EventContext): Array<{ recipientId: string; role: st
           body: `${ctx.task.assignee.name} просрочил «${ctx.task.title}»`,
         });
       }
+      break;
+
+    case 'task.expired':
+      add(ctx.task.assigner?.id, 'assigner', {
+        title: 'Напоминания остановлены',
+        body: `Срок актуальности «${ctx.task.title}» закончился. Задача осталась открытой.`,
+      });
       break;
 
     // ── Deals ──────────────────────────────────────────────────────────────────

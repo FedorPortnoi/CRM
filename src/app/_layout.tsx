@@ -6,7 +6,13 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useUserStore } from '../store/userStore';
-import { registerDevicePushToken } from '../utils/notifications';
+import {
+  cleanupLegacyTaskDueReminders,
+  getInitialRuStoreNotification,
+  registerDevicePushToken,
+  subscribeToRuStoreOpenedNotifications,
+  subscribeToRuStorePushTokenRefresh,
+} from '../utils/notifications';
 import { queryClient, persistOptions } from '../utils/queryClient';
 import SyncStatusBar from '../components/SyncStatusBar';
 import { ConflictToast } from '../components/ConflictToast';
@@ -44,11 +50,35 @@ export default function RootLayout() {
   const handledNotifRef = useRef<string | null>(null);
   const lastNotificationResponse = Notifications.useLastNotificationResponse();
 
+  const routeNotificationData = useCallback(
+    (data: Record<string, string | undefined>, notificationId: string) => {
+      if (handledNotifRef.current === notificationId) return;
+      handledNotifRef.current = notificationId;
+
+      if (data.type === 'chat:message' && data.channel) {
+        router.push({
+          pathname: '/chat/[channel]',
+          params: { channel: data.channel, name: data.channel_name ?? 'Чат' },
+        } as never);
+        return;
+      }
+
+      const taskId = data.taskId ?? data.task_id ?? (data.entityType === 'task' ? data.entityId : undefined);
+      if (taskId) {
+        router.push(`/task/${taskId}` as never);
+      } else if (data.type === 'pending_captures') {
+        router.push('/captures' as never);
+      }
+    },
+    [router],
+  );
+
   useEffect(() => {
     void initI18n('ru')
       .then(() => restoreSession())
       .finally(() => setIsRestoring(false));
     void registerBackgroundSync();
+    void cleanupLegacyTaskDueReminders();
 
     const currentVersionCode = Constants.expoConfig?.android?.versionCode ?? 0;
     fetch(`${API_URL.replace('/api/v1', '')}/version`)
@@ -115,6 +145,14 @@ export default function RootLayout() {
     })();
   }, [token]);
 
+  // RuStore can rotate a device token after the initial session registration. The SDK does
+  // not upload the replacement itself; without this session-long listener the old row stays
+  // on the server and the phone silently stops receiving reminders.
+  useEffect(() => {
+    if (!token) return undefined;
+    return subscribeToRuStorePushTokenRefresh(() => token);
+  }, [token]);
+
   useEffect(() => {
     if (token !== null && !isRestoring) {
       void fetchOnboarding(token);
@@ -137,22 +175,29 @@ export default function RootLayout() {
   useEffect(() => {
     if (!lastNotificationResponse || !token || isRestoring) return;
     const notifId = lastNotificationResponse.notification.request.identifier;
-    if (handledNotifRef.current === notifId) return;
-    handledNotifRef.current = notifId;
-
     const data = lastNotificationResponse.notification.request.content.data as Record<string, string | undefined>;
+    routeNotificationData(data, notifId);
+  }, [lastNotificationResponse, token, isRestoring, routeNotificationData]);
 
-    if (data.type === 'chat:message' && data.channel) {
-      router.push({
-        pathname: '/chat/[channel]',
-        params: { channel: data.channel, name: data.channel_name ?? 'Чат' },
-      } as never);
-    } else if (data.taskId) {
-      router.push(`/task/${data.taskId}` as never);
-    } else if (data.type === 'pending_captures') {
-      router.push('/captures' as never);
-    }
-  }, [lastNotificationResponse, token, isRestoring, router]);
+  // Expo owns APNs/FCM tap responses; RuStore owns its Android tray responses. Both feed the
+  // same router and dedupe key so a warm-open event racing the cold-start lookup navigates once.
+  useEffect(() => {
+    if (!token || isRestoring) return undefined;
+    let active = true;
+    void getInitialRuStoreNotification().then((message) => {
+      if (!active || !message) return;
+      const id = message.messageId ?? `rustore:${JSON.stringify(message.data ?? {})}`;
+      routeNotificationData(message.data ?? {}, id);
+    });
+    const unsubscribe = subscribeToRuStoreOpenedNotifications((message) => {
+      const id = message.messageId ?? `rustore:${JSON.stringify(message.data ?? {})}`;
+      routeNotificationData(message.data ?? {}, id);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [token, isRestoring, routeNotificationData]);
 
   if (isRestoring) {
     return (

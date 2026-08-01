@@ -12,6 +12,7 @@ import {
 import { db } from './db';
 import { userBelongsToOrg } from './db-guards';
 import { fireWebhookEventForWorkflowTrigger } from './webhooks';
+import { fireAmoOutbound } from './amocrm/sync-worker';
 
 type WorkflowContext = {
   organizationId: string;
@@ -180,6 +181,7 @@ async function targetStageBelongsToDealPipeline(
   const stage = await db.pipelineStage.findFirst({
     where: {
       id: stageId,
+      is_archived: false,
       pipeline: {
         organization_id: organizationId,
         ...(pipelineId ? { id: pipelineId } : {}),
@@ -220,6 +222,7 @@ export async function validateWorkflowActionsForOrganization(
     const stages = await db.pipelineStage.findMany({
       where: {
         id: { in: [...stageIds] },
+        is_archived: false,
         pipeline: { organization_id: organizationId },
       },
       select: { id: true },
@@ -329,10 +332,25 @@ async function executeAction(
       throw new Error('Workflow target stage does not belong to this deal pipeline');
     }
 
-    await db.deal.updateMany({
+    const moved = await db.deal.updateMany({
       where: { id: dealId, organization_id: context.organizationId },
       data: { stage_id: action.stage_id, stage_entered_at: new Date() },
     });
+
+    if (moved.count === 1) {
+      const updated = await db.deal.findFirst({
+        where: { id: dealId, organization_id: context.organizationId },
+      });
+      if (updated) {
+        fireAmoOutbound({
+          organizationId: context.organizationId,
+          entityType: 'lead',
+          operation: 'stage_change',
+          localId: updated.id,
+          record: updated as unknown as Record<string, unknown>,
+        });
+      }
+    }
   }
 }
 

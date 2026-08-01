@@ -25,6 +25,7 @@ import { logActivity } from './activities';
 import { evaluateWorkflows } from '../../services/workflows';
 import { dispatchNotification, dealCtx } from '../../services/notificationEngine';
 import { runIdempotent } from '../../services/idempotency';
+import { fireAmoOutbound } from '../../services/amocrm/sync-worker';
 import type { PublicApiContext } from '../../services/public-api-auth';
 import type { Requester } from '../../services/visibility';
 import {
@@ -336,6 +337,14 @@ async function moveDealStage(request: FastifyRequest, reply: FastifyReply): Prom
 
     void dealCtx(updated.id, updated.stage?.name, requester.sub).then((ctx) => {
       if (ctx) void dispatchNotification({ eventType: 'deal.stage_changed', orgId: context.org_id, deal: ctx });
+    });
+
+    fireAmoOutbound({
+      organizationId: context.org_id,
+      entityType: 'lead',
+      operation: 'stage_change',
+      localId: updated.id,
+      record: updated as unknown as Record<string, unknown>,
     });
 
     return { data: updated, meta: {} };

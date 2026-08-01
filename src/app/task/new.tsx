@@ -1,17 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Modal, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, StyleSheet } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Calendar } from 'react-native-calendars';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
-import { scheduleTaskDueReminder } from '../../utils/notifications';
 import { formatMarketDate } from '../../market/profile';
 import { useCreateMutation } from '../../hooks/useCreateMutation';
 import { RECURRENCE_OPTIONS, labelKeyForRule } from '../../utils/recurrence';
 import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors } from '../../theme';
+import ReminderEditor from '../../components/reminders/ReminderEditor';
+import {
+  firstLocalFireInstant,
+  syncTaskReminders,
+  type ReminderDraft,
+} from '../../hooks/useTaskReminders';
 
 interface ContactPreview {
   id: string;
@@ -65,8 +70,7 @@ export default function NewTaskScreen(): JSX.Element | null {
   const [contactResults, setContactResults] = useState<ContactPreview[]>([]);
   const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
   const [showRepeatPicker, setShowRepeatPicker] = useState<boolean>(false);
-  const [reminderDate, setReminderDate] = useState<string>('');
-  const [showReminderCalendar, setShowReminderCalendar] = useState<boolean>(false);
+  const [reminders, setReminders] = useState<ReminderDraft[]>([]);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [assigneeId, setAssigneeId] = useState<string>('');
   const [assigneeName, setAssigneeName] = useState<string>('');
@@ -155,30 +159,44 @@ export default function NewTaskScreen(): JSX.Element | null {
     },
     buildPayload: () => {
       const finalContactId = pendingContactIdRef.current ?? selectedContactId;
+      // `reminder_at` is the legacy single-instant column and still drives the task list's
+      // badge, so the earliest one-off reminder is mirrored into it. A repeating schedule
+      // has no single instant and deliberately leaves it unset.
+      const legacyReminderAt = firstLocalFireInstant(reminders);
       return {
         title: title.trim(),
         assigned_to: assigneeId || (user?.id ?? ''),
         is_recurring: recurrenceRule !== null,
         ...(recurrenceRule !== null ? { recurrence_rule: recurrenceRule } : {}),
         ...(dueDate !== '' ? { due_date: new Date(dueDate + 'T00:00:00').toISOString() } : {}),
-        ...(reminderDate !== '' ? { reminder_at: new Date(reminderDate + 'T09:00:00').toISOString() } : {}),
+        ...(legacyReminderAt !== null ? { reminder_at: legacyReminderAt } : {}),
         ...(finalContactId !== '' ? { contact_id: finalContactId } : {}),
       };
     },
     onSuccess: async (data, queued) => {
       pendingContactIdRef.current = null;
       if (queued) {
+        // Offline: there is no task id yet, so the reminders cannot be attached. Say so
+        // rather than dropping them silently.
+        if (reminders.length > 0) {
+          Alert.alert(t('reminders.title'), t('reminders.queuedNotSaved'));
+        }
         router.replace('/(tabs)/tasks');
         return;
       }
       const taskId = data.id;
-      if (dueDate !== '') {
+
+      if (reminders.length > 0) {
         try {
-          await scheduleTaskDueReminder(taskId, title.trim(), dueDate, reminderDate || null);
+          await syncTaskReminders({ taskId, token: token ?? '', original: [], next: reminders });
         } catch {
-          // Task creation should still succeed if local reminders are unavailable.
+          // The task exists; staying on a form whose submit would create a SECOND task is
+          // worse than losing the schedule, so report and move on to the detail screen —
+          // where the reminders card shows what actually landed.
+          Alert.alert(t('reminders.title'), t('reminders.saveFailed'));
         }
       }
+
       router.replace({ pathname: '/task/[id]', params: { id: taskId } });
     },
     fallbackErrorMessage: t('tasks.failedToCreate'),
@@ -361,36 +379,8 @@ export default function NewTaskScreen(): JSX.Element | null {
         />
       </Modal>
 
-      <Text style={styles.label}>{t('tasks.reminderOptional')}</Text>
-      <TouchableOpacity style={styles.input} onPress={() => setShowReminderCalendar(true)}>
-        <Text style={reminderDate ? styles.inputText : styles.placeholderText}>{reminderDate ? t('tasks.remindOn', { date: formatDate(reminderDate) }) : t('tasks.noReminder')}</Text>
-      </TouchableOpacity>
-      {reminderDate !== '' && (
-        <TouchableOpacity onPress={() => setReminderDate('')}>
-          <Text style={styles.clearLink}>{t('tasks.clear')}</Text>
-        </TouchableOpacity>
-      )}
-
-      <Modal animationType="slide" visible={showReminderCalendar} onRequestClose={() => setShowReminderCalendar(false)}>
-        <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
-          <Text style={styles.modalTitle}>{t('tasks.reminderDate')}</Text>
-          <TouchableOpacity onPress={() => setShowReminderCalendar(false)}>
-            <Text style={styles.modalDone}>{t('tasks.done')}</Text>
-          </TouchableOpacity>
-        </View>
-        <Calendar
-          firstDay={1}
-          onDayPress={(day: CalendarDay) => {
-            setReminderDate(day.dateString);
-            setShowReminderCalendar(false);
-          }}
-          markedDates={
-            reminderDate
-              ? ({ [reminderDate]: { selected: true, selectedColor: colors.orange } } as Record<string, { selected?: boolean; selectedColor?: string }>)
-              : {}
-          }
-        />
-      </Modal>
+      {/* Replaces the old date-only picker, which silently chose 09:00 for the user. */}
+      <ReminderEditor value={reminders} onChange={setReminders} defaultDate={dueDate} />
 
       <Text style={styles.label}>{t('tasks.repeat')}</Text>
       <TouchableOpacity style={styles.dropdownField} onPress={() => setShowRepeatPicker(true)} activeOpacity={0.75}>

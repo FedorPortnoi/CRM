@@ -142,6 +142,7 @@ import { personalNamesMayBeSent } from '../services/model-jurisdiction';
 export const USER_RELATION_KEYS: ReadonlySet<string> = new Set([
   'assignee', // Contact / Deal / Task -> assigned_to
   'completer', // Task -> completed_by
+  'connector', // AmoIntegration -> connected_by
   'creator', // Contact / Deal / Task / CalendarEvent / Pipeline / Workflow / ApiKey / WebhookEndpoint / EmailTemplate / Sequence -> created_by
   'enroller', // SequenceEnrollment -> enrolled_by
   'invitees', // User[] (reverse of inviter)

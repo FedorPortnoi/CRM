@@ -4,6 +4,7 @@ const dbMock = vi.hoisted(() => ({
   $queryRaw: vi.fn(),
   org: { findUniqueOrThrow: vi.fn() },
   pipeline: { findMany: vi.fn() },
+  pipelineStage: { findMany: vi.fn() },
   user: { findMany: vi.fn() },
   deal: { groupBy: vi.fn(), aggregate: vi.fn(), count: vi.fn() },
   task: { groupBy: vi.fn() },
@@ -75,6 +76,7 @@ beforeEach(() => {
     settings: null,
   });
   dbMock.pipeline.findMany.mockResolvedValue([]);
+  dbMock.pipelineStage.findMany.mockResolvedValue([]);
   dbMock.user.findMany.mockResolvedValue([]);
   dbMock.deal.groupBy.mockResolvedValue([]);
   dbMock.deal.aggregate.mockResolvedValue({ _count: { _all: 0 }, _sum: { value: null } });
@@ -352,7 +354,7 @@ describe('report assembly', () => {
           { assigned_to: MANAGER_ID, status: 'lost', _count: { _all: 1 }, _sum: { value: '50000' } },
         ];
       }
-      if (args.where.updated_at) {
+      if (args.where.stage_entered_at || args.where.OR) {
         return [{ assigned_to: MANAGER_ID, _count: { _all: 4 } }];
       }
       return [{ assigned_to: MANAGER_ID, _count: { _all: 6 }, _sum: { value: '120000' } }];
@@ -466,7 +468,7 @@ describe('report assembly', () => {
           { pipeline_id: 'p1', status: 'lost', _count: { _all: 1 } },
         ];
       }
-      if (args.where.updated_at) {
+      if (args.where.stage_entered_at || args.where.OR) {
         return [{ pipeline_id: 'p1', _count: { _all: 4 } }];
       }
       return [{ pipeline_id: 'p1', _count: { _all: 9 } }];
@@ -488,5 +490,30 @@ describe('report assembly', () => {
     expect(first?.pipeline_health_score).toBe(50);
     expect(second?.pipeline_health_score).toBe(0);
     expect(JSON.stringify(result)).not.toMatch(/win_rate/i);
+  });
+
+  it('uses each stage stale threshold in pipeline-health stalled queries', async () => {
+    dbMock.pipelineStage.findMany.mockResolvedValue([
+      { id: 'stage-fast', stale_after_days: 3 },
+      { id: 'stage-default', stale_after_days: null },
+    ]);
+
+    const result = await getPipelineHealth(owner, {});
+
+    const stalledCall = dbMock.deal.groupBy.mock.calls.find(
+      (call) => Array.isArray((call[0] as { where?: { OR?: unknown[] } }).where?.OR),
+    );
+    const clauses = (stalledCall?.[0] as { where: { OR: Array<Record<string, unknown>> } }).where.OR;
+    expect(clauses).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        stage_id: 'stage-fast',
+        stage_entered_at: { lt: expect.any(Date) },
+      }),
+      expect.objectContaining({
+        stage_id: 'stage-default',
+        stage_entered_at: { lt: expect.any(Date) },
+      }),
+    ]));
+    expect(result.meta.stage_stale_overrides_applied).toBe(true);
   });
 });

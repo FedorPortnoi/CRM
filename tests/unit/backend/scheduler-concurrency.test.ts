@@ -56,6 +56,7 @@ const harness = vi.hoisted(() => {
     webhookDelivery: [],
     webhookEndpoint: [],
     task: [],
+    taskReminder: [],
     user: [],
     notification: [],
     notificationSent: [],
@@ -167,6 +168,13 @@ const harness = vi.hoisted(() => {
         const found = rows().find((row) => matches(row, where));
         return found ? { ...found } : null;
       }),
+      // Indistinguishable from findFirst here — the double has no unique indexes to look up
+      // by, only the collision test above. notificationSent deliberately replaces this with a
+      // read that always loses; see the note where it is assembled.
+      findUnique: vi.fn(async ({ where }: any = {}) => {
+        const found = rows().find((row) => matches(row, where));
+        return found ? { ...found } : null;
+      }),
       count: vi.fn(async ({ where }: any = {}) => rows().filter((row) => matches(row, where)).length),
       create: vi.fn(async ({ data }: any) => {
         if (collides(data)) {
@@ -224,10 +232,44 @@ const harness = vi.hoisted(() => {
     (row) => `${row.event_type} ${row.entity_id} ${row.recipient_id}`,
   );
 
+  /**
+   * TaskReminder is the one table here the scheduler reaches THROUGH: it filters on the
+   * parent task's status and reads the task's title off the joined row. A double that ignored
+   * the relation would let a reminder on a cancelled task look deliverable, which is exactly
+   * the thing the reminder job is now responsible for not doing.
+   *
+   * The relation filter is resolved the way the database resolves it — to the set of task ids
+   * that satisfy it — so `matches` needs no new operator.
+   */
+  const taskReminderRows = table('taskReminder');
+  const joinTask = (row: Row): Row => ({
+    ...row,
+    task: tables.task.find((candidate) => candidate.id === row.task_id) ?? null,
+  });
+  const resolveTaskRelation = (where: any): any => {
+    if (!where || !where.task) return where;
+    const { task: taskWhere, ...rest } = where;
+    return {
+      ...rest,
+      task_id: { in: tables.task.filter((row) => matches(row, taskWhere)).map((row) => row.id) },
+    };
+  };
+  const taskReminder = {
+    ...taskReminderRows,
+    findMany: vi.fn(async ({ where, take }: any = {}) =>
+      (await taskReminderRows.findMany({ where: resolveTaskRelation(where), take })).map(joinTask),
+    ),
+    updateMany: vi.fn(async ({ where, data }: any) =>
+      taskReminderRows.updateMany({ where: resolveTaskRelation(where), data }),
+    ),
+  };
+
   const db = {
+    $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(db)),
     webhookDelivery,
     webhookEndpoint: table('webhookEndpoint'),
     task: table('task'),
+    taskReminder,
     user: table('user'),
     notification: table('notification'),
     notificationSent: {
@@ -264,7 +306,22 @@ const harness = vi.hoisted(() => {
 
 const push = vi.hoisted(() => ({
   sendPush: vi.fn(async () => ({ ok: true })),
-  sendPushToUser: vi.fn(async () => undefined),
+  sendPushToUser: vi.fn(async () => ({
+    user_id: 'user',
+    attempted: 1,
+    sent: 1,
+    failed: 0,
+    pruned: 0,
+    skipped: 0,
+    devices: [{
+      device_id: 'device',
+      token: 'token',
+      provider: 'expo',
+      platform: 'ios',
+      result: { ok: true },
+      pruned: false,
+    }],
+  })),
 }));
 
 /** Stands in for the network: it burns clock and then reports the endpoint unreachable. */
@@ -291,6 +348,7 @@ vi.mock('resend', () => ({
 
 import { WEBHOOK_LEASE_MS, runWebhookDeliveryTick } from '../../../backend/services/webhooks';
 import { runExclusively, runRecurrence, runReminders } from '../../../backend/services/scheduler';
+import { REMINDER_CATCHUP_MAX_AGE_MS } from '../../../backend/services/reminders';
 import { DISPLAY_TIME_ZONE, dispatchNotification } from '../../../backend/services/notificationEngine';
 import {
   IDEMPOTENCY_HEARTBEAT_INTERVAL_MS,
@@ -319,7 +377,22 @@ beforeEach(() => {
   vi.setSystemTime(T0);
   harness.reset();
   push.sendPush.mockResolvedValue({ ok: true });
-  push.sendPushToUser.mockResolvedValue(undefined);
+  push.sendPushToUser.mockResolvedValue({
+    user_id: ASSIGNEE,
+    attempted: 1,
+    sent: 1,
+    failed: 0,
+    pruned: 0,
+    skipped: 0,
+    devices: [{
+      device_id: 'device',
+      token: 'token',
+      provider: 'expo',
+      platform: 'ios',
+      result: { ok: true },
+      pruned: false,
+    }],
+  });
   warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 });
@@ -544,9 +617,78 @@ describe('recurring tasks spawn one successor, not one per tick', () => {
     expect(created).toHaveLength(1);
     expect(created[0]?.due_date?.getTime()).toBe(new Date('2026-07-31T09:00:00Z').getTime());
   });
+
+  it('rebases active reminder rules onto the successor in the same task create', async () => {
+    const dueDate = new Date('2026-07-24T09:00:00Z');
+    seedCompletedRecurringTask(dueDate);
+    harness.tables.taskReminder.push({
+      id: 'reminder-parent',
+      task_id: TASK_ID,
+      organization_id: ORG,
+      recipient_id: ASSIGNEE,
+      frequency: 'daily',
+      time_of_day: '12:00',
+      days_of_week: [],
+      recurrence_rule: null,
+      timezone: 'Europe/Moscow',
+      starts_at: new Date('2026-07-24T09:00:00Z'),
+      expires_at: new Date('2026-08-24T09:00:00Z'),
+      next_fire_at: new Date('2026-07-24T09:00:00Z'),
+      is_active: true,
+    });
+
+    await runRecurrence();
+
+    const createArg = harness.db.task.create.mock.calls[0]?.[0] as Row;
+    const cloned = createArg.data.reminders.create[0];
+    expect(cloned.starts_at).toEqual(new Date('2026-07-31T09:00:00Z'));
+    expect(cloned.expires_at).toEqual(new Date('2026-08-31T09:00:00Z'));
+    expect(cloned.next_fire_at).toEqual(new Date('2026-07-31T09:00:00Z'));
+    expect(cloned.recipient_id).toBe(ASSIGNEE);
+    expect(cloned.is_active).toBe(true);
+  });
 });
 
-describe('a task reminder is pushed once, not once per overlapping window', () => {
+/**
+ * §2b. A REMINDER THAT NOBODY WAS RUNNING FOR USED TO BE DESTROYED, NOT DELAYED.
+ *
+ * runReminders scanned Task.reminder_at inside a ±30 s window around the current minute, so
+ * delivery was conditional on this process being awake for one particular tick. A deploy, a
+ * restart, or the overlap guard above skipping a slow tick did not postpone that reminder —
+ * the window moved past it and nothing ever looked at it again. The scan is now an index seek
+ * on TaskReminder(is_active, next_fire_at) for everything already past its time, so a missed
+ * tick is caught up on the next one.
+ *
+ * The claim survives the rewrite unchanged and is still keyed per INSTANT, now with the
+ * reminder row's id alongside it: one task can carry several schedules, and two of them can
+ * land on the same minute without being the same reminder.
+ */
+describe('a task reminder is pushed once per occurrence, and a missed tick is caught up', () => {
+  const REMINDER_ID = '55555555-5555-5555-5555-555555555555';
+
+  function seedReminder(overrides: Row = {}): Row {
+    const reminder = {
+      id: REMINDER_ID,
+      task_id: TASK_ID,
+      organization_id: ORG,
+      recipient_id: ASSIGNEE,
+      frequency: 'daily',
+      time_of_day: '15:00', // 12:00Z — T0 — in Europe/Moscow
+      days_of_week: [],
+      recurrence_rule: null,
+      timezone: 'Europe/Moscow',
+      starts_at: new Date(T0.getTime() - 86_400_000),
+      expires_at: null,
+      next_fire_at: T0,
+      last_fired_at: null,
+      fire_count: 0,
+      is_active: true,
+      ...overrides,
+    };
+    harness.tables.taskReminder.push(reminder);
+    return reminder;
+  }
+
   beforeEach(() => {
     harness.tables.user.push({ id: ASSIGNEE, push_token: 'ExponentPushToken[abc]' });
     harness.tables.task.push({
@@ -554,41 +696,163 @@ describe('a task reminder is pushed once, not once per overlapping window', () =
       organization_id: ORG,
       title: 'Позвонить клиенту',
       status: 'pending',
+      is_recurring: false,
       assigned_to: ASSIGNEE,
       reminder_at: T0,
     });
   });
 
-  it('claims the reminder before sending, so consecutive ticks do not buzz twice', async () => {
+  it('claims the occurrence before sending, so consecutive ticks do not buzz twice', async () => {
+    seedReminder();
+
     await runReminders();
     await runReminders();
 
-    expect(push.sendPush).toHaveBeenCalledTimes(1);
+    expect(push.sendPushToUser).toHaveBeenCalledTimes(1);
     expect(harness.tables.notificationSent).toHaveLength(1);
+
+    // Delivered, counted, and moved on to tomorrow rather than left sitting in the past.
+    const stored = harness.tables.taskReminder[0];
+    expect(stored.fire_count).toBe(1);
+    expect(stored.last_fired_at).toEqual(T0);
+    expect(stored.next_fire_at?.getTime()).toBe(T0.getTime() + 86_400_000);
   });
 
-  it('fires again when the reminder is moved, because that is a different reminder', async () => {
-    await runReminders();
-
-    const task = harness.tables.task[0];
-    task.reminder_at = new Date(T0.getTime() + 3_600_000);
-    vi.setSystemTime(task.reminder_at);
+  it('fires again when the reminder is moved, because that is a different occurrence', async () => {
+    const reminder = seedReminder();
 
     await runReminders();
 
-    expect(push.sendPush).toHaveBeenCalledTimes(2);
+    reminder.next_fire_at = new Date(T0.getTime() + 3_600_000);
+    vi.setSystemTime(reminder.next_fire_at);
+
+    await runReminders();
+
+    expect(push.sendPushToUser).toHaveBeenCalledTimes(2);
     expect(harness.tables.notificationSent).toHaveLength(2);
   });
 
-  it('gives the claim back when the provider fails, so the reminder is not lost', async () => {
-    push.sendPush.mockResolvedValueOnce({ ok: false, code: 'SEND_FAILED', message: 'timeout' } as never);
+  it('gives the claim back when the provider fails, so the occurrence is not lost', async () => {
+    const reminder = seedReminder();
+    push.sendPushToUser.mockResolvedValueOnce({
+      user_id: ASSIGNEE,
+      attempted: 1,
+      sent: 0,
+      failed: 1,
+      pruned: 0,
+      skipped: 0,
+      devices: [{
+        device_id: 'device',
+        token: 'token',
+        provider: 'expo',
+        platform: 'ios',
+        result: { ok: false, code: 'SEND_FAILED', message: 'timeout' },
+        pruned: false,
+      }],
+    } as never);
 
     await runReminders();
     expect(harness.tables.notificationSent).toHaveLength(0);
+    // And the schedule did NOT advance, so the next tick has something to retry.
+    expect(reminder.next_fire_at).toEqual(T0);
 
     await runReminders();
-    expect(push.sendPush).toHaveBeenCalledTimes(2);
+    expect(push.sendPushToUser).toHaveBeenCalledTimes(2);
     expect(harness.tables.notificationSent).toHaveLength(1);
+  });
+
+  it('delivers an occurrence the process was not running for', async () => {
+    // Nothing ran at 12:00. Two hours later — inside the catch-up window — it still arrives.
+    // Under the ±30 s window this reminder was gone for good.
+    seedReminder();
+    vi.setSystemTime(new Date(T0.getTime() + 2 * 3600_000));
+
+    await runReminders();
+
+    expect(push.sendPushToUser).toHaveBeenCalledTimes(1);
+    expect(harness.tables.taskReminder[0].fire_count).toBe(1);
+  });
+
+  it('skips an occurrence that is too stale to be worth delivering, and rolls it forward', async () => {
+    // Catch-up is capped at REMINDER_CATCHUP_MAX_AGE. A 12:00 "call the client" surfacing the
+    // next morning is not a reminder, it is noise — but the SCHEDULE has to survive the gap.
+    seedReminder();
+    const nextMorning = new Date(T0.getTime() + 20 * 3600_000);
+    vi.setSystemTime(nextMorning);
+
+    await runReminders();
+
+    expect(push.sendPushToUser).not.toHaveBeenCalled();
+    const stored = harness.tables.taskReminder[0];
+    expect(stored.fire_count).toBe(0);
+    expect(stored.is_active).toBe(true);
+    expect(stored.next_fire_at?.getTime()).toBeGreaterThan(nextMorning.getTime() - REMINDER_CATCHUP_MAX_AGE_MS);
+  });
+
+  it('retires a reminder whose task has been completed', async () => {
+    seedReminder();
+    harness.tables.task[0].status = 'done';
+
+    await runReminders();
+
+    expect(push.sendPushToUser).not.toHaveBeenCalled();
+    const stored = harness.tables.taskReminder[0];
+    expect(stored.is_active).toBe(false);
+    expect(stored.next_fire_at).toBeNull();
+  });
+
+  it('retires a reminder whose horizon has passed with nothing left to fire', async () => {
+    // The shape a run-out rule leaves behind: still active, so the expiry sweep can see it,
+    // but with no occurrence pending.
+    seedReminder({ next_fire_at: null, expires_at: new Date(T0.getTime() - 1000) });
+
+    await runReminders();
+
+    expect(push.sendPushToUser).not.toHaveBeenCalled();
+    const stored = harness.tables.taskReminder[0];
+    expect(stored.is_active).toBe(false);
+    expect(stored.next_fire_at).toBeNull();
+  });
+
+  it('still delivers a final occurrence that lands exactly on the horizon', async () => {
+    // "Valuable until 15:00" includes that 15:00. The expiry sweep runs before the delivery
+    // pass, so without its `next_fire_at: null` guard it would retire this row seconds after
+    // the last occurrence came due and swallow the most urgent buzz of the lot.
+    seedReminder({ expires_at: T0 });
+
+    await runReminders();
+
+    expect(push.sendPushToUser).toHaveBeenCalledTimes(1);
+    const stored = harness.tables.taskReminder[0];
+    expect(stored.fire_count).toBe(1);
+    expect(stored.next_fire_at).toBeNull();
+    // Retirement, and the task.expired notification with it, happens on the following tick.
+    expect(stored.is_active).toBe(true);
+
+    vi.setSystemTime(new Date(T0.getTime() + 60_000));
+    await runReminders();
+
+    expect(push.sendPushToUser).toHaveBeenCalledTimes(1);
+    expect(stored.is_active).toBe(false);
+  });
+
+  it('keeps a run-out rule alive until its horizon, so the expiry is not silent', async () => {
+    // T0 is Saturday 25 July 2026. Mondays only, expiring on the Sunday: this occurrence is
+    // the last one the rule can ever produce, because the next Monday is past the horizon.
+    // The window the operator asked for has NOT closed yet, though, and retiring the row here
+    // would put it beyond the reach of the expiry sweep for good.
+    seedReminder({
+      frequency: 'weekly',
+      days_of_week: [1],
+      next_fire_at: T0,
+      expires_at: new Date(T0.getTime() + 86_400_000),
+    });
+
+    await runReminders();
+
+    const stored = harness.tables.taskReminder[0];
+    expect(stored.next_fire_at).toBeNull();
+    expect(stored.is_active).toBe(true);
   });
 });
 

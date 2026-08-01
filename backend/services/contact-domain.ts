@@ -19,6 +19,7 @@ import { dispatchNotification, contactCtx } from './notificationEngine';
 import { getVisibleUserIds, getAccessibleUserIds, canSeeUser, ownerVisibilityWhere } from './visibility';
 import { userBelongsToOrg } from './contact-bulk';
 import { getLastContactedMap } from './lastContacted';
+import { fireAmoOutbound } from './amocrm/sync-worker';
 
 // ---------------------------------------------------------------------------
 // Re-exported types
@@ -306,6 +307,14 @@ export async function createContactForUser(
     });
   }
 
+  fireAmoOutbound({
+    organizationId: orgId,
+    entityType: 'contact',
+    operation: 'create',
+    localId: contact.id,
+    record: contact as unknown as Record<string, unknown>,
+  });
+
   return decryptContact(contact);
 }
 
@@ -437,6 +446,14 @@ export async function updateContactForUser(
       if (ctx) void dispatchNotification({ eventType, orgId, contact: ctx });
     });
   }
+
+  fireAmoOutbound({
+    organizationId: orgId,
+    entityType: 'contact',
+    operation: 'update',
+    localId: contact.id,
+    record: contact as unknown as Record<string, unknown>,
+  });
 
   return decryptContact(contact);
 }

@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import AttachmentsSection from '../../components/AttachmentsSection';
-import { cancelTaskDueReminder, scheduleTaskDueReminder } from '../../utils/notifications';
+import ReminderSummaryList from '../../components/reminders/ReminderSummaryList';
+import { cancelTaskDueReminder } from '../../utils/notifications';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { formatMarketDate } from '../../market/profile';
 import { labelKeyForRule } from '../../utils/recurrence';
@@ -214,8 +215,6 @@ export default function TaskDetailScreen(): JSX.Element {
         try {
           if (body.data.status === 'done') {
             await cancelTaskDueReminder(id);
-          } else if (body.data.due_date) {
-            await scheduleTaskDueReminder(id, body.data.title, body.data.due_date);
           }
         } catch {
           // The server action succeeded; reminder cleanup is best-effort.
@@ -395,6 +394,9 @@ export default function TaskDetailScreen(): JSX.Element {
             </Text>
           </View>
         </View>
+
+        {/* The schedule behind the task — when it reminds, how often, and until when. */}
+        <ReminderSummaryList taskId={id as string} />
 
         <View style={[styles.card, { marginTop: 16 }]}>
           <Text style={styles.sectionLabel}>{t('tasks.notes')}</Text>

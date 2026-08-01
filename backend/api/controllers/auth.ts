@@ -13,7 +13,11 @@ import {
 } from '../../services/sessions';
 import { issueCode, verifyCode } from '../../services/verification';
 import { sendEmail, isEmailSendingEnabled } from '../../services/email';
-import { DEFAULT_PIPELINE_NAME, DEFAULT_PIPELINE_STAGE_NAMES } from '../../config/market';
+import {
+  DEFAULT_PIPELINE_NAME,
+  DEFAULT_PIPELINE_STAGE_NAMES,
+  DEFAULT_TIME_ZONE,
+} from '../../config/market';
 
 const saltRounds = process.env.NODE_ENV === 'test' ? 4 : 12;
 
@@ -72,7 +76,7 @@ function onboardingCompleted(state: Prisma.JsonValue | null): boolean {
   return record.completed === true || typeof record.completed_at === 'string';
 }
 
-function publicUser(user: { id: string; email: string | null; username?: string | null; name: string; role: string; organization_id: string; onboarding_state?: Prisma.JsonValue | null; must_change_password?: boolean; must_change_email?: boolean; manager_id?: string | null }) {
+function publicUser(user: { id: string; email: string | null; username?: string | null; name: string; role: string; organization_id: string; timezone?: string; onboarding_state?: Prisma.JsonValue | null; must_change_password?: boolean; must_change_email?: boolean; manager_id?: string | null }) {
   return {
     id: user.id,
     email: user.email,
@@ -80,6 +84,7 @@ function publicUser(user: { id: string; email: string | null; username?: string 
     name: user.name,
     role: user.role,
     org_id: user.organization_id,
+    timezone: user.timezone ?? DEFAULT_TIME_ZONE,
     manager_id: user.manager_id ?? null,
     onboarding_completed: onboardingCompleted(user.onboarding_state ?? null),
     must_change_password: user.must_change_password ?? false,
@@ -682,6 +687,35 @@ export const AuthController = {
     return reply.send({ data: { user: publicUser(user) }, meta: {} });
   },
 
+  setTimezone: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { timezone } = request.body as { timezone: string };
+    const updated = await db.user.updateMany({
+      where: {
+        id: request.user.sub,
+        organization_id: request.user.org_id,
+        is_active: true,
+      },
+      data: { timezone },
+    });
+
+    if (updated.count !== 1) {
+      return reply.status(404).send({
+        error: { code: 'USER_NOT_FOUND', message: 'User not found' },
+      });
+    }
+
+    await auditLog({
+      action: 'auth.update_timezone',
+      outcome: 'success',
+      request,
+      organizationId: request.user.org_id,
+      userId: request.user.sub,
+      metadata: { timezone },
+    });
+
+    return reply.send({ data: { timezone }, meta: {} });
+  },
+
   deactivateUser: async (request: FastifyRequest, reply: FastifyReply) => {
     const callerRole = request.user.role as AuthRole;
     if (callerRole !== 'owner' && callerRole !== 'admin') {
@@ -806,7 +840,7 @@ export const AuthController = {
 
     const user = await db.user.findUnique({
       where: { id: user_id },
-      select: { id: true, email: true, name: true, role: true, organization_id: true, is_verified: true, is_active: true },
+      select: { id: true, email: true, name: true, role: true, organization_id: true, timezone: true, is_verified: true, is_active: true },
     });
 
     if (!user || !user.is_active) {
@@ -852,7 +886,7 @@ export const AuthController = {
 
     return reply.code(200).send({
       data: {
-        user: { id: user.id, email: user.email, name: user.name, role: user.role, org_id: user.organization_id, onboarding_completed: false },
+        user: { id: user.id, email: user.email, name: user.name, role: user.role, org_id: user.organization_id, timezone: user.timezone, onboarding_completed: false },
         token,
       },
       meta: {},

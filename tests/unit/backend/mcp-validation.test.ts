@@ -27,6 +27,7 @@ const user = {
   sub: '00000000-0000-4000-a000-000000000001',
   org_id: '00000000-0000-4000-a000-000000000010',
   sid: '00000000-0000-4000-a000-000000000100',
+  role: 'owner',
 };
 
 describe('MCP validation helpers', () => {
@@ -34,6 +35,7 @@ describe('MCP validation helpers', () => {
     vi.clearAllMocks();
     dbMock.$queryRaw.mockResolvedValue([{ id: user.sid }]);
     dbMock.$executeRaw.mockResolvedValue(1);
+    user.role = 'owner';
   });
 
   it('requires the token user to be active and scoped to an existing org', async () => {
@@ -48,19 +50,20 @@ describe('MCP validation helpers', () => {
     });
     expect(dbMock.user.findFirst).toHaveBeenCalledWith({
       where: { id: user.sub, organization_id: user.org_id, is_active: true },
-      select: { id: true },
+      select: { id: true, role: true },
     });
   });
 
   it('accepts an active user in an existing org', async () => {
-    dbMock.user.findFirst.mockResolvedValue({ id: user.sub });
+    dbMock.user.findFirst.mockResolvedValue({ id: user.sub, role: 'member' });
     dbMock.org.findUnique.mockResolvedValue({ id: user.org_id });
 
     await expect(validateMcpPrincipal(user)).resolves.toBeNull();
+    expect(user.role).toBe('member');
   });
 
   it('rejects revoked MCP token sessions', async () => {
-    dbMock.user.findFirst.mockResolvedValue({ id: user.sub });
+    dbMock.user.findFirst.mockResolvedValue({ id: user.sub, role: 'member' });
     dbMock.org.findUnique.mockResolvedValue({ id: user.org_id });
     dbMock.$queryRaw.mockResolvedValue([]);
 

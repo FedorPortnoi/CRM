@@ -7,6 +7,7 @@
 - Log in: eas login (use Expo account: **fedorportnoi**)
 - Ensure eas.json is committed and app.json has owner: fedorportnoi
 - Set `EXPO_PUBLIC_API_URL` as an EAS environment variable for preview and production. It must be the real HTTPS API URL ending in `/api/v1`; `app.config.js` rejects missing or placeholder deployment URLs.
+- Set `EXPO_PUBLIC_RUSTORE_PROJECT_ID` in the EAS `rustore` environment. The config plugin fails the build when it is missing because a linked-but-uninitialized push SDK would silently lose reminders at runtime.
 
 ## Build Commands
 
@@ -21,9 +22,9 @@ eas build --platform android --profile production
 
 
 ### Android (RuStore - APK)
-Use the preview profile to produce a plain APK, then upload manually:
+Use the dedicated RuStore profile to produce a plain APK, then upload manually:
 
-eas build --platform android --profile preview
+eas build --platform android --profile rustore
 
 Upload at: https://rustore.ru/developers
 

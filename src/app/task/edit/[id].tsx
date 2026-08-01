@@ -1,19 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
-import { scheduleTaskDueReminder } from '../../../utils/notifications';
 import { formatMarketDate } from '../../../market/profile';
 import { RECURRENCE_OPTIONS, labelKeyForRule, normalizeRule } from '../../../utils/recurrence';
 import { useContactSearch } from '../../../hooks/useContactSearch';
 import { useCreateMutation } from '../../../hooks/useCreateMutation';
 import { useTheme } from '../../../hooks/useTheme';
 import { ThemeColors } from '../../../theme';
+import ReminderEditor from '../../../components/reminders/ReminderEditor';
+import {
+  draftFromReminder,
+  draftSignature,
+  firstLocalFireInstant,
+  syncTaskReminders,
+  useTaskReminders,
+  type ReminderDraft,
+} from '../../../hooks/useTaskReminders';
 
 interface TaskContact {
   id: string;
@@ -79,6 +87,14 @@ type TaskPatch = {
   recurrence_rule?: string;
   assigned_to?: string;
 };
+
+/** Order-independent fingerprint of the whole schedule — drives the "did anything move?" check. */
+function remindersSignature(drafts: ReminderDraft[]): string {
+  return drafts
+    .map((draft) => `${draft.id ?? 'new'}:${draftSignature(draft)}`)
+    .sort()
+    .join('||');
+}
 
 function contactDisplayName(contact: { first_name: string; last_name: string | null }): string {
   return `${contact.first_name}${contact.last_name ? ' ' + contact.last_name : ''}`;
@@ -186,8 +202,8 @@ export default function EditTaskScreen(): JSX.Element {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
   const [showRepeatPicker, setShowRepeatPicker] = useState<boolean>(false);
-  const [reminderDate, setReminderDate] = useState<string>('');
-  const [showReminderCalendar, setShowReminderCalendar] = useState<boolean>(false);
+  const [reminders, setReminders] = useState<ReminderDraft[]>([]);
+  const [originalReminders, setOriginalReminders] = useState<ReminderDraft[]>([]);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [assigneeId, setAssigneeId] = useState<string>('');
   const [assigneeName, setAssigneeName] = useState<string>('');
@@ -204,6 +220,25 @@ export default function EditTaskScreen(): JSX.Element {
       assigned_to: assigneeId,
     }),
     [assigneeId, dueDate, notes, recurrenceRule, selectedContactId, title],
+  );
+
+  const remindersQuery = useTaskReminders(typeof id === 'string' && id !== '' ? id : null);
+  const remindersSeededRef = useRef<boolean>(false);
+
+  // Seed the editor ONCE. A background refetch landing mid-edit must not overwrite what
+  // the user has typed; the server copy is reconciled by syncTaskReminders() on save.
+  useEffect(() => {
+    if (remindersSeededRef.current) return;
+    if (!remindersQuery.data) return;
+    const drafts = remindersQuery.data.map(draftFromReminder);
+    remindersSeededRef.current = true;
+    setReminders(drafts);
+    setOriginalReminders(drafts);
+  }, [remindersQuery.data]);
+
+  const remindersChanged = useMemo(
+    () => remindersSignature(reminders) !== remindersSignature(originalReminders),
+    [reminders, originalReminders],
   );
 
   const loadTask = useCallback(async (): Promise<void> => {
@@ -238,7 +273,6 @@ export default function EditTaskScreen(): JSX.Element {
       setRecurrenceRule(loadedForm.is_recurring && loadedForm.recurrence_rule !== '' ? loadedForm.recurrence_rule : null);
       setAssigneeId(parsedBody.data.assignee.id);
       setAssigneeName(parsedBody.data.assignee.name);
-      setReminderDate(toDateInputValue(parsedBody.data.reminder_at ?? null));
       clearContactSearch();
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : t('tasks.failedToLoad'));
@@ -276,20 +310,29 @@ export default function EditTaskScreen(): JSX.Element {
     },
     buildPayload: () => {
       const patch = buildPatch(form, original!);
-      const originalReminderDate = toDateInputValue(null);
-      if (reminderDate !== originalReminderDate) {
-        patch.reminder_at = reminderDate !== '' ? new Date(reminderDate + 'T09:00:00').toISOString() : null;
+      if (remindersChanged) {
+        // Keep the legacy single-instant column in step with the schedule: the earliest
+        // one-off reminder, or nothing at all when everything left is repeating.
+        patch.reminder_at = firstLocalFireInstant(reminders);
       }
       return patch;
     },
     onSuccess: async (data, queued) => {
-      if (!queued && data.due_date) {
+      if (!queued && remindersChanged) {
         try {
-          await scheduleTaskDueReminder(id, data.title, data.due_date, reminderDate || null);
+          await syncTaskReminders({
+            taskId: id,
+            token: token ?? '',
+            original: originalReminders,
+            next: reminders,
+          });
+          setOriginalReminders(reminders);
         } catch {
-          // The task update succeeded; local reminder updates are best-effort.
+          // The task itself already saved, so the screen cannot simply refuse to close.
+          Alert.alert(t('reminders.title'), t('reminders.saveFailed'));
         }
       }
+
       router.back();
     },
     fallbackErrorMessage: t('errors.networkError'),
@@ -298,11 +341,7 @@ export default function EditTaskScreen(): JSX.Element {
   const handleSubmit = async (): Promise<void> => {
     if (!original || !token) return;
     const patch = buildPatch(form, original);
-    const originalReminderDate = toDateInputValue(null);
-    if (reminderDate !== originalReminderDate) {
-      patch.reminder_at = reminderDate !== '' ? new Date(reminderDate + 'T09:00:00').toISOString() : null;
-    }
-    if (Object.keys(patch).length === 0) {
+    if (Object.keys(patch).length === 0 && !remindersChanged) {
       router.back();
       return;
     }
@@ -401,36 +440,16 @@ export default function EditTaskScreen(): JSX.Element {
               />
             </Modal>
 
+            {/* Replaces the old date-only picker, which silently chose 09:00 for the user. */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('tasks.reminderOptional')}</Text>
-              <TouchableOpacity style={styles.input} onPress={() => setShowReminderCalendar(true)}>
-                <Text style={reminderDate ? styles.inputText : styles.placeholderText}>{reminderDate ? t('tasks.remindOn', { date: formatDate(reminderDate) }) : t('tasks.noReminder')}</Text>
-              </TouchableOpacity>
-              {reminderDate !== '' && (
-                <TouchableOpacity onPress={() => setReminderDate('')}>
-                  <Text style={styles.clearLink}>{t('tasks.clear')}</Text>
-                </TouchableOpacity>
-              )}
-              <Modal animationType="slide" visible={showReminderCalendar} onRequestClose={() => setShowReminderCalendar(false)}>
-                <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
-                  <Text style={styles.modalTitle}>{t('tasks.reminderDate')}</Text>
-                  <TouchableOpacity onPress={() => setShowReminderCalendar(false)}>
-                    <Text style={styles.modalDone}>{t('tasks.done')}</Text>
-                  </TouchableOpacity>
-                </View>
-                <Calendar
-                  firstDay={1}
-                  onDayPress={(day: CalendarDay) => {
-                    setReminderDate(day.dateString);
-                    setShowReminderCalendar(false);
-                  }}
-                  markedDates={
-                    reminderDate
-                      ? ({ [reminderDate]: { selected: true, selectedColor: colors.orange } } as Record<string, { selected?: boolean; selectedColor?: string }>)
-                      : {}
-                  }
-                />
-              </Modal>
+              <ReminderEditor
+                value={reminders}
+                onChange={setReminders}
+                defaultDate={dueDate}
+                isLoading={remindersQuery.isLoading}
+                loadError={remindersQuery.isError ? t('reminders.loadFailed') : null}
+                onRetry={() => void remindersQuery.refetch()}
+              />
             </View>
 
             <View style={styles.fieldGroup}>

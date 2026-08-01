@@ -55,6 +55,25 @@ export type ToolModelFacingOptions = {
 
 const tools: ToolEntry[] = [];
 
+const DENIED_RESULT_CODES = new Set([
+  'FORBIDDEN',
+  'UNAUTHORIZED',
+  'INVALID_TOKEN',
+  'SESSION_REVOKED',
+]);
+
+function classifyToolResult(result: unknown): {
+  outcome: 'success' | 'failure' | 'denied';
+  code?: string;
+} {
+  if (!result || typeof result !== 'object') return { outcome: 'success' };
+  const error = (result as { error?: unknown }).error;
+  if (!error || typeof error !== 'object') return { outcome: 'success' };
+  const code = (error as { code?: unknown }).code;
+  if (typeof code !== 'string' || code.length === 0) return { outcome: 'failure' };
+  return { outcome: DENIED_RESULT_CODES.has(code) ? 'denied' : 'failure', code };
+}
+
 export const mcpServer = new Server(
   { name: 'crm-mcp', version: '1.0.0' },
   { capabilities: { tools: {} } },
@@ -145,11 +164,13 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
     throw err;
   }
 
+  const classification = classifyToolResult(result);
   await auditLog({
     action: `mcp.tool.${name}`,
-    outcome: 'success',
+    outcome: classification.outcome,
     organizationId: user.org_id,
     userId: user.sub,
+    ...(classification.code ? { metadata: { reason: classification.code } } : {}),
   });
 
   return {
@@ -204,6 +225,9 @@ export function loadMcpTools(): Promise<void> {
       await import('./tools/tasks');
       await import('./tools/calendar');
       await import('./tools/analytics');
+      await import('./tools/pipeline-stages');
+      await import('./tools/reminders');
+      await import('./tools/amocrm');
     })();
   }
 
@@ -289,12 +313,16 @@ export async function invokeMcpTool(
 
   try {
     const result = await entry.handler(safeArgs, user);
+    const classification = classifyToolResult(result);
     await auditLog({
       action: `mcp.tool.${name}`,
-      outcome: 'success',
+      outcome: classification.outcome,
       organizationId: user.org_id,
       userId: user.sub,
-      metadata: { via: 'in_process' },
+      metadata: {
+        via: 'in_process',
+        ...(classification.code ? { reason: classification.code } : {}),
+      },
     });
     return { ok: true, result };
   } catch (err) {

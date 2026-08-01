@@ -1,8 +1,9 @@
 /**
  * PM2 processes for the self-hosted deployment.
  *
- * Three processes replace what the VM ran: the API, a static file server in
- * place of nginx, and cloudflared in place of a public IP.
+ * Four processes replace what the VM ran: the API, a static file server in
+ * place of nginx, cloudflared in place of a public IP, and the database backup
+ * job the self-hosted deployment otherwise does not have.
  *
  *   pm2 start deploy/local/ecosystem.config.js
  *   pm2 save                 remember them across reboots
@@ -120,6 +121,24 @@ module.exports = {
       time: true,
       error_file: path.join(ROOT, 'logs/tunnel-error.log'),
       out_file: path.join(ROOT, 'logs/tunnel-out.log'),
+    },
+    {
+      // A one-shot process: PM2 starts it once when this ecosystem is installed, then its cron
+      // restart runs it every night. autorestart stays false so a successful dump does not loop.
+      // Dumps default to C:\Users\<user>\crm-backups and keep 30 generations; BACKUP_DIR and
+      // BACKUP_KEEP in .env.localprod override those values. An off-machine copy is still required
+      // to survive loss of this laptop.
+      name: 'crm-backup',
+      cwd: ROOT,
+      script: path.join(__dirname, 'backup.js'),
+      env: { ...APP_ENV, NODE_ENV: 'production' },
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: false,
+      cron_restart: '30 3 * * *',
+      time: true,
+      error_file: path.join(ROOT, 'logs/backup-error.log'),
+      out_file: path.join(ROOT, 'logs/backup-out.log'),
     },
   ],
 };

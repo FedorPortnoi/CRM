@@ -6,6 +6,7 @@ import { DEFAULT_CURRENCY, normalizeCurrencyCode } from '../../config/market';
 import { evaluateWorkflows } from '../../services/workflows';
 import { logActivity } from '../../api/controllers/activities';
 import { dispatchNotification, dealCtx } from '../../services/notificationEngine';
+import { fireAmoOutbound } from '../../services/amocrm/sync-worker';
 import { getAccessibleUserIds, canSeeUser } from '../../services/visibility';
 import {
   listDealsForUser,
@@ -266,7 +267,12 @@ registerTool(
     }
 
     const stage = await db.pipelineStage.findFirst({
-      where: { id: stage_id, pipeline_id: deal.pipeline_id, pipeline: { organization_id: user.org_id } },
+      where: {
+        id: stage_id,
+        pipeline_id: deal.pipeline_id,
+        is_archived: false,
+        pipeline: { organization_id: user.org_id },
+      },
     });
 
     if (!stage) {
@@ -302,6 +308,14 @@ registerTool(
 
     void dealCtx(updated.id, updated.stage?.name).then((ctx) => {
       if (ctx) void dispatchNotification({ eventType: 'deal.stage_changed', orgId: user.org_id, deal: ctx });
+    });
+
+    fireAmoOutbound({
+      organizationId: user.org_id,
+      entityType: 'lead',
+      operation: 'stage_change',
+      localId: updated.id,
+      record: updated as unknown as Record<string, unknown>,
     });
 
     return { data: updated };

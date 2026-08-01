@@ -1,12 +1,20 @@
 import crypto from 'node:crypto';
 import { RRule } from 'rrule';
-import { DealStatus, TaskStatus } from '@prisma/client';
+import { DealStatus, ReminderFrequency, TaskStatus } from '@prisma/client';
 import { db } from './db';
-import { sendPush } from './push';
+import { sendPushToUser } from './push';
 import { dispatchNotification, taskCtx, dealCtx } from './notificationEngine';
 import { runWebhookDeliveryTick } from './webhooks';
 import { reapIdempotencyKeys } from './idempotency';
 import { runSequenceTick } from './sequences';
+import {
+  computeNextFire,
+  nextFireAfterCatchup,
+  shouldStayActive,
+  REMINDER_CATCHUP_MAX_AGE_MS,
+} from './reminders';
+import { runAmoSyncTick } from './amocrm/sync-worker';
+import { runAmoReconciliationTick } from './amocrm/reconcile';
 
 const JOIN_CODE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -107,65 +115,319 @@ async function claimScheduledPush(
  *
  * Keying it on the task alone would mean one reminder per task per user for the lifetime of
  * the row: an employee who pushes a reminder back an hour would get nothing at the new time,
- * because the old claim still stands and NotificationSent has no reaper. Folding reminder_at
- * into the event type makes "the same reminder" mean the same task at the same moment, which
- * is what the deduplication is actually for — a rescheduled reminder is a different reminder
- * and fires, while the same one seen by two overlapping windows does not.
+ * because the old claim still stands and NotificationSent has no reaper. Folding the instant
+ * into the event type makes "the same reminder" mean the same schedule at the same moment,
+ * which is what the deduplication is actually for — a rescheduled reminder is a different
+ * reminder and fires, while the same one seen twice does not.
+ *
+ * The REMINDER ROW's id is now in the key as well as the instant. A task can carry several
+ * schedules at once — "every weekday at 09:00" for the assignee and "Fridays at 17:00" for
+ * their head — and two of them can legitimately land on the same minute. Keyed on the instant
+ * alone they would collide on the (event_type, entity_id, recipient_id) index and one of the
+ * two would be silently swallowed as a duplicate of the other.
  */
-function reminderEventType(reminderAt: Date): string {
-  return `task.reminder:${reminderAt.getTime()}`;
+function reminderEventType(reminderId: string, firesAt: Date): string {
+  return `task.reminder:${reminderId}:${firesAt.getTime()}`;
+}
+
+/**
+ * Run `worker` over `items`, at most `limit` of them in flight.
+ *
+ * The reminder job's unit of work is one RECIPIENT, not one row: a daily 09:00 reminder
+ * attached to an org-wide task is N pushes at the same instant, and awaiting them one after
+ * another means the last employee on the list hears about their morning at 09:04. Sequential
+ * within a recipient (one person, one device queue, in order), parallel across recipients.
+ */
+async function mapWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const item = items[cursor];
+      cursor += 1;
+      await worker(item);
+    }
+  });
+  await Promise.all(runners);
+}
+
+/** How many due reminders one tick will look at. A backlog drains over several ticks. */
+const REMINDER_BATCH_LIMIT = 500;
+/** How many recipients are pushed to at once. */
+const REMINDER_RECIPIENT_CONCURRENCY = 8;
+
+type DueReminder = {
+  id: string;
+  task_id: string;
+  recipient_id: string;
+  frequency: ReminderFrequency;
+  time_of_day: string;
+  days_of_week: number[];
+  recurrence_rule: string | null;
+  timezone: string;
+  starts_at: Date;
+  expires_at: Date | null;
+  next_fire_at: Date | null;
+  task: { title: string };
+};
+
+/**
+ * Move a reminder on to its next occurrence.
+ *
+ * The `next_fire_at` in the WHERE is a compare-and-set, and it is what makes advancing safe
+ * to call from more than one place in this file: whoever writes first moves the row, and any
+ * second attempt to advance the same occurrence matches nothing and does nothing. Without it,
+ * the "someone else already claimed this instant" path below could advance a schedule the
+ * claim holder is about to advance too, and the reminder would skip a day.
+ */
+async function advanceReminder(
+  reminder: DueReminder,
+  after: Date,
+  now: Date,
+  delivered: boolean,
+): Promise<void> {
+  const next = nextFireAfterCatchup(reminder, after, now);
+
+  await db.taskReminder.updateMany({
+    where: { id: reminder.id, next_fire_at: reminder.next_fire_at },
+    data: {
+      next_fire_at: next,
+      // A rule with no occurrences left stops being scanned — a `once` that has fired, an
+      // RRULE whose COUNT ran out, a weekly whose next Monday is past the horizon.
+      //
+      // EXCEPT when it has an expires_at that has not arrived yet, and this is the whole
+      // reason the flag is not simply `next !== null`. "Every Monday until the 14th" runs out
+      // of Mondays on the 10th. Retiring it there would put it beyond the reach of
+      // expireLapsedReminders, which only looks at active rows, and the task.expired
+      // notification the operator is owed on the 14th would never be sent — the reminder
+      // would have gone quiet four days early with nothing to show for it. Left active with
+      // next_fire_at NULL it costs nothing: the delivery seek below is on `next_fire_at <=
+      // now`, and NULL matches no comparison.
+      is_active: shouldStayActive(next, reminder.expires_at),
+      ...(delivered ? { last_fired_at: now, fire_count: { increment: 1 } } : {}),
+    },
+  });
+}
+
+/**
+ * Reminders whose horizon has passed, while the task itself is still open.
+ *
+ * This is the "until the task stops being valuable" half of the feature. The reminder simply
+ * stopping would be silent — nobody learns that the thing they wanted chasing is still not
+ * done — so the person who asked for it (the task's creator) is told once, and only once.
+ *
+ * `next_fire_at: null` in the WHERE is what keeps this from stealing the last buzz. expires_at
+ * is INCLUSIVE (see computeNextFire), so a reminder can legitimately have one occurrence left
+ * that lands exactly on its horizon — and this sweep runs BEFORE the delivery pass, so
+ * without that clause it would retire the row seconds after the final occurrence came due and
+ * before anything sent it. Only a rule with nothing left to fire is retired here; the one with
+ * a pending occurrence is retired by advanceReminder on the following tick, after it has been
+ * delivered.
+ *
+ * The conditional `updateMany` is the claim, the same shape as rotateExpiredJoinCodes below:
+ * whoever flips is_active owes the notification, and everyone else's WHERE stops matching.
+ * dispatchNotification deduplicates on top of that, per recipient, which is what stops two
+ * reminders on the same task expiring in the same minute from sending two of these.
+ */
+async function expireLapsedReminders(now: Date): Promise<void> {
+  const lapsed = await db.taskReminder.findMany({
+    where: { is_active: true, expires_at: { lte: now }, next_fire_at: null },
+    select: {
+      id: true,
+      task_id: true,
+      organization_id: true,
+      task: { select: { status: true } },
+    },
+    take: REMINDER_BATCH_LIMIT,
+  });
+
+  for (const reminder of lapsed) {
+    const claimed = await db.taskReminder.updateMany({
+      where: { id: reminder.id, is_active: true },
+      data: { is_active: false, next_fire_at: null },
+    });
+    if (claimed.count !== 1) continue;
+
+    // A finished task's reminder expiring is not news. The notification is about work that
+    // outlived the window somebody gave it.
+    if (reminder.task.status === TaskStatus.done || reminder.task.status === TaskStatus.cancelled) {
+      continue;
+    }
+
+    const ctx = await taskCtx(reminder.task_id);
+    if (!ctx) continue;
+
+    // `task.expired` is NOT yet a member of NotificationEventType. Adding it means editing
+    // services/notificationEngine.ts, which another agent is inside, so the exact addition is
+    // reported in the handover rather than made here. The cast keeps this compiling today and
+    // becomes redundant the moment the union, the SCHEDULED_EVENTS set and the buildMessages
+    // case exist. UNTIL THEY DO, THIS DISPATCH IS A NO-OP: the switch has no case, so no
+    // message is built and nothing is sent.
+    await dispatchNotification({
+      eventType: 'task.expired',
+      orgId: reminder.organization_id,
+      task: ctx,
+    } as unknown as Parameters<typeof dispatchNotification>[0]);
+  }
+}
+
+/**
+ * Deliver every reminder that is due, including ones this process was not running for.
+ *
+ * THIS DELIBERATELY CHANGES WHAT "DUE" MEANS, AND THE CHANGE IS THE FIX. The old job scanned
+ * Task.reminder_at inside a ±30 s window around the current minute, which made delivery
+ * conditional on the server being awake for one particular tick. A deploy, a restart, or the
+ * overlap guard above skipping a slow tick did not DELAY that reminder — it destroyed it,
+ * silently and permanently, because the window had moved on by the time anything looked
+ * again. The scan is now an index seek on (is_active, next_fire_at) for everything already
+ * past its time, so a missed tick is caught up on the next one.
+ *
+ * Catch-up is capped, because unbounded catch-up is its own defect. A reminder that surfaces
+ * hours after the moment it was meant to change what someone did is not a reminder, and a
+ * server that was down overnight would hand a phone every occurrence it slept through at
+ * once. Anything older than REMINDER_CATCHUP_MAX_AGE (4 h) is not delivered: it is rolled
+ * forward to its next occurrence, so the schedule survives even though that instance did not.
+ *
+ * Exported for the tests only — startScheduler is the sole caller in the running server.
+ */
+async function fireDueReminders(now: Date): Promise<void> {
+  const horizon = new Date(now.getTime() - REMINDER_CATCHUP_MAX_AGE_MS);
+
+  const due = await db.taskReminder.findMany({
+    where: {
+      is_active: true,
+      next_fire_at: { lte: now },
+      task: { status: { notIn: [TaskStatus.done, TaskStatus.cancelled] } },
+    },
+    orderBy: { next_fire_at: 'asc' },
+    take: REMINDER_BATCH_LIMIT,
+    select: {
+      id: true,
+      task_id: true,
+      recipient_id: true,
+      frequency: true,
+      time_of_day: true,
+      days_of_week: true,
+      recurrence_rule: true,
+      timezone: true,
+      starts_at: true,
+      expires_at: true,
+      next_fire_at: true,
+      task: { select: { title: true } },
+    },
+  });
+
+  if (due.length === 0) return;
+
+  const byRecipient = new Map<string, DueReminder[]>();
+  for (const reminder of due) {
+    const group = byRecipient.get(reminder.recipient_id);
+    if (group) group.push(reminder);
+    else byRecipient.set(reminder.recipient_id, [reminder]);
+  }
+
+  await mapWithConcurrency([...byRecipient.values()], REMINDER_RECIPIENT_CONCURRENCY, async (group) => {
+    for (const reminder of group) {
+      await fireOneReminder(reminder, now, horizon);
+    }
+  });
+}
+
+async function fireOneReminder(
+  reminder: DueReminder,
+  now: Date,
+  horizon: Date,
+): Promise<void> {
+  const firesAt = reminder.next_fire_at;
+  if (!firesAt) return;
+
+  // Defensive: computeNextFire never schedules past the horizon, so this only fires if a row
+  // was written by something that is not this file. Retire it rather than deliver it.
+  if (reminder.expires_at && firesAt.getTime() > reminder.expires_at.getTime()) {
+    await advanceReminder(reminder, firesAt, now, false);
+    return;
+  }
+
+  // Too stale to be worth waking anyone for — roll the schedule forward instead. Advancing
+  // from `horizon` rather than from the missed instant is what stops a week-long outage
+  // becoming a week of ticks walking one occurrence at a time.
+  if (firesAt.getTime() < horizon.getTime()) {
+    await advanceReminder(reminder, horizon, now, false);
+    return;
+  }
+
+  const eventType = reminderEventType(reminder.id, firesAt);
+
+  if (!(await claimScheduledPush(eventType, reminder.task_id, reminder.recipient_id))) {
+    // Someone already delivered this instant. Advance anyway rather than returning: the
+    // compare-and-set inside advanceReminder makes it harmless if the claim holder advances
+    // too, and NOT advancing leaves a row that is permanently due and permanently deduplicated
+    // — a hot loop that pushes nothing. NotificationSent has no reaper, so an edit that lands
+    // a reminder back on an instant it already fired reaches this branch with one process.
+    await advanceReminder(reminder, firesAt, now, false);
+    return;
+  }
+
+  const result = await sendPushToUser(reminder.recipient_id, 'Напоминание', reminder.task.title, {
+    taskId: reminder.task_id,
+    reminderId: reminder.id,
+  });
+
+  const hasTransientFailure = result.devices.some(
+    (device) => !device.result.ok && device.result.code === 'SEND_FAILED',
+  );
+
+  if (result.sent === 0 && hasTransientFailure) {
+    // A provider-side failure is transient. Give the claim back and leave next_fire_at where
+    // it is, so the next tick retries the same instant — it is still inside the catch-up
+    // window, which is precisely what that window is for.
+    await db.notificationSent
+      .deleteMany({
+        where: { event_type: eventType, entity_id: reminder.task_id, recipient_id: reminder.recipient_id },
+      })
+      .catch(() => undefined);
+    return;
+  }
+
+  // With no devices, or only permanently-dead devices, advancing avoids scanning the same
+  // occurrence every minute forever. A partial success also advances: the person was reached
+  // on at least one device, while dead rows were pruned independently by the push router.
+  await advanceReminder(reminder, firesAt, now, result.sent > 0);
 }
 
 /** Exported for the tests only — startScheduler is the sole caller in the running server. */
 export async function runReminders(): Promise<void> {
   const now = new Date();
-  const windowStart = new Date(now.getTime() - 30_000);
-  const windowEnd = new Date(now.getTime() + 30_000);
 
-  const tasks = await db.task.findMany({
+  // Order matters: a reminder past its horizon must be retired before the delivery pass can
+  // read it as due and buzz someone one last time.
+  await expireLapsedReminders(now);
+
+  // Reminders on tasks that have been finished or cancelled are retired lazily, at the moment
+  // they would have fired, rather than swept eagerly every minute. The seek is the same index
+  // the delivery pass uses, so this costs nothing extra; an eager sweep would scan every
+  // active reminder in the database once a minute to find the handful that changed.
+  await db.taskReminder.updateMany({
     where: {
-      reminder_at: { gte: windowStart, lte: windowEnd },
-      status: { not: TaskStatus.done },
+      is_active: true,
+      next_fire_at: { lte: now },
+      // Recurrence owns retirement for a completed recurring task: it clones the schedules and
+      // retires the parent in one transaction. Sweeping those rows here would race that clone
+      // because both scheduler jobs run concurrently every minute.
+      task: {
+        OR: [
+          { status: TaskStatus.cancelled },
+          { status: TaskStatus.done, is_recurring: false },
+        ],
+      },
     },
-    select: { id: true, title: true, assigned_to: true, reminder_at: true },
+    data: { is_active: false, next_fire_at: null },
   });
 
-  const assigneeIds = [...new Set(tasks.map(t => t.assigned_to).filter((id): id is string => Boolean(id)))];
-  const users = await db.user.findMany({
-    where: { id: { in: assigneeIds } },
-    select: { id: true, push_token: true },
-  });
-  const userMap = new Map(users.map(u => [u.id, u]));
-
-  for (const task of tasks) {
-    if (!task.assigned_to || !task.reminder_at) continue;
-    const user = userMap.get(task.assigned_to);
-    if (!user?.push_token) continue;
-
-    const eventType = reminderEventType(task.reminder_at);
-    if (!(await claimScheduledPush(eventType, task.id, task.assigned_to))) {
-      continue;
-    }
-
-    const result = await sendPush(user.push_token, 'Напоминание', task.title, { taskId: task.id });
-
-    if (!result.ok && result.code === 'DEVICE_NOT_REGISTERED') {
-      await db.user.update({ where: { id: task.assigned_to }, data: { push_token: null } });
-      continue;
-    }
-
-    if (!result.ok) {
-      // A provider-side failure is transient and the task is probably still inside its
-      // window on the next tick, so give the claim back rather than silently dropping the
-      // only reminder this task gets. A device that is simply gone (above) is not retried:
-      // there is nothing left to deliver to.
-      await db.notificationSent
-        .deleteMany({
-          where: { event_type: eventType, entity_id: task.id, recipient_id: task.assigned_to },
-        })
-        .catch(() => undefined);
-    }
-  }
+  await fireDueReminders(now);
 }
 
 /**
@@ -233,10 +495,30 @@ export async function runRecurrence(): Promise<void> {
       },
       select: { id: true },
     });
-    if (existing) continue;
+    if (existing) {
+      await db.taskReminder.updateMany({
+        where: { task_id: task.id, is_active: true },
+        data: { is_active: false, next_fire_at: null },
+      });
+      continue;
+    }
 
     const nextDue = nextOccurrence(task.recurrence_rule, task.due_date);
     if (!nextDue) continue;
+
+    const reminderRules = await db.taskReminder.findMany({
+      where: { task_id: task.id, is_active: true },
+      select: {
+        recipient_id: true,
+        frequency: true,
+        time_of_day: true,
+        days_of_week: true,
+        recurrence_rule: true,
+        timezone: true,
+        starts_at: true,
+        expires_at: true,
+      },
+    });
 
     // Compute reminder_at offset relative to due_date
     let nextReminder: Date | undefined;
@@ -245,8 +527,31 @@ export async function runRecurrence(): Promise<void> {
       nextReminder = new Date(nextDue.getTime() + offsetMs);
     }
 
-    await db.task.create({
-      data: {
+    const shiftMs = nextDue.getTime() - task.due_date.getTime();
+    const shiftedReminders = reminderRules.flatMap((reminder) => {
+      const startsAt = new Date(reminder.starts_at.getTime() + shiftMs);
+      const expiresAt = reminder.expires_at
+        ? new Date(reminder.expires_at.getTime() + shiftMs)
+        : null;
+      const rule = {
+        frequency: reminder.frequency,
+        time_of_day: reminder.time_of_day,
+        days_of_week: reminder.days_of_week,
+        recurrence_rule: reminder.recurrence_rule,
+        timezone: reminder.timezone,
+        starts_at: startsAt,
+        expires_at: expiresAt,
+      };
+      const nextFireAt = computeNextFire(rule, now);
+      if (!nextFireAt) return [];
+      return [{ ...reminder, starts_at: startsAt, expires_at: expiresAt, next_fire_at: nextFireAt }];
+    });
+
+    // The successor and its schedules are one write. A crash must not leave an open recurring
+    // task with no reminders, nor orphan reminder rows without the task they describe.
+    await db.$transaction(async (tx) => {
+      await tx.task.create({
+        data: {
         title: task.title,
         description: task.description ?? undefined,
         contact_id: task.contact_id ?? undefined,
@@ -259,7 +564,31 @@ export async function runRecurrence(): Promise<void> {
         due_date: nextDue,
         reminder_at: nextReminder,
         status: TaskStatus.pending,
-      },
+        ...(shiftedReminders.length > 0
+          ? {
+              reminders: {
+                create: shiftedReminders.map((reminder) => ({
+                  organization_id: task.organization_id,
+                  recipient_id: reminder.recipient_id,
+                  frequency: reminder.frequency,
+                  time_of_day: reminder.time_of_day,
+                  days_of_week: reminder.days_of_week,
+                  recurrence_rule: reminder.recurrence_rule,
+                  timezone: reminder.timezone,
+                  starts_at: reminder.starts_at,
+                  expires_at: reminder.expires_at,
+                  next_fire_at: reminder.next_fire_at,
+                  is_active: true,
+                })),
+              },
+            }
+          : {}),
+        },
+      });
+      await tx.taskReminder.updateMany({
+        where: { task_id: task.id, is_active: true },
+        data: { is_active: false, next_fire_at: null },
+      });
     });
   }
 }
@@ -440,6 +769,9 @@ export function startScheduler(): void {
     // guard is about the tick not being started again while it is still working through a
     // backlog it has already scanned.
     void runExclusively('webhook-delivery', runWebhookDeliveryTick);
+    void runExclusively('amocrm-sync', async () => {
+      await runAmoSyncTick();
+    });
     tickSequences();
   };
 
@@ -448,6 +780,11 @@ export function startScheduler(): void {
     void runExclusively('join-code-rotation', rotateExpiredJoinCodes);
     void runExclusively('idempotency-reaper', async () => {
       await reapIdempotencyKeys();
+    });
+    // The reconciliation service gates itself to one configured UTC hour, so
+    // sharing the hourly loop does not turn this into an hourly full import.
+    void runExclusively('amocrm-reconcile', async () => {
+      await runAmoReconciliationTick();
     });
   };
 

@@ -2,7 +2,9 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../services/db';
 import { tgSendCode, tgVerifyAndPull } from '../../services/importTelegram';
 import { importFromBitrix24 } from '../../services/importBitrix24';
+import { importFromAmo, previewAmoImport, type AmoImportCursor } from '../../services/amocrm/import';
 import { encryptField, blindIndex } from '../../services/encryption';
+import { can } from '../../services/capabilities';
 
 // ── Telegram ─────────────────────────────────────────────────────────────────
 
@@ -99,6 +101,99 @@ async function bitrix24Import(request: FastifyRequest, reply: FastifyReply): Pro
   }
 }
 
+// ── amoCRM ───────────────────────────────────────────────────────────────────
+
+/**
+ * Fails fast when the org has no usable amoCRM connection.
+ *
+ * Without this the import reaches the token layer and comes back as a generic
+ * 502, which reads as "amoCRM is down" for what is really "nobody has connected
+ * an account yet" or "the refresh token died and a human must re-authorize".
+ * `needs_reauth` in particular must not be retried — amoCRM rotates the refresh
+ * token on every use and hammering an invalid_grant earns a ban.
+ */
+async function requireAmoIntegration(
+  orgId: string,
+  reply: FastifyReply,
+): Promise<boolean> {
+  const integration = await db.amoIntegration.findUnique({
+    where: { organization_id: orgId },
+    select: { status: true, needs_reauth_at: true },
+  });
+
+  if (!integration) {
+    reply.status(409).send({
+      error: { code: 'AMO_NOT_CONNECTED', message: 'amoCRM не подключён к этой организации.' },
+    });
+    return false;
+  }
+
+  if (integration.status === 'needs_reauth' || integration.needs_reauth_at) {
+    reply.status(409).send({
+      error: {
+        code: 'AMO_NEEDS_REAUTH',
+        message: 'Подключение к amoCRM устарело. Авторизуйте интеграцию заново.',
+      },
+    });
+    return false;
+  }
+
+  return true;
+}
+
+async function amocrmImport(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  // Keep the authorization at the controller boundary as well as the global route policy.
+  // This import creates contacts, deals and funnels in bulk; ordinary contact/deal write
+  // access is intentionally insufficient.
+  if (!can(request.user.role, 'contacts.bulk') || !can(request.user.role, 'integrations.manage')) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'amoCRM import requires owner or admin' },
+    });
+    return;
+  }
+  const { include_leads, include_companies, max_records, cursor } = request.body as {
+    include_leads?: boolean;
+    include_companies?: boolean;
+    max_records?: number;
+    cursor?: AmoImportCursor;
+  };
+
+  if (!(await requireAmoIntegration(request.user.org_id, reply))) return;
+
+  try {
+    const result = await importFromAmo(request.user.org_id, request.user.sub, {
+      include_leads,
+      include_companies,
+      max_records,
+      cursor,
+    });
+    // A partial run is a 200, not an error: the counts are real, the rows are
+    // written, and `cursor` is how the caller finishes the job.
+    reply.send({ data: result, meta: { partial: result.partial } });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Ошибка импорта из amoCRM';
+    reply.status(502).send({ error: { code: 'AMOCRM_IMPORT_FAILED', message: msg } });
+  }
+}
+
+async function amocrmPreview(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (!can(request.user.role, 'integrations.manage')) {
+    reply.status(403).send({
+      error: { code: 'FORBIDDEN', message: 'Viewing amoCRM integration data requires owner or admin' },
+    });
+    return;
+  }
+  if (!(await requireAmoIntegration(request.user.org_id, reply))) return;
+
+  try {
+    const preview = await previewAmoImport(request.user.org_id);
+    reply.send({ data: preview, meta: {} });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Ошибка чтения данных amoCRM';
+    reply.status(502).send({ error: { code: 'AMOCRM_PREVIEW_FAILED', message: msg } });
+  }
+}
+
 // ── vCard (parsed client-side, bulk create server-side) ──────────────────────
 
 interface VCardContact {
@@ -191,6 +286,8 @@ export const ImportsController = {
   telegramSendCode,
   telegramVerify,
   bitrix24Import,
+  amocrmImport,
+  amocrmPreview,
   vcardImport,
   whatsappImport,
 };

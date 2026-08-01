@@ -15,6 +15,45 @@ const MS_PER_DAY = 86_400_000;
 /** Guard against a five-year day-by-day request generating an unbounded series. */
 const MAX_REVENUE_BUCKETS = 400;
 
+async function stalledDealsWhere(
+  organizationId: string,
+  defaultThresholdDays: number,
+  pipelineId?: string,
+): Promise<{ where: Prisma.DealWhereInput; hasStageOverrides: boolean }> {
+  const now = new Date();
+  const stages = await db.pipelineStage.findMany({
+    where: {
+      pipeline: {
+        organization_id: organizationId,
+        ...(pipelineId ? { id: pipelineId } : {}),
+      },
+    },
+    select: { id: true, stale_after_days: true },
+  });
+  const fallbackCutoff = new Date(now.getTime() - defaultThresholdDays * MS_PER_DAY);
+  if (stages.length === 0) {
+    return { where: { stage_entered_at: { lt: fallbackCutoff } }, hasStageOverrides: false };
+  }
+
+  const stageIds = stages.map((stage) => stage.id);
+  const clauses: Prisma.DealWhereInput[] = stages.map((stage) => ({
+    stage_id: stage.id,
+    stage_entered_at: {
+      lt: new Date(now.getTime() - (stage.stale_after_days ?? defaultThresholdDays) * MS_PER_DAY),
+    },
+  }));
+  // Defensive fallback for historical rows whose stage was removed before archiving existed.
+  clauses.push(
+    { stage_id: { notIn: stageIds }, stage_entered_at: { lt: fallbackCutoff } },
+    { stage_id: null, stage_entered_at: { lt: fallbackCutoff } },
+  );
+
+  return {
+    where: { OR: clauses },
+    hasStageOverrides: stages.some((stage) => stage.stale_after_days !== null),
+  };
+}
+
 export const REPORT_PERIODS = ['7d', '30d', '90d', 'month', 'quarter', 'year', 'custom'] as const;
 export type ReportPeriod = (typeof REPORT_PERIODS)[number];
 
@@ -467,6 +506,11 @@ export async function getRepPerformance(
   const scope = await resolveReportScope(requester, query);
   const settings = await loadOrgReportingSettings(scope.orgId);
   const stalledSince = new Date(Date.now() - settings.stalled_threshold_days * MS_PER_DAY);
+  const stalled = await stalledDealsWhere(
+    scope.orgId,
+    settings.stalled_threshold_days,
+    query.pipeline_id,
+  );
 
   const dealScope: Prisma.DealWhereInput = {
     organization_id: scope.orgId,
@@ -493,7 +537,7 @@ export async function getRepPerformance(
     }),
     db.deal.groupBy({
       by: ['assigned_to'],
-      where: { ...dealScope, status: DealStatus.open, updated_at: { lt: stalledSince } },
+      where: { ...dealScope, status: DealStatus.open, ...stalled.where },
       _count: { _all: true },
     }),
     db.task.groupBy({
@@ -1008,6 +1052,11 @@ export async function getPipelineHealth(
   const scope = await resolveReportScope(requester, query);
   const settings = await loadOrgReportingSettings(scope.orgId);
   const stalledSince = new Date(Date.now() - settings.stalled_threshold_days * MS_PER_DAY);
+  const stalled = await stalledDealsWhere(
+    scope.orgId,
+    settings.stalled_threshold_days,
+    query.pipeline_id,
+  );
   const base = dealBaseWhere(scope, query);
 
   const [closedRows, openRows, stalledRows, pipelines] = await Promise.all([
@@ -1027,7 +1076,7 @@ export async function getPipelineHealth(
     }),
     db.deal.groupBy({
       by: ['pipeline_id'],
-      where: { ...base, status: DealStatus.open, updated_at: { lt: stalledSince } },
+      where: { ...base, status: DealStatus.open, ...stalled.where },
       _count: { _all: true },
     }),
     db.pipeline.findMany({
@@ -1101,8 +1150,9 @@ export async function getPipelineHealth(
     },
     meta: reportMeta(range, scope, settings.currency, {
       formula: 'won / (won + lost + stalled * decay_factor)',
+      stage_stale_overrides_applied: stalled.hasStageOverrides,
       note:
-        'Always present this as the Pipeline Health Score («Здоровье воронки»), never as a win rate. Won and lost are dated by actual_close inside the range; stalled is a current snapshot of open deals untouched since stalled_since.',
+        'Always present this as the Pipeline Health Score («Здоровье воронки»), never as a win rate. Won and lost are dated by actual_close inside the range; stalled is a current snapshot based on time in the current stage and each stage\'s override (or the organization default).',
     }),
   };
 }

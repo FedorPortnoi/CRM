@@ -3,7 +3,7 @@ import { db } from '../services/db';
 import { validateAuthSession } from '../services/sessions';
 import type { McpUser } from './server';
 
-type McpPrincipal = { sub: string; org_id: string; sid?: string };
+type McpPrincipal = { sub: string; org_id: string; sid?: string; role?: string };
 
 export type McpToolError = {
   error: {
@@ -34,7 +34,7 @@ export async function validateMcpPrincipal(user: McpPrincipal): Promise<McpToolE
   const [activeUser, org] = await Promise.all([
     db.user.findFirst({
       where: { id: user.sub, organization_id: user.org_id, is_active: true },
-      select: { id: true },
+      select: { id: true, role: true },
     }),
     db.org.findUnique({
       where: { id: user.org_id },
@@ -54,6 +54,14 @@ export async function validateMcpPrincipal(user: McpPrincipal): Promise<McpToolE
   if (!activeSession) {
     return mcpError('SESSION_REVOKED', 'Authentication session has expired or was revoked');
   }
+
+  // A JWT captures the role at login, but an owner can demote or re-role a user
+  // while that session is still valid. REST refreshes request.user.role from the
+  // same live row on every request; MCP must do likewise or a demoted admin keeps
+  // organization-management tools until token expiry. Mutating the verified
+  // principal is intentional: both the stdio and in-process invocation paths
+  // pass this exact object on to capability checks and visibility scoping.
+  user.role = activeUser.role;
 
   return null;
 }
@@ -196,6 +204,33 @@ export const MCP_TOOL_CAPABILITIES = {
   get_deals: 'deals.read',
   get_deal: 'deals.read',
   get_pipelines: 'deals.read',
+  get_stage_library: 'deals.read',
+
+  // Funnel configuration is organization administration, not ordinary deal
+  // writing. This mirrors deals.stage_admin -> org.manage in authenticate.ts;
+  // a sales manager may move deals but may not redefine everybody's funnel.
+  create_pipeline_stage: 'org.manage',
+  update_pipeline_stage: 'org.manage',
+  delete_pipeline_stage: 'org.manage',
+  reorder_pipeline_stages: 'org.manage',
+
+  // A reminder is a sub-resource of its task. Handlers additionally resolve
+  // the task through getTaskForUser before touching the reminder table, so the
+  // hierarchy cone stays identical to GET/PATCH /tasks/:id.
+  get_task_reminders: 'tasks.read',
+  create_task_reminder: 'tasks.write',
+  update_task_reminder: 'tasks.write',
+  delete_task_reminder: 'tasks.write',
+
+  // Connection metadata and queue health are integration administration.
+  // Import and preview intentionally match the REST import prefix, which is
+  // contacts.bulk. Both capabilities currently resolve to owner/admin only,
+  // but keeping the semantic distinction prevents a future role from gaining
+  // token visibility merely because it may import contacts (or vice versa).
+  get_amocrm_status: 'integrations.manage',
+  get_amocrm_sync_status: 'integrations.manage',
+  preview_amocrm_import: 'contacts.bulk',
+  import_amocrm: 'contacts.bulk',
 
   get_dashboard: 'revenue.view',
   get_funnel: 'revenue.view',

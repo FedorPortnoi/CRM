@@ -261,6 +261,19 @@ export default function SettingsScreen(): JSX.Element {
           ) : null}
         </View>
       </View>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => router.push('/settings/timezone' as never)}
+        accessibilityRole="button"
+      >
+        <View style={styles.row}>
+          <View style={styles.rowMain}>
+            <Text style={styles.rowLabel}>{t('settings.timezone')}</Text>
+            <Text style={styles.comingSoon}>{t('settings.timezoneEntryDesc')}</Text>
+          </View>
+          <Text style={styles.chevron}>{'>'}</Text>
+        </View>
+      </TouchableOpacity>
 
       <Text style={styles.sectionHeader}>{t('settings.organisation')}</Text>
       <View style={styles.card}>
@@ -288,6 +301,29 @@ export default function SettingsScreen(): JSX.Element {
                 <Text style={styles.comingSoon}>
                   {t('settings.teamMembersDesc')}
                 </Text>
+              </View>
+              <Text style={styles.chevron}>{'>'}</Text>
+            </View>
+          </TouchableOpacity>
+        </>
+      )}
+
+      {(user?.role === 'owner' || user?.role === 'admin') && (
+        <>
+          <Text style={styles.sectionHeader}>{t('pipelines.sectionHeader')}</Text>
+          {/*
+            Sits next to «Планирование продаж» rather than under «Интеграции»: the funnel is
+            what the plan is measured against, not a connector.
+          */}
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => router.push('/settings/pipelines' as never)}
+            accessibilityRole="button"
+          >
+            <View style={styles.row}>
+              <View style={styles.rowMain}>
+                <Text style={styles.rowLabel}>{t('pipelines.settingsEntry')}</Text>
+                <Text style={styles.comingSoon}>{t('pipelines.settingsEntryDesc')}</Text>
               </View>
               <Text style={styles.chevron}>{'>'}</Text>
             </View>
@@ -367,6 +403,19 @@ export default function SettingsScreen(): JSX.Element {
         <>
           <Text style={styles.sectionHeader}>{t('settings.integrations')}</Text>
           <View style={styles.card}>
+            <TouchableOpacity
+              onPress={() => router.push('/settings/amocrm' as never)}
+              accessibilityRole="button"
+            >
+              <View style={styles.row}>
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowLabel}>{t('settings.amocrm')}</Text>
+                  <Text style={styles.comingSoon}>{t('settings.amocrmDesc')}</Text>
+                </View>
+                <Text style={styles.chevron}>{'>'}</Text>
+              </View>
+            </TouchableOpacity>
+            <View style={styles.divider} />
             <TouchableOpacity
               onPress={() => router.push('/settings/api-keys' as never)}
               accessibilityRole="button"

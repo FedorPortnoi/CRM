@@ -1,29 +1,61 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { Expo } from 'expo-server-sdk';
 import { db } from '../../services/db';
-import { sendPush } from '../../services/push';
+import { sendPushToUser } from '../../services/push';
+import {
+  isPushPlatform,
+  isPushProvider,
+  registerPushDevice,
+  PushDeviceOrgConflictError,
+  type PushPlatform,
+  type PushProvider,
+} from '../../services/push-devices';
 
-type RegisterTokenBody = { token: string };
+type RegisterTokenBody = {
+  token: string;
+  provider?: PushProvider;
+  platform?: PushPlatform;
+  app_version?: string;
+  device_name?: string;
+};
 type SendNotificationBody = { user_id: string; title: string; body: string };
 type IdParams = { id: string };
 
 async function registerToken(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-  const { token } = request.body as RegisterTokenBody;
+  const body = request.body as RegisterTokenBody;
+  const { token, app_version, device_name } = body;
+  // Backward compatibility for the currently-installed app, which posts only `{ token }`.
+  // Every token it has ever produced is Expo or raw FCM; RuStore is never inferred because
+  // its opaque token cannot be distinguished from FCM by shape.
+  const provider: PushProvider = body.provider ?? (Expo.isExpoPushToken(token) ? 'expo' : 'fcm');
+  const platform: PushPlatform = body.platform ?? 'unknown';
 
-  const isExpo = Expo.isExpoPushToken(token);
-  // Accept Expo tokens and raw FCM tokens (32+ char alphanumeric strings)
-  const isFcm = !isExpo && /^[A-Za-z0-9_:%-]{32,}$/.test(token);
+  const tokenMatchesProvider =
+    (provider === 'expo' && Expo.isExpoPushToken(token)) ||
+    (provider === 'fcm' && /^[A-Za-z0-9_:%-]{32,}$/.test(token)) ||
+    (provider === 'rustore' && token.length >= 16 && !/\s/.test(token)) ||
+    (provider === 'apns' && token.length >= 32 && !/\s/.test(token));
 
-  if (!isExpo && !isFcm) {
+  const providerAndPlatformAgree =
+    isPushProvider(provider) &&
+    isPushPlatform(platform) &&
+    (provider !== 'rustore' || platform === 'android') &&
+    (provider !== 'apns' || platform === 'ios') &&
+    tokenMatchesProvider;
+
+  if (!providerAndPlatformAgree) {
     reply.status(400).send({
-      error: { code: 'INVALID_PUSH_TOKEN', message: 'Invalid push token' },
+      error: {
+        code: 'INVALID_PUSH_DEVICE',
+        message: 'Push provider, platform, and token do not agree',
+      },
     });
     return;
   }
 
   const existingUser = await db.user.findFirst({
     where: { id: request.user.sub, organization_id: request.user.org_id },
-    select: { push_token: true },
+    select: { id: true },
   });
 
   if (!existingUser) {
@@ -33,53 +65,50 @@ async function registerToken(request: FastifyRequest, reply: FastifyReply): Prom
     return;
   }
 
-  if (existingUser.push_token === token) {
-    reply.send({
-      data: { message: 'Push token already registered', already_registered: true },
-      meta: {},
+  let device;
+  try {
+    device = await registerPushDevice({
+      userId: request.user.sub,
+      organizationId: request.user.org_id,
+      token,
+      provider,
+      platform,
+      appVersion: app_version,
+      deviceName: device_name,
     });
-    return;
+  } catch (error) {
+    if (error instanceof PushDeviceOrgConflictError) {
+      reply.status(409).send({
+        error: { code: error.code, message: error.message },
+      });
+      return;
+    }
+    throw error;
   }
 
-  // De-duplication is scoped to the caller's org. A push token identifies a
-  // device, not a person, so the same token must not stay attached to a second
-  // user who no longer holds that device — otherwise this org's notifications
-  // keep landing on it. Inside the org the caller is a member, so clearing a
-  // colleague's stale row is an authorized write.
-  //
-  // It must NOT reach across orgs. Knowing a token string is not proof of
-  // holding the device: without organization_id here, anyone in any org could
-  // POST a victim's Expo/FCM token and null it out, silently killing the
-  // victim's push notifications from a tenant they have no relationship with.
-  //
-  // SECURITY TODO: that leaves the legitimate case where a device really does
-  // move between orgs (an employee leaves org A, joins org B, same phone) —
-  // org A's row keeps the token and org A keeps pushing to a device someone
-  // else now uses. The DEVICE_NOT_REGISTERED receipt path below only clears it
-  // once the app is uninstalled, not on a re-login. That case cannot be closed
-  // from this handler without re-introducing the unauthenticated cross-tenant
-  // write; the fix belongs where possession IS provable — clearing push_token
-  // on logout/deactivation, or a proof-of-possession challenge push.
-  const [clearedDuplicates] = await db.$transaction([
-    db.user.updateMany({
+  // Preserve the legacy rollback column only for providers the old server understands.
+  // Writing a RuStore token here would make a rolled-back server send it to FCM.
+  if (provider === 'expo' || provider === 'fcm') {
+    await db.user.updateMany({
       where: {
         push_token: token,
         organization_id: request.user.org_id,
         id: { not: request.user.sub },
       },
       data: { push_token: null },
-    }),
-    db.user.updateMany({
+    });
+    await db.user.updateMany({
       where: { id: request.user.sub, organization_id: request.user.org_id },
       data: { push_token: token },
-    }),
-  ]);
+    });
+  }
 
   reply.send({
     data: {
-      message: 'Push token registered',
-      already_registered: false,
-      cleared_duplicate_count: clearedDuplicates.count,
+      message: 'Push device registered',
+      device_id: device.id,
+      provider: device.provider,
+      platform: device.platform,
     },
     meta: {},
   });
@@ -90,7 +119,7 @@ async function sendNotification(request: FastifyRequest, reply: FastifyReply): P
 
   const user = await db.user.findFirst({
     where: { id: user_id, organization_id: request.user.org_id },
-    select: { id: true, push_token: true },
+    select: { id: true },
   });
 
   if (!user) {
@@ -100,35 +129,32 @@ async function sendNotification(request: FastifyRequest, reply: FastifyReply): P
     return;
   }
 
-  if (!user.push_token) {
+  const result = await sendPushToUser(user.id, title, body);
+  if (result.attempted === 0) {
     reply.status(422).send({
-      error: { code: 'NO_PUSH_TOKEN', message: 'User has no registered push token' },
+      error: { code: 'NO_PUSH_TOKEN', message: 'User has no registered push device' },
     });
     return;
   }
 
-  const result = await sendPush(user.push_token, title, body);
-
-  if (!result.ok) {
-    if (result.code === 'DEVICE_NOT_REGISTERED') {
-      await db.user.updateMany({
-        where: { id: user.id, organization_id: request.user.org_id },
-        data: { push_token: null },
-      });
+  if (result.sent === 0) {
+    const allGone = result.devices.every(
+      (device) => !device.result.ok && device.result.code === 'DEVICE_NOT_REGISTERED',
+    );
+    if (allGone) {
       reply.status(422).send({
-        error: { code: 'DEVICE_NOT_REGISTERED', message: 'Device is no longer registered' },
+        error: { code: 'DEVICE_NOT_REGISTERED', message: 'Every registered device is gone' },
       });
       return;
     }
-
     reply.status(502).send({
-      error: { code: 'PUSH_SEND_FAILED', message: result.message },
+      error: { code: 'PUSH_SEND_FAILED', message: 'Push delivery failed for every device' },
     });
     return;
   }
 
   reply.send({
-    data: { message: 'Notification sent' },
+    data: { message: 'Notification sent', sent: result.sent, failed: result.failed },
     meta: {},
   });
 }

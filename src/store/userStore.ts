@@ -42,6 +42,12 @@ type AuthUser = {
   name: string;
   role: string;
   org_id: string;
+  // IANA zone the user's reminders are scheduled in. Optional because the auth
+  // endpoints have to start returning it before the client can rely on it; until
+  // then useDefaultReminderTimezone() falls back to the device zone, then to
+  // Europe/Moscow. A reminder set for 09:00 fires according to this, so a wrong
+  // value is not cosmetic — it moves when the phone rings.
+  timezone?: string;
   onboarding_completed?: boolean;
   must_change_password?: boolean;
   must_change_email?: boolean;
@@ -59,6 +65,7 @@ interface UserState {
   resendVerification: (userId: string, channel: 'email') => Promise<void>;
   changePassword: (newPassword: string) => Promise<void>;
   setCredentials: (email: string, newPassword: string) => Promise<void>;
+  setTimezone: (timezone: string) => Promise<void>;
   logout: () => Promise<void>;
   restoreSession: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
@@ -246,6 +253,24 @@ export const useUserStore = create<UserState>()((set) => ({
     const { data } = body as { data: { user: AuthUser } };
     await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(data.user));
     set({ user: data.user });
+  },
+
+  setTimezone: async (timezone: string): Promise<void> => {
+    const token = await SecureStore.getItemAsync('crm_auth_token');
+    const response = await fetch(`${API_URL}/auth/me/timezone`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token ?? ''}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timezone }),
+    });
+    const body: unknown = await response.json();
+    if (!response.ok) throw new Error(extractErrorMessage(body, response.status));
+
+    const userJson = await SecureStore.getItemAsync('crm_auth_user');
+    if (!userJson) return;
+    const user = JSON.parse(userJson) as AuthUser;
+    const updated = { ...user, timezone };
+    await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(updated));
+    set({ user: updated });
   },
 
   logout: async (): Promise<void> => {

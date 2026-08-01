@@ -42,6 +42,9 @@ const ACTION_CAPABILITY: Record<string, Capability> = {
   'deals.mutate': 'deals.write',
   'contacts.bulk_admin': 'contacts.bulk',
   'deals.read': 'deals.read',
+  'tasks.reminders_read': 'tasks.read',
+  'tasks.reminders_write': 'tasks.write',
+  'integrations.amocrm_manage': 'integrations.manage',
   // Minting an invite link IS adding a member — the account it creates is real
   // the moment the link is redeemed. Gated identically to the rest of team
   // administration so the link route cannot become a softer door into the org
@@ -59,6 +62,24 @@ const ACTION_CAPABILITY: Record<string, Capability> = {
 
 function isReadOnlyMethod(method: string): boolean {
   return method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+}
+
+/**
+ * Account/session maintenance is not business-data mutation. A read-only role
+ * must still be able to sign out, rotate its own password and set the timezone
+ * used to interpret reminders.
+ */
+function isSelfServiceWrite(request: FastifyRequest): boolean {
+  const path = apiPath(request);
+  const method = request.method.toUpperCase();
+  return (
+    (method === 'POST' && (path === '/api/v1/auth/logout' || path === '/api/v1/auth/logout-all')) ||
+    (method === 'PATCH' && (
+      path === '/api/v1/auth/me/password' ||
+      path === '/api/v1/auth/me/credentials' ||
+      path === '/api/v1/auth/me/timezone'
+    ))
+  );
 }
 
 function apiPath(request: FastifyRequest): string {
@@ -100,6 +121,18 @@ function isPublicApiRoute(request: FastifyRequest): boolean {
   }
 
   if (method === 'POST' && path === '/api/v1/calendar/webhooks/yandex') {
+    return true;
+  }
+
+  // amoCRM arrives without a 4KUB session on both of these routes. The OAuth
+  // callback is authenticated by its short-lived signed state; the webhook is
+  // authenticated by the per-organization secret embedded in the subscribed
+  // destination URL (and accepts a provider signature as an additional proof).
+  if (method === 'GET' && path === '/api/v1/amocrm/callback') {
+    return true;
+  }
+
+  if (method === 'POST' && path === '/api/v1/integrations/amocrm/webhook') {
     return true;
   }
 
@@ -153,6 +186,23 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
     return { action: 'audit.read', reason: 'audit access requires owner or admin' };
   }
 
+  if (/^\/api\/v1\/tasks\/[^/]+\/reminders(?:\/[^/]+)?$/.test(path)) {
+    return isReadOnlyMethod(method)
+      ? { action: 'tasks.reminders_read', reason: 'reading task reminders requires tasks.read' }
+      : { action: 'tasks.reminders_write', reason: 'changing task reminders requires tasks.write' };
+  }
+
+  // Status, consent start, webhook subscription, reconciliation, conflict
+  // inspection and disconnect all expose or change the organization-wide amoCRM
+  // connection. The callback is public and re-checks the initiating user's live
+  // role from its signed state inside the controller.
+  if (path.startsWith('/api/v1/amocrm') && path !== '/api/v1/amocrm/callback') {
+    return {
+      action: 'integrations.amocrm_manage',
+      reason: 'managing the amoCRM integration requires owner or admin',
+    };
+  }
+
   // Invite links. The three public redemption routes below (/invites/open,
   // /invites/lookup, /invites/accept) are NOT matched here — they are
   // unauthenticated by necessity, since the person redeeming has no account yet,
@@ -181,9 +231,18 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
   // `deals.read` is held by every role except `support`, so this narrows exactly
   // one role and matches that role's stated design. The MCP twin of this gate
   // lives in mcp/validation.ts — both doors, or neither.
+  //
+  // `/deals/stages/library` is listed explicitly because it is TWO segments past
+  // `/deals`, and every clause above it stops at one: the regex is `[^/]+$`, and the
+  // two literals are exact. A read that matches no clause here is authenticated but
+  // ungated, which is how `support` — the one role this branch exists to exclude —
+  // could read it. Any future `/deals/<a>/<b>` GET has the same hole by default.
   if (
     method === 'GET' &&
-    (path === '/api/v1/deals' || path === '/api/v1/deals/pipelines' || /^\/api\/v1\/deals\/[^/]+$/.test(path))
+    (path === '/api/v1/deals' ||
+      path === '/api/v1/deals/pipelines' ||
+      path === '/api/v1/deals/stages/library' ||
+      /^\/api\/v1\/deals\/[^/]+$/.test(path))
   ) {
     return { action: 'deals.read', reason: 'reading the pipeline requires deals.read' };
   }
@@ -380,7 +439,8 @@ export async function enforceAuthenticatedApiRequest(
   // whatever holds no write capability, which the capability tests pin.
   if (
     !hasAnyWriteCapability(activeUser.role) &&
-    !isReadOnlyMethod(request.method.toUpperCase())
+    !isReadOnlyMethod(request.method.toUpperCase()) &&
+    !isSelfServiceWrite(request)
   ) {
     return reply.status(403).send({
       error: { code: 'FORBIDDEN', message: 'This role has read-only access' },

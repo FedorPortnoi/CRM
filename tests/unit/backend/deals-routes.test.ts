@@ -40,9 +40,11 @@ vi.mock('../../../backend/api/controllers/deals', () => ({
     updatePipeline: routeMocks.noop,
     deletePipeline: routeMocks.noop,
     listStages: routeMocks.noop,
+    stageLibrary: routeMocks.noop,
     createStage: routeMocks.noop,
     updateStage: routeMocks.noop,
     deleteStage: routeMocks.noop,
+    reorderStages: routeMocks.noop,
   },
 }));
 

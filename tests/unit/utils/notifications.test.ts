@@ -47,9 +47,19 @@ const mocks = vi.hoisted(() => {
     getExpoPushTokenAsync: vi.fn(),
     scheduleNotificationAsync: vi.fn(),
     cancelScheduledNotificationAsync: vi.fn(),
+    getAllScheduledNotificationsAsync: vi.fn(async () => []),
+    storageGetItem: vi.fn(async () => null),
+    storageSetItem: vi.fn(async () => undefined),
     fetch: vi.fn(),
   };
 });
+
+vi.mock('@react-native-async-storage/async-storage', () => ({
+  default: {
+    getItem: mocks.storageGetItem,
+    setItem: mocks.storageSetItem,
+  },
+}));
 
 vi.mock('react-native', () => ({
   Platform: {
@@ -74,6 +84,7 @@ function notificationModuleMock() {
     getExpoPushTokenAsync: mocks.getExpoPushTokenAsync,
     scheduleNotificationAsync: mocks.scheduleNotificationAsync,
     cancelScheduledNotificationAsync: mocks.cancelScheduledNotificationAsync,
+    getAllScheduledNotificationsAsync: mocks.getAllScheduledNotificationsAsync,
   };
 
   return {
@@ -104,6 +115,9 @@ let notifyUnknownCallCapture: typeof import('../../../src/utils/notifications').
 let notifyPendingCaptureCount: typeof import('../../../src/utils/notifications').notifyPendingCaptureCount;
 let registerDevicePushToken: typeof import('../../../src/utils/notifications').registerDevicePushToken;
 let scheduleTaskDueReminder: typeof import('../../../src/utils/notifications').scheduleTaskDueReminder;
+let cleanupLegacyTaskDueReminders: typeof import('../../../src/utils/notifications').cleanupLegacyTaskDueReminders;
+let subscribeToRuStorePushTokenRefresh: typeof import('../../../src/utils/notifications').subscribeToRuStorePushTokenRefresh;
+let setRuStorePushModuleForTests: typeof import('../../../src/utils/notifications').__setRuStorePushModuleForTests;
 
 describe('notifications utilities', () => {
   beforeAll(async () => {
@@ -112,6 +126,9 @@ describe('notifications utilities', () => {
     notifyPendingCaptureCount = notifications.notifyPendingCaptureCount;
     registerDevicePushToken = notifications.registerDevicePushToken;
     scheduleTaskDueReminder = notifications.scheduleTaskDueReminder;
+    cleanupLegacyTaskDueReminders = notifications.cleanupLegacyTaskDueReminders;
+    subscribeToRuStorePushTokenRefresh = notifications.subscribeToRuStorePushTokenRefresh;
+    setRuStorePushModuleForTests = notifications.__setRuStorePushModuleForTests;
   });
 
   beforeEach(() => {
@@ -119,6 +136,9 @@ describe('notifications utilities', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-21T12:00:00.000Z'));
     vi.stubGlobal('fetch', mocks.fetch);
+    mocks.storageGetItem.mockResolvedValue(null);
+    mocks.getAllScheduledNotificationsAsync.mockResolvedValue([]);
+    setRuStorePushModuleForTests(null);
   });
 
   afterEach(() => {
@@ -157,11 +177,17 @@ describe('notifications utilities', () => {
     expect(mocks.fetch).toHaveBeenCalledWith(
       'https://api.example.com/api/v1/notifications/register',
       expect.objectContaining({
-        body: JSON.stringify({ token: 'ExponentPushToken[requested]' }),
+        body: JSON.stringify({
+          token: 'ExponentPushToken[requested]',
+          provider: 'expo',
+          platform: 'ios',
+        }),
       }),
     );
   });
 
+  // The device descriptor, not a bare token: an opaque RuStore token and an opaque FCM token
+  // are the same shape, so the server cannot infer the transport from the string alone.
   it('registers an Expo push token with the shared API URL', async () => {
     mocks.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
     mocks.getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[test]' });
@@ -177,8 +203,35 @@ describe('notifications utilities', () => {
         'Content-Type': 'application/json',
         Authorization: 'Bearer token-2',
       },
-      body: JSON.stringify({ token: 'ExponentPushToken[test]' }),
+      body: JSON.stringify({
+        token: 'ExponentPushToken[test]',
+        provider: 'expo',
+        platform: 'ios',
+      }),
     });
+  });
+
+  it('falls back to an Expo token on Android when RuStore is not configured', async () => {
+    // A build with no EXPO_PUBLIC_RUSTORE_PROJECT_ID must keep working exactly as before,
+    // rather than registering nothing.
+    mocks.setPlatformOS('android');
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mocks.getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[android]' });
+    mocks.fetch.mockResolvedValue(new Response('', { status: 200 }));
+
+    const registered = await registerDevicePushToken('token-android');
+
+    expect(registered).toBe(true);
+    expect(mocks.fetch).toHaveBeenCalledWith(
+      'https://api.example.com/api/v1/notifications/register',
+      expect.objectContaining({
+        body: JSON.stringify({
+          token: 'ExponentPushToken[android]',
+          provider: 'expo',
+          platform: 'android',
+        }),
+      }),
+    );
   });
 
   it('does not register a push token when the Expo project id is missing', async () => {
@@ -260,6 +313,63 @@ describe('notifications utilities', () => {
         identifier: 'task-due-task-4',
       }),
     );
+  });
+
+  it('removes only legacy task alarms once after server reminders take ownership', async () => {
+    mocks.getAllScheduledNotificationsAsync.mockResolvedValue([
+      { identifier: 'task-due-task-1' },
+      { identifier: 'call-capture-1' },
+    ] as never);
+
+    await expect(cleanupLegacyTaskDueReminders()).resolves.toBe(1);
+
+    expect(mocks.cancelScheduledNotificationAsync).toHaveBeenCalledTimes(1);
+    expect(mocks.cancelScheduledNotificationAsync).toHaveBeenCalledWith('task-due-task-1');
+    expect(mocks.storageSetItem).toHaveBeenCalledWith(
+      '@4kub/notifications/server-reminders-v1',
+      'done',
+    );
+  });
+
+  it('uploads the object-shaped token emitted by RuStore 6.9.1 after rotation', async () => {
+    let tokenListener: ((payload: { token: string }) => void) | undefined;
+    const remove = vi.fn();
+    setRuStorePushModuleForTests({
+      default: {
+        getToken: vi.fn(),
+        deleteToken: vi.fn(),
+        checkPushAvailability: vi.fn(),
+        createPushEmitter: vi.fn(),
+        deletePushEmitter: vi.fn(),
+        getInitialNotification: vi.fn(),
+      },
+      eventEmitter: {
+        addListener: vi.fn((_event: string, listener: (payload: never) => void) => {
+          tokenListener = listener as unknown as (payload: { token: string }) => void;
+          return { remove };
+        }),
+      },
+    } as never);
+    mocks.fetch.mockResolvedValue(new Response('', { status: 200 }));
+
+    const unsubscribe = subscribeToRuStorePushTokenRefresh(() => 'session-token');
+    tokenListener?.({ token: 'rotated-rustore-token' });
+
+    await vi.waitFor(() => {
+      expect(mocks.fetch).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/notifications/register',
+        expect.objectContaining({
+          body: expect.stringContaining('rotated-rustore-token'),
+        }),
+      );
+    });
+    expect(JSON.parse(mocks.fetch.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      token: 'rotated-rustore-token',
+      provider: 'rustore',
+      platform: 'android',
+    });
+    unsubscribe();
+    expect(remove).toHaveBeenCalledTimes(1);
   });
 
   it('does not schedule unknown caller notifications without permission', async () => {

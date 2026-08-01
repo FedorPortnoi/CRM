@@ -74,6 +74,26 @@ vi.mock('../../../backend/services/db', () => ({
 
 vi.mock('../../../backend/services/push', () => ({
   sendPush: vi.fn(async () => ({ ok: true })),
+  sendPushToUser: vi.fn(async () => ({ attempted: 0, sent: 0, failed: 0, devices: [] })),
+}));
+
+const registerPushDevice = vi.hoisted(() => vi.fn(async (input: Record<string, unknown>) => ({
+  id: 'device-1',
+  user_id: input.userId,
+  token: input.token,
+  provider: input.provider,
+  platform: input.platform,
+  app_version: null,
+  device_name: null,
+})));
+
+vi.mock('../../../backend/services/push-devices', () => ({
+  isPushProvider: (value: unknown) => ['rustore', 'apns', 'expo', 'fcm'].includes(String(value)),
+  isPushPlatform: (value: unknown) => ['android', 'ios', 'web'].includes(String(value)),
+  registerPushDevice,
+  PushDeviceOrgConflictError: class PushDeviceOrgConflictError extends Error {
+    readonly code = 'PUSH_DEVICE_ORG_CONFLICT';
+  },
 }));
 
 // Keep the real deriveOrgScopedKey and isAllowedUploadMimeType — both are under
@@ -124,10 +144,6 @@ function errorCode(reply: Record<string, unknown>): string | undefined {
   return (reply.payload as { error?: { code: string } } | undefined)?.error?.code;
 }
 
-function clearedCount(reply: Record<string, unknown>): number {
-  return (reply.payload as { data: { cleared_duplicate_count: number } }).data.cleared_duplicate_count;
-}
-
 // --- 1. The cross-tenant push-token write -----------------------------------
 
 describe('registerToken de-duplication is org-scoped', () => {
@@ -143,21 +159,20 @@ describe('registerToken de-duplication is org-scoped', () => {
     const reply = makeReply();
 
     await NotificationsController.registerToken(
-      { body: { token: SHARED_TOKEN }, user: { sub: ATTACKER, org_id: ORG_B, role: 'member' } } as never,
+      { body: { token: SHARED_TOKEN, provider: 'fcm', platform: 'android' }, user: { sub: ATTACKER, org_id: ORG_B, role: 'member' } } as never,
       reply as never,
     );
 
     // The load-bearing assertion: the victim's device is still reachable.
     expect(users.find((u) => u.id === VICTIM)?.push_token).toBe(SHARED_TOKEN);
     expect(reply.statusCode).toBeUndefined();
-    expect(clearedCount(reply)).toBe(0);
   });
 
   it('the attacker still gets the token recorded on their own row', async () => {
     const reply = makeReply();
 
     await NotificationsController.registerToken(
-      { body: { token: SHARED_TOKEN }, user: { sub: ATTACKER, org_id: ORG_B, role: 'member' } } as never,
+      { body: { token: SHARED_TOKEN, provider: 'fcm', platform: 'android' }, user: { sub: ATTACKER, org_id: ORG_B, role: 'member' } } as never,
       reply as never,
     );
 
@@ -168,13 +183,12 @@ describe('registerToken de-duplication is org-scoped', () => {
     const reply = makeReply();
 
     await NotificationsController.registerToken(
-      { body: { token: SHARED_TOKEN }, user: { sub: COLLEAGUE, org_id: ORG_A, role: 'member' } } as never,
+      { body: { token: SHARED_TOKEN, provider: 'fcm', platform: 'android' }, user: { sub: COLLEAGUE, org_id: ORG_A, role: 'member' } } as never,
       reply as never,
     );
 
     expect(users.find((u) => u.id === VICTIM)?.push_token).toBeNull();
     expect(users.find((u) => u.id === COLLEAGUE)?.push_token).toBe(SHARED_TOKEN);
-    expect(clearedCount(reply)).toBe(1);
   });
 });
 

@@ -36,6 +36,7 @@ const DEAL = '77777777-7777-4777-8777-000000000201';
 const PIPELINE = '77777777-7777-4777-8777-000000000301';
 const STAGE = '77777777-7777-4777-8777-000000000401';
 const TASK = '77777777-7777-4777-8777-000000000501';
+const REMINDER = '77777777-7777-4777-8777-000000000502';
 const EVENT = '77777777-7777-4777-8777-000000000601';
 
 // ─── Boot the real registry outside a running server ──────────────────────────
@@ -48,7 +49,8 @@ vi.mock('../../../backend/config/security', () => ({
   getJwtSecret: () => 'test-secret-not-a-real-key-0123456789abcdef',
 }));
 vi.mock('fast-jwt', () => ({ createVerifier: () => () => ({}) }));
-vi.mock('../../../backend/services/audit', () => ({ auditLog: vi.fn() }));
+const auditLogMock = vi.hoisted(() => vi.fn());
+vi.mock('../../../backend/services/audit', () => ({ auditLog: auditLogMock }));
 
 /**
  * Every Prisma entry point a tool in the registry can mutate through. They are
@@ -83,6 +85,11 @@ const dbMock = vi.hoisted(() => ({
   },
   pipeline: { findMany: vi.fn(async () => []) },
   pipelineStage: { findFirst: vi.fn(async () => null) },
+  amoSyncJob: {
+    groupBy: vi.fn(async () => []),
+    findMany: vi.fn(async () => []),
+  },
+  amoSyncConflict: { count: vi.fn(async () => 0) },
 }));
 
 vi.mock('../../../backend/services/db', () => ({ db: dbMock }));
@@ -112,7 +119,7 @@ const dealDomainMock = vi.hoisted(() => ({
 
 const taskDomainMock = vi.hoisted(() => ({
   listTasksForUser: vi.fn(async () => ({ data: [], total: 0 })),
-  getTaskForUser: vi.fn(async () => null),
+  getTaskForUser: vi.fn(async () => ({ id: '77777777-7777-4777-8777-000000000501' })),
   createTaskForUser: vi.fn(async () => ({ ok: true, task: { id: 'task-fixture' } })),
   updateTaskForUser: vi.fn(async () => ({ ok: true, task: { id: 'task-fixture' } })),
   completeTaskForUser: vi.fn(async () => ({ ok: true, task: { id: 'task-fixture' } })),
@@ -122,6 +129,51 @@ const taskDomainMock = vi.hoisted(() => ({
 vi.mock('../../../backend/services/contact-domain', () => contactDomainMock);
 vi.mock('../../../backend/services/deal-domain', () => dealDomainMock);
 vi.mock('../../../backend/services/task-domain', () => taskDomainMock);
+
+const pipelineDomainMock = vi.hoisted(() => ({
+  PipelineDomainError: class PipelineDomainError extends Error {
+    domainError = { code: 'PIPELINE_ERROR', message: 'Pipeline error' };
+  },
+  stageLibraryForPipeline: vi.fn(async () => ({ pipeline_id: '77777777-7777-4777-8777-000000000301', entries: [] })),
+  createStage: vi.fn(async () => ({ id: '77777777-7777-4777-8777-000000000401' })),
+  updateStage: vi.fn(async () => ({ id: '77777777-7777-4777-8777-000000000401' })),
+  deleteStage: vi.fn(async () => ({ deleted_stage_id: '77777777-7777-4777-8777-000000000401', moved_deals: 0, moved_to: null })),
+  reorderStages: vi.fn(async () => [{ id: '77777777-7777-4777-8777-000000000401' }]),
+}));
+
+const reminderDomainMock = vi.hoisted(() => ({
+  listTaskReminders: vi.fn(async () => []),
+  createTaskReminder: vi.fn(async () => ({ ok: true, reminder: { id: '77777777-7777-4777-8777-000000000502' } })),
+  updateTaskReminder: vi.fn(async () => ({ ok: true, reminder: { id: '77777777-7777-4777-8777-000000000502' } })),
+  deleteTaskReminder: vi.fn(async () => ({ ok: true })),
+}));
+
+const amoAuthMock = vi.hoisted(() => ({
+  amoConfigured: vi.fn(() => true),
+  getIntegration: vi.fn(async () => ({
+    connected: true,
+    status: 'active',
+    subdomain: 'fixture',
+    base_url: 'https://fixture.amocrm.ru',
+    token_expires_at: null,
+    needs_reauth_at: null,
+    last_sync_at: null,
+    last_error: null,
+    webhook_count: 0,
+    connected_by: '77777777-7777-4777-8777-00000000000a',
+    connected_at: null,
+  })),
+}));
+
+const amoImportMock = vi.hoisted(() => ({
+  previewAmoImport: vi.fn(async () => ({ pipelines: [], warnings: [] })),
+  importFromAmo: vi.fn(async () => ({ partial: false })),
+}));
+
+vi.mock('../../../backend/services/pipeline-domain', () => pipelineDomainMock);
+vi.mock('../../../backend/services/reminders', () => reminderDomainMock);
+vi.mock('../../../backend/services/amocrm/auth', () => amoAuthMock);
+vi.mock('../../../backend/services/amocrm/import', () => amoImportMock);
 
 // The cone is a different axis (see capabilities.ts). Pinned wide open here on
 // purpose: a refusal in this file must be attributable to the ROLE, never to
@@ -192,6 +244,27 @@ const ARGS: Partial<Record<McpGatedTool, Record<string, unknown>>> = {
   update_task: { id: TASK, title: 'Перезвонить' },
   complete_task: { id: TASK },
 
+  get_stage_library: { pipeline_id: PIPELINE },
+  create_pipeline_stage: { pipeline_id: PIPELINE, name: 'Переговоры' },
+  update_pipeline_stage: { id: STAGE, probability: 50 },
+  delete_pipeline_stage: { id: STAGE },
+  reorder_pipeline_stages: { pipeline_id: PIPELINE, ordered_ids: [STAGE] },
+
+  get_task_reminders: { task_id: TASK },
+  create_task_reminder: {
+    task_id: TASK,
+    frequency: 'daily',
+    time_of_day: '09:00',
+    expires_at: '2026-09-01T00:00:00.000Z',
+  },
+  update_task_reminder: { task_id: TASK, reminder_id: REMINDER, time_of_day: '10:00' },
+  delete_task_reminder: { task_id: TASK, reminder_id: REMINDER },
+
+  get_amocrm_status: {},
+  get_amocrm_sync_status: {},
+  preview_amocrm_import: {},
+  import_amocrm: { include_leads: true, include_companies: true, max_records: 100 },
+
   create_event: {
     title: 'Встреча',
     start_time: '2026-08-01T10:00:00.000Z',
@@ -218,6 +291,14 @@ function writeMocks(): Array<{ mock: { calls: unknown[][] } }> {
     taskDomainMock.createTaskForUser,
     taskDomainMock.updateTaskForUser,
     taskDomainMock.completeTaskForUser,
+    pipelineDomainMock.createStage,
+    pipelineDomainMock.updateStage,
+    pipelineDomainMock.deleteStage,
+    pipelineDomainMock.reorderStages,
+    reminderDomainMock.createTaskReminder,
+    reminderDomainMock.updateTaskReminder,
+    reminderDomainMock.deleteTaskReminder,
+    amoImportMock.importFromAmo,
   ];
 }
 
@@ -327,6 +408,13 @@ describe('the specific holes that were open', () => {
       message: mcpCapabilityDeniedMessage('deals.write'),
     });
     expect(dealDomainMock.createDealForUser).not.toHaveBeenCalled();
+    expect(auditLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'mcp.tool.create_deal',
+        outcome: 'denied',
+        metadata: expect.objectContaining({ reason: 'FORBIDDEN' }),
+      }),
+    );
   });
 
   it('…while the same support user may still create a contact and a task', async () => {
@@ -373,6 +461,143 @@ describe('the specific holes that were open', () => {
     expect(await refusedByCapabilityGate('merge_contacts', 'member')).toBe(true);
     expect(await refusedByCapabilityGate('merge_contacts', 'support')).toBe(true);
     expect(dbMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('only owner/admin can redefine the funnel or inspect the amoCRM connection', async () => {
+    for (const role of ['head', 'member', 'accountant', 'marketer', 'support', 'viewer'] as const) {
+      expect(await refusedByCapabilityGate('create_pipeline_stage', role)).toBe(true);
+      expect(await refusedByCapabilityGate('reorder_pipeline_stages', role)).toBe(true);
+      expect(await refusedByCapabilityGate('get_amocrm_status', role)).toBe(true);
+      expect(await refusedByCapabilityGate('get_amocrm_sync_status', role)).toBe(true);
+    }
+    expect(await refusedByCapabilityGate('create_pipeline_stage', 'owner')).toBe(false);
+    expect(await refusedByCapabilityGate('create_pipeline_stage', 'admin')).toBe(false);
+  });
+
+  it('task reminder control follows tasks.read/tasks.write for every role', async () => {
+    for (const role of ROLES) {
+      expect(await refusedByCapabilityGate('get_task_reminders', role)).toBe(false);
+      expect(await refusedByCapabilityGate('create_task_reminder', role)).toBe(
+        !can(role, 'tasks.write'),
+      );
+      expect(await refusedByCapabilityGate('delete_task_reminder', role)).toBe(
+        !can(role, 'tasks.write'),
+      );
+    }
+  });
+
+  it('amoCRM import is the contacts.bulk tier and never falls back to a generic write grant', async () => {
+    for (const role of ROLES) {
+      expect(await refusedByCapabilityGate('preview_amocrm_import', role)).toBe(
+        !can(role, 'contacts.bulk'),
+      );
+      expect(await refusedByCapabilityGate('import_amocrm', role)).toBe(
+        !can(role, 'contacts.bulk'),
+      );
+    }
+  });
+});
+
+// ═══ 2b. New control surfaces keep the same tenant/cone boundaries ═══════════
+
+describe('funnel, reminder and amoCRM tools stay inside the caller boundary', () => {
+  it('passes the authenticated org to funnel administration, never an org from model arguments', async () => {
+    await invokeMcpTool(
+      'create_pipeline_stage',
+      { pipeline_id: PIPELINE, name: 'Переговоры', organization_id: 'attacker-org' },
+      principal('admin'),
+    );
+
+    expect(pipelineDomainMock.createStage).toHaveBeenCalledWith(
+      ORG,
+      expect.objectContaining({ pipeline_id: PIPELINE, name: 'Переговоры' }),
+    );
+    expect(pipelineDomainMock.createStage).not.toHaveBeenCalledWith(
+      'attacker-org',
+      expect.anything(),
+    );
+  });
+
+  it('resolves task visibility before touching a reminder sub-resource', async () => {
+    taskDomainMock.getTaskForUser.mockResolvedValueOnce(null as never);
+
+    const outcome = await invokeMcpTool(
+      'create_task_reminder',
+      { ...ARGS.create_task_reminder },
+      principal('member'),
+    );
+
+    expect(errorOf(outcome.ok ? outcome.result : null)).toEqual({
+      code: 'TASK_NOT_FOUND',
+      message: 'Task not found',
+    });
+    expect(reminderDomainMock.createTaskReminder).not.toHaveBeenCalled();
+  });
+
+  it('creates a reminder through the caller org after the task cone admits it', async () => {
+    await invokeMcpTool(
+      'create_task_reminder',
+      { ...ARGS.create_task_reminder, organization_id: 'attacker-org' },
+      principal('support'),
+    );
+
+    expect(taskDomainMock.getTaskForUser).toHaveBeenCalledWith(
+      TASK,
+      ORG,
+      expect.objectContaining({ sub: CALLER, org_id: ORG, role: 'support' }),
+    );
+    expect(reminderDomainMock.createTaskReminder).toHaveBeenCalledWith(
+      TASK,
+      ORG,
+      expect.objectContaining({ frequency: 'daily', time_of_day: '09:00' }),
+      expect.objectContaining({ sub: CALLER, org_id: ORG, role: 'support' }),
+    );
+  });
+
+  it('scopes amoCRM import to the authenticated org and actor', async () => {
+    await invokeMcpTool(
+      'import_amocrm',
+      { ...ARGS.import_amocrm, organization_id: 'attacker-org', user_id: 'attacker-user' },
+      principal('owner'),
+    );
+
+    expect(amoImportMock.importFromAmo).toHaveBeenCalledWith(
+      ORG,
+      CALLER,
+      expect.objectContaining({ include_leads: true, include_companies: true, max_records: 100 }),
+    );
+  });
+
+  it('scopes every sync-observation query and never selects payload or conflict values', async () => {
+    await invokeMcpTool('get_amocrm_sync_status', {}, principal('admin'));
+
+    expect(dbMock.amoSyncJob.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organization_id: ORG } }),
+    );
+    expect(dbMock.amoSyncJob.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organization_id: ORG },
+        select: expect.not.objectContaining({ payload: true, error_message: true }),
+      }),
+    );
+    expect(dbMock.amoSyncConflict.count).toHaveBeenCalledWith({
+      where: { organization_id: ORG },
+    });
+  });
+
+  it('does not expose amoCRM authorization, disconnect or credential fields to the model', async () => {
+    const catalogue = await listMcpTools(principal('owner'));
+    const names = catalogue.map((tool) => tool.name);
+
+    expect(names).not.toContain('connect_amocrm');
+    expect(names).not.toContain('disconnect_amocrm');
+    expect(names).not.toContain('reauthorize_amocrm');
+
+    const amoSchemas = catalogue
+      .filter((tool) => tool.name.includes('amocrm'))
+      .map((tool) => JSON.stringify(tool.inputSchema).toLowerCase())
+      .join('\n');
+    expect(amoSchemas).not.toMatch(/client_secret|access_token|refresh_token|authorization_code/);
   });
 });
 
@@ -440,6 +665,9 @@ describe('listMcpTools offers a role only what that role can invoke', () => {
     expect(support).not.toContain('merge_contacts');
     expect(support).not.toContain('get_revenue');
     expect(support).not.toContain('get_dashboard');
+    expect(support).toContain('create_task_reminder');
+    expect(support).not.toContain('create_pipeline_stage');
+    expect(support).not.toContain('get_amocrm_status');
   });
 
   it('accountant is offered the analytics and none of the writes', async () => {
@@ -488,7 +716,7 @@ describe('listMcpTools offers a role only what that role can invoke', () => {
 describe('the table cannot silently fall behind the registry', () => {
   // Every verb the registry uses for a mutation. A tool named with one of these
   // and absent from MCP_TOOL_CAPABILITIES is a write with no declared capability.
-  const MUTATING_PREFIXES = ['create_', 'update_', 'delete_', 'archive_', 'cancel_', 'complete_', 'merge_', 'move_', 'assign_', 'send_'];
+  const MUTATING_PREFIXES = ['create_', 'update_', 'delete_', 'archive_', 'cancel_', 'complete_', 'merge_', 'move_', 'reorder_', 'assign_', 'send_', 'import_'];
 
   it('every mutating tool in the live registry has a capability mapped', async () => {
     const registry = (await listMcpTools(principal('owner'))).map((t) => t.name);
