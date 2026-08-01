@@ -183,6 +183,11 @@ model User {
   role              UserRole  @default(member)
   avatar_url        String?
   phone             String?
+  // IANA zone name. Every reminder this user schedules is interpreted here, so a
+  // wall-clock "09:00" means 09:00 where they are rather than 09:00 UTC — the whole
+  // point of letting them pick a time at all. Defaults to the market's zone; see
+  // DEFAULT_TIME_ZONE in backend/config/market.ts.
+  timezone               String    @default("Europe/Moscow")
   is_active              Boolean   @default(true)
   onboarding_state       Json?
   preferences            Json?
@@ -235,6 +240,9 @@ model User {
   assistantConversations  AssistantConversation[] @relation("AssistantConversationUser")
   createdInvites          Invite[]               @relation("InviteCreatedBy")
   acceptedInvite          Invite[]               @relation("InviteAcceptedBy")
+  pushDevices             PushDevice[]           @relation("PushDeviceUser")
+  taskReminders           TaskReminder[]         @relation("TaskReminderRecipient")
+  connectedAmoIntegrations AmoIntegration[]      @relation("AmoIntegrationConnectedBy")
 
   // Employees log in by username, which only needs to be unique inside their org.
   @@unique([organization_id, username])
@@ -285,6 +293,11 @@ model Org {
   assistantConversations AssistantConversation[]
   assistantMessages      AssistantMessage[]
   invites                Invite[]
+  taskReminders          TaskReminder[]
+  amoIntegration         AmoIntegration?
+  amoEntityMaps          AmoEntityMap[]
+  amoSyncJobs            AmoSyncJob[]
+  amoSyncConflicts       AmoSyncConflict[]
 
   @@map("organizations")
 }
@@ -464,6 +477,7 @@ model Task {
   assignee     User     @relation("TaskAssignedTo", fields: [assigned_to], references: [id])
   creator      User?    @relation("TaskCreatedBy", fields: [created_by], references: [id])
   completer    User?    @relation("TaskCompletedBy", fields: [completed_by], references: [id])
+  reminders    TaskReminder[]
 
   @@index([organization_id, status, due_date])
   @@index([organization_id, created_at])
@@ -575,6 +589,14 @@ model PipelineStage {
   color         String?
   is_won_stage  Boolean  @default(false)
   is_lost_stage Boolean  @default(false)
+  // Per-stage close probability, offered as the default when a deal lands here.
+  probability      Int?
+  // Overrides Org.stalled_threshold_days for this stage: "Согласование договора"
+  // legitimately sits for weeks where "Новый лид" should not.
+  stale_after_days Int?
+  // Retiring a stage that carries history must not delete the history. Archived
+  // stages disappear from pickers and the kanban but keep their deals readable.
+  is_archived      Boolean  @default(false)
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
@@ -1092,5 +1114,228 @@ model AssistantMessage {
   conversation AssistantConversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
 
   @@index([conversation_id, seq])
+  @@index([organization_id, created_at])
+}
+
+// ─── Reminders ────────────────────────────────────────────────────────────────
+
+enum ReminderFrequency {
+  once
+  daily
+  weekdays
+  weekly
+  custom
+}
+
+/// A repeating reminder schedule attached to a task.
+///
+/// Task.reminder_at survives as the one-shot field the public API and the client's local
+/// notification still read; this table is what the scheduler actually scans. Separating them
+/// is what allows more than one rule per task (the assignee at 09:00 daily, their manager
+/// once on the due date) without widening Task for every future variation.
+///
+/// next_fire_at is materialized rather than computed per tick: the scheduler's hot query is
+/// "everything due", and that has to be an index seek, not a recurrence-rule evaluation over
+/// every active reminder in the database.
+model TaskReminder {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  task_id         String            @db.Uuid
+  organization_id String            @db.Uuid
+  recipient_id    String            @db.Uuid
+  frequency       ReminderFrequency
+  /// Wall-clock local time, "HH:MM". Text on purpose — the instant it maps to moves with the
+  /// calendar (DST), so the only stable thing to persist is what the user actually said.
+  time_of_day     String
+  /// For `weekly`: ISO weekdays, 1 = Monday .. 7 = Sunday. Empty for every other frequency.
+  days_of_week    Int[]
+  /// For `custom`: an RRULE string, evaluated in `timezone`.
+  recurrence_rule String?
+  /// Snapshot of the recipient's zone when the rule was written. Held per-reminder rather than
+  /// read live from User, so moving an employee between zones does not silently reschedule
+  /// every reminder they already agreed to.
+  timezone        String
+  starts_at       DateTime
+  /// "How long this task is valuable." Past it the reminder deactivates itself.
+  expires_at      DateTime?
+  /// The next instant this should fire, in UTC. Null means exhausted.
+  next_fire_at    DateTime?
+  last_fired_at   DateTime?
+  fire_count      Int               @default(0)
+  is_active       Boolean           @default(true)
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
+
+  task         Task @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  organization Org  @relation(fields: [organization_id], references: [id])
+  recipient    User @relation("TaskReminderRecipient", fields: [recipient_id], references: [id])
+
+  /// The scheduler's only query.
+  @@index([is_active, next_fire_at])
+  @@index([task_id])
+  @@index([organization_id, recipient_id])
+}
+
+/// One row per (device, transport).
+///
+/// Replaces User.push_token, which held exactly one token and recorded nothing about which
+/// service that token belongs to. Both assumptions broke: a user has a phone and a tablet, and
+/// Android has to leave FCM for RuStore while iOS stays on APNs, so the transport is now a
+/// property of the token rather than of the build.
+///
+/// User.push_token is deliberately NOT dropped in this migration — it is backfilled from and
+/// kept in step for one release, so a rollback does not silence every notification.
+model PushDevice {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String   @db.Uuid
+  token        String   @unique
+  /// 'rustore' | 'apns' | 'expo' | 'fcm'
+  provider     String
+  /// 'android' | 'ios' | 'web'
+  platform     String
+  app_version  String?
+  device_name  String?
+  last_seen_at DateTime @default(now())
+  created_at   DateTime @default(now())
+
+  user User @relation("PushDeviceUser", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([provider])
+}
+
+// ─── amoCRM ───────────────────────────────────────────────────────────────────
+
+enum AmoIntegrationStatus {
+  active
+  needs_reauth
+  paused
+}
+
+enum AmoSyncDirection {
+  inbound
+  outbound
+}
+
+enum AmoSyncJobStatus {
+  pending
+  processing
+  delivered
+  failed
+  dropped
+}
+
+/// One amoCRM account bound to one organization.
+///
+/// THE REFRESH TOKEN ROTATES ON EVERY REFRESH. amoCRM issues a new refresh token with each
+/// access-token renewal and invalidates the old one immediately, so two concurrent renewals
+/// both presenting the stored token means the loser's response is worthless and the account is
+/// locked out for good — re-authorization by hand is the only way back. Every read-modify-write
+/// of these columns must therefore take a row lock (SELECT ... FOR UPDATE) or an advisory lock
+/// keyed on organization_id, and must persist the new refresh token in the same transaction
+/// that consumed the old one.
+model AmoIntegration {
+  id                String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id   String               @unique @db.Uuid
+  subdomain         String
+  client_id         String
+  /// All secrets go through services/encryption.ts (enc:v1: prefix), never plaintext.
+  client_secret_enc String
+  access_token_enc  String?
+  refresh_token_enc String?
+  redirect_uri      String
+  token_expires_at  DateTime?
+  status            AmoIntegrationStatus @default(active)
+  /// Set when a refresh comes back invalid_grant. The queue stops rather than retrying: that
+  /// error is terminal until a human re-authorizes, and hammering it earns a ban.
+  needs_reauth_at   DateTime?
+  last_sync_at      DateTime?
+  last_error        String?
+  /// amoCRM webhook subscription ids, so they can be torn down on disconnect.
+  webhook_ids       String[]
+  connected_by      String?              @db.Uuid
+  created_at        DateTime             @default(now())
+  updated_at        DateTime             @updatedAt
+
+  organization Org   @relation(fields: [organization_id], references: [id])
+  connector    User? @relation("AmoIntegrationConnectedBy", fields: [connected_by], references: [id])
+}
+
+/// The identity bridge between a 4КУБ row and its amoCRM counterpart.
+///
+/// Without this, every inbound webhook re-creates what the import already pulled. The two hash
+/// columns are what stops the echo loop: an outbound payload whose hash equals last_remote_hash
+/// is a change we ourselves just received, and is dropped instead of sent back.
+model AmoEntityMap {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id  String    @db.Uuid
+  /// 'contact' | 'company' | 'lead'
+  entity_type      String
+  local_id         String    @db.Uuid
+  amo_id           BigInt
+  last_synced_at   DateTime?
+  last_local_hash  String?
+  last_remote_hash String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  organization Org @relation(fields: [organization_id], references: [id])
+
+  @@unique([organization_id, entity_type, amo_id])
+  @@unique([organization_id, entity_type, local_id])
+  @@index([organization_id, entity_type])
+}
+
+/// Work queue for both directions of the sync, shaped after WebhookDelivery.
+///
+/// Inbound rows are written by the webhook receiver, which must answer amoCRM fast — amoCRM
+/// retries any non-2xx and disables a subscription that keeps failing, so the HTTP handler
+/// verifies the signature, enqueues, and returns. Outbound rows are written by the domain layer
+/// when a local change needs pushing.
+model AmoSyncJob {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String           @db.Uuid
+  direction       AmoSyncDirection
+  entity_type     String
+  local_id        String?          @db.Uuid
+  amo_id          BigInt?
+  /// 'create' | 'update' | 'delete' | 'stage_change'
+  operation       String
+  payload         Json
+  status          AmoSyncJobStatus @default(pending)
+  attempts        Int              @default(0)
+  next_attempt_at DateTime?
+  error_message   String?
+  processed_at    DateTime?
+  created_at      DateTime         @default(now())
+  updated_at      DateTime         @updatedAt
+
+  organization Org @relation(fields: [organization_id], references: [id])
+
+  @@index([status, next_attempt_at])
+  @@index([organization_id, direction, status])
+  @@index([organization_id, entity_type, local_id])
+}
+
+/// Every time last-write-wins threw something away, it is written down here.
+///
+/// A silent clobber is indistinguishable from data loss to the person whose edit vanished.
+/// This is the record that lets someone answer "where did my change go" afterwards.
+model AmoSyncConflict {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id   String    @db.Uuid
+  entity_type       String
+  local_id          String?   @db.Uuid
+  amo_id            BigInt?
+  field             String
+  local_value       String?
+  remote_value      String?
+  /// 'local' | 'remote'
+  winner            String
+  local_updated_at  DateTime?
+  remote_updated_at DateTime?
+  created_at        DateTime  @default(now())
+
+  organization Org @relation(fields: [organization_id], references: [id])
+
   @@index([organization_id, created_at])
 }
