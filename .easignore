@@ -87,3 +87,10 @@ expo-env.d.ts
 
 # Force-include the Firebase Android config the managed build needs
 !google-services.json
+
+# Local self-hosted production env. Holds the real JWT secret, the field
+# encryption key and the database password — the same secrets as the server's
+# .env. Ignored in BOTH files, because .easignore replaces .gitignore for EAS
+# uploads rather than stacking on it.
+.env.localprod
+.env.local-prod

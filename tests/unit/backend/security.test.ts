@@ -28,6 +28,52 @@ function validProductionEnv(overrides: Record<string, string | undefined> = {}):
 }
 
 describe('backend security config', () => {
+  // ── The self-hosted opt-out ────────────────────────────────────────────────
+  // A local DATABASE_URL is normally a deployment mistake worth refusing to boot
+  // over: a cloud service pointed at localhost looks perfectly healthy while
+  // talking to a database nobody else can reach. It is legitimate in exactly one
+  // situation — the whole product running on one machine on purpose — so the
+  // escape hatch has to exist, and has to stay narrow.
+
+  it('still refuses a local database host in production by default', () => {
+    expect(() => validateProductionConfig(validProductionEnv({
+      DATABASE_URL: 'postgresql://crm_user:StrongDbPass123!@127.0.0.1:5432/crm_prod',
+    }))).toThrow(ConfigurationError);
+  });
+
+  it('allows a local database host only when the operator opts in explicitly', () => {
+    expect(() => validateProductionConfig(validProductionEnv({
+      DATABASE_URL: 'postgresql://crm_user:StrongDbPass123!@127.0.0.1:5432/crm_prod',
+      ALLOW_LOCAL_DATABASE: 'true',
+    }))).not.toThrow();
+  });
+
+  it('accepts only the exact string "true" as the opt-in', () => {
+    // Anything else is treated as "not set". A half-hearted value like `1` or
+    // `yes` should not silently disable a production guard.
+    for (const value of ['1', 'yes', 'TRUE', 'True', 'on', '']) {
+      expect(() => validateProductionConfig(validProductionEnv({
+        DATABASE_URL: 'postgresql://crm_user:StrongDbPass123!@127.0.0.1:5432/crm_prod',
+        ALLOW_LOCAL_DATABASE: value,
+      })), `ALLOW_LOCAL_DATABASE=${JSON.stringify(value)}`).toThrow(ConfigurationError);
+    }
+  });
+
+  it('does not let the opt-in weaken any OTHER production check', () => {
+    // The flag covers the private-host rule and nothing else. A weak password or
+    // a missing secret must still stop the boot even on a self-hosted box.
+    expect(() => validateProductionConfig(validProductionEnv({
+      DATABASE_URL: 'postgresql://crm_user:password@127.0.0.1:5432/crm_prod',
+      ALLOW_LOCAL_DATABASE: 'true',
+    }))).toThrow(ConfigurationError);
+
+    expect(() => validateProductionConfig(validProductionEnv({
+      DATABASE_URL: 'postgresql://crm_user:StrongDbPass123!@127.0.0.1:5432/crm_prod',
+      ALLOW_LOCAL_DATABASE: 'true',
+      JWT_SECRET: 'short',
+    }))).toThrow(ConfigurationError);
+  });
+
   it('requires JWT_SECRET to be present', () => {
     expect(() => getJwtSecret({} as NodeJS.ProcessEnv)).toThrow(ConfigurationError);
   });

@@ -1,0 +1,60 @@
+# Cloudflare Tunnel — the public door for the self-hosted deployment.
+#
+# There is no public IP and no port forwarding here. cloudflared makes an
+# OUTBOUND connection to Cloudflare and traffic comes back down it, which is why
+# this works behind a home router and carrier NAT.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# BEFORE THIS FILE WORKS (one-time, needs a browser and a Cloudflare account):
+#
+#   1. winget install --id Cloudflare.cloudflared
+#   2. cloudflared tunnel login            ← opens a browser, pick the 4kub.ru zone
+#   3. cloudflared tunnel create 4kub
+#   4. cloudflared tunnel route dns 4kub 4kub.ru
+#      cloudflared tunnel route dns 4kub www.4kub.ru
+#   5. Put the tunnel's UUID and credentials path below.
+#
+# Step 4 writes the DNS record for you, so nothing needs changing by hand at
+# reg.ru except moving the nameservers to Cloudflare.
+# ─────────────────────────────────────────────────────────────────────────────
+
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: C:\Users\fedor\.cloudflared\REPLACE_WITH_TUNNEL_UUID.json
+
+# Ingress rules are evaluated TOP DOWN and the first match wins, so the API
+# routes must come before the catch-all. These reproduce the nginx vhost the VM
+# was running; where they differ, that is a bug rather than a decision.
+ingress:
+  # ── API ────────────────────────────────────────────────────────────────────
+  - hostname: 4kub.ru
+    path: ^/api/.*
+    service: http://127.0.0.1:3000
+  - hostname: www.4kub.ru
+    path: ^/api/.*
+    service: http://127.0.0.1:3000
+
+  # The backend owns these two as well — they are not static files.
+  - hostname: 4kub.ru
+    path: ^/(health|version)$
+    service: http://127.0.0.1:3000
+  - hostname: www.4kub.ru
+    path: ^/(health|version)$
+    service: http://127.0.0.1:3000
+
+  # ── Everything else: the website, /i, /.well-known ────────────────────────
+  - hostname: 4kub.ru
+    service: http://127.0.0.1:8080
+  - hostname: www.4kub.ru
+    service: http://127.0.0.1:8080
+
+  # Required terminator. Anything not matched above is refused rather than
+  # silently forwarded somewhere.
+  - service: http_status:404
+
+originRequest:
+  # The API is local; a long timeout only hides a hung process.
+  connectTimeout: 10s
+  # The assistant's model calls can be slow, and a request cut off mid-completion
+  # looks to the user like the feature is broken.
+  noTLSVerify: false
+  httpHostHeader: 4kub.ru

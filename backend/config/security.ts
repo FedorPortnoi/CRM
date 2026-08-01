@@ -402,7 +402,29 @@ function validateProductionUrl(
   }
 
   if (isPrivateHostname(parsed.hostname)) {
-    throw new ConfigurationError(`${name} must not point to a private or local host in production`);
+    // SELF-HOSTED DEPLOYMENTS ARE THE ONE LEGITIMATE EXCEPTION.
+    //
+    // This check exists to catch a CLOUD deployment left pointing at localhost
+    // — a real and easy mistake, and one that produces a service which looks
+    // healthy while talking to a database nobody else can reach. That reasoning
+    // does not hold when the whole product runs on one machine on purpose:
+    // there the database IS local, and requiring a public database host would
+    // mean exposing Postgres to the internet, which is strictly worse.
+    //
+    // So it is an opt-out rather than a relaxation, and deliberately an awkward
+    // one: the operator has to name this variable, set it to exactly 'true', and
+    // it applies ONLY to the private-host rule. Every other production check —
+    // password strength, protocol, secret quality — still runs. A deployment
+    // that sets this and is not in fact self-hosted has said something false
+    // about itself in writing, which is the most an environment variable can be
+    // asked to guarantee.
+    if (readTrimmedEnv('ALLOW_LOCAL_DATABASE', env) !== 'true') {
+      throw new ConfigurationError(
+        `${name} must not point to a private or local host in production. ` +
+          'If this deployment is genuinely self-hosted and the database runs on the same ' +
+          'machine, set ALLOW_LOCAL_DATABASE=true to acknowledge that deliberately.',
+      );
+    }
   }
 
   if (options.requirePassword) {
