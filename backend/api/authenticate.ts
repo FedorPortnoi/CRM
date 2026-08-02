@@ -3,6 +3,7 @@ import { db } from '../services/db';
 import { auditLog } from '../services/audit';
 import { validateAuthSession } from '../services/sessions';
 import { TRACKING_OPEN_PATH_PREFIX } from '../services/open-tracking';
+import { UPDATES_ASSETS_PATH_PREFIX, UPDATES_MANIFEST_PATH } from '../services/updates-store';
 import { can, hasAnyWriteCapability, type Capability } from '../services/capabilities';
 
 // One-click opt-out from a marketing email. Kept next to the tracking prefix so both
@@ -171,6 +172,22 @@ function isPublicApiRoute(request: FastifyRequest): boolean {
   if (
     (method === 'GET' || method === 'POST') &&
     path.startsWith(CONSENT_UNSUBSCRIBE_PATH_PREFIX)
+  ) {
+    return true;
+  }
+
+  // expo-updates fetches the manifest and its assets during NATIVE startup — before any
+  // JavaScript runs, and therefore before the app knows whether anyone is logged in. There
+  // is no token it could present, so requiring one would mean no install ever receives an
+  // update.
+  //
+  // Both constants are imported from the service that builds the URLs, so the allowlist
+  // cannot drift away from the mount point — the same arrangement as the tracking prefix
+  // above. Reads only: the manifest names a build, and the asset route serves only files
+  // an update explicitly declares, so neither can be used to enumerate the store.
+  if (
+    method === 'GET' &&
+    (path === UPDATES_MANIFEST_PATH || path.startsWith(UPDATES_ASSETS_PATH_PREFIX))
   ) {
     return true;
   }

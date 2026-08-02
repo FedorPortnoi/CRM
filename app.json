@@ -8,6 +8,20 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "updates": {
+      "enabled": true,
+      "url": "https://4kub.ru/api/v1/updates/manifest",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 15000,
+      "codeSigningCertificate": "./certs/updates/certificate.pem",
+      "codeSigningMetadata": {
+        "keyid": "main",
+        "alg": "rsa-v1_5-sha256"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",

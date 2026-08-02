@@ -53,6 +53,24 @@ certs/
 docs/Российские*
 docs/*доступы*
 
+# …except the OTA code-signing CERTIFICATE, which the build genuinely needs.
+#
+# app.json points expo-updates at ./certs/updates/certificate.pem, and that file has to
+# exist on the builder or the build fails outright. It is the PUBLIC half — the app uses
+# it to verify that an update manifest was signed by us, so shipping it inside the binary
+# is the entire point.
+#
+# The PRIVATE key stays excluded and must never leave this machine: it is what signs a
+# manifest, so anyone holding it can push arbitrary code to every installed app. The three
+# lines below re-admit the one certificate without re-admitting the directory around it —
+# gitignore syntax cannot un-ignore a file whose parent directory is excluded, so the
+# parents have to be re-admitted first and their other contents excluded again.
+!certs/
+certs/*
+!certs/updates/
+certs/updates/*
+!certs/updates/certificate.pem
+
 # Logs
 *.log
 npm-debug.log*

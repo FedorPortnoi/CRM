@@ -40,6 +40,7 @@ import contactAiRoutes from './api/routes/contact-ai';
 import sequencesRoutes, { consentRoutes } from './api/routes/sequences';
 import emailTemplatesRoutes from './api/routes/email-templates';
 import trackingRoutes from './api/routes/tracking';
+import updatesRoutes from './api/routes/updates';
 import publicApiRoutes, { apiKeysRoutes } from './api/routes/public-api';
 import { wsRoutes } from './api/routes/ws';
 import { startScheduler } from './services/scheduler';
@@ -265,6 +266,7 @@ async function start() {
   // plugin and the only thing exempted from the auth hook — see isPublicApiRoute().
   // Its own per-IP rate limit is declared on the route, not here.
   await server.register(trackingRoutes, { prefix: '/api/v1/tracking' });
+  await server.register(updatesRoutes, { prefix: '/api/v1/updates' });
   // Session-authenticated console for minting/revoking API keys. Must stay under
   // /api/v1 so the global preHandler refreshes request.user.role from the DB before
   // the plugin's own owner/admin check reads it.
@@ -297,7 +299,19 @@ async function start() {
   const port = parseInt(process.env.PORT ?? '3000', 10);
 
   try {
-    await server.listen({ port, host: '0.0.0.0' });
+    // BIND_HOST exists because 0.0.0.0 is only safe behind something that is
+    // filtering. On the cloud VM that was the security group — only 22/80/443
+    // were reachable, so binding every interface cost nothing. Self-hosted on a
+    // home network there is no such filter: every phone, TV and IoT device on
+    // the same wifi can reach an 0.0.0.0 port directly, which means reaching the
+    // API without passing through Cloudflare at all.
+    //
+    // The default stays 0.0.0.0 so a containerised or cloud deployment behaves
+    // exactly as before — those need to accept traffic from outside their own
+    // loopback. A self-hosted deployment sets 127.0.0.1, because cloudflared
+    // connects from loopback and nothing else has any business connecting.
+    const host = process.env.BIND_HOST?.trim() || '0.0.0.0';
+    await server.listen({ port, host });
     startScheduler();
 
     if (process.env.ENABLE_MCP === 'true') {

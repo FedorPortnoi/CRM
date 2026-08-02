@@ -11,7 +11,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'x'.repeat(48);
-process.env.NODE_ENV = 'test';
+// @types/node declares NODE_ENV readonly, and both `process.env.NODE_ENV =` and
+// `process.env['NODE_ENV'] =` resolve to that same declaration. Object.assign
+// writes the property without going through it. Same value, same moment — a
+// type-level workaround, not a behavioural one.
+Object.assign(process.env, { NODE_ENV: 'test' });
 
 // ─── In-memory Prisma stand-in ────────────────────────────────────────────────
 
