@@ -20,7 +20,7 @@
       }
     },
     "runtimeVersion": {
-      "policy": "fingerprint"
+      "policy": "appVersion"
     },
     "splash": {
       "image": "./assets/splash.png",
@@ -33,7 +33,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.fedorportnoi.crm",
-      "buildNumber": "27",
+      "buildNumber": "30",
       "infoPlist": {
         "CFBundleDisplayName": "4КУБ",
         "NSLocationWhenInUseUsageDescription": "CRM uses your location for field visit tracking.",
