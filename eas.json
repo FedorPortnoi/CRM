@@ -60,6 +60,19 @@
         "buildType": "apk"
       }
     },
+    "rustore-nopush": {
+      "distribution": "internal",
+      "channel": "rustore",
+      "env": {
+        "APP_ENV": "production",
+        "MARKET_CODE": "RU",
+        "EXPO_PUBLIC_API_URL": "https://4kub.ru/api/v1",
+        "EXPO_PUBLIC_WS_URL": "wss://4kub.ru"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "huawei": {
       "distribution": "internal",
       "channel": "huawei",
