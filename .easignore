@@ -18,7 +18,6 @@ node_modules/
 # .env.bak-20260727 (41 credentials) was uploaded on every build until 30 Jul.
 .env.bak*
 .env.production
-*.pem
 *.p8
 *.jks
 *.keystore
@@ -46,32 +45,10 @@ coverage/
 *.apk
 *.aab
 *.ipa
-*.pem
 
 # Sensitive
-certs/
 docs/Российские*
 docs/*доступы*
-
-# …except the OTA code-signing CERTIFICATE, which the build genuinely needs.
-#
-# app.json points expo-updates at ./certs/updates/certificate.pem, and that file has to
-# exist on the builder or the build fails outright. It is the PUBLIC half — the app uses
-# it to verify that an update manifest was signed by us, so shipping it inside the binary
-# is the entire point.
-#
-# The PRIVATE key stays excluded and must never leave this machine: it is what signs a
-# manifest, so anyone holding it can push arbitrary code to every installed app. The three
-# lines below re-admit the one certificate without re-admitting the directory around it —
-# gitignore syntax cannot un-ignore a file whose parent directory is excluded, so the
-# parents have to be re-admitted first and their other contents excluded again.
-!certs/
-certs/*
-!certs/updates/
-certs/updates/*
-!certs/updates/certificate.pem
-
-# Logs
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -112,3 +89,20 @@ expo-env.d.ts
 # uploads rather than stacking on it.
 .env.localprod
 .env.local-prod
+
+
+# Secrets, named individually.
+#
+# A blanket *.pem / certs/ rule used to live here, and it also swallowed the OTA
+# code-signing CERTIFICATE — which the build genuinely needs, because expo-updates
+# bakes it into the binary at prebuild time. Two iOS builds failed on exactly that
+# missing file. Re-admitting it by negation did not work reliably, so the rules are
+# now inverted: name the secrets, let everything else through.
+#
+# certs/updates/certificate.pem is deliberately NOT listed — it is the public half.
+certs/**/private-key.pem
+certs/**/public-key.pem
+*.p8
+rustore-private-key.pem
+google-play-service-account.json
+firebase-service-account.json
