@@ -110,3 +110,14 @@ backend-log.txt
 # uploads rather than stacking on it.
 .env.localprod
 .env.local-prod
+
+# The OTA code-signing CERTIFICATE is public and must be committed.
+#
+# expo-updates reads it at prebuild time and bakes it into the binary, so EAS has to
+# receive it — and EAS uploads via git, which means .easignore cannot re-admit what
+# .gitignore excluded. It is the public half: the app uses it to verify that an update
+# manifest was signed by us. Publishing it gives an attacker nothing.
+#
+# The PRIVATE key on the line below stays excluded and must never be committed — it is
+# what signs a manifest, so anyone holding it can push arbitrary code to every install.
+!certs/updates/certificate.pem
