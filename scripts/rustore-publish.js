@@ -150,7 +150,9 @@ async function cmdModerate(args) {
   const env = loadEnv();
   const token = await auth(env);
   console.log(`AUTH OK — token acquired (length ${token.length}).`);
-  const mod = await api(token, 'POST', `/public/v1/application/${PKG}/version/${args.versionId}/moderation`, { json: {} });
+  // NB: the submit-for-moderation endpoint is /commit, NOT /moderation —
+  // RuStore's gateway answers unknown routes with 502, not 404.
+  const mod = await api(token, 'POST', `/public/v1/application/${PKG}/version/${args.versionId}/commit`);
   dump('POST submit for moderation', mod);
   if (!mod.ok) throw new Error('Moderation submit failed (see response above).');
   console.log(`\n✅ Version ${args.versionId} submitted to RuStore moderation.`);
@@ -160,8 +162,14 @@ async function cmdStatus(args) {
   if (!args.versionId) throw new Error('--version-id <id> is required for status');
   const env = loadEnv();
   const token = await auth(env);
-  const r = await api(token, 'GET', `/public/v1/application/${PKG}/version/${args.versionId}`);
-  dump('GET version status', r);
+  // There is no per-version GET; list versions and filter client-side.
+  const r = await api(token, 'GET', `/public/v1/application/${PKG}/version`, { query: { pageSize: 20 } });
+  if (r.ok && r.data && r.data.body && Array.isArray(r.data.body.content)) {
+    const v = r.data.body.content.find((x) => String(x.versionId) === String(args.versionId));
+    dump('version status', { status: r.status, ok: r.ok, data: v || `versionId ${args.versionId} not found` });
+  } else {
+    dump('GET versions', r);
+  }
 }
 
 async function cmdPublish(args) {
@@ -210,7 +218,7 @@ async function cmdPublish(args) {
     console.log(`\nDraft ${versionId} created + APK uploaded. --no-submit set: NOT sending to moderation.`);
     return;
   }
-  const mod = await api(token, 'POST', `/public/v1/application/${PKG}/version/${versionId}/moderation`, { json: {} });
+  const mod = await api(token, 'POST', `/public/v1/application/${PKG}/version/${versionId}/commit`);
   dump('POST submit for moderation', mod);
   if (!mod.ok) throw new Error('Moderation submit failed (see response above).');
   console.log(`\n✅ Version ${versionId} (vc from APK) submitted to RuStore moderation. publishType=${args.publishType}`);
