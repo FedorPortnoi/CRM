@@ -10,6 +10,8 @@ const en = {
     organization: 'Organization',
     forgotPassword: 'Forgot password?',
     passwordTooShort: 'Password must be at least 8 characters',
+    passwordWeak: 'At least 8 characters, with an upper and lower case letter, a digit and a symbol',
+    passwordTooLong: 'Password is too long (max 72 bytes; Cyrillic letters count as two)',
     signIn: 'Sign in',
     loginSubtext: 'Manage contacts, deals, tasks, and meetings in one simple workspace.',
     orDivider: 'or',

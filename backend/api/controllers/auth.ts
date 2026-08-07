@@ -158,11 +158,18 @@ async function verifyPasswordWithLockout(
   password: string,
   classify: (candidate: PasswordAttemptUser, passwordMatches: boolean) => PasswordAttemptOutcome,
 ): Promise<PasswordAttemptResult> {
+  // The compare runs FIRST, before the lockout branch, and its result is
+  // discarded on the locked path. Returning early on `locked` skipped bcrypt
+  // entirely, so a locked account answered in ~5 ms where every other rejection
+  // took ~300 ms — a ~60x timing gap behind an identical INVALID_CREDENTIALS
+  // body, which told an attacker both that the address exists and that someone
+  // has been guessing it. Same reason `user` may be null here: an unknown email
+  // still pays for a DUMMY_HASH compare so absent and present cost the same.
+  const passwordMatches = await bcrypt.compare(password, user?.password_hash ?? DUMMY_HASH);
+
   if (user?.locked_until && user.locked_until > new Date()) {
     return 'locked';
   }
-
-  const passwordMatches = await bcrypt.compare(password, user?.password_hash ?? DUMMY_HASH);
   if (!user) {
     return 'failure';
   }

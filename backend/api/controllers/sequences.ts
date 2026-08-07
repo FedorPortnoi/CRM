@@ -117,7 +117,13 @@ export function denySequenceAdmin(
   reply: FastifyReply,
 ): FastifyReply | null {
   const { role } = request.user;
-  if (can(role, 'visibility.all')) {
+  // sequences.manage, NOT visibility.all. These are not the same set:
+  // visibility.all is held by accountant and marketer, sequences.manage only by
+  // marketer (plus owner/admin). Checking the wrong one let `accountant` — a
+  // role whose whole point is "deliberately no writes at all" — read every
+  // campaign, step and enrollment list, and would have handed it full mutation
+  // of marketing email the day accountant was granted any write capability.
+  if (can(role, 'sequences.manage')) {
     return null;
   }
 

@@ -6,11 +6,31 @@ import { InviteController } from '../controllers/invites';
 import { ASSIGNABLE_ROLE_VALUES } from '../../services/capabilities';
 import { isValidTimeZone } from '../../services/reminders';
 
-const PasswordSchema = z.string().min(8).max(100)
+/**
+ * The single password policy. Every path that SETS a password imports this one
+ * object — register, invite-accept, set-credentials, change-password — so the
+ * rules cannot drift apart between them.
+ *
+ * The byte cap is not cosmetic. bcrypt's Blowfish key schedule consumes exactly
+ * 72 bytes and silently ignores the rest, so a `.max(100)` in CHARACTERS meant
+ * two different passwords sharing a 72-byte prefix authenticated
+ * interchangeably. In Russian that bites far earlier than it looks: UTF-8
+ * Cyrillic is 2 bytes per character, so a passphrase was being truncated at
+ * ~36 characters — well inside a plausible one, and well under the 100 the UI
+ * advertised. Measured in bytes, refused rather than truncated.
+ */
+export const PasswordSchema = z.string()
+  .min(8)
+  .max(72, 'Password must be at most 72 characters')
   .regex(/[a-z]/, 'Password must include a lowercase letter')
   .regex(/[A-Z]/, 'Password must include an uppercase letter')
   .regex(/[0-9]/, 'Password must include a number')
-  .regex(/[^A-Za-z0-9]/, 'Password must include a symbol');
+  .regex(/[^A-Za-z0-9]/, 'Password must include a symbol')
+  // Last, and it has to be: .refine() returns a ZodEffects, which has no
+  // .regex(), so anything chained after this stops type-checking.
+  .refine((v) => Buffer.byteLength(v, 'utf8') <= 72, {
+    message: 'Password is too long (max 72 bytes; Cyrillic letters count as two)',
+  });
 
 const RegisterSchema = z.object({
   email: z.string().trim().toLowerCase().email(),

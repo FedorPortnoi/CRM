@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { Lock, Mail, Eye, EyeOff, ShieldCheck } from 'lucide-react-native';
 import { Stack } from 'expo-router';
 import { useUserStore } from '../store/userStore';
+import { checkPassword } from '../utils/password';
 import { useTheme } from '../hooks/useTheme';
 import { ThemeColors } from '../theme';
 
@@ -40,8 +41,17 @@ export default function SetPasswordScreen() {
       setError(t('auth.passwordMismatch'));
       return;
     }
-    if (newPassword.length < 8) {
-      setError(t('auth.passwordTooShort'));
+    // Shared with InviteScreen and mirroring PasswordSchema on the server. This
+    // screen used to check length alone, so every invited employee who picked a
+    // weak password sailed past the client and got a raw English zod string
+    // back inside a Russian UI.
+    const problem = checkPassword(newPassword);
+    if (problem === 'weak') {
+      setError(t('auth.passwordWeak'));
+      return;
+    }
+    if (problem === 'tooLong') {
+      setError(t('auth.passwordTooLong'));
       return;
     }
     setIsLoading(true);
