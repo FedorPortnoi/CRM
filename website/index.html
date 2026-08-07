@@ -43,6 +43,127 @@ try {
 <link rel="preload" as="image" href="/img/hero-riviera-sm.webp" media="(max-width: 999px)" fetchpriority="high">
 <link rel="stylesheet" href="/css/base.css?v=15">
 <link rel="stylesheet" href="/css/sections.css?v=46">
+<!-- Structured data. Every answer below is lifted from the copy further down
+     this page rather than written for crawlers — if the two ever disagree, the
+     visible page is right and this block is the bug.
+     The hosting answer is deliberately the honest one: this block existed as a
+     draft while the page still claimed ru-central1, and shipping it then would
+     have turned a false compliance claim into a machine-readable one. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://4kub.ru/#organization",
+      "name": "4КУБ",
+      "legalName": "ИП Портной Фёдор",
+      "url": "https://4kub.ru/",
+      "email": "hello@4kub.ru",
+      "areaServed": { "@type": "Country", "name": "Россия" }
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://4kub.ru/#website",
+      "url": "https://4kub.ru/",
+      "name": "4КУБ",
+      "inLanguage": "ru-RU",
+      "publisher": { "@id": "https://4kub.ru/#organization" }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://4kub.ru/#app",
+      "name": "4КУБ",
+      "alternateName": "КУБ: Клиенты и Сделки",
+      "applicationCategory": "BusinessApplication",
+      "applicationSubCategory": "CRM",
+      "operatingSystem": "iOS, Android",
+      "inLanguage": "ru-RU",
+      "url": "https://4kub.ru/",
+      "publisher": { "@id": "https://4kub.ru/#organization" },
+      "description": "Мобильная CRM для малого и среднего бизнеса: контакты, сделки, задачи и аналитика в телефоне. Работает без интернета. Отвечает на вопросы обычным языком.",
+      "featureList": [
+        "Контакты: карточка клиента со звонками, заметками, задачами и сделками",
+        "Сделки: канбан по этапам",
+        "Задачи: дедлайны, напоминания и повторяющиеся дела",
+        "Аналитика: воронка, выручка, работа менеджеров, причины отказов",
+        "Работает офлайн, записи уходят на сервер при появлении связи",
+        "ИИ-ассистент по своим данным на российском провайдере",
+        "Восемь ролей с раздельными правами",
+        "Импорт из Битрикс24, Excel, Telegram, WhatsApp, vCard и телефонной книги",
+        "Синхронизация с Яндекс Календарём",
+        "Шифрование телефонов и email в базе (AES-256-GCM)"
+      ],
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "RUB",
+        "description": "На время закрытого пилота регистрация бесплатная, банковская карта не нужна."
+      },
+      "sameAs": [
+        "https://apps.apple.com/ru/app/id6776447873",
+        "https://www.rustore.ru/catalog/app/com.fedorportnoi.crm"
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://4kub.ru/#faq",
+      "inLanguage": "ru-RU",
+      "isPartOf": { "@id": "https://4kub.ru/#website" },
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Работает ли CRM 4КУБ без интернета?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Да. Метро, стройка, поезд: записи сохраняются на устройстве и уходят на сервер сами, когда связь вернётся."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Где хранятся данные 4КУБ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Идёт закрытый пилот: сервер контролируется оператором лично и находится за пределами России. Идёт перенос на российский хостинг — до этого момента мы не заявляем, что требование ФЗ-152 о локализации выполнено. Телефоны и email клиентов хранятся в базе зашифрованными (AES-256-GCM)."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Шифруются ли телефоны и email клиентов?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Да. Телефоны и email клиентов хранятся зашифрованными. Поиск по ним при этом работает: система ищет, не расшифровывая."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Можно ли перенести базу из Битрикс24 в 4КУБ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Да, за один импорт: Битрикс24, Excel, Telegram, WhatsApp, vCard и телефонная книга. Клиентскую базу не придётся набивать заново."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Какие роли и права есть в 4КУБ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Восемь ролей: Владелец, Администратор, Руководитель отдела, Менеджер, Бухгалтер, Маркетолог, Поддержка и Только просмотр. Права разделены по контактам, сделкам, деньгам и управлению командой: руководитель отдела видит данные подчинённых, бухгалтер ничего не меняет, роль «только просмотр» не видит деньги."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Сколько стоит 4КУБ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "На время закрытого пилота регистрация бесплатная и банковская карта не нужна."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
 </head>
 <body>
 
