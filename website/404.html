@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Страница не найдена — 4КУБ</title>
+<meta name="description" content="Такой страницы на 4kub.ru нет. Вернитесь на главную или начните регистрацию.">
+<meta name="robots" content="noindex, follow">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#F4EADC">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='5' fill='%230E0E0D'/><path d='M12 4.5 19 8v8l-7 3.5L5 16V8l7-3.5Z' fill='none' stroke='%23CC785C' stroke-width='1.6' stroke-linejoin='round'/><path d='M5 8l7 3.5L19 8M12 11.5v8' fill='none' stroke='%23CC785C' stroke-width='1.6' stroke-linejoin='round' opacity='.55'/></svg>">
+<link rel="stylesheet" href="/css/base.css?v=15">
+<style>
+  /* Self-contained: a 404 must render even when the section stylesheet is the
+     thing that failed to load. Only base.css (tokens + type) is relied on. */
+  .nf { min-height: 100svh; display: grid; place-items: center; padding: 2rem 0; }
+  .nf-inner { text-align: center; max-width: 34rem; }
+  .nf-code {
+    font-family: var(--font-mono); font-size: var(--t-label); font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent-ink);
+    margin: 0 0 1.4rem;
+  }
+  .nf h1 {
+    font-family: var(--font-display);
+    font-size: clamp(1.85rem, 1.15rem + 2.7vw, 3.4rem);
+    line-height: 1.06; letter-spacing: 0.005em; text-transform: uppercase;
+    font-weight: 250; margin: 0; text-wrap: balance;
+  }
+  .nf p {
+    color: var(--ink-soft); margin: 1.2rem auto 0; max-width: 44ch;
+    font-size: clamp(1.02rem, 0.98rem + 0.3vw, 1.15rem); line-height: 1.75;
+  }
+  .nf-actions { display: flex; flex-wrap: wrap; gap: 0.9rem; justify-content: center; margin-top: 2.2rem; }
+  .nf-cube { width: 64px; height: 64px; margin: 0 auto 2rem; color: var(--line-strong); }
+</style>
+</head>
+<body>
+
+<main class="nf">
+  <div class="nf-inner">
+    <svg class="nf-cube" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2.5 21 7v10l-9 4.5L3 17V7l9-4.5Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+      <path d="M3 7l9 4.5L21 7M12 11.5V21.5" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" opacity=".5"/>
+    </svg>
+
+    <p class="nf-code">Ошибка 404</p>
+    <h1>Такой страницы нет</h1>
+    <p>Возможно, ссылка устарела или в адресе опечатка. Всё остальное на месте.</p>
+
+    <div class="nf-actions">
+      <a class="btn btn-primary btn-lg" href="/">
+        На главную
+        <span class="btn-arrow" aria-hidden="true">
+          <svg viewBox="0 0 12 12" fill="none"><path d="M1 6h9M6.5 2.5 10 6l-3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </a>
+      <a class="btn btn-ghost btn-lg" href="/register">Создать аккаунт</a>
+    </div>
+  </div>
+</main>
+
+</body>
+</html>

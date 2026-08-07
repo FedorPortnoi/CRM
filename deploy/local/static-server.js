@@ -73,13 +73,15 @@ const server = http.createServer((req, res) => {
   const file = resolveFile(urlPath);
 
   if (!file) {
-    // The SPA fallback nginx used. Note it answers 200, not 404 — that is
-    // deliberate there and copied here so behaviour does not change during the
-    // move, but it is why scanners record a "hit" on /.env and similar.
-    const fallback = path.join(ROOT, 'index.html');
-    if (fs.existsSync(fallback)) {
-      res.writeHead(200, { 'Content-Type': TYPES['.html'] });
-      fs.createReadStream(fallback).pipe(res);
+    // Was an SPA fallback answering 200 with the homepage. There is no client
+    // router on this site, so that bought nothing and cost real damage: every
+    // scanner probe for /.env or /wp-login recorded a hit, and every mistyped
+    // URL became a soft 404 that search engines index as a duplicate of the
+    // homepage. Answer 404 with a 404, and serve a real page while doing it.
+    const notFound = path.join(ROOT, '404.html');
+    if (fs.existsSync(notFound)) {
+      res.writeHead(404, { 'Content-Type': TYPES['.html'], 'Cache-Control': 'no-store' });
+      fs.createReadStream(notFound).pipe(res);
       return;
     }
     res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found');
@@ -95,15 +97,69 @@ const server = http.createServer((req, res) => {
   if (urlPath.startsWith('/.well-known/')) {
     headers['Content-Type'] = 'application/json';
     headers['Cache-Control'] = 'public, max-age=300';
-  } else if (urlPath === '/i') {
+  } else if (urlPath === '/i' || urlPath === '/i.html') {
     // The invite landing page. The token rides in the URL fragment so it never
     // reaches this process at all, but the page renders a claim code, and that
     // must not sit in a shared cache or a back-forward cache.
     headers['Cache-Control'] = 'no-store, no-cache, must-revalidate';
     headers['Referrer-Policy'] = 'no-referrer';
     headers['X-Robots-Tag'] = 'noindex, nofollow';
-  } else if (['.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.woff', '.woff2'].includes(ext)) {
+  } else if (urlPath.startsWith('/fonts/')) {
+    // Genuinely immutable: these are pinned subsets, and replacing one would
+    // mean a new file. Safe to promise a browser it never has to ask again.
     headers['Cache-Control'] = 'public, max-age=2592000, immutable';
+  } else if (['.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.woff', '.woff2'].includes(ext)) {
+    /* These are edited IN PLACE at a fixed path — website/ is served straight to
+       4kub.ru — so the only thing separating a visitor from a stale stylesheet
+       is the ?v= query the HTML appends. That is a sound scheme and `immutable`
+       is the correct header FOR it, but the counter is bumped by hand and has
+       been missed twice: base.css was rewritten for the 2026-08-06 redesign
+       while privacy/register/verify/i went on asking for ?v=7, and the 08-07
+       clock fix sat on disk behind an unbumped ?v=37. `immutable` makes either
+       slip permanent for thirty days, because the browser will not revalidate
+       even on a reload.
+
+       So: still cached, but staleness is bounded to five minutes instead of a
+       month. A forgotten bump becomes a short delay rather than a silent month
+       of serving the wrong site. Restore `immutable` once these carry a content
+       hash generated at deploy rather than a number someone remembers. */
+    headers['Cache-Control'] = 'public, max-age=300, must-revalidate';
+  } else if (ext === '.html') {
+    /* The pages carry the ?v= stamps, so a stale page pins stale assets no
+       matter how the assets themselves are cached — this is the gate. It used
+       to send no Cache-Control at all, which does not mean "do not cache": with
+       no explicit policy a browser is free to guess a lifetime from
+       Last-Modified, and that guess grows as the file ages. Always revalidate;
+       with the ETag below that is a 304 and costs nothing. */
+    headers['Cache-Control'] = 'public, max-age=0, must-revalidate';
+  }
+
+  /* Conditional requests, so `must-revalidate` above costs a 304 rather than a
+     fresh copy of every stylesheet on every page view. nginx did this for free
+     and this file is meant to match it. The validator is mtime + size, which is
+     what nginx's own weak ETag is built from. */
+  const stat = fs.statSync(file);
+  const lastModified = stat.mtime.toUTCString();
+  const etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`;
+  headers['Last-Modified'] = lastModified;
+  headers['ETag'] = etag;
+
+  const inm = req.headers['if-none-match'];
+  const ims = req.headers['if-modified-since'];
+  // Never 304 a no-store response: /i renders a claim code, and answering "use
+  // your copy" is only safe if a copy was allowed to exist in the first place.
+  const storable = !String(headers['Cache-Control'] || '').includes('no-store');
+  // If-None-Match wins outright when present; that is the rule in RFC 9110.
+  const fresh = storable && (inm
+    ? inm.split(',').some((t) => t.trim() === etag)
+    : Boolean(ims) && Date.parse(ims) >= Math.floor(stat.mtimeMs / 1000) * 1000);
+
+  if (fresh) {
+    // A 304 carries no body, and must not claim a Content-Length for one.
+    delete headers['Content-Type'];
+    res.writeHead(304, headers);
+    res.end();
+    return;
   }
 
   res.writeHead(200, headers);

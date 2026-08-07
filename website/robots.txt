@@ -1,2 +1,22 @@
 User-agent: *
 Allow: /
+
+# Named explicitly rather than left to the wildcard. Being quotable by an
+# assistant is the point for a product whose buyers ask «какая CRM работает
+# офлайн» in a chat window, not a search box.
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: YandexAdditional
+Allow: /
+
+Sitemap: https://4kub.ru/sitemap.xml
