@@ -7,10 +7,338 @@
      · no section uses margin to position itself; vertical rhythm is .section-pad
    Therefore: editing one block cannot move or restyle another.
 
+   BAND RHYTHM. The page alternates grounds so it reads as a printed sequence
+   rather than one long scroll:
+     hero  paper      day    paper-soft   caps  paper
+     asst  NIGHT      team   paper        trust paper-soft
+     cta   TERRACOTTA foot   NIGHT
+   The two night bands are the product showing through the poster; they use the
+   app's own lacquer, not a tinted grey.
+
    Deliberate deviation from one-file-per-section: this stack has no bundler, so
-   ten CSS files would be ten requests nginx serves individually. The isolation
-   guarantee comes from the prefixing discipline, not from file boundaries.
+   ten CSS files would be ten requests the static server serves individually. The
+   isolation guarantee comes from the prefixing discipline, not file boundaries.
    ========================================================================== */
+
+
+/* ─── INTRO (title plate, once per session) ──────────────────────────────── */
+
+/* Solarpunk read as the SUN half only: radiance, warmth, optimism, drawn with a
+   ruler. No green, no botanical ornament — the rest of the site bans both, and
+   an overture in a foreign palette would read as a different website.
+
+   The lockup travels on a scroll timeline; JS only MEASURES (on load and on
+   resize) and publishes --fly-* custom properties. There is still no scroll
+   handler anywhere in this codebase.
+
+   Geometry, so the numbers below are not magic:
+     .intro is a 100vh SPACER with nothing in it — it exists only to buy scroll
+     distance. The plate itself is fixed, so it never slides; it fades. The hero
+     is pinned across the same 0 → 100vh by a counter-translate and fades in on
+     the spot, so the two cross-fade and neither one travels. Both the spacer and
+     the range are 100vh (not dvh) on purpose: they must be the same length, or
+     a mobile URL bar collapsing mid-scroll would desynchronise the pin.
+
+     vh, not dvh, for the same reason the flight ends exactly where the hero
+     arrives — the hero reaches full opacity precisely as the pin releases, so
+     there is no stretch of scrolling where nothing moves. */
+
+.intro { display: none; }
+
+.js .intro {
+  display: block;
+  position: relative;
+  height: 100vh;
+  /* Above the nav so the flying lockup is never dimmed by the nav's translucent
+     bar on the last leg. No background: the spacer sits over the pinned hero,
+     and an opaque one would mask the hero exactly as it fades in.
+     Nothing in here is interactive, so it must not eat clicks meant for the nav
+     underneath it. */
+  z-index: 58;
+  pointer-events: none;
+}
+.intro-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Held back until site.js has measured the flight, otherwise the lockup would
+     paint centred, then jump once the custom properties arrive. Doubles as the
+     entrance. */
+  opacity: 0;
+  transition: opacity 0.9s var(--ease-out);
+}
+.intro-ready .intro-stage { opacity: 1; }
+
+/* Repeat visit: no intro at all, and the nav is simply itself. */
+.intro-seen .intro { display: none; }
+
+.intro-sun {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: min(128vmin, 1000px);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  background: radial-gradient(circle,
+    rgba(204, 120, 92, 0.30) 0%,
+    rgba(204, 120, 92, 0.18) 26%,
+    rgba(204, 120, 92, 0.07) 46%,
+    transparent 66%);
+}
+/* Rays: 60 hairlines from a repeating conic sweep, masked to an annulus so they
+   emerge out of the glow and dissolve before the edge rather than ending. */
+.intro-sun::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-conic-gradient(from 0deg,
+    rgba(151, 67, 41, 0.15) 0deg 0.32deg, transparent 0.32deg 6deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 15%, #000 33%, #000 50%, transparent 70%);
+  mask-image: radial-gradient(circle, transparent 15%, #000 33%, #000 50%, transparent 70%);
+}
+
+.intro-motes { list-style: none; margin: 0; padding: 0; position: absolute; inset: 0; }
+.intro-motes li {
+  position: absolute;
+  left: var(--x); top: var(--y);
+  width: var(--s, 4px); height: var(--s, 4px);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(204, 120, 92, 0.6), transparent 70%);
+  opacity: 0;
+}
+
+.intro-mark {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  color: var(--accent-ink);
+  /* Sized BIG intrinsically and scaled DOWN on landing. The other way round —
+     nav-sized type scaled up ~12× — rasterises small and arrives blurry. */
+  font-family: var(--font-mono);
+  font-size: clamp(2.2rem, 1rem + 5.4vw, 5rem);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  line-height: 1;
+  z-index: 55;
+}
+.intro-mark svg { width: 1.35em; height: 1.35em; }
+.intro-mark span { padding-left: 0.06em; }
+
+/* --ink-soft, not the quieter --ash: on a wide-but-short viewport the sun disc
+   reaches the corners, and --ash measured 4.23:1 there against the glow plus a
+   ray. The plate has to stay legible at every aspect ratio, not just the one it
+   was designed at. */
+.intro-meta {
+  position: absolute;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.intro-meta.is-tr { top: clamp(1.4rem, 4vh, 2.6rem); right: clamp(1.25rem, 4vw, 3rem); }
+.intro-meta.is-bl { bottom: clamp(1.4rem, 4vh, 2.6rem); left: clamp(1.25rem, 4vw, 3rem); }
+.intro-meta.is-br { bottom: clamp(1.4rem, 4vh, 2.6rem); right: clamp(1.25rem, 4vw, 3rem); }
+
+.intro-cue {
+  position: absolute;
+  bottom: clamp(4.5rem, 13vh, 7rem);
+  left: 50%;
+  translate: -50% 0;
+  margin: 0;
+  display: grid;
+  justify-items: center;
+  gap: 0.7rem;
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.intro-cue i { display: block; width: 1px; height: 2.6rem; background: linear-gradient(180deg, var(--line-strong), transparent); }
+
+@media (max-width: 700px) {
+  .intro-meta.is-tr, .intro-meta.is-br { display: none; }
+  .intro-meta.is-bl { right: clamp(1.25rem, 4vw, 3rem); }
+}
+
+@keyframes intro-rays { to { rotate: 360deg; } }
+@keyframes intro-mote {
+  0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+  12%  { opacity: 0.75; }
+  78%  { opacity: 0.75; }
+  100% { transform: translate3d(var(--mx, 20px), -130px, 0); opacity: 0; }
+}
+@keyframes intro-cue-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
+/* The flight. `from` is the centred plate, `to` is the nav mark. */
+@keyframes intro-fly {
+  from { transform: translate(var(--fly-dx, 0px), var(--fly-dy, 0px)) scale(1); }
+  to   { transform: scale(var(--fly-end, 0.2)); }
+}
+@keyframes intro-plate-out {
+  0%, 30% { opacity: 1; }
+  100%    { opacity: 0; }
+}
+/* The hero never scrolls, in or out. One linear counter-translate holds it at
+   the top of the viewport across BOTH acts — arriving over the intro spacer and
+   then standing still while it parts. Because the counter-move is linear the
+   whole way, the two acts are a single ramp rather than two animations fighting
+   over `transform` (a second declaration would replace the first, not extend it).
+     first visit:  -100vh → +100vh across 0 → 200vh
+     repeat visit:      0 → +100vh across 0 → 100vh   (no intro spacer above) */
+/* Arrival and hold are split across two PROPERTIES — transform for the arrival,
+   translate for the hold — because they are separate phases with a stretch of
+   ordinary scrolling in between, and a single `transform` animation cannot
+   describe a gap. As independent properties they compose instead of fighting. */
+@keyframes hero-arrive {
+  from { transform: translate3d(0, var(--hero-arrive-from, -100vh), 0); }
+  to   { transform: none; }
+}
+@keyframes hero-hold {
+  from { translate: 0 0; }
+  to   { translate: 0 var(--hero-hold-to, 100vh); }
+}
+/* .day is uncovered, not delivered: held at the top of the viewport behind the
+   parting hero and faded up on the spot. */
+@keyframes day-arrive {
+  from { transform: translate3d(0, var(--day-from, 100vh), 0); }
+  to   { transform: none; }
+}
+@keyframes day-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes hero-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+/* The curtains. These animate `translate`, NOT `transform`, on purpose: the
+   stage is a .reveal target whose transform belongs to the reveal, and the
+   artwork's transform belongs to its parallax drift. As a separate property,
+   translate composes with both instead of overwriting either. */
+@keyframes hero-part-left  { to { translate: -125% 0; } }
+@keyframes hero-part-right { to { translate: 125% 0; } }
+/* The margin rule is a ~25px-wide vertical strip, and a percentage translate is
+   relative to the element's OWN width — so the shared -125% moved it 31px and it
+   sat there for the entire exit while everything else cleared. Given a viewport
+   distance instead, chosen to match how far the copy column actually travels. */
+@keyframes hero-part-rule  { to { translate: -55vw 0; } }
+@keyframes intro-nav-in {
+  0%, 74% { opacity: 0; }
+  100%    { opacity: 1; }
+}
+@keyframes intro-navmark-in {
+  0%, 93% { opacity: 0; }
+  100%    { opacity: 1; }
+}
+@keyframes intro-mark-out {
+  0%, 93% { opacity: 1; }
+  100%    { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .intro-sun::before { animation: intro-rays 150s linear infinite; }
+  .intro-motes li { animation: intro-mote var(--d, 20s) var(--delay, 0s) linear infinite; }
+  /* The LINE pulses, not the word. Pulsing the whole cue took its text to 0.45
+     opacity, which fails contrast for half of every cycle. */
+  .intro-cue i { animation: intro-cue-pulse 3.4s var(--ease-in-out) infinite; }
+
+  /* Scroll timelines are the only way to scrub this without a scroll handler.
+     Where they are missing the whole flight is skipped and the plate simply
+     scrolls away — the lockup stays centred and static, which is a coherent
+     screen rather than a broken one. */
+  @supports (animation-timeline: scroll()) {
+    /* Fixed, so the plate never slides: it holds still and dissolves. */
+    .js:not(.intro-seen) .intro-stage { position: fixed; }
+
+    .js:not(.intro-seen) .intro-mark {
+      position: fixed;
+      left: var(--mark-x, 2rem);
+      top: var(--mark-y, 1.5rem);
+      transform-origin: left top;
+      animation: intro-fly linear both, intro-mark-out linear both;
+      animation-timeline: scroll(root), scroll(root);
+      animation-range: 0 55vh, 0 55vh;
+    }
+    .js:not(.intro-seen) .intro-stage > :not(.intro-mark) {
+      animation: intro-plate-out linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 55vh;
+    }
+    /* A full screen of runway so the parting has somewhere to happen. */
+    .js .hero-exit { display: block; height: 100vh; }
+
+    /* Held only from SETTLE — the point where the hero's bottom has reached the
+       bottom of the viewport and the whole thing has been seen. */
+    .js .hero {
+      animation: hero-hold linear both;
+      animation-timeline: scroll(root);
+      animation-range: var(--hero-settle, 100vh) var(--hero-pin-end, 200vh);
+    }
+    /* Only the first visit arrives and fades — a repeat visit has no plate to
+       cross with and no spacer to travel over. The fade starts well before the
+       plate finishes so the two genuinely cross; beginning it at 45vh left a
+       stretch of near-empty paper. */
+    .js:not(.intro-seen) .hero {
+      animation: hero-hold linear both, hero-arrive linear both, hero-fade linear both;
+      animation-timeline: scroll(root), scroll(root), scroll(root);
+      animation-range: var(--hero-settle, 100vh) var(--hero-pin-end, 200vh),
+                       0 var(--hero-arrive-end, 100vh),
+                       30vh 88vh;
+    }
+
+    /* ACT TWO — the halves leave in opposite directions, finishing at
+       --hero-part-end (~55% of the hold) so they are entirely gone before the
+       next section starts to surface. */
+    .js .hero::before,
+    .js .hero-body {
+      animation: hero-part-left linear both;
+      animation-timeline: scroll(root);
+      animation-range: var(--hero-settle, 100vh) var(--hero-part-end, 170vh);
+    }
+    .js .hero-rule {
+      animation: hero-part-rule linear both;
+      animation-timeline: scroll(root);
+      animation-range: var(--hero-settle, 100vh) var(--hero-part-end, 170vh);
+    }
+    .js .hero-art-wrap,
+    .js .hero-stage {
+      animation: hero-part-right linear both;
+      animation-timeline: scroll(root);
+      animation-range: var(--hero-settle, 100vh) var(--hero-part-end, 170vh);
+    }
+
+    /* .day: held at the top for the same span and faded up there, so it is
+       revealed by the curtains rather than sliding in under them. */
+    .js .day {
+      animation: day-arrive linear both, day-fade linear both;
+      animation-timeline: scroll(root), scroll(root);
+      animation-range: var(--hero-settle, 100vh) var(--hero-pin-end, 200vh),
+                       var(--day-fade-start, 150vh) var(--hero-pin-end, 200vh);
+    }
+    /* The nav arrives to receive the lockup; its own mark appears only in the
+       last breath, under the flyer, so the hand-off has no visible seam. */
+    .js:not(.intro-seen) .nav {
+      animation: intro-nav-in linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 55vh;
+    }
+    .js:not(.intro-seen) .nav-mark {
+      animation: intro-navmark-in linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 55vh;
+    }
+    /* Author !important outranks animations in the cascade, so a keyboard user
+       tabbing into a nav that has not faded in yet still sees where they are. */
+    .nav:focus-within { opacity: 1 !important; }
+  }
+}
 
 
 /* ─── NAV ─────────────────────────────────────────────────────────────────── */
@@ -19,30 +347,45 @@
   position: fixed;
   inset: 0 0 auto;
   z-index: 50;
-  background: rgba(14, 14, 13, 0.72);
-  backdrop-filter: blur(14px) saturate(140%);
+  background: var(--nav-bg);
+  backdrop-filter: blur(14px) saturate(120%);
   border-bottom: 1px solid transparent;
   transition: border-color 0.3s var(--ease-out), background-color 0.3s var(--ease-out);
 }
-.nav[data-scrolled='true'] { border-bottom-color: var(--line); background: rgba(14, 14, 13, 0.9); }
+.nav[data-scrolled='true'] { border-bottom-color: var(--line); background: var(--nav-bg-solid); }
 .nav-inner {
-  height: 70px;
+  height: 74px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
 }
-.nav-mark { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; letter-spacing: 0.02em; }
-.nav-mark svg { width: 26px; height: 26px; }
-.nav-mark span { font-family: var(--font-display); font-size: 1.16rem; }
-.nav-links { display: none; gap: 2rem; }
-.nav-links a { font-size: 0.92rem; color: var(--ink-muted); transition: color 0.2s var(--ease-out); }
-.nav-links a:hover { color: var(--ink); }
+.nav-mark { display: flex; align-items: center; gap: 0.65rem; }
+.nav-mark svg { width: 26px; height: 26px; transition: transform 0.5s var(--ease-out); }
+.nav-mark:hover svg { transform: rotate(28deg) scale(1.08); }
+.nav-mark span {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+}
+.nav-links { display: none; gap: 2.2rem; }
+.nav-links a {
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  padding-block: 0.4rem;
+  transition: color 0.2s var(--ease-out);
+}
+.nav-links a:hover { color: var(--accent-ink); }
 .nav-cta { display: none; }
 .nav-burger {
   display: inline-flex; align-items: center; justify-content: center;
   width: 46px; height: 46px; background: none; border: 1px solid var(--line-strong);
-  border-radius: 10px; cursor: pointer;
+  border-radius: var(--radius); cursor: pointer;
 }
 .nav-burger svg { width: 20px; height: 20px; }
 .nav-panel {
@@ -52,10 +395,14 @@
 }
 .nav-panel[data-open='true'] { display: block; }
 .nav-panel a {
-  display: block; padding: 0.85rem 0; font-size: 1.02rem;
-  border-bottom: 1px solid var(--line);
+  display: block; padding: 0.9rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line-soft);
 }
-.nav-panel .btn { margin-top: 1.1rem; }
+.nav-panel .btn { margin-top: 1.3rem; }
 @media (min-width: 900px) {
   .nav-links, .nav-cta { display: flex; }
   .nav-burger { display: none; }
@@ -70,315 +417,2220 @@
   min-height: 100dvh;
   display: flex;
   align-items: center;
-  padding-block: 7rem 4rem;
+  padding-block: 8rem 3rem;
   overflow: hidden;
   isolation: isolate;
+  /* Above .day, which is a later sibling and would otherwise paint on top while
+     the hero is held in place. .day rises behind the parting halves and is what
+     they reveal, so the hero has to stay in front until they have cleared. */
+  z-index: 2;
 }
-/* Atmosphere, drawn not photographed. Two soft warm fields + a faint grid.
-   Decorative only, so it is aria-hidden in the markup. */
-.hero-veil {
-  position: absolute;
-  inset: -20% -10% auto;
-  height: 90%;
-  z-index: -2;
-  background:
-    radial-gradient(48% 55% at 22% 28%, rgba(204, 120, 92, 0.16), transparent 68%),
-    radial-gradient(40% 48% at 82% 12%, rgba(212, 162, 127, 0.10), transparent 70%);
-  filter: blur(6px);
-}
-.hero-grid {
+
+/* The artwork. It carries its own sun, so there is no CSS sun any more — a
+   second light source would read as two suns in one frame.
+   The mask is the whole trick: the painting does not sit in a box, it dissolves
+   into the paper, so the page reads as one sheet that happens to be painted on
+   the right. Tuned in --art-in / --art-full rather than hard-coded, because the
+   only correct value is the one that keeps the headline legible. */
+.hero-art-wrap {
   position: absolute;
   inset: 0;
-  z-index: -3;
-  background-image:
-    linear-gradient(to right, rgba(232, 224, 212, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(232, 224, 212, 0.04) 1px, transparent 1px);
-  background-size: 76px 76px;
-  mask-image: radial-gradient(70% 60% at 50% 35%, #000 30%, transparent 78%);
+  z-index: -2;
 }
-.hero-body { max-width: 62rem; }
+.hero-art {
+  position: absolute;
+  inset: 0;
+  --art-in: 14%;
+  --art-full: 52%;
+  background-image: url('/img/hero-riviera.webp');
+  background-size: cover;
+  background-position: 58% center;
+  -webkit-mask-image: linear-gradient(90deg,
+    transparent 0%, rgba(0,0,0,0.35) var(--art-in), #000 var(--art-full));
+  mask-image: linear-gradient(90deg,
+    transparent 0%, rgba(0,0,0,0.35) var(--art-in), #000 var(--art-full));
+}
+/* Paper bed under the copy column only. The mask alone leaves the lower-left of
+   the painting (dark hull, balustrade) sitting under the meta block, where dark
+   ink on dark paint fails. This puts a sheet back under the words. */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 68%;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    var(--paper) 0%, var(--paper) 36%, rgba(244, 234, 220, 0.88) 58%, transparent 100%);
+}
+
+/* The left margin rule with vertical meta — the reference's tell. Hidden below
+   the breakpoint where there is no margin to put it in. */
+.hero-rule { display: none; }
+@media (min-width: 1180px) {
+  .hero-rule {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.4rem;
+    position: absolute;
+    left: max(1.5rem, calc((100vw - var(--shell)) / 2 + 1.1rem));
+    top: 32%;
+    z-index: 2;
+  }
+  .hero-vert {
+    writing-mode: vertical-rl;
+    font-family: var(--font-mono);
+    font-size: var(--t-label);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--ash);
+  }
+  .hero-rule::after {
+    content: '';
+    width: 1px;
+    height: clamp(5rem, 12vh, 9rem);
+    background: linear-gradient(180deg, var(--line), transparent);
+  }
+}
+
+.hero-grid { display: grid; gap: 3rem; align-items: center; }
+@media (min-width: 1000px) {
+  .hero-grid { grid-template-columns: 1.02fr 0.98fr; gap: 3.5rem; }
+  /* Lifts the card clear of the walking figure in the painting — centred, its
+     lower edge cut him at the neck. Offset via `top`, not margin (a centred grid
+     absorbs half of any margin) and not transform (.hero-stage is a .reveal
+     target, and the reveal animation already owns transform). */
+  .hero-stage { position: relative; top: -7rem; }
+}
+@media (min-width: 1180px) { .hero-grid { padding-left: 3.6rem; } }
+
 .hero-title {
   font-family: var(--font-display);
   font-size: var(--t-display);
-  line-height: 1.03;
-  letter-spacing: -0.028em;
-  font-weight: 700;
+  /* Not tighter than 1.0: uppercase Cyrillic has descenders (Д, Ц, Щ) that a
+     latin-tuned 0.96 drops straight into the next line. */
+  line-height: 1;
+  letter-spacing: 0.005em;
+  text-transform: uppercase;
+  font-weight: 200;
   margin: 0;
-  text-wrap: balance;
 }
-.hero-title em {
-  font-style: normal;
-  color: var(--accent);
+.hero-title em { font-style: normal; color: var(--accent-ink); }
+
+/* The serif line under the headline — the one moment of warmth in the block. */
+.hero-accent {
+  font-family: var(--font-serif);
+  font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.35rem);
+  line-height: 1.25;
+  color: var(--accent-ink);
+  margin: 1.3rem 0 0;
 }
 .hero-sub {
-  font-size: clamp(1.05rem, 1rem + 0.4vw, 1.3rem);
-  line-height: 1.55;
-  color: var(--ink-muted);
-  max-width: 48ch;
-  margin: 1.6rem 0 0;
+  font-family: var(--font-serif);
+  font-size: clamp(1rem, 0.97rem + 0.24vw, 1.12rem);
+  line-height: 1.75;
+  color: var(--ink-soft);
+  max-width: 40ch;
+  margin: 1rem 0 0;
 }
-.hero-actions { display: flex; flex-wrap: wrap; gap: 0.9rem; margin-top: 2.4rem; }
-.hero-note {
+.hero-actions { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-top: 2.4rem; }
+
+/* Printed meta, set like the venue block on a ticket. */
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2.6rem;
+  margin: 2.6rem 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+.hero-meta div { display: grid; gap: 0.25rem; }
+.hero-meta dt {
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+.hero-meta dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+/* The drawn product. Deliberately not a screenshot: it stays crisp at any
+   density, weighs nothing, and cannot leak a real customer's data. */
+/* It now sits ON the painting, so it needs to behave like a real object resting
+   there: slightly translucent so the gold reads through, and a two-part shadow
+   — a tight contact shadow plus a long soft one — which is what actually sells
+   depth. A single large blur reads as a sticker. */
+.hero-stage {
+  background: rgba(251, 246, 238, 0.93);
+  backdrop-filter: blur(10px) saturate(115%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: var(--radius-lg);
+  padding: 1.1rem;
+  box-shadow: 0 2px 8px rgba(48, 26, 10, 0.16),
+              0 44px 110px rgba(48, 26, 10, 0.34);
+}
+.hero-stage-bar {
+  display: flex; align-items: center; gap: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ash);
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+.hero-stage-bar i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+.hero-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin-top: 0.9rem; }
+.hero-col-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: var(--accent-wash);
+  border-radius: var(--radius);
+  padding: 0.45rem 0.55rem;
+  margin: 0 0 0.5rem;
+}
+.hero-col-head b { color: var(--accent-ink); font-weight: 600; }
+.hero-deal {
+  background: var(--paper);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 0.55rem 0.6rem;
+  margin-bottom: 0.45rem;
+}
+.hero-deal span {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+.hero-deal i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex: none; }
+.hero-deal b {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 0.25rem;
+}
+
+@keyframes hero-art-in {
+  from { opacity: 0; transform: scale(1.06); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes hero-copy-in {
+  from { opacity: 0; transform: translate3d(0, 30px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes hero-art-drift {
+  from { transform: scale(1.04) translate3d(0, -1.5%, 0); }
+  to { transform: scale(1.12) translate3d(0, 4%, 0); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-art { animation: hero-art-in 1.6s 0.05s var(--ease-out) both; }
+
+  .js .hero-body.reveal { opacity: 1; transform: none; transition: none; }
+  .js .hero-body.reveal > * { opacity: 0; transform: translate3d(0, 30px, 0); }
+  .js .hero-body.reveal.is-in > * { animation: hero-copy-in 0.8s var(--ease-out) both; }
+  .js .hero-body.reveal.is-in > :nth-child(2) { animation-delay: 0.07s; }
+  .js .hero-body.reveal.is-in > :nth-child(3) { animation-delay: 0.14s; }
+  .js .hero-body.reveal.is-in > :nth-child(4) { animation-delay: 0.21s; }
+  .js .hero-body.reveal.is-in > :nth-child(5) { animation-delay: 0.28s; }
+  .js .hero-body.reveal.is-in > :nth-child(6) { animation-delay: 0.35s; }
+
+  @supports (animation-timeline: view()) {
+    .hero-art {
+      animation: hero-art-in 1.6s 0.05s var(--ease-out) both,
+                 hero-art-drift linear both;
+      animation-timeline: auto, view();
+      animation-range: normal, entry 0% exit 100%;
+    }
+  }
+}
+
+/* Short laptop screens: claw back vertical space so more of the hero fits
+   before the free-scroll phase has to make up the difference. */
+@media (min-width: 1000px) and (max-height: 800px) {
+  .hero { padding-block: 6rem 2rem; }
+  .hero-meta { margin-top: 1.8rem; padding-top: 1.1rem; }
+  .hero-actions { margin-top: 1.7rem; }
+  .hero-sub { margin-top: 0.8rem; }
+}
+
+@media (max-width: 999px) {
+  .hero { align-items: flex-start; padding-block: 7rem 3.5rem; min-height: 0; }
+  .hero-sub { max-width: none; }
+  .hero-stage { order: 2; }
+  /* Portrait has no left margin to dissolve into, so the painting becomes a
+     band under the copy rather than a backdrop behind it: masked top-down and
+     dropped in strength, or the headline sits on painted architecture. */
+  .hero-art {
+    inset: auto 0 0 0;
+    height: 52%;
+    opacity: 0.9;
+    background-image: url('/img/hero-riviera-sm.webp');
+    background-position: 62% center;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 42%);
+    mask-image: linear-gradient(180deg, transparent 0%, #000 42%);
+  }
+  .hero::before {
+    inset: 0;
+    width: auto;
+    background: linear-gradient(180deg, var(--paper) 0%, var(--paper) 46%, transparent 78%);
+  }
+}
+@media (max-width: 560px) {
+  .hero-cols { grid-template-columns: 1fr 1fr; }
+  .hero-cols > :last-child { display: none; }
+  .hero-meta { gap: 0.5rem 1.6rem; }
+}
+
+
+/* ─── DAY (one day, read as a schedule — five beats) ─────────────────────────
+   The design: time lives in the left margin, a hairline with a dot runs down
+   beside it, and the world runs as a strip off the right edge whose inner edge
+   dissolves into the paper. TEXT NEVER SITS ON A PICTURE — that separation is
+   the whole idea, and it is why there is not one scrim in this section.
+
+   The light travels: the ground warms from pale at 09:40 to deep at 19:05, so
+   the section is one passage of time rather than three tiles with clocks on.
+
+   Beats: 0 heading · 1–3 each moment alone · 4 the whole day at once. Each gets
+   --day-beat of scroll; the builder is in site.js. */
+
+.day {
+  border-block: 1px solid var(--line);
+  background: linear-gradient(180deg, #F7F0E6 0%, #F3E8D8 34%, #EFDFC9 68%, #E9D4B7 100%);
+  /* THE tuning number: scroll distance per beat. ~1200px reads as roughly two
+     seconds at a normal wheel speed; a trackpad flick will always be quicker.
+     Turn this one value, nothing else. */
+  --day-beat: 1200px;
+  /* Wide enough for the time on ONE line. The glyphs are split into separate
+     inline-blocks so each can roll on its own window, which means the browser
+     is free to break between them — at 9rem it wrapped after the colon and put
+     the minutes under the hours.
+
+     The clock's geometry is single-sourced here, and it HAS to be: every cell
+     below is a fixed width, so the run measures exactly
+     4·digit + colon + 5·letter-spacing = 2.83em — but --time-col was a flat
+     12rem while --time-size scales with the viewport. Past ~1370px the run
+     outgrew the column, and since .day-time is right-aligned inside the
+     overflow clip the roll needs, the excess was cut off its LEFT edge: 6px at
+     1440, 16px once the size caps. Deriving the column from the same numbers
+     that draw the clock is what keeps the two from drifting apart again.
+
+     Floored at 12rem so the widths that already composed correctly do not move;
+     only the ones that were clipping get wider. */
+  --time-size: clamp(2.4rem, 1.5rem + 3.2vw, 4.6rem);
+  --time-digit: 0.63;   /* one digit cell, in --time-size units */
+  --time-colon: 0.26;   /* the separator cell */
+  --time-track: 0.01;   /* letter-spacing, landing after all five cells */
+  --time-roll: 105%;    /* how far a glyph travels to clear its cell */
+  --time-col: max(12rem, calc(var(--time-size) *
+    (4 * var(--time-digit) + var(--time-colon) + 5 * var(--time-track))));
+  --time-gap: 3rem;
+}
+.day-head { max-width: 54rem; }
+
+/* ── cinema mode ──────────────────────────────────────────────────────────
+   Only present once site.js has enhanced the section. Without it every rule
+   below is inert and the section is an ordinary one. */
+.day.is-cinema { padding-block: 0; }
+.day-reel { position: relative; }
+.day-frame {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  display: grid;
+  place-items: stretch;
+  overflow: hidden;
+}
+/* All beats share one grid cell so they stack and cross-fade. */
+.day-beat {
+  grid-area: 1 / 1;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  animation: day-beat-show linear both;
+  animation-timeline: scroll(root);
+  animation-range: var(--beat-in, 0px) var(--beat-out, 100vh);
+}
+.day-beat:last-child { animation-name: day-beat-last; }
+.day-beat-in {
+  width: 100%;
+  max-width: var(--shell);
+  margin-inline: auto;
+  padding-inline: clamp(1.25rem, 4vw, 3rem);
+}
+
+/* pointer-events rides the opacity, and it is load-bearing rather than tidy:
+   the beats share one grid cell, so a faded-out beat is still hit-tested and
+   the LAST one in the DOM wins. Without it, dragging over the entry you can see
+   selects invisible text from the finale stacked on top of it. */
+@keyframes day-beat-show {
+  0%   { opacity: 0; pointer-events: none; }
+  12%  { opacity: 1; pointer-events: auto; }
+  88%  { opacity: 1; pointer-events: auto; }
+  100% { opacity: 0; pointer-events: none; }
+}
+@keyframes day-beat-last {
+  0%   { opacity: 0; pointer-events: none; }
+  12%  { opacity: 1; pointer-events: auto; }
+  100% { opacity: 1; pointer-events: auto; }
+}
+
+/* ── an entry ───────────────────────────────────────────────────────────── */
+.day-card {
+  position: relative;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  color: inherit;
+}
+.day-card .day-time {
+  font-family: var(--font-display);
+  font-weight: 200;
+  line-height: 1;
+  white-space: nowrap;   /* belt and braces: never break between glyphs */
+  /* Exo 2 ships PROPORTIONAL figures, so 1 is far narrower than 0 and the three
+     times came out 177 / 146 / 158 px wide — colons and digits landed somewhere
+     different on every card. Tabular figures fix most of it, but Exo 2 still
+     gives 4 a 41.31px advance against every other digit at 42.67, which was
+     enough to shift the colon between beats. The split glyphs therefore get an
+     explicit cell width below and stop trusting the font entirely.
+     (Measured off the woff2 at wght 200: tabular 4 is .619em and 8 is .613em
+     against .620em for the other eight, so tnum genuinely does not equalise.) */
+  font-variant-numeric: tabular-nums;
+  font-size: var(--time-size);
+  letter-spacing: calc(var(--time-track) * 1em);
+  color: var(--accent-ink);
+  margin: 0 0 0.8rem;
+}
+.day-card h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.16;
+  font-size: clamp(1.15rem, 1rem + 0.8vw, 1.6rem);
+  margin: 0 0 0.7rem;
+}
+.day-card p { margin: 0 0 0.9rem; color: var(--ink-soft); font-size: 0.99rem; line-height: 1.75; max-width: 52ch; }
+.day-card p:last-of-type { margin-bottom: 0; }
+
+@media (min-width: 900px) {
+  /* Time into the margin. The card is a two-column grid and the time spans it,
+     so every following block lands in column two without needing a wrapper. */
+  .day-card {
+    display: grid;
+    grid-template-columns: var(--time-col) minmax(0, 1fr);
+    column-gap: var(--time-gap);
+  }
+  .day-card .day-time { grid-column: 1; grid-row: 1 / span 20; text-align: right; margin: 0; padding-top: 0.1rem; }
+  .day-card > :not(.day-time) { grid-column: 2; }
+  /* ::before is the rule, ::after is the dot — together they read as a timeline
+     rather than a divider between two columns. */
+  .day-card::before {
+    content: '';
+    position: absolute;
+    top: 0.35rem; bottom: 0;
+    left: calc(var(--time-col) + var(--time-gap) / 2);
+    width: 1px;
+    background: var(--line);
+  }
+  .day-card::after {
+    content: '';
+    position: absolute;
+    top: 0.72rem;
+    left: calc(var(--time-col) + var(--time-gap) / 2 - 4.5px);
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 4px #F3E8D8;
+  }
+}
+
+/* the drawn product fragment — a strip, never a screenshot */
+.day-stage { display: grid; gap: 0.45rem; margin-top: 1.5rem; max-width: 26rem; }
+.day-stage-row {
+  display: flex; align-items: center; gap: 0.7rem;
+  background: var(--rice);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 0.62rem 0.78rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+}
+.day-stage-row b { font-weight: 600; }
+.day-stage-row span { margin-left: auto; font-size: 0.66rem; color: var(--ash); }
+.day-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+.day-dot.is-quiet { background: var(--line-strong); }
+
+/* ── a solo beat: the entry on paper, the world down the right edge ──────── */
+/* Anchored to the TOP, not centred. The three entries are different heights
+   (309 / 358 / 309), so centring them put the clock at a different height on
+   every beat and it jumped as they cross-faded. A common top edge is also
+   robust to the copy changing, which a matching min-height would not be. */
+.day-beat.is-solo { position: relative; align-items: flex-start; }
+.day-beat.is-solo .day-beat-in { padding-top: clamp(5rem, 22vh, 11rem); }
+.day-beat.is-solo .day-card { max-width: 46rem; }
+.day-beat.is-solo::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 38%;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--card-img, none);
+  background-size: cover;
+  background-position: center;
+  /* Two masks, intersected. Horizontal dissolves the inner edge into the paper;
+     vertical keeps the frame off the top and bottom of the screen. Percentages
+     are of this element's own box and the horizontal one reaches transparent at
+     0%, so there is no rectangle anywhere — the earlier version sized a radial
+     at 115% of the box, which put `transparent` outside the element entirely
+     and drew a hard rectangle. */
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.55) 22%, #000 55%),
+    linear-gradient(180deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
+  mask-image:
+    linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.55) 22%, #000 55%),
+    linear-gradient(180deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+/* The time turns over as you scroll: each glyph rolls on its own slightly later
+   window, so they cascade like an odometer instead of sliding as a slab.
+
+   --time-roll is why 105% is enough to hide a glyph completely. Measured off the
+   woff2: hhea gives ascent .999 / descent -.201, so the font's content box is
+   1.2em and line-height:1 puts the baseline .899em down. Digit ink runs -.012 to
+   .702 around the baseline, i.e. .197em to .911em inside a 1em cell — so one
+   whole cell height clears both edges outright, and the extra 5% is only there
+   to swallow antialiasing. The old 118% was guesswork against a clip that, in
+   the grid, was not even happening. */
+@keyframes day-time-roll {
+  0%   { transform: translateY(var(--time-roll)); }
+  14%  { transform: translateY(0); }
+  86%  { transform: translateY(0); }
+  100% { transform: translateY(calc(var(--time-roll) * -1)); }
+}
+/* The cell: one line tall, and the only thing that clips. It does NOT carry the
+   animation — an element cannot clip itself while it moves. */
+.day-beat.is-solo .day-time .day-glyph {
+  display: inline-block;
+  vertical-align: top;   /* pin to the line-box top; overflow:hidden would
+                            otherwise move this box's baseline to its bottom
+                            edge and drop the whole clock by ~0.1em */
+  overflow: hidden;
+  /* One fixed cell per glyph — deterministic, so every beat's clock occupies
+     exactly the same pixels no matter which digits it happens to contain.
+     These are the same numbers --time-col is computed from; change them there,
+     not here, or the column stops matching the run and the clock clips again. */
+  width: calc(var(--time-digit) * 1em);
+}
+.day-beat.is-solo .day-time .day-glyph.is-sep { width: calc(var(--time-colon) * 1em); }
+/* The roller: a block filling the cell, so it can leave through either edge. */
+.day-beat.is-solo .day-time .day-glyph > i {
+  display: block;
+  font-style: normal;
+  text-align: center;
+  animation: day-time-roll linear both;
+  animation-timeline: scroll(root);
+  animation-range: calc(var(--beat-in) + var(--i) * 26px)
+                   calc(var(--beat-out) + var(--i) * 26px);
+}
+
+/* ── the finale: THE DAY ENDS ────────────────────────────────────────────
+   Beats one to four are paper warming from pale morning to deep evening. The
+   fifth leaves paper for --night — not a new dark theme, the app's own lacquer,
+   the surface .asst and the assistant band already use — and the only lit thing
+   is the device the day happened on.
+
+   This is what retires the section's oldest problem. The finale never had a
+   picture and four attempts at one were turned down; a lit screen needs none,
+   because it IS the light in the frame.
+
+   It used to be the whole three-card rail shown again, trimmed. A finale that
+   repeats what you just read, smaller, has nothing to give. */
+.day-rail { display: grid; gap: clamp(1.2rem, 3vh, 2.2rem); margin: 0; }
+
+/* The rail still rides in this beat, because the solo beats are aria-hidden
+   clones and it is the only copy of the section AT ever sees. Hidden the
+   accessible way — display:none would take it from AT too. */
+.day-sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.day-beat.is-close {
+  position: relative;   /* the grain below insets to THIS, not to .day-frame */
+  --night-deep: #0D0B09;
+  --night-line-soft: rgba(239, 230, 216, 0.09);
+  color: var(--night-ink);
+  /* Lit from behind the device — the only source in the frame, so the object
+     reads as the thing being looked at. */
+  background:
+    radial-gradient(58% 46% at 72% 50%, rgba(204, 120, 92, 0.20), transparent 66%),
+    radial-gradient(80% 60% at 72% 46%, rgba(239, 230, 216, 0.05), transparent 72%),
+    var(--night);
+}
+/* Fine lacquer grain, so a large flat dark field is never plastic. */
+.day-beat.is-close::before {
+  content: '';
+  position: absolute; inset: 0; pointer-events: none;
+  opacity: 0.4; mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)' opacity='0.3'/%3E%3C/svg%3E");
+}
+.day-beat.is-close .day-beat-in { position: relative; }
+
+.day-close {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(19rem, 34%, 26rem);
+  gap: clamp(2rem, 6vw, 6rem);
+  align-items: center;
+}
+/* --accent is a FILL and measures 1.8:1 on night. Accent TEXT here is
+   --accent-lift, the same rule the assistant band keeps. */
+.day-close .eyebrow { color: var(--accent-lift); }
+.day-close .lede { color: var(--night-muted); max-width: 44ch; }
+.day-close .day-foot {
+  border-top-color: var(--night-line);
+  color: var(--night-muted);
+}
+.day-close .day-foot b { color: var(--night-ink); }
+
+/* ── the object ──────────────────────────────────────────────────────────── */
+/* Long lens. At 1500px the near edge fisheyes and the screen stops being
+   readable at this size. */
+.day-dev-wrap { perspective: 2400px; display: grid; place-items: center; }
+.day-dev {
+  position: relative;
+  width: min(20rem, 100%);
+  aspect-ratio: 41 / 84;
+  border-radius: 2.1rem;
+  padding: 0.5rem;
+  transform: rotateY(-15deg) rotateX(4deg);
+  transform-style: preserve-3d;
+  background: linear-gradient(150deg, #3A3129 0%, #171310 42%, #0B0908 100%);
+  box-shadow:
+    0 0 0 1px rgba(239, 230, 216, 0.10),
+    0 50px 90px -40px rgba(0, 0, 0, 0.95),
+    0 24px 120px -30px rgba(204, 120, 92, 0.32);   /* the screen's own spill */
+}
+.day-dev::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(118deg, rgba(239, 230, 216, 0.16) 0%, transparent 26%,
+                              transparent 74%, rgba(239, 230, 216, 0.06) 100%);
+}
+
+.day-scr {
+  height: 100%;
+  border-radius: 1.7rem;
+  background: var(--night-deep);
+  border: 1px solid rgba(239, 230, 216, 0.07);
+  padding: 1.15rem 1rem 0.9rem;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.day-scr-top {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--night-muted);
+  padding-bottom: 0.8rem; border-bottom: 1px solid var(--night-line-soft);
+}
+.day-scr-tots { display: flex; gap: 1.5rem; padding: 1.05rem 0 0.95rem; }
+.day-scr-tots div { display: grid; gap: 0.1rem; }
+/* the clock's own instrument, carried into the payoff: the day was told in
+   times and it ends in numbers */
+.day-scr-tots b {
+  font-family: var(--font-display); font-weight: 200; font-size: 2.5rem;
+  line-height: 1; letter-spacing: 0.01em; font-variant-numeric: tabular-nums;
+  color: var(--accent-lift);
+}
+.day-scr-tots span {
+  font-family: var(--font-mono); font-size: 0.5rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--night-muted);
+}
+.day-scr-log {
+  list-style: none; margin: 0; padding: 0.85rem 0 0;
+  border-top: 1px solid var(--night-line-soft);
+  display: grid; gap: 0.4rem;
+}
+.day-scr-log li {
+  display: flex; align-items: baseline; gap: 0.7rem;
+  background: rgba(239, 230, 216, 0.035);
+  border: 1px solid var(--night-line-soft);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.6rem;
+  font-family: var(--font-mono); font-size: 0.575rem; letter-spacing: 0.02em;
+  color: var(--night-ink);
+}
+.day-scr-log time {
+  font-family: var(--font-display); font-weight: 200; font-size: 0.86rem;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.01em;
+  color: var(--accent-lift); flex: none;
+}
+.day-scr-log li.is-on { background: rgba(204, 120, 92, 0.12);
+                        border-color: rgba(204, 120, 92, 0.34); }
+.day-scr-h {
+  margin: 1.05rem 0 0.5rem;
+  font-family: var(--font-mono); font-size: 0.5rem; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--night-muted);
+}
+.day-scr-funnel { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.34rem; }
+.day-scr-funnel li {
+  display: flex; align-items: center; gap: 0.55rem;
+  padding: 0.42rem 0.6rem;
+  border: 1px solid var(--night-line-soft);
+  border-radius: var(--radius);
+  font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.02em;
+  color: var(--night-muted);
+}
+.day-scr-funnel li.is-on { color: var(--night-ink); border-color: rgba(204, 120, 92, 0.3); }
+.day-scr-funnel i { width: 5px; height: 5px; border-radius: 50%; flex: none;
+                    background: rgba(239, 230, 216, 0.28); }
+.day-scr-funnel li.is-on i { background: var(--accent); }
+.day-scr-funnel b { margin-left: auto; font-weight: 400; font-variant-numeric: tabular-nums; }
+/* the app's own tab bar, one lit — the tell that this is the product */
+.day-scr-tabs { margin-top: auto; padding-top: 0.9rem; display: flex; gap: 0.42rem;
+                justify-content: center; }
+.day-scr-tabs i { width: 22px; height: 3px; border-radius: 2px;
+                  background: rgba(239, 230, 216, 0.16); }
+.day-scr-tabs i.is-on { background: var(--accent); width: 30px; }
+
+/* The rows land one after another as the beat comes up, on the beat's own
+   window — the same timeline the clocks roll on, so nothing needs measuring. */
+.day-scr-log li {
+  animation: day-row-land linear both;
+  animation-timeline: scroll(root);
+  animation-range: calc(var(--beat-in) + 200px + var(--n) * 130px)
+                   calc(var(--beat-in) + 460px + var(--n) * 130px);
+}
+@keyframes day-row-land {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.day-foot {
+  display: flex; flex-wrap: wrap; gap: 0.6rem 2.6rem;
+  margin: clamp(1.6rem, 4vh, 2.6rem) 0 0;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+.day-foot b { color: var(--ink); font-weight: 600; }
+
+/* Below the cinema breakpoint the section is ordinary. */
+@media (max-width: 859px) {
+  .day-card { padding-block: 1.6rem 0; }
+  .day-card + .day-card { border-top: 1px solid var(--line); }
+}
+
+
+/* ─── CAPABILITIES (the turning cube) ────────────────────────────────────────
+
+   NIGHT. Not a new dark theme — --night from base.css, which IS the app's
+   lacquer. The site is the poster and opens on paper; this section is the
+   product showing through it, exactly as .asst and the DAY close beat do.
+
+   ONE RULE CARRIES OVER: --accent is a FILL. Accent-coloured TEXT on night uses
+   --accent-lift, so every .eyebrow and folio in here is overridden below.
+
+   It replaced four numbered faces read as an editorial contents page. Four
+   faces printed next to a feature list are a metaphor; this is the actual
+   solid, and the section turns it a quarter per screen.
+
+   Class names are all caps- prefixed. The standalone study used .track, .stage,
+   .rail, .read, .import and .cube — fine in a 400-line file of its own, but
+   here they would sit in the same cascade as every other section. */
+
+.caps {
+  --night-deep: #0D0B09;
+  --night-line-soft: rgba(239, 230, 216, 0.09);
+  position: relative;
+  color: var(--night-ink);
+  background:
+    radial-gradient(120% 70% at 50% 34%, rgba(204, 120, 92, 0.14), transparent 62%),
+    radial-gradient(90% 60% at 50% 100%, rgba(239, 230, 216, 0.05), transparent 70%),
+    var(--night);
+  /* NOT overflow:hidden. That would make this section a scroll container and
+     the sticky stage inside would pin to it instead of to the viewport — i.e.
+     not pin at all. Nothing here overflows anyway. */
+  overflow: clip;
+}
+/* Fine lacquer grain, so a large flat dark field is never plastic. */
+.caps::before {
+  content: '';
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  opacity: 0.4; mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)' opacity='0.3'/%3E%3C/svg%3E");
+}
+.caps > * { position: relative; z-index: 1; }
+
+.caps-head { max-width: 58rem; }
+.caps .eyebrow { color: var(--accent-lift); }
+.caps .lede { color: var(--night-muted); }
+
+.caps-track { margin-top: clamp(2.6rem, 5vw, 4.4rem); }
+.caps-stage { display: grid; gap: clamp(2.4rem, 5vw, 4rem); }
+
+/* ---- the solid ---------------------------------------------------------- */
+
+.caps-cube-wrap {
+  position: relative;
+  display: grid; place-items: center;
+  /* Long lens, not wide: at 1500px the near edge fisheyes and the screen on
+     the front face stops being readable. */
+  perspective: 2400px;
+  --s: clamp(15rem, 26vw, 23rem);
+  padding-block: clamp(1rem, 3vw, 2.5rem);
+}
+/* Contact shadow. Without it the cube floats like a sticker. */
+.caps-cube-wrap::after {
+  content: ''; position: absolute; z-index: 0;
+  width: calc(var(--s) * 1.15); height: calc(var(--s) * 0.22);
+  bottom: calc(50% - var(--s) * 0.78);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.55), transparent 72%);
+  filter: blur(6px);
+}
+.caps-cube {
+  position: relative; z-index: 1;
+  width: var(--s); height: var(--s);
+  transform-style: preserve-3d;
+  transform: rotateX(-14deg) rotateY(-34deg);
+}
+.caps-cf {
+  position: absolute; inset: 0;
+  background: var(--night-soft);
+  border: 1px solid var(--night-line);
+  border-radius: 2px;
+  padding: clamp(0.8rem, 1.5vw, 1.15rem);
+  display: flex; flex-direction: column;
+  font-family: var(--font-mono); font-size: 0.66rem; line-height: 1.5; letter-spacing: 0.02em;
+  backface-visibility: hidden;
+  /* The edge catching the light, then the body falling away from it. */
+  box-shadow: inset 0 1px 0 rgba(239, 230, 216, 0.07),
+              inset 0 -40px 60px -30px rgba(0, 0, 0, 0.75);
+}
+.caps-cf-1 { transform: translateZ(calc(var(--s) / 2)); }
+.caps-cf-2 { transform: rotateY(90deg)   translateZ(calc(var(--s) / 2)); }
+.caps-cf-3 { transform: rotateY(180deg)  translateZ(calc(var(--s) / 2)); }
+.caps-cf-4 { transform: rotateY(-90deg)  translateZ(calc(var(--s) / 2)); }
+/* The lid. We look slightly down on the object, so it has to exist. */
+.caps-cf-top {
+  transform: rotateX(90deg) translateZ(calc(var(--s) / 2));
+  background: linear-gradient(118deg, rgba(239, 230, 216, 0.10), transparent 42%), var(--night-deep);
+  display: grid; place-items: center;
+}
+.caps-cf-top span {
+  font-family: var(--font-display); font-size: 1.05rem; font-weight: 250;
+  letter-spacing: 0.42em; text-transform: uppercase; color: rgba(239, 230, 216, 0.34);
+  padding-left: 0.42em;
+}
+.caps-cf-head {
+  display: flex; align-items: baseline; gap: 0.6rem;
+  padding-bottom: 0.7rem; margin-bottom: 0.85rem;
+  border-bottom: 1px solid var(--night-line);
+  flex: none;
+}
+.caps-cf-head b { font-weight: 600; font-size: 0.62rem; letter-spacing: 0.2em;
+                  text-transform: uppercase; color: var(--accent-lift); }
+.caps-cf-head i { font-style: normal; margin-left: auto; color: rgba(239, 230, 216, 0.38);
+                  font-size: 0.58rem; letter-spacing: 0.14em; }
+.caps-cf-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* The tab bar. Each face is one of the app's four screens, so it carries the
+   app's own navigation with its own tab lit — which is also what stops the
+   lower half of a 23rem face from reading as a void. */
+.caps-cf-tabs {
+  margin-top: auto; flex: none; display: flex; gap: 0.55rem; justify-content: center;
+  padding-top: 0.85rem; border-top: 1px solid var(--night-line);
+}
+.caps-cf-tabs i { width: 15px; height: 15px; border: 1px solid rgba(239, 230, 216, 0.24);
+                  border-radius: 3px; }
+.caps-cf-tabs i.is-on { background: var(--accent); border-color: var(--accent);
+                        box-shadow: 0 0 12px rgba(204, 120, 92, 0.55); }
+
+/* ---- the four screens, drawn (never a screenshot) ----------------------- */
+
+/* 01 — the card everything hangs off */
+.caps-sc-card {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.75rem; border: 1px solid var(--night-line); border-radius: 2px;
+  background: rgba(239, 230, 216, 0.035);
+}
+.caps-sc-mono {
+  width: 26px; height: 26px; flex: none; display: grid; place-items: center;
+  border: 1px solid var(--night-line); border-radius: 2px;
+  font-family: var(--font-display); font-size: 0.82rem; font-weight: 300; color: var(--night-ink);
+}
+.caps-sc-card b { display: block; font-size: 0.68rem; font-weight: 600; color: var(--night-ink); }
+.caps-sc-card em { font-style: normal; font-size: 0.56rem; letter-spacing: 0.14em;
+                   text-transform: uppercase; color: var(--accent-lift); }
+.caps-sc-time { list-style: none; margin: 0.75rem 0 0; padding: 0 0 0 0.95rem;
+                position: relative; color: var(--night-muted); }
+.caps-sc-time::before { content: ''; position: absolute; left: 2px; top: 0.55rem; bottom: 0.6rem;
+                        width: 1px; background: var(--night-line); }
+.caps-sc-time li { display: flex; gap: 0.5rem; padding: 0.52rem 0; }
+.caps-sc-time li::before {
+  content: ''; position: absolute; left: 0; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--night-soft); border: 1px solid rgba(239, 230, 216, 0.3);
+  transform: translateY(0.44rem);
+}
+.caps-sc-time li:first-child::before { background: var(--accent); border-color: var(--accent);
+                                       box-shadow: 0 0 10px rgba(204, 120, 92, 0.7); }
+.caps-sc-time time { margin-left: auto; font-size: 0.58rem; color: rgba(239, 230, 216, 0.42);
+                     white-space: nowrap; }
+
+/* 02 — a card in flight over its landing slot */
+.caps-sc-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.caps-sc-col { display: flex; flex-direction: column; gap: 0.34rem; min-width: 0; }
+.caps-sc-col.is-target { position: relative; }
+.caps-sc-h { margin: 0; font-size: 0.53rem; letter-spacing: 0.06em; text-transform: uppercase;
+             color: rgba(239, 230, 216, 0.44);
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.caps-sc-stub { height: 2rem; border-radius: 2px; background: rgba(239, 230, 216, 0.06);
+                border: 1px solid var(--night-line-soft); }
+.caps-sc-slot { height: 2rem; border-radius: 2px; border: 1px dashed rgba(239, 230, 216, 0.26); }
+.caps-sc-drag {
+  position: absolute; left: -13%; right: -4%; top: 1.05rem; height: 2rem; border-radius: 2px;
+  background: var(--night-soft); border: 1px solid var(--night-line);
+  border-left: 2px solid var(--accent);
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.6); transform: rotate(-3deg);
+}
+
+/* 03 — the checklist, and what it hangs off */
+.caps-sc-tasks { list-style: none; margin: 0; padding: 0; color: var(--night-muted); }
+.caps-sc-tasks li { display: flex; align-items: center; gap: 0.55rem; padding: 0.68rem 0;
+                    border-bottom: 1px solid var(--night-line-soft); }
+.caps-sc-tasks li:last-child { border-bottom: 0; }
+.caps-sc-tasks i {
+  width: 12px; height: 12px; flex: none; border: 1px solid rgba(239, 230, 216, 0.3);
+  border-radius: 2px; display: grid; place-items: center;
+}
+.caps-sc-tasks i svg { width: 8px; height: 8px; opacity: 0; color: var(--button-ink); }
+.caps-sc-tasks li.is-done i { background: var(--accent); border-color: var(--accent); }
+.caps-sc-tasks li.is-done i svg { opacity: 1; }
+.caps-sc-tasks li.is-done { color: rgba(239, 230, 216, 0.38); text-decoration: line-through;
+                            text-decoration-color: rgba(239, 230, 216, 0.3); }
+.caps-sc-tasks time { margin-left: auto; font-size: 0.58rem; color: rgba(239, 230, 216, 0.42);
+                      white-space: nowrap; }
+
+/* 04 — a chart lit from the last column */
+.caps-sc-chart { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.caps-sc-bars {
+  flex: 1; min-height: 3rem; display: flex; align-items: flex-end; gap: 0.34rem;
+  border-bottom: 1px solid var(--night-line);
+  background-image: linear-gradient(to top, var(--night-line-soft) 1px, transparent 1px);
+  background-size: 100% 33.33%;
+}
+.caps-sc-bars i { flex: 1; height: var(--h, 50%); background: rgba(239, 230, 216, 0.22);
+                  border-radius: 1px 1px 0 0; transform-origin: bottom center; }
+.caps-sc-bars i.is-now { background: var(--accent); box-shadow: 0 0 18px rgba(204, 120, 92, 0.45); }
+.caps-sc-foot { margin: 0.6rem 0 0; font-size: 0.56rem; letter-spacing: 0.14em;
+                text-transform: uppercase; color: rgba(239, 230, 216, 0.42); }
+
+/* ---- the reading side --------------------------------------------------- */
+
+.caps-reads-wrap { position: relative; }
+.caps-reads {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; gap: clamp(2rem, 4vw, 2.8rem); align-content: center;
+}
+/* Specificity, deliberately: the folio IS a <p> inside .caps-read, so the
+   paragraph rule below (0,1,1) outranks a bare .caps-read-folio (0,1,0) and the
+   accent never landed. The standalone study had the same collision, so its
+   folios rendered muted despite the declaration — this is the one place the
+   port does not reproduce the prototype pixel for pixel. Accent-lift matches
+   every other small mono label in the section (.eyebrow, .caps-cf-head b). */
+.caps-read .caps-read-folio {
+  font-family: var(--font-mono); font-size: var(--t-label); font-weight: 600;
+  letter-spacing: 0.18em; color: var(--accent-lift); margin: 0 0 0.7rem;
+}
+.caps-read h3 {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 1.15rem + 1.5vw, 2.4rem);
+  font-weight: 250; text-transform: uppercase; letter-spacing: 0.035em; line-height: 1.1;
+  margin: 0 0 0.9rem;
+}
+.caps-read p { margin: 0; color: var(--night-muted); font-size: 1.02rem; line-height: 1.8;
+               max-width: 44ch; }
+
+/* The rail: four quarters of one turn. It is the only thing that tells you how
+   much of the object is left. */
+.caps-rail { display: none; grid-auto-flow: column; gap: 0.5rem; margin: 0 0 2.2rem;
+             width: max-content; }
+.caps-rail div { position: relative; width: 2.6rem; height: 2px; background: var(--night-line); }
+.caps-rail div i { position: absolute; inset: 0; background: var(--accent); opacity: 0; }
+.caps-rail span {
+  position: absolute; top: 0.7rem; left: 0;
+  font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.14em;
+  color: rgba(239, 230, 216, 0.38);
+}
+
+/* ---- below the object --------------------------------------------------- */
+
+.caps-deeper { margin-top: clamp(3rem, 6vw, 5rem); }
+.caps-deeper-rule {
+  display: flex; align-items: center; gap: 1rem; margin: 0;
+  font-family: var(--font-mono); font-size: var(--t-label); letter-spacing: 0.18em;
+  text-transform: uppercase; color: rgba(239, 230, 216, 0.45);
+}
+.caps-deeper-rule::after { content: ''; flex: 1; border-top: 1px solid var(--night-line); }
+
+.caps-more { display: grid; gap: 1.9rem; margin-top: 1.7rem; }
+@media (min-width: 760px) {
+  .caps-more { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(2rem, 4vw, 3.4rem); }
+}
+.caps-more-item h3 {
+  font-family: var(--font-display); font-size: 1.05rem; font-weight: 300;
+  text-transform: uppercase; letter-spacing: 0.06em; line-height: 1.25; margin: 0 0 0.55rem;
+}
+.caps-more-item p { margin: 0; color: var(--night-muted); font-size: 0.95rem; line-height: 1.74;
+                    max-width: 46ch; }
+
+/* Not a feature: this is the reason someone leaves their current CRM, so it
+   gets its own field rather than a clause inside a card. */
+.caps-import {
+  margin-top: clamp(2.6rem, 5vw, 3.6rem);
+  border: 1px solid var(--night-line); border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(204, 120, 92, 0.10), rgba(204, 120, 92, 0.02));
+  padding: clamp(1.5rem, 3vw, 2.1rem);
+  display: grid; gap: 1.5rem;
+}
+@media (min-width: 880px) {
+  .caps-import { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+                 gap: clamp(2rem, 4vw, 3.4rem); align-items: center; }
+}
+.caps-import .eyebrow { margin-bottom: 0; }
+.caps-import-lead { margin: 0.55rem 0 0; font-size: 1.05rem; line-height: 1.6;
+                    color: var(--night-ink); }
+.caps-import-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap;
+                    gap: 0.5rem; align-content: center; }
+.caps-import-list li {
+  border: 1px solid var(--night-line); border-radius: var(--radius);
+  padding: 0.42rem 0.75rem; background: rgba(239, 230, 216, 0.04);
+  font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--night-muted);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE TURN
+
+   Everything above renders a standing cube and four readable blocks. This is
+   the only place the section pins, and it is gated three ways: the browser must
+   support scroll-driven timelines, there must be room for a two-column stage,
+   and the reader must not have asked for less motion. Fail any one and the
+   fallback above is what ships — which is why the fallback is the base layer
+   and this is the override.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (min-width: 1000px) {
+  .caps-stage { grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+                align-items: center; gap: clamp(2.5rem, 5vw, 5rem); }
+}
+
+@media (min-width: 1000px) and (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    /* Four viewports of scroll: one quarter turn each. */
+    .caps-track { height: 400vh; view-timeline-name: --caps; view-timeline-axis: block; }
+    .caps-stage { position: sticky; top: 0; height: 100vh; align-content: center; }
+
+    .caps-rail { display: grid; }
+
+    /* A subject taller than the scrollport makes `contain` exactly the window
+       in which the sticky child is pinned — no magic numbers. */
+    .caps-cube, .caps-read, .caps-rail i {
+      animation-timeline: --caps;
+      animation-range: contain 0% contain 100%;
+      animation-fill-mode: both;
+      animation-timing-function: linear;
+    }
+
+    /* The blocks cross-fade on top of each other, so they get their own band
+       below the rail rather than covering it. */
+    /* The WRAP is the positioning context, not the <ol>. A <div> cannot be a
+       child of <ol>, so the rail sits beside the list rather than in it, and
+       the list must stay static or the absolutely placed <li>s would resolve
+       against it and leave the rail with nothing to sit above. */
+    .caps-reads-wrap { min-height: 22rem; padding-top: 3.6rem; }
+    .caps-rail { position: absolute; top: 0; left: 0; margin: 0; }
+    .caps-read { position: absolute; inset: 3.6rem 0 0; display: flex; flex-direction: column;
+                 justify-content: center; }
+
+    .caps-cube { animation-name: caps-cube-turn; }
+    .caps-read-1 { animation-name: caps-read-1; }
+    .caps-read-2 { animation-name: caps-read-2; }
+    .caps-read-3 { animation-name: caps-read-3; }
+    .caps-read-4 { animation-name: caps-read-4; }
+    .caps-rail div:nth-child(1) i { animation-name: caps-tick-1; }
+    .caps-rail div:nth-child(2) i { animation-name: caps-tick-2; }
+    .caps-rail div:nth-child(3) i { animation-name: caps-tick-3; }
+    .caps-rail div:nth-child(4) i { animation-name: caps-tick-4; }
+
+    /* The dwell matters more than the turn: each face holds still while its
+       paragraph is being read, then moves between them. */
+    @keyframes caps-cube-turn {
+      0%, 17%   { transform: rotateX(-11deg) rotateY(-19deg); }
+      27%, 42%  { transform: rotateX(-11deg) rotateY(-109deg); }
+      52%, 67%  { transform: rotateX(-11deg) rotateY(-199deg); }
+      77%, 100% { transform: rotateX(-11deg) rotateY(-289deg); }
+    }
+    @keyframes caps-read-1 { 0%, 17% { opacity: 1; transform: none; }
+                             23%, 100% { opacity: 0; transform: translateY(-16px); } }
+    @keyframes caps-read-2 { 0%, 21% { opacity: 0; transform: translateY(16px); }
+                             27%, 42% { opacity: 1; transform: none; }
+                             48%, 100% { opacity: 0; transform: translateY(-16px); } }
+    @keyframes caps-read-3 { 0%, 46% { opacity: 0; transform: translateY(16px); }
+                             52%, 67% { opacity: 1; transform: none; }
+                             73%, 100% { opacity: 0; transform: translateY(-16px); } }
+    @keyframes caps-read-4 { 0%, 71% { opacity: 0; transform: translateY(16px); }
+                             77%, 100% { opacity: 1; transform: none; } }
+    @keyframes caps-tick-1 { 0%, 20% { opacity: 1; } 25%, 100% { opacity: 0.001; } }
+    @keyframes caps-tick-2 { 0%, 20% { opacity: 0.001; } 25%, 45% { opacity: 1; }
+                             50%, 100% { opacity: 0.001; } }
+    @keyframes caps-tick-3 { 0%, 45% { opacity: 0.001; } 50%, 70% { opacity: 1; }
+                             75%, 100% { opacity: 0.001; } }
+    @keyframes caps-tick-4 { 0%, 70% { opacity: 0.001; } 75%, 100% { opacity: 1; } }
+  }
+}
+
+/* Phones: the cube is an illustration, the four screens are a list. */
+@media (max-width: 999px) {
+  .caps-cube { transform: rotateX(-16deg) rotateY(-38deg) scale(0.92); }
+  .caps-read { border-top: 1px solid var(--night-line); padding-top: 1.6rem; }
+}
+
+
+/* ─── ASSISTANT (terracotta band: the CTA's ground, taken deliberately) ──── */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ИИ-АССИСТЕНТ — light.
+
+   Was a --night band. On this site night means "the product showing through the
+   poster" (.asst, .day-stage, the cube, the DAY close beat). This section is not
+   a product screen — it is a claim about what the product may read — and with
+   DAY now ending on night and CAPS a full night section, it was the third dark
+   field in a row.
+
+   The subject is provenance, so the tool call sits BETWEEN question and answer,
+   where it actually happens, instead of trailing the answer as a footnote.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ══ THE BAND ══════════════════════════════════════════════════════════════
+   Terracotta — the CTA's ground, taken deliberately. It costs the section its
+   accent: --accent is now the FLOOR, so nothing on this band can use it to
+   stand out. Hierarchy here is size, weight and tracking, never opacity —
+   --button-ink on --accent measures 5.23:1, but the same ink at .72 alpha drops
+   to 3.38:1, and the smallest labels are exactly the text that cannot afford
+   that. So everything on the band is full-strength ink, and the accent survives
+   only INSIDE the rice card, where it is a figure again.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.asst {
+  position: relative;
+  padding-block: clamp(4.5rem, 9vw, 8rem);
+  background: var(--accent);
+  color: var(--button-ink);
+  overflow: clip;
+  isolation: isolate;
+  --on-line: rgba(36, 23, 15, 0.26);
+}
+.asst-veil {
+  position: absolute;
+  left: 50%; bottom: -55%;
+  translate: -50% 0;
+  width: min(120vw, 900px);
+  aspect-ratio: 1;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(251, 246, 238, 0.30), transparent 68%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .asst-veil { animation: asst-breathe 11s ease-in-out infinite; }
+}
+@keyframes asst-breathe {
+  0%, 100% { opacity: 0.72; transform: scale(0.94); }
+  50%      { opacity: 1;    transform: scale(1.06); }
+}
+.asst 
+.asst 
+.asst-head { max-width: 56rem; }
+
+/* ── the top: the claim, and the thing doing it ──────────────────────────── */
+/* The copy holds the left and the card the right, so the section reads as a
+   statement answered by a demonstration rather than a heading with an exhibit
+   underneath it. */
+.asst-top { display: grid; gap: clamp(2rem, 4vw, 3.4rem); align-items: center; }
+@media (min-width: 1080px) {
+  .asst-top { grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr); }
+}
+.asst-head { max-width: 34rem; }
+
+/* ── the stage ───────────────────────────────────────────────────────────── */
+/* Asymmetric on purpose: a narrow rail of what the assistant MAY read, against
+   the wide card of what it did. Stacked, the rail would read as a caption to the
+   card; beside it, the two are a comparison. */
+.asst-stage { margin-top: clamp(2.4rem, 5vw, 3.6rem); display: grid; gap: clamp(1.4rem, 3vw, 2.2rem); }
+@media (min-width: 1100px) {
+  .asst-stage { grid-template-columns: 15rem minmax(0, 1fr); align-items: start; }
+}
+
+/* A strip now, not a rail: full width under the exchange, so the four domains
+   read as one row of things rather than a column of options. */
+.asst-scope {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem 1.5rem;
+  margin-top: clamp(1.8rem, 3.5vw, 2.6rem);
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--on-line);
+}
+.asst-scope-h {
+  margin: 0;
+  font-family: var(--font-mono); font-size: var(--t-label); font-weight: 600;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--button-ink);
+}
+.asst-scope ul { list-style: none; margin: 0; padding: 0;
+                 display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.asst-scope li {
+  display: flex; align-items: center; gap: 0.5rem;
+  border: 1px solid var(--on-line); border-radius: var(--radius);
+  padding: 0.3rem 0.6rem;
+  font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.06em;
+  color: var(--button-ink);
+}
+.asst-scope li i {
+  width: 8px; height: 8px; border-radius: 2px; flex: none;
+  border: 1px solid var(--on-line);
+}
+/* lit = read for THIS answer; outlined = in scope, not needed. On terracotta
+   the "lit" state cannot be accent — it is rice, the card's own colour. */
+.asst-scope li.is-on { background: rgba(251, 246, 238, 0.5); border-color: transparent; }
+.asst-scope li.is-on i { background: var(--button-ink); border-color: var(--button-ink); }
+.asst-scope-no {
+  display: flex; align-items: center; gap: 0.5rem;
+  margin: 0 0 0 auto;
+  font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.06em;
+  color: var(--button-ink); text-decoration: line-through;
+  text-decoration-color: var(--button-ink); text-decoration-thickness: 1px;
+}
+.asst-scope-no i {
+  width: 8px; height: 8px; border-radius: 2px; flex: none;
+  border: 1px dashed var(--on-line);
+}
+
+/* ── the exchange ────────────────────────────────────────────────────────── */
+/* Rice lifts it off the paper without becoming a second colour. A conversation
+   wants a reading measure, so it is held at 52rem and set left rather than
+   stretched across the shell. */
+.asst-ex {
+  /* ONE clock for everything inside. Each part used to run on its own view()
+     timeline, which measures that element's own entry — and entry for a 5px row
+     of dots is a 5px window of scroll, so the working state flashed past
+     invisibly. Naming a timeline on the card makes every stage inside share the
+     card's entry, so the ranges below are a real sequence instead of six
+     unrelated ones. */
+  view-timeline-name: --asst-card;
+  view-timeline-axis: block;
+  background-color: var(--rice);
+  /* A fibre in the stock. Painted as a background-image it sits under the text,
+     and multiply against rice only ever darkens — so it cannot cost contrast. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23p)' opacity='0.055'/%3E%3C/svg%3E");
+  background-blend-mode: multiply;
+  border: 1px solid rgba(36, 23, 15, 0.14);
+  border-radius: var(--radius-lg);
+  padding: clamp(1.5rem, 3vw, 2.4rem);
+  /* It is an object ON the band now, not a panel in a page. */
+  box-shadow: 0 30px 60px -34px rgba(36, 23, 15, 0.55);
+}
+
+/* The question carries the section's whole promise — "своими словами" — so it is
+   set in the display face at reading size, not in a chat bubble. */
+.asst-q {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 250;
+  font-size: clamp(1.3rem, 1.05rem + 1.05vw, 1.95rem);
+  line-height: 1.28;
+  letter-spacing: 0.005em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+/* The card names itself and admits what it is. «пример» is the same disclosure
+   the old role="img" label carried, made visible instead of only spoken. */
+.asst-ex-head {
+  display: flex; align-items: center; gap: 0.7rem;
+  padding-bottom: 0.95rem; margin-bottom: clamp(1rem, 2vw, 1.4rem);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: var(--t-label);
+  letter-spacing: 0.18em; text-transform: uppercase;
+}
+.asst-ex-head b { font-weight: 600; color: var(--ink); letter-spacing: 0.18em; }
+.asst-mark {
+  width: 13px; height: 13px; flex: none; border-radius: 2px;
+  border: 1px solid var(--accent); position: relative;
+}
+.asst-mark::after {
+  content: ''; position: absolute; inset: 3px; border-radius: 1px; background: var(--accent);
+}
+.asst-tag {
+  margin-left: auto; color: var(--ash);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 0.2rem 0.45rem; letter-spacing: 0.14em;
+}
+
+/* The spine. Question, read, answer are one thread, so a line runs down them
+   and each stage sits on it as a node — the accent stretch beside the answer is
+   the same line, lit for its own segment. */
+.asst-thread { position: relative; padding-left: 1.35rem; border-left: 1px solid var(--line); }
+/* The spine fills as the sequence runs — one meter for the whole exchange,
+   replacing the separate bar the answer used to carry. Two accent rules on the
+   same axis is one rule too many. */
+.asst-thread::after {
+  content: '';
+  position: absolute; left: -1px; top: 0; bottom: 0; width: 2px;
+  background: var(--accent); border-radius: 1px;
+  transform: scaleY(0); transform-origin: top;
+}
+.asst-read::before, .asst-a::after {
+  content: ''; position: absolute; left: calc(-1.35rem - 4px);
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+}
+.asst-read::before { top: 1.35rem; }
+.asst-a::after { top: 0.5em; }
+
+/* ── the ask surface ─────────────────────────────────────────────────────── */
+/* A drawn field, never a real input: a focusable box that does nothing is worse
+   than no box. Paper inset into the rice card so it reads as the place you
+   type, with the accent rule under it standing in for focus. */
+.asst-field {
+  display: flex; align-items: flex-start; gap: 1rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-bottom-color: var(--accent);
+  border-radius: var(--radius);
+  padding: clamp(0.9rem, 1.8vw, 1.25rem) clamp(1rem, 2vw, 1.35rem);
+}
+.asst-key {
+  flex: none; align-self: center;
+  font-family: var(--font-mono); font-size: 0.78rem; line-height: 1;
+  color: var(--ash);
+  border: 1px solid var(--line-strong); border-bottom-width: 2px;
+  border-radius: var(--radius);
+  padding: 0.34rem 0.5rem;
+  background: var(--rice);
+}
+
+/* The read. Between the question and the answer because that is when it
+   happens — the live page has it trailing the answer like a citation.
+
+   A <div>, not a <p>: it carries the source chips as a <ul>, and a <ul> inside a
+   <p> is not nesting the parser honours — it closes the paragraph, hoists the
+   list out as a sibling and leaves an empty <p> behind, which is exactly what
+   the first build did. */
+.asst-read {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 0.75rem;
+  margin: 0 0 clamp(1.1rem, 2.4vw, 1.5rem);
+  padding: 0 0 0.85rem;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: var(--t-label);
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ash);
+}
+.asst-read svg { width: 14px; height: 14px; flex: none; color: var(--accent-ink); }
+.asst-src { list-style: none; display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; padding: 0; }
+.asst-src li {
+  border: 1px solid var(--accent);
+  background: var(--accent-wash);
+  color: var(--accent-ink);
+  border-radius: var(--radius);
+  padding: 0.2rem 0.5rem;
+  letter-spacing: 0.12em;
+}
+
+/* Working. Present only between the read and the answer — it is a state, so it
+   leaves when the state does. */
+.asst-dots { display: inline-flex; gap: 0.28rem; align-items: center; margin-left: 0.1rem; }
+.asst-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); opacity: 0.35; }
+@media (prefers-reduced-motion: no-preference) {
+  .asst-dots i { animation: asst-blip 1s ease-in-out infinite; }
+  .asst-dots i:nth-child(2) { animation-delay: 0.14s; }
+  .asst-dots i:nth-child(3) { animation-delay: 0.28s; }
+}
+@keyframes asst-blip { 0%, 100% { opacity: 0.25; } 45% { opacity: 1; } }
+
+.asst-a {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(1.02rem, 0.98rem + 0.3vw, 1.16rem);
+  line-height: 1.78;
+  color: var(--ink);
+  max-width: 54ch;
+}
+
+/* The answer, counted. Same instrument as the DAY close beat and the clocks —
+   Exo 2 200, terracotta, tabular — so a figure means the same thing everywhere
+   on this site. */
+.asst-stats {
+  list-style: none; margin: 1.5rem 0 0; padding: 1.1rem 0 0;
+  border-top: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: 1.2rem 2.4rem;
+}
+.asst-stats li { display: flex; align-items: baseline; gap: 0.45rem; }
+.asst-stats b {
+  font-family: var(--font-display); font-weight: 200; font-size: 1.9rem; line-height: 1;
+  letter-spacing: 0.01em; font-variant-numeric: tabular-nums; color: var(--accent-ink);
+}
+.asst-stats span {
+  font-family: var(--font-mono); font-size: var(--t-label); letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ash);
+}
+
+/* ── the rules of the reading ────────────────────────────────────────────── */
+/* Under the exchange, not beside it: every one of the three is a LIMIT on what
+   was just demonstrated, and a limit belongs under the thing it limits. */
+.asst-rules {
+  list-style: none; margin: clamp(2.4rem, 5vw, 3.6rem) 0 0; padding: 0;
+  display: grid; gap: 1.8rem;
+}
+@media (min-width: 860px) {
+  .asst-rules { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(1.6rem, 3vw, 2.8rem); }
+}
+.asst-rules li { border-top: 1px solid var(--line); padding-top: 1rem; }
+.asst-rule-top { display: flex; align-items: center; justify-content: space-between;
+                 gap: 1rem; margin-bottom: 0.65rem; }
+/* Three small drawn marks. Abstract on purpose — a literal lock or flag would
+   be a second, worse version of the sentence next to it. */
+.asst-fig { display: inline-flex; align-items: center; gap: 3px; flex: none; }
+.asst-fig i, .asst-fig b { display: block; }
+.asst-fig.is-scope i { width: 7px; height: 7px; border-radius: 1px; background: var(--button-ink); }
+.asst-fig.is-scope b {
+  position: relative; width: 7px; height: 7px; border-radius: 1px;
+  border: 1px solid var(--on-line); margin-left: 4px;
+}
+.asst-fig.is-scope b::before, .asst-fig.is-scope b::after {
+  content: ''; position: absolute; inset: 50% -2px auto -2px; height: 1px;
+  background: var(--button-ink);
+}
+.asst-fig.is-scope b::before { transform: rotate(45deg); }
+.asst-fig.is-scope b::after  { transform: rotate(-45deg); }
+/* equal length, which IS the point of «права ровно ваши» */
+.asst-fig.is-rights { flex-direction: column; align-items: flex-end; gap: 4px; }
+.asst-fig.is-rights i { width: 30px; height: 3px; border-radius: 2px; background: var(--on-line); }
+.asst-fig.is-rights i:last-child { background: var(--button-ink); }
+.asst-fig.is-host i { width: 8px; height: 8px; border-radius: 50%; background: var(--button-ink); }
+.asst-fig.is-host i:last-child { background: transparent; border: 1px solid var(--button-ink); }
+.asst-fig.is-host u { width: 16px; height: 1px; background: var(--on-line); text-decoration: none; }
+
+.asst-rule-n {
+  margin: 0 0 0;
+  font-family: var(--font-mono); font-size: var(--t-label); font-weight: 600;
+  letter-spacing: 0.18em; color: var(--accent-ink);
+}
+.asst-rules p:last-child {
+  margin: 0; color: var(--ink-soft); font-size: 0.99rem; line-height: 1.75; max-width: 34ch;
+}
+
+/* ── the section, alive ──────────────────────────────────────────────────
+   Every moving part below dramatises the section's own sequence — a question
+   typed in plain words, the data being read, then the answer — rather than
+   decorating it. All of it is scroll-driven and gated, so the base layer is the
+   finished composition and nothing here is required to read the section.
+
+   THE CARET. The one thing on a clock rather than on scroll: the question ends
+   in a live cursor, because "своими словами" means it was typed, not chosen
+   from a filter. It is the only ambient motion in the section.
+
+   THE SCAN. A hairline runs the width of the read row once, between the
+   question and the answer — the moment the assistant is actually in your data.
+
+   THE BAR. The answer is drawn top-down by a rule down its left edge, so the
+   reply arrives as a reply rather than as another paragraph.
+
+   THE RULES DRAW. The three limits underline themselves in sequence.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* base layer: everything below is already in its finished state */
+.asst-q::after {
+  content: '';
+  display: inline-block;
+  width: 2px; height: 0.92em;
+  margin-left: 0.16em;
+  vertical-align: -0.13em;
+  background: var(--accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .asst-q::after { animation: asst-caret 1.15s steps(1, end) infinite; }
+}
+@keyframes asst-caret { 0%, 54% { opacity: 1; } 55%, 100% { opacity: 0.1; } }
+
+/* clip, NOT hidden. `hidden` makes this a scroll container, and view() on the
+   chips inside then resolves against THIS box instead of the page — where they
+   are permanently fully visible, so their animation reports `finished` at scroll
+   zero and the stagger never runs. Exactly the trap the CAPS pin already paid
+   for. `clip` clips without creating a scrolling box. */
+.asst-read { position: relative; overflow: clip; }
+.asst-read::after {
+  content: '';
+  display: none;                       /* only exists when it can travel */
+  position: absolute; bottom: 0; left: 0;
+  width: 38%; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent) 50%, transparent);
+}
+
+.asst-a { position: relative; }
+
+.asst-rules li { border-top: 0; position: relative; }
+/* Dividers between the three, so they are three columns of one table rather
+   than three loose blocks. */
+@media (min-width: 860px) {
+  .asst-rules li + li { padding-left: clamp(1.6rem, 3vw, 2.8rem); }
+  .asst-rules li + li::after {
+    content: ''; position: absolute; left: 0; top: 0.2rem; bottom: 0.2rem;
+    width: 1px; background: var(--on-line);
+  }
+}
+.asst-rules li::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: var(--button-ink);
+  transform-origin: left;
+}
+
+@media (min-width: 900px) and (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .asst-src li, .asst-a, .asst-read::after, .asst-dots, .asst-stats li,
+    .asst-thread::after {
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: --asst-card;      /* the card's clock, not their own */
+    }
+    .asst-rules li::before {                 /* outside the card, own entry */
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: view();
+    }
+    .asst-src li {
+      animation-name: asst-chip-in;
+      animation-range: entry calc(34% + var(--n) * 9%) entry calc(52% + var(--n) * 9%);
+    }
+    .asst-read::after {
+      display: block;
+      animation-name: asst-scan;
+      animation-range: entry 30% entry 80%;
+    }
+    .asst-a { animation-name: asst-in; animation-range: entry 64% entry 88%; }
+    .asst-dots { animation-name: asst-working; animation-range: entry 28% entry 76%; }
+    .asst-stats li { animation-name: asst-in; animation-range: entry 78% entry 98%; }
+    .asst-thread::after { animation-name: asst-bar; animation-range: entry 26% entry 88%; }
+    .asst-rules li::before {
+      animation-name: asst-draw;
+      animation-range: entry calc(14% + var(--n) * 6%) entry calc(46% + var(--n) * 6%);
+    }
+  }
+}
+@keyframes asst-in   { from { opacity: 0; transform: translateY(6px); }
+                       to   { opacity: 1; transform: none; } }
+@keyframes asst-chip-in { from { opacity: 0; transform: translateY(4px) scale(0.92); }
+                          to   { opacity: 1; transform: none; } }
+@keyframes asst-bar  { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes asst-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* the working state exists only while it is working */
+@keyframes asst-working { 0% { opacity: 0; } 14%, 68% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes asst-scan {
+  0%        { transform: translateX(-105%); opacity: 0; }
+  12%, 84%  { opacity: 0.95; }
+  100%      { transform: translateX(300%); opacity: 0; }
+}
+
+
+/* ─── TEAM / ROLES (two settings, drawn as two) ──────────────────────────────
+
+   The lede promises two settings — "Роль решает, что человек может делать.
+   Структура команды решает, чьи данные он видит. Это две разные настройки, и
+   они не мешают друг другу." The section used to draw exactly one of them, an
+   8x5 table, so the second half had to be taken on faith. Now both are here,
+   labelled, side by side: the sentence IS the layout.
+
+   PAPER GROUND, NIGHT INSTRUMENTS. DAY ends on night and CAPS is night; a third
+   dark field in a row would finish off the paper world. But an access matrix and
+   an org tree ARE product screens, and base.css is explicit that anything which
+   must feel like the product uses --night. Ground is the poster, panels are the
+   tool.
+
+   NOT PINNED. CAPS owns that move. A matrix wants to be read, not driven — the
+   mechanism here is arrival.
+
+   Class names are team- prefixed: the study used .two, .panel, .grid, .lv,
+   .tree and .node, which are fine alone and reckless in a shared cascade. */
+
+.team-head { max-width: 56rem; }
+
+.team-two {
+  display: grid;
+  gap: clamp(1.6rem, 3vw, 2.4rem);
+  margin-top: clamp(2.6rem, 5vw, 4rem);
+}
+@media (min-width: 1040px) {
+  /* The matrix needs the width; the tree is a diagram and does not. But they
+     stay the same HEIGHT: top-aligned, the tree panel ended a third of the way
+     down and left an L of empty paper, which reads as the second setting being
+     the lesser one — the exact opposite of "две разные настройки". */
+  .team-two { grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr); align-items: stretch; }
+}
+
+.team-panel {
+  --night-line-soft: rgba(239, 230, 216, 0.09);
+  background: var(--night);
+  border: 1px solid rgba(36, 29, 22, 0.18);
+  border-radius: var(--radius-lg);
+  color: var(--night-ink);
+  padding: clamp(1.1rem, 2.2vw, 1.7rem);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5), 0 26px 60px -40px rgba(36, 29, 22, 0.75);
+  overflow: hidden;
+}
+/* A column, so the diagram can sit in the middle of the height the matrix sets
+   rather than clinging to the top of it. */
+.team-panel.is-structure { display: flex; flex-direction: column; }
+.team-panel.is-structure .team-tree { margin-block: auto; }
+
+.team-panel-head {
+  display: flex; align-items: baseline; gap: 0.8rem;
+  padding-bottom: 0.85rem; margin-bottom: 1rem;
+  border-bottom: 1px solid var(--night-line);
+}
+/* On night the accent must be --accent-lift; --accent is a FILL and measures
+   1.8:1 here. Same rule the cube and the DAY close beat keep. */
+.team-panel-head b {
+  font-family: var(--font-mono); font-size: var(--t-label); font-weight: 600;
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent-lift);
+}
+.team-panel-head span {
+  margin-left: auto; font-family: var(--font-mono); font-size: 0.6rem;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--night-muted);
+  text-align: right;
+}
+
+/* ── setting one: the matrix ─────────────────────────────────────────────── */
+/* Still a real <table>. An access matrix rendered as anything else stops being
+   checkable and stops being readable by AT. */
+.team-grid { width: 100%; border-collapse: collapse; font-family: var(--font-mono); }
+.team-grid thead th {
+  font-size: 0.56rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--night-muted); text-align: left;
+  padding: 0 0 0.7rem; border-bottom: 1px solid var(--night-line-soft);
+}
+.team-grid thead th:first-child { width: 34%; }
+.team-grid tbody th {
+  text-align: left; font-weight: 400; font-size: 0.76rem; letter-spacing: 0.01em;
+  color: var(--night-ink); padding: 0.62rem 0.9rem 0.62rem 0; vertical-align: top;
+}
+.team-grid tbody th small {
+  display: block; font-size: 0.58rem; letter-spacing: 0.04em; margin-top: 0.18rem;
+  color: var(--night-muted);
+}
+.team-grid tbody tr + tr th,
+.team-grid tbody tr + tr td { border-top: 1px solid var(--night-line-soft); }
+.team-grid td { padding: 0.62rem 0.5rem 0.62rem 0; vertical-align: top; }
+
+/* The pip carries the level at a glance, the word keeps it a reading.
+
+   Every dim tone in this panel is --night-muted rather than an ad-hoc alpha.
+   The cube's faces get away with rgba(...,.38-.44) because they are decoration,
+   aria-hidden, and repeat copy written out beside them. Here the same values sit
+   on the actual content — the role notes, the «нет» cells, the tree labels — and
+   they measure 3.1-3.8:1 at 9-10px, under the 4.5 floor. Legibility beats
+   hierarchy in an access matrix: you have to be able to read «нет». The
+   full/none distinction is carried by the pip and by --night-ink instead. */
+.team-lv { font-size: 0.62rem; letter-spacing: 0.06em; color: var(--night-muted); }
+.team-lv i {
+  display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 0.42rem;
+  vertical-align: baseline; border: 1px solid rgba(239, 230, 216, 0.3);
+}
+.team-lv-full i { background: var(--accent); border-color: var(--accent);
+                  box-shadow: 0 0 10px rgba(204, 120, 92, 0.45); }
+/* half: the same square, half filled — read-only is not a lesser colour, it is
+   a lesser amount */
+.team-lv-half i { background: linear-gradient(90deg, var(--accent) 50%, transparent 50%);
+                  border-color: rgba(204, 120, 92, 0.55); }
+.team-lv-none i { background: transparent; }
+.team-lv-full span { color: var(--night-ink); }
+
+/* ── setting two: the structure ──────────────────────────────────────────── */
+/* The half the page never drew. Three levels is all the copy supports —
+   Владелец, Руководитель отдела, and the Менеджеры under it, which is exactly
+   what "плюс данные подчинённых" refers to. Nothing invented beyond that. */
+.team-tree { display: grid; gap: 0.5rem; }
+.team-node {
+  display: flex; align-items: center; gap: 0.6rem;
+  border: 1px solid var(--night-line); border-radius: var(--radius);
+  padding: 0.6rem 0.7rem;
+  font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.02em;
+  background: rgba(239, 230, 216, 0.03);
+}
+.team-node i { width: 7px; height: 7px; border-radius: 50%; flex: none;
+               background: rgba(239, 230, 216, 0.34); }
+.team-node em { font-style: normal; margin-left: auto; font-size: 0.56rem;
+                letter-spacing: 0.13em; text-transform: uppercase; color: var(--night-muted); }
+.team-lvl-2 { margin-left: 1.5rem; }
+.team-lvl-3 { margin-left: 3rem; }
+
+/* The lit set is the answer to "чьи данные он видит" — drawn, not claimed. */
+.team-tree .is-seen { border-color: rgba(204, 120, 92, 0.45); background: rgba(204, 120, 92, 0.10); }
+.team-tree .is-seen i { background: var(--accent); box-shadow: 0 0 10px rgba(204, 120, 92, 0.6); }
+.team-tree .is-seen em { color: var(--accent-lift); }
+.team-tree-note {
+  margin: 1rem 0 0; font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--night-muted);
+  display: flex; align-items: center; gap: 0.6rem;
+}
+.team-tree-note::before {
+  content: ''; width: 9px; height: 9px; border-radius: 2px; flex: none;
+  background: var(--accent); box-shadow: 0 0 10px rgba(204, 120, 92, 0.5);
+}
+
+.team-foot {
+  margin: clamp(1.8rem, 3.5vw, 2.6rem) 0 0;
+  padding-top: 1.3rem; border-top: 1px solid var(--line);
+  color: var(--ink-soft); font-size: 0.99rem; line-height: 1.75; max-width: 62ch;
+}
+
+/* ── arrival ─────────────────────────────────────────────────────────────── */
+/* Rows land in order as the panel comes up — the matrix filling in rather than
+   arriving whole. Enhancement only: without it every row is simply there, which
+   is the base layer. */
+@media (min-width: 900px) and (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .team-grid tbody tr {
+      animation: team-row-in linear both;
+      animation-timeline: view();
+      /* Finish as the panel ENTERS, not part-way through covering the screen:
+         at cover 22%+n*5% the last row was still at 0.2 opacity with the whole
+         section in view, so anyone stopping here read a matrix that faded out
+         at the bottom. Row 8 now completes at entry 90%. */
+      animation-range: entry calc(15% + var(--n) * 5%) entry calc(55% + var(--n) * 5%);
+    }
+  }
+}
+@keyframes team-row-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (max-width: 620px) {
+  .team-grid thead { display: none; }
+  .team-grid tbody th { padding-bottom: 0.3rem; }
+  .team-grid tbody tr { display: grid; grid-template-columns: 1fr 1fr; padding: 0.5rem 0; }
+  .team-grid tbody th { grid-column: 1 / -1; }
+  .team-grid tbody tr + tr th, .team-grid tbody tr + tr td { border-top: 0; }
+  .team-grid tbody tr + tr { border-top: 1px solid var(--night-line-soft); }
+  .team-lvl-2 { margin-left: 0.9rem; }
+  .team-lvl-3 { margin-left: 1.8rem; }
+}
+
+
+/* ─── TRUST (the CTA's ground, and one record held in it) ────────────────── */
+
+/* The section borrows .cta's material exactly — `background: var(--accent)`,
+   `color: var(--button-ink)`, and the same half-sunk cream sun — so the two
+   read as one stock rather than as two warm blocks that happen to rhyme.
+   Every class below is trust-prefixed: the study this came from used .track,
+   .stage, .claim, .rec, .row, .find, .chip, .seal and .status, which are fine
+   in a file of their own and catastrophic in this cascade.
+
+   THE CONSTRAINT THAT SHAPES IT: ink on terracotta measures 5.32:1 — legible,
+   with almost no headroom. Ink at 90% is already 4.65:1 and at 55% it is
+   2.54:1, which fails outright. So on this ground TEXT CANNOT CARRY STATE.
+   Dimming a claim to mark it inactive would make a legal claim unreadable, so
+   the state lives in the folio chip instead, and the record — which is
+   aria-hidden illustration, where contrast rules do not apply — keeps the
+   dimming. */
+
+.trust {
+  position: relative;
+  isolation: isolate;
+  background: var(--accent);
+  color: var(--button-ink);
+  /* clip, NOT hidden: overflow:hidden makes this a scroll container and the
+     sticky stage inside stops pinning altogether. */
+  overflow: clip;
+
+  /* Scoped, not added to :root — these only mean anything on terracotta. */
+  --on-rule: rgba(36, 23, 15, 0.26);
+  --on-paper: rgba(251, 246, 238, 0.16);
+  --on-paper-soft: rgba(251, 246, 238, 0.1);
+  --on-paper-mid: rgba(251, 246, 238, 0.42);
+}
+/* The CTA ends in the same colour this section starts in. Without a fold the
+   two run together into one field and the CTA stops being an event. */
+.trust + .cta { border-top: 1px solid rgba(36, 23, 15, 0.3); }
+
+/* Paper grain, multiplied — on a saturated field it reads as ink laid on
+   stock rather than as a flat swatch. */
+.trust::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.42;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)' opacity='0.22'/%3E%3C/svg%3E");
+}
+.trust > .shell { position: relative; z-index: 1; }
+
+/* The shared primitives are tuned for paper and must be re-pointed here, the
+   same way .cta-inner re-points them. */
+.trust-head { max-width: 54rem; }
+.trust-head .eyebrow { color: var(--button-ink); opacity: 0.72; }
+.trust-head .lede { color: rgba(36, 23, 15, 0.9); max-width: 52ch; }
+
+.trust-track { margin-top: clamp(2.6rem, 5vw, 4.4rem); }
+.trust-stage { display: grid; gap: clamp(2.4rem, 5vw, 4rem); }
+
+/* ---- the claims: ink printed on the stock ------------------------------- */
+
+.trust-claims-wrap { display: grid; align-content: center; }
+.trust-claims { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.7rem; }
+.trust-claim {
+  position: relative;
+  padding-left: 3.9rem;
+  /* Full ink at every moment — 5.32:1 — and never dimmed. */
+  color: var(--button-ink);
+}
+/* The folio IS the state: a hairline outline while it waits, a solid ink block
+   with a paper numeral when it is live. Contrast rises on both sides of the
+   change and nothing ever fades. */
+.trust-folio {
+  position: absolute;
+  left: 0;
+  top: 0.15rem;
+  width: 2.5rem;
+  height: 1.7rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--on-rule);
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--button-ink);
+}
+.trust-folio::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 2px;
+  background: var(--button-ink);
+  opacity: 0;
+}
+.trust-folio span { position: relative; }
+.trust-claim h3 {
+  font-family: var(--font-display);
+  font-size: clamp(1.12rem, 1rem + 0.5vw, 1.45rem);
+  font-weight: 300;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  /* Explicit: display type must not inherit the body's 1.8. */
+  line-height: 1.2;
+  margin: 0 0 0.45rem;
+}
+.trust-claim p { margin: 0; font-size: 0.98rem; line-height: 1.75; max-width: 46ch; }
+
+/* ---- the record: ink field, paper label -------------------------------- */
+
+/* The inversion .cta already performs on its button, at panel scale. It also
+   restores what makes the piece work: the exhibit is the darkest thing on
+   screen, so light landing on it MEANS something. A cream card on terracotta
+   has no light to give. */
+.trust-rec-wrap { position: relative; display: grid; align-content: center; }
+/* The CTA's second sun, moved behind the object it is meant to light. */
+.trust-rec-wrap::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  left: 50%; top: 50%;
+  translate: -50% -50%;
+  width: min(125%, 900px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(251, 246, 238, 0.34), transparent 66%);
+}
+.trust-rec {
+  position: relative;
+  z-index: 1;
+  background: var(--button-ink);
+  border: 1px solid rgba(251, 246, 238, 0.14);
+  border-radius: var(--radius-lg);
+  padding: clamp(1rem, 2vw, 1.45rem);
+  color: var(--rice);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  box-shadow: 0 30px 70px rgba(44, 18, 8, 0.42);
+}
+
+/* The seal: four hairlines that grow along their own edge, drawn in paper on
+   the terracotta just outside the ink. Transform-only, so it composites — and
+   unlike an SVG stroke-dashoffset it repaints reliably when it is driven by a
+   scroll timeline rather than by time. Closed by default; the pinned block at
+   the end of this section is what starts it open. */
+.trust-seal {
+  position: absolute;
+  top: -10px; left: -10px; right: -10px; bottom: -10px;
+  pointer-events: none;
+  z-index: 2;
+}
+.trust-seal i { position: absolute; background: var(--rice); opacity: 0.85; }
+.trust-seal .is-t { top: 0; left: 0; width: 100%; height: 1px; transform-origin: left center; }
+.trust-seal .is-r { top: 0; right: 0; width: 1px; height: 100%; transform-origin: center top; }
+.trust-seal .is-b { bottom: 0; right: 0; width: 100%; height: 1px; transform-origin: right center; }
+.trust-seal .is-l { bottom: 0; left: 0; width: 1px; height: 100%; transform-origin: center bottom; }
+
+.trust-rec-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding-bottom: 0.8rem;
+  margin-bottom: 0.9rem;
+  border-bottom: 1px solid var(--on-paper);
+}
+.trust-rec-head b { font-weight: 600; font-size: 0.7rem; letter-spacing: 0.04em; }
+.trust-chip {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid rgba(251, 246, 238, 0.22);
+  border-radius: 2px;
+  padding: 0.24rem 0.5rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-lift);
+}
+.trust-chip i {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(204, 120, 92, 0.9);
+}
+
+.trust-row { display: flex; align-items: baseline; gap: 0.9rem; padding: 0.42rem 0; }
+.trust-row span {
+  flex: none;
+  width: 5.4rem;
+  color: var(--on-paper-mid);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.trust-row b { font-weight: 400; min-width: 0; overflow-wrap: anywhere; }
+/* Ciphertext is the whole argument of claim 02, so it is set as bytes and
+   coloured like a machine. --accent-lift, not --accent: on a night surface the
+   fill colour is the one that must not carry text. */
+.trust-row.is-enc b { color: var(--accent-lift); letter-spacing: 0.06em; }
+.trust-lock {
+  margin-left: auto;
+  flex: none;
+  font-style: normal;
+  color: rgba(251, 246, 238, 0.38);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.trust-rec-rule { border: 0; border-top: 1px solid var(--on-paper-soft); margin: 0.9rem 0; }
+
+.trust-find {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  border: 1px solid var(--on-paper);
+  border-radius: 2px;
+  background: rgba(251, 246, 238, 0.04);
+  padding: 0.55rem 0.65rem;
+}
+.trust-find svg { width: 11px; height: 11px; flex: none; color: rgba(251, 246, 238, 0.5); }
+.trust-find em { font-style: normal; }
+.trust-find u { text-decoration: none; margin-left: auto; color: var(--accent-lift); }
+.trust-find small {
+  width: 100%;
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--on-paper-mid);
+}
+
+.trust-consent { display: grid; gap: 0.34rem; }
+.trust-consent .trust-row span { width: 7.6rem; }
+
+.trust-status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.95rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--on-paper);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(251, 246, 238, 0.5);
+}
+.trust-status i { width: 6px; height: 6px; border-radius: 50%; background: rgba(251, 246, 238, 0.35); flex: none; }
+/* Both states occupy the same cell, so one replaces the other in place rather
+   than the row reflowing under them. The WHOLE line swaps: once the queue has
+   drained the device is plainly not offline any more. */
+.trust-swap { display: grid; width: 100%; }
+.trust-swap > * { grid-area: 1 / 1; display: flex; align-items: center; gap: 0.6rem; width: 100%; }
+.trust-swap b { margin-left: auto; font-weight: 400; letter-spacing: 0.08em; }
+.trust-queue { color: var(--rice); }
+/* Hidden by default. Without a timeline nothing would ever hide it and the two
+   states would print on top of each other; the static exhibit shows the queue,
+   which is the state that illustrates the claim. */
+.trust-sent { color: var(--accent-lift); opacity: 0; }
+.trust-sent i.is-on { background: var(--accent); box-shadow: 0 0 10px rgba(204, 120, 92, 0.85); }
+
+/* Below the pin: the record sits above the claims as one finished exhibit, and
+   no folio is filled because there is no "current" claim to mark. */
+@media (max-width: 999px) {
+  .trust-rec-wrap { order: -1; margin-bottom: 1.8rem; }
+  .trust-claims { gap: 1.6rem; }
+}
+
+/* ---- the reading light -------------------------------------------------- */
+
+/* Everything above renders the record complete, the seal closed and every
+   claim at full contrast. This is the only place the section pins, gated the
+   same three ways as the cube — width, scroll-timeline support, and the
+   reader's motion preference. Fail any one and the base layer is what ships,
+   which is why the base layer is the base layer. */
+
+@media (min-width: 1000px) {
+  .trust-stage {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(2.5rem, 5vw, 5rem);
+  }
+}
+
+/* min-height as well: the stage has to hold four claims and the record
+   inside one viewport, and a short laptop window cannot. Pinning there
+   would clip the first claim rather than reveal it. */
+@media (min-width: 1000px) and (min-height: 660px) and (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    /* Four viewports of scroll, one claim each. */
+    .trust-track {
+      height: 400vh;
+      view-timeline-name: --trust;
+      view-timeline-axis: block;
+    }
+    /* padding-top, not top: header.nav is position:fixed and translucent
+       cream at z-index 50, so without it the first claim reads through a
+       paper bar. Centring inside the padding puts the pair below the nav. */
+    .trust-stage { position: sticky; top: 0; height: 100vh; align-content: center; padding-top: 4.5rem; }
+    /* The released pin already ends on air; the section's own bottom padding
+       on top of it leaves a dead terracotta gap before the CTA. */
+    .trust.section-pad { padding-bottom: clamp(2rem, 4vw, 3.5rem); }
+
+    /* A subject taller than the scrollport makes `contain` exactly the window
+       in which the sticky child is pinned — no magic numbers. */
+    .trust-folio,
+    .trust-folio::before,
+    .trust-seal i,
+    .trust-rec [data-p],
+    .trust-queue,
+    .trust-sent {
+      animation-timeline: --trust;
+      animation-range: contain 0% contain 100%;
+      animation-fill-mode: both;
+      animation-timing-function: linear;
+    }
+
+    /* Everything in the record that proves something waits in the dark. */
+    .trust-rec [data-p] { opacity: 0.3; }
+
+    .trust-claim:nth-child(1) .trust-folio::before { animation-name: trust-fill-1; }
+    .trust-claim:nth-child(2) .trust-folio::before { animation-name: trust-fill-2; }
+    .trust-claim:nth-child(3) .trust-folio::before { animation-name: trust-fill-3; }
+    .trust-claim:nth-child(4) .trust-folio::before { animation-name: trust-fill-4; }
+    .trust-claim:nth-child(1) .trust-folio { animation-name: trust-num-1; }
+    .trust-claim:nth-child(2) .trust-folio { animation-name: trust-num-2; }
+    .trust-claim:nth-child(3) .trust-folio { animation-name: trust-num-3; }
+    .trust-claim:nth-child(4) .trust-folio { animation-name: trust-num-4; }
+    /* Separate names from the chip's, same timings: the chip's fill must reach
+       0 or the ink block never lifts, while a record row that reaches 0 deletes
+       half the exhibit. */
+    .trust-rec [data-p="1"] { animation-name: trust-row-1; }
+    .trust-rec [data-p="2"] { animation-name: trust-row-2; }
+    .trust-rec [data-p="3"] { animation-name: trust-row-3; }
+    .trust-rec [data-p="4"] { animation-name: trust-row-4; }
+
+    @keyframes trust-fill-1 { 0%, 20% { opacity: 1 }                          26%, 100% { opacity: 0 } }
+    @keyframes trust-fill-2 { 0%, 19% { opacity: 0 }  26%, 45% { opacity: 1 } 51%, 100% { opacity: 0 } }
+    @keyframes trust-fill-3 { 0%, 44% { opacity: 0 }  51%, 70% { opacity: 1 } 76%, 100% { opacity: 0 } }
+    @keyframes trust-fill-4 { 0%, 69% { opacity: 0 }                          76%, 100% { opacity: 1 } }
+
+    @keyframes trust-num-1 { 0%, 20% { color: var(--rice) }                                        26%, 100% { color: var(--button-ink) } }
+    @keyframes trust-num-2 { 0%, 19% { color: var(--button-ink) } 26%, 45% { color: var(--rice) }  51%, 100% { color: var(--button-ink) } }
+    @keyframes trust-num-3 { 0%, 44% { color: var(--button-ink) } 51%, 70% { color: var(--rice) }  76%, 100% { color: var(--button-ink) } }
+    @keyframes trust-num-4 { 0%, 69% { color: var(--button-ink) }                                  76%, 100% { color: var(--rice) } }
+
+    @keyframes trust-row-1 { 0%, 20% { opacity: 1 }                                 26%, 100% { opacity: 0.36 } }
+    @keyframes trust-row-2 { 0%, 19% { opacity: 0.36 } 26%, 45% { opacity: 1 }      51%, 100% { opacity: 0.36 } }
+    @keyframes trust-row-3 { 0%, 44% { opacity: 0.36 } 51%, 70% { opacity: 1 }      76%, 100% { opacity: 0.36 } }
+    @keyframes trust-row-4 { 0%, 69% { opacity: 0.36 }                              76%, 100% { opacity: 1 } }
+
+    /* The queue drains on the last claim, and only there. Name only — the
+       `animation` shorthand would reset the timeline and range set above, and
+       a scroll-driven animation with a fixed duration does not span its
+       range. */
+    .trust-queue { animation-name: trust-queue-out; }
+    .trust-sent { animation-name: trust-sent-in; }
+    @keyframes trust-queue-out { 0%, 84% { opacity: 1 } 90%, 100% { opacity: 0 } }
+    @keyframes trust-sent-in  { 0%, 84% { opacity: 0 } 90%, 100% { opacity: 1 } }
+
+    /* One side of the seal per claim, clockwise from the top-left. The box is
+       closed at the moment the fourth proof is on screen. */
+    .trust-seal .is-t { animation-name: trust-seal-t; }
+    .trust-seal .is-r { animation-name: trust-seal-r; }
+    .trust-seal .is-b { animation-name: trust-seal-b; }
+    .trust-seal .is-l { animation-name: trust-seal-l; }
+    @keyframes trust-seal-t { 0%      { transform: scaleX(0) } 22%, 100% { transform: scaleX(1) } }
+    @keyframes trust-seal-r { 0%, 22% { transform: scaleY(0) } 47%, 100% { transform: scaleY(1) } }
+    @keyframes trust-seal-b { 0%, 47% { transform: scaleX(0) } 72%, 100% { transform: scaleX(1) } }
+    @keyframes trust-seal-l { 0%, 72% { transform: scaleY(0) } 95%, 100% { transform: scaleY(1) } }
+  }
+}
+
+
+/* ─── CTA (the manifesto band — one flat terracotta field) ────────────────── */
+
+.cta {
+  position: relative;
+  background: var(--accent);
+  color: var(--button-ink);
+  overflow: hidden;
+  isolation: isolate;
+}
+/* A second sun, half-sunk in the band, so the block is not a flat rectangle. */
+.cta-veil {
+  position: absolute;
+  left: 50%; bottom: -55%;
+  translate: -50% 0;
+  width: min(120vw, 900px);
+  aspect-ratio: 1;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(251, 246, 238, 0.30), transparent 68%);
+}
+@keyframes cta-breathe {
+  0%, 100% { opacity: 0.7; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cta-veil { animation: cta-breathe 9s var(--ease-in-out) infinite; }
+}
+.cta-inner { text-align: center; max-width: 46rem; margin-inline: auto; }
+.cta-inner .eyebrow { color: var(--button-ink); opacity: 0.72; }
+.cta-inner .h2 { font-size: clamp(2rem, 1.3rem + 3.2vw, 4.2rem); color: var(--button-ink); }
+.cta-inner .lede { margin-inline: auto; color: var(--button-ink); opacity: 0.82; }
+.cta-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.9rem; margin-top: 2.4rem; }
+/* On terracotta the primary button inverts: ink field, paper label. */
+.cta .btn-primary {
+  background: var(--button-ink);
+  border-color: var(--button-ink);
+  color: var(--rice);
+}
+.cta .btn-primary:hover { background: var(--night); border-color: var(--night); color: var(--rice); }
+.cta-stores {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 0.7rem;
+  margin-top: 2.8rem; padding-top: 2.4rem;
+  border-top: 1px solid rgba(36, 23, 15, 0.22);
+}
+.cta-store {
+  display: inline-flex; align-items: center; gap: 0.6rem;
+  min-height: 48px; padding: 0 1.3rem;
+  border: 1px solid rgba(36, 23, 15, 0.3);
+  border-radius: var(--radius);
   font-family: var(--font-mono);
   font-size: var(--t-label);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-faint);
-  margin: 1.5rem 0 0;
+  color: var(--button-ink);
+  transition: border-color 0.25s var(--ease-out), background-color 0.25s var(--ease-out);
 }
+.cta-store:hover { border-color: var(--button-ink); background: rgba(36, 23, 15, 0.08); }
+.cta-store svg { width: 16px; height: 16px; }
 
 
-/* ─── DAY (signature: three moments of a working day) ─────────────────────── */
+/* ─── FOOTER (night) ─────────────────────────────────────────────────────── */
 
-.day { background: var(--bg-deep); border-block: 1px solid var(--line); }
-.day-head { max-width: 46rem; }
-.day-rail {
-  display: grid;
-  gap: 1.25rem;
-  margin-top: 3.2rem;
+.foot {
+  background: var(--night);
+  color: var(--night-ink);
+  padding-block: 3.6rem 2.4rem;
 }
-@media (min-width: 860px) {
-  /* Asymmetric on purpose: the middle beat is the widest because the pipeline
-     is where the day actually happens. */
-  .day-rail { grid-template-columns: 1fr 1.28fr 1fr; align-items: start; }
-}
-.day-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: 1.6rem 1.5rem 1.7rem;
-  transition: border-color 0.35s var(--ease-out), transform 0.35s var(--ease-out);
-}
-.day-card:hover { border-color: var(--line-strong); transform: translateY(-3px); }
-@media (min-width: 860px) {
-  .day-card:nth-child(2) { transform: translateY(2.2rem); }
-  .day-card:nth-child(2):hover { transform: translateY(calc(2.2rem - 3px)); }
-}
-.day-time {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
-  color: var(--accent);
-}
-.day-card h3 {
-  font-family: var(--font-display);
-  font-size: var(--t-h3);
-  margin: 0.7rem 0 0.5rem;
-  font-weight: 700;
-}
-.day-card p { margin: 0; color: var(--ink-muted); font-size: 0.97rem; }
-/* Drawn UI fragment inside a card — a stage strip, not a screenshot. */
-.day-stage { display: grid; gap: 0.5rem; margin-top: 1.25rem; }
-.day-stage-row {
-  display: flex; align-items: center; gap: 0.7rem;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.6rem 0.75rem;
-  font-size: 0.86rem;
-}
-.day-stage-row b { font-weight: 600; }
-.day-stage-row span { margin-left: auto; font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-faint); }
-.day-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
-.day-dot.is-quiet { background: var(--ink-faint); }
-
-
-/* ─── CAPABILITIES (asymmetric 6, never three equal cards) ────────────────── */
-
-.caps-head { max-width: 46rem; }
-.caps-grid { display: grid; gap: 1rem; margin-top: 3.2rem; }
-@media (min-width: 760px) { .caps-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 1100px) {
-  .caps-grid { grid-template-columns: repeat(6, 1fr); }
-  /* Two wide anchors, four narrower supports. */
-  .caps-item:nth-child(1) { grid-column: span 4; }
-  .caps-item:nth-child(2) { grid-column: span 2; }
-  .caps-item:nth-child(3),
-  .caps-item:nth-child(4),
-  .caps-item:nth-child(5) { grid-column: span 2; }
-  .caps-item:nth-child(6) { grid-column: span 6; }
-}
-.caps-item {
-  position: relative;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: 1.7rem 1.6rem;
-  overflow: hidden;
-  transition: border-color 0.35s var(--ease-out), background-color 0.35s var(--ease-out);
-}
-.caps-item:hover { border-color: var(--line-strong); background: var(--panel-raised); }
-.caps-item::after {
-  content: '';
-  position: absolute; inset: auto -30% -60% auto;
-  width: 60%; aspect-ratio: 1;
-  background: radial-gradient(circle, rgba(204, 120, 92, 0.10), transparent 70%);
-  opacity: 0; transition: opacity 0.4s var(--ease-out);
-}
-.caps-item:hover::after { opacity: 1; }
-.caps-icon { width: 26px; height: 26px; color: var(--accent); }
-.caps-item h3 {
-  font-family: var(--font-display);
-  font-size: var(--t-h3);
-  font-weight: 700;
-  margin: 1rem 0 0.45rem;
-}
-.caps-item p { margin: 0; color: var(--ink-muted); font-size: 0.96rem; max-width: 46ch; }
-
-
-/* ─── ASSISTANT (signature: the AI, shown answering) ─────────────────────── */
-
-.asst { background: var(--bg-deep); border-block: 1px solid var(--line); }
-.asst-wrap { display: grid; gap: 3rem; align-items: center; }
-@media (min-width: 980px) { .asst-wrap { grid-template-columns: 0.92fr 1.08fr; gap: 4.5rem; } }
-.asst-copy .lede { margin-bottom: 1.6rem; }
-.asst-points { list-style: none; margin: 1.6rem 0 0; padding: 0; display: grid; gap: 0.9rem; }
-.asst-points li { display: flex; gap: 0.75rem; align-items: flex-start; font-size: 0.98rem; color: var(--ink-muted); }
-.asst-points svg { width: 18px; height: 18px; color: var(--accent); flex: none; margin-top: 0.28rem; }
-/* The drawn conversation. Deliberately not a screenshot: it stays crisp,
-   weighs nothing, and cannot leak a real customer's data. */
-.asst-chat {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: 1.4rem;
-  display: grid;
-  gap: 0.9rem;
-}
-.asst-bubble { max-width: 88%; padding: 0.85rem 1.05rem; border-radius: 16px; font-size: 0.96rem; line-height: 1.5; }
-.asst-bubble.is-you {
-  justify-self: end;
-  background: var(--accent);
-  color: #17110E;
-  border-bottom-right-radius: 6px;
-}
-.asst-bubble.is-bot {
-  justify-self: start;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  color: var(--ink);
-  border-bottom-left-radius: 6px;
-}
-.asst-tool {
-  display: flex; align-items: center; gap: 0.55rem;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  color: var(--ink-faint);
-  padding-left: 0.2rem;
-}
-.asst-tool svg { width: 13px; height: 13px; }
-
-
-/* ─── TEAM / ROLES (matrix — who may see what) ───────────────────────────── */
-
-.team-head { max-width: 48rem; }
-.team-table-wrap {
-  margin-top: 3rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--panel);
-  overflow-x: auto;
-}
-.team-table { width: 100%; border-collapse: collapse; min-width: 620px; font-size: 0.94rem; }
-.team-table th, .team-table td { padding: 0.9rem 1.1rem; text-align: left; }
-.team-table thead th {
-  font-family: var(--font-mono);
-  font-size: var(--t-label);
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  font-weight: 400;
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-}
-.team-table tbody tr + tr td { border-top: 1px solid var(--line); }
-.team-role { font-weight: 600; white-space: nowrap; }
-.team-role small { display: block; font-weight: 400; color: var(--ink-faint); font-size: 0.8rem; }
-.team-yes, .team-no { font-family: var(--font-mono); font-size: 0.82rem; }
-.team-yes { color: var(--accent-warm); }
-.team-no { color: var(--ink-faint); }
-.team-foot { margin: 1.4rem 0 0; color: var(--ink-faint); font-size: 0.88rem; max-width: 64ch; }
-
-
-/* ─── TRUST (light room — the page exhales) ──────────────────────────────── */
-
-.trust {
-  background: var(--room-bg);
-  color: var(--room-ink);
-}
-.trust-head { max-width: 46rem; }
-.trust .eyebrow { color: var(--room-muted); }
-.trust .h2 { color: var(--room-ink); }
-.trust .lede { color: var(--room-muted); }
-.trust-grid { display: grid; gap: 1rem; margin-top: 3rem; }
-@media (min-width: 720px) { .trust-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 1080px) { .trust-grid { grid-template-columns: repeat(4, 1fr); } }
-.trust-card {
-  background: var(--room-panel);
-  border: 1px solid var(--room-line);
-  border-radius: var(--radius);
-  padding: 1.5rem 1.4rem;
-}
-.trust-card svg { width: 24px; height: 24px; color: var(--room-accent); }
-.trust-card h3 {
-  font-family: var(--font-display);
-  font-size: 1.08rem;
-  font-weight: 700;
-  margin: 0.95rem 0 0.4rem;
-  color: var(--room-ink);
-}
-.trust-card p { margin: 0; font-size: 0.94rem; color: var(--room-muted); }
-
-
-/* ─── CTA + STORES ───────────────────────────────────────────────────────── */
-
-.cta { position: relative; overflow: hidden; isolation: isolate; }
-.cta-veil {
-  position: absolute; inset: 0; z-index: -1;
-  background: radial-gradient(58% 70% at 50% 108%, rgba(204, 120, 92, 0.18), transparent 70%);
-}
-.cta-inner { text-align: center; max-width: 44rem; margin-inline: auto; }
-.cta-inner .h2 { font-size: clamp(1.9rem, 1.4rem + 2.2vw, 3rem); }
-.cta-inner .lede { margin-inline: auto; }
-.cta-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.9rem; margin-top: 2.2rem; }
-.cta-stores {
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 0.7rem;
-  margin-top: 2.6rem; padding-top: 2.2rem; border-top: 1px solid var(--line);
-}
-.cta-store {
-  display: inline-flex; align-items: center; gap: 0.6rem;
-  min-height: 48px; padding: 0 1.2rem;
-  border: 1px solid var(--line-strong); border-radius: 12px;
-  font-size: 0.92rem; color: var(--ink-muted);
-  transition: border-color 0.25s var(--ease-out), color 0.25s var(--ease-out);
-}
-.cta-store:hover { border-color: var(--accent); color: var(--ink); }
-.cta-store svg { width: 17px; height: 17px; }
-
-
-/* ─── FOOTER ─────────────────────────────────────────────────────────────── */
-
-.foot { border-top: 1px solid var(--line); background: var(--bg-deep); padding-block: 3.2rem 2.4rem; }
-.foot-top { display: grid; gap: 2.2rem; }
+.foot-top { display: grid; gap: 2.4rem; }
 @media (min-width: 820px) { .foot-top { grid-template-columns: 1.4fr 1fr 1fr; } }
-.foot-mark { display: flex; align-items: center; gap: 0.6rem; font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; }
+.foot-mark {
+  display: flex; align-items: center; gap: 0.65rem;
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+}
 .foot-mark svg { width: 24px; height: 24px; }
-.foot-blurb { margin: 0.9rem 0 0; color: var(--ink-faint); font-size: 0.92rem; max-width: 34ch; }
-.foot-col h4 {
+.foot-blurb { margin: 1rem 0 0; color: var(--night-muted); font-size: 0.92rem; line-height: 1.7; max-width: 34ch; }
+.foot-col h3 {
   font-family: var(--font-mono);
   font-size: var(--t-label);
-  letter-spacing: 0.13em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--ink-faint);
-  font-weight: 400;
-  margin: 0 0 0.9rem;
+  color: var(--accent);
+  font-weight: 500;
+  line-height: 1.4;
+  margin: 0 0 1rem;
 }
-.foot-col ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
-.foot-col a { font-size: 0.93rem; color: var(--ink-muted); transition: color 0.2s var(--ease-out); }
-.foot-col a:hover { color: var(--ink); }
+.foot-col ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.65rem; }
+.foot-col a { font-size: 0.92rem; color: var(--night-muted); transition: color 0.2s var(--ease-out); }
+.foot-col a:hover { color: var(--night-ink); }
 .foot-base {
   display: flex; flex-wrap: wrap; gap: 0.8rem 1.6rem; justify-content: space-between;
-  margin-top: 2.6rem; padding-top: 1.6rem; border-top: 1px solid var(--line);
-  font-size: 0.86rem; color: var(--ink-faint);
+  margin-top: 2.8rem; padding-top: 1.7rem; border-top: 1px solid var(--night-line);
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--night-muted);
 }

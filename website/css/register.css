@@ -61,7 +61,7 @@
   padding: 0 1rem;
   background: var(--panel);
   border: 1px solid var(--line-strong);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font-family: inherit;
   font-size: 1rem;
@@ -82,7 +82,7 @@
   right: 6px; top: 50%; transform: translateY(-50%);
   width: 44px; height: 44px;
   display: inline-flex; align-items: center; justify-content: center;
-  background: none; border: 0; border-radius: 10px;
+  background: none; border: 0; border-radius: var(--radius-lg);
   color: var(--ink-faint); cursor: pointer;
   transition: color 0.2s var(--ease-out);
 }
@@ -95,8 +95,8 @@
   display: none;
   background: rgba(204, 82, 71, 0.10);
   border: 1px solid rgba(204, 82, 71, 0.4);
-  color: #F0B4AE;
-  border-radius: 12px;
+  color: var(--danger);
+  border-radius: var(--radius-lg);
   padding: 0.8rem 1rem;
   font-size: 0.93rem;
 }
@@ -110,8 +110,8 @@
 /* Spinner shown inside the button while the request is in flight. */
 .spinner {
   width: 18px; height: 18px;
-  border: 2px solid rgba(23, 17, 14, 0.35);
-  border-top-color: #17110E;
+  border: 2px solid rgba(36, 23, 15, 0.35);
+  border-top-color: var(--button-ink);
   border-radius: 50%;
   animation: reg-spin 0.7s linear infinite;
 }

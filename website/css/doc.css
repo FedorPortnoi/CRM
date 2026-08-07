@@ -71,7 +71,7 @@
 }
 /* 68ch keeps legal prose at a readable measure instead of edge to edge. */
 .doc-body p,
-.doc-body li { font-size: 1rem; line-height: 1.72; color: #4A413B; max-width: 68ch; }
+.doc-body li { font-size: 1rem; line-height: 1.72; color: var(--ink-soft); max-width: 68ch; }
 .doc-body p { margin: 0 0 1rem; }
 .doc-body ul { margin: 0 0 1rem; padding-left: 1.3rem; }
 .doc-body li { margin-bottom: 0.5rem; }

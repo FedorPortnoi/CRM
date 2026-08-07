@@ -6,7 +6,8 @@
 <title>4КУБ — мобильная CRM для клиентов, сделок и команды</title>
 <meta name="description" content="Контакты, сделки, задачи и аналитика в телефоне. Работает офлайн, отвечает на вопросы своими словами. Данные остаются в России. App Store и RuStore.">
 <link rel="canonical" href="https://4kub.ru/">
-<meta name="theme-color" content="#0E0E0D">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#F4EADC">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="4КУБ">
 <meta property="og:title" content="4КУБ — мобильная CRM для клиентов, сделок и команды">
@@ -17,14 +18,81 @@
      and no extra request is made. -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='5' fill='%230E0E0D'/><path d='M12 4.5 19 8v8l-7 3.5L5 16V8l7-3.5Z' fill='none' stroke='%23CC785C' stroke-width='1.6' stroke-linejoin='round'/><path d='M5 8l7 3.5L19 8M12 11.5v8' fill='none' stroke='%23CC785C' stroke-width='1.6' stroke-linejoin='round' opacity='.55'/></svg>">
 <!-- Synchronous on purpose: it must mark JS BEFORE the stylesheets paint, or
-     the reveal targets flash visible and then fade out. -->
-<script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="/css/base.css?v=2">
-<link rel="stylesheet" href="/css/sections.css?v=2">
+     the reveal targets flash visible and then fade out.
+     The intro flag rides along for the same reason and it is the whole point of
+     "once per session": decided in the deferred script instead, every repeat
+     visit would paint the full-screen intro and then yank it away. Written on
+     first view, so a reload counts as the same session. -->
+<script>
+document.documentElement.classList.add('js');
+try {
+  if (sessionStorage.getItem('kub-intro') === 'seen') document.documentElement.classList.add('intro-seen');
+  else sessionStorage.setItem('kub-intro', 'seen');
+} catch (e) {
+  /* Private mode / storage disabled: show the intro. Not worth failing over. */
+}
+</script>
+<!-- The two faces the first screen actually paints in. Cyrillic only: the latin
+     subsets are still declared in CSS but no Russian glyph needs them, so
+     preloading them would buy a render nothing and cost 72 KB. -->
+<link rel="preload" as="font" type="font/woff2" href="/fonts/exo2-cyrillic.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="/fonts/zenoldmincho-400-cyrillic.woff2" crossorigin>
+<!-- The hero artwork is the LCP element. Preloaded per breakpoint so a phone
+     never pulls the 257 KB desktop plate to show the 82 KB one. -->
+<link rel="preload" as="image" href="/img/hero-riviera.webp" media="(min-width: 1000px)" fetchpriority="high">
+<link rel="preload" as="image" href="/img/hero-riviera-sm.webp" media="(max-width: 999px)" fetchpriority="high">
+<link rel="stylesheet" href="/css/base.css?v=15">
+<link rel="stylesheet" href="/css/sections.css?v=46">
 </head>
 <body>
 
+<div class="scroll-progress" aria-hidden="true"></div>
+
 <a class="skip-link" href="#main">Перейти к содержанию</a>
+
+<!-- ═══════════ INTRO (once per session) ═══════════
+     Decorative in full: the wordmark is already the nav mark, and every line on
+     the plate is repeated verbatim further down the page. A screen reader lands
+     on the nav and the hero, which is the right first stop anyway.
+     No transform/filter on .intro or .intro-stage — either would make them the
+     containing block for the fixed lockup and ground the flight. -->
+<div class="intro" aria-hidden="true">
+  <div class="intro-stage">
+    <div class="intro-sun"></div>
+
+    <ul class="intro-motes">
+      <li style="--x:12%;--y:68%;--d:21s;--delay:-3s;--mx:30px;--s:5px"></li>
+      <li style="--x:23%;--y:82%;--d:17s;--delay:-9s;--mx:-18px"></li>
+      <li style="--x:31%;--y:44%;--d:25s;--delay:-1s;--mx:22px;--s:3px"></li>
+      <li style="--x:44%;--y:76%;--d:19s;--delay:-13s;--mx:-26px"></li>
+      <li style="--x:57%;--y:88%;--d:23s;--delay:-6s;--mx:16px;--s:5px"></li>
+      <li style="--x:63%;--y:52%;--d:27s;--delay:-17s;--mx:-14px;--s:3px"></li>
+      <li style="--x:71%;--y:71%;--d:18s;--delay:-4s;--mx:24px"></li>
+      <li style="--x:79%;--y:39%;--d:24s;--delay:-11s;--mx:-20px;--s:3px"></li>
+      <li style="--x:86%;--y:79%;--d:20s;--delay:-8s;--mx:18px;--s:5px"></li>
+      <li style="--x:17%;--y:33%;--d:26s;--delay:-15s;--mx:-24px;--s:3px"></li>
+      <li style="--x:50%;--y:28%;--d:22s;--delay:-19s;--mx:20px"></li>
+      <li style="--x:92%;--y:58%;--d:16s;--delay:-2s;--mx:-16px;--s:3px"></li>
+    </ul>
+
+    <!-- The lockup. Static and centred here by default; when motion is allowed
+         and the browser has scroll timelines it goes position:fixed and flies
+         to the nav. One element, two modes — never two copies to keep in sync. -->
+    <div class="intro-mark">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M12 2.5 21 7v10l-9 4.5L3 17V7l9-4.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M3 7l9 4.5L21 7M12 11.5V21.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" opacity=".55"/>
+      </svg>
+      <span>4КУБ</span>
+    </div>
+
+    <p class="intro-meta is-tr">Данные остаются в России</p>
+    <p class="intro-meta is-bl">CRM для малого и среднего бизнеса</p>
+    <p class="intro-meta is-br">App Store · RuStore</p>
+
+    <p class="intro-cue"><span>Листайте</span><i></i></p>
+  </div>
+</div>
 
 <!-- ═══════════ NAV ═══════════ -->
 <header class="nav">
@@ -46,7 +114,12 @@
       </nav>
 
       <div class="nav-cta">
-        <a class="btn btn-primary" href="/register">Начать бесплатно</a>
+        <a class="btn btn-primary" href="/register">
+          Начать бесплатно
+          <span class="btn-arrow" aria-hidden="true">
+            <svg viewBox="0 0 12 12" fill="none"><path d="M1 6h9M6.5 2.5 10 6l-3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </a>
       </div>
 
       <button class="nav-burger" type="button" aria-label="Меню" aria-expanded="false" aria-controls="nav-panel">
@@ -70,20 +143,84 @@
 
   <!-- ═══════════ HERO ═══════════ -->
   <section class="hero">
-    <div class="hero-veil" aria-hidden="true"></div>
-    <div class="hero-grid" aria-hidden="true"></div>
+    <!-- Wrapper exists so the exit can translate the artwork without touching
+         .hero-art's own `animation` (entrance + parallax drift). `animation` is
+         a single property: a second declaration would replace that list, not
+         extend it. The wrapper carries the curtain, the inner keeps the drift. -->
+    <div class="hero-art-wrap" aria-hidden="true"><div class="hero-art"></div></div>
+
+    <!-- Margin rule. Decorative: the same words are already in the meta block
+         below, so a screen reader gains nothing by hearing them sideways. -->
+    <div class="hero-rule" aria-hidden="true">
+      <span class="hero-vert">Мобильная CRM · Россия</span>
+    </div>
+
     <div class="shell">
-      <div class="hero-body reveal">
-        <p class="eyebrow">CRM для малого и среднего бизнеса</p>
-        <h1 class="hero-title">Продажи не ждут <em>офиса</em></h1>
-        <p class="hero-sub">Контакты, сделки и задачи в телефоне. Работает без интернета. Данные остаются в России.</p>
-        <div class="hero-actions">
-          <a class="btn btn-primary btn-lg" href="/register">Начать бесплатно</a>
-          <a class="btn btn-ghost btn-lg" href="#caps">Что внутри</a>
+      <div class="hero-grid">
+        <div class="hero-body reveal">
+          <p class="eyebrow">CRM для малого и среднего бизнеса</p>
+          <h1 class="hero-title">Продажи<br>не ждут<br><em>офиса</em></h1>
+          <p class="hero-accent">Работает без интернета</p>
+          <p class="hero-sub">Контакты, сделки и задачи в телефоне. Открывается в метро, на стройке и в поезде — записи уходят на сервер сами, когда связь вернётся.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary btn-lg" href="/register">
+              Начать бесплатно
+              <span class="btn-arrow" aria-hidden="true">
+                <svg viewBox="0 0 12 12" fill="none"><path d="M1 6h9M6.5 2.5 10 6l-3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </a>
+            <a class="btn btn-ghost btn-lg" href="#caps">Что внутри</a>
+          </div>
+          <dl class="hero-meta">
+            <div>
+              <dt>Платформы</dt>
+              <dd>App Store · RuStore</dd>
+            </div>
+            <div>
+              <dt>Данные</dt>
+              <dd>Россия · ФЗ-152</dd>
+            </div>
+            <div>
+              <dt>Команда</dt>
+              <dd>от 1 до 500 человек</dd>
+            </div>
+          </dl>
+        </div>
+
+        <!-- The product, drawn rather than screenshotted: it stays crisp at any
+             density, weighs nothing, and cannot leak a real customer's data. -->
+        <div class="hero-stage reveal" role="img" aria-label="Воронка сделок: этап «Новые» — пять сделок на 2 350 000 ₽, «В работе» — шесть на 4 750 000 ₽, «Закрыто» — четыре на 3 200 000 ₽.">
+          <p class="hero-stage-bar"><i aria-hidden="true"></i>Воронка сделок</p>
+          <div class="hero-cols" aria-hidden="true">
+            <div>
+              <p class="hero-col-head">Новые <b>5</b></p>
+              <div class="hero-deal"><span><i></i>ООО «Альфа»</span><b>500 000 ₽</b></div>
+              <div class="hero-deal"><span><i></i>ИП Петров</span><b>350 000 ₽</b></div>
+              <div class="hero-deal"><span><i></i>ООО «Бета»</span><b>800 000 ₽</b></div>
+            </div>
+            <div>
+              <p class="hero-col-head">В работе <b>6</b></p>
+              <div class="hero-deal"><span><i></i>ООО «Эпсилон»</span><b>1 200 000 ₽</b></div>
+              <div class="hero-deal"><span><i></i>ООО «Зета»</span><b>950 000 ₽</b></div>
+              <div class="hero-deal"><span><i></i>ООО «Техно»</span><b>650 000 ₽</b></div>
+            </div>
+            <div>
+              <p class="hero-col-head">Закрыто <b>4</b></p>
+              <div class="hero-deal"><span><i></i>ООО «Омега»</span><b>1 500 000 ₽</b></div>
+              <div class="hero-deal"><span><i></i>ООО «Прайм»</span><b>900 000 ₽</b></div>
+              <div class="hero-deal"><span><i></i>ООО «Сигма»</span><b>300 000 ₽</b></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </section>
+
+  <!-- Runway for the hero's exit. Without it the curtains have only the hero's
+       own remaining scroll to travel in and the parting snaps past. Present only
+       when the scroll-driven exit actually runs; otherwise it would be a screen
+       of empty paper. -->
+  <div class="hero-exit" aria-hidden="true"></div>
 
   <!-- ═══════════ DAY ═══════════ -->
   <section class="day section-pad">
@@ -95,20 +232,22 @@
       </div>
 
       <div class="day-rail reveal-group">
-        <article class="day-card reveal">
+        <article class="day-card reveal" style="--card-img:url('/img/day-call.webp')">
           <p class="day-time">09:40</p>
           <h3>Звонок в дороге</h3>
           <p>Номер незнакомый. 4КУБ показывает, кто это, о чём договаривались в прошлый раз и что вы обещали.</p>
+          <p>Разговор кончился — заметка и задача уже привязаны к карточке, набирать ничего не нужно. Пропала связь в тоннеле: запись останется на телефоне и уйдёт на сервер сама, когда появится сеть.</p>
           <div class="day-stage">
             <div class="day-stage-row"><i class="day-dot" aria-hidden="true"></i><b>Входящий звонок</b><span>сейчас</span></div>
             <div class="day-stage-row"><i class="day-dot is-quiet" aria-hidden="true"></i>Обещали смету<span>12 дней</span></div>
           </div>
         </article>
 
-        <article class="day-card reveal">
+        <article class="day-card reveal" style="--card-img:url('/img/day-deal.webp')">
           <p class="day-time">14:15</p>
           <h3>Сделка сдвинулась</h3>
           <p>Перетащили карточку на следующий этап. История, задачи и сумма поехали вместе с ней, дублировать ничего не нужно.</p>
+          <p>Руководитель видит движение сразу — просить «обновите статус» больше не приходится. А если этап меняется по правилу, само уйдёт письмо и поставится задача с ответственным.</p>
           <div class="day-stage">
             <div class="day-stage-row"><i class="day-dot is-quiet" aria-hidden="true"></i>Новый лид<span>4</span></div>
             <div class="day-stage-row"><i class="day-dot" aria-hidden="true"></i><b>Переговоры</b><span>7</span></div>
@@ -116,16 +255,24 @@
           </div>
         </article>
 
-        <article class="day-card reveal">
+        <article class="day-card reveal" style="--card-img:url('/img/day-close.webp')">
           <p class="day-time">19:05</p>
           <h3>Итоги без отчётов</h3>
           <p>Сколько закрыли, что просрочено, кому не позвонили. Один экран вместо вечерней переписки с командой.</p>
+          <p>Цифры собираются сами из того, что происходило за день: заполнять таблицу в конце смены некому и незачем. Завтрашние задачи уже в списке, просроченные подсвечены.</p>
           <div class="day-stage">
             <div class="day-stage-row"><i class="day-dot" aria-hidden="true"></i><b>Закрыто за день</b><span>3</span></div>
             <div class="day-stage-row"><i class="day-dot is-quiet" aria-hidden="true"></i>Просрочено<span>1</span></div>
           </div>
         </article>
       </div>
+
+      <!-- The day totalled. Rides into the closing beat with the schedule. -->
+      <p class="day-foot">
+        <span>Один день · <b>3 момента</b></span>
+        <span>Ни одного отчёта</span>
+        <span>Ни одной выгрузки в Excel</span>
+      </p>
     </div>
   </section>
 
@@ -135,103 +282,244 @@
       <div class="caps-head reveal">
         <p class="eyebrow">Возможности</p>
         <h2 class="h2">Всё, что нужно для работы с клиентами</h2>
-        <p class="lede">Четыре грани куба: продукт, маркетинг, продажи, сервис. Ничего лишнего сверху.</p>
+        <p class="lede">Четыре грани куба — четыре экрана приложения: контакты, сделки, задачи, аналитика. Остальное лежит глубже и не занимает место на виду.</p>
       </div>
 
-      <div class="caps-grid reveal-group">
-        <article class="caps-item reveal">
-          <svg class="caps-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19 11h2M20 8v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-          <h3>Контакты</h3>
-          <p>Карточка клиента, в которой лежит всё: звонки, заметки, задачи, сделки и переписка. Импорт из Битрикс24, Excel, Telegram, WhatsApp, vCard и телефонной книги.</p>
-        </article>
+      <div class="caps-track">
+        <div class="caps-stage">
 
-        <article class="caps-item reveal">
-          <svg class="caps-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M5 4v16M12 4v10M19 4v13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-          </svg>
-          <h3>Воронка</h3>
-          <p>Канбан по этапам. Перетащили сделку, и всё связанное поехало за ней.</p>
-        </article>
+          <!-- The object. It repeats what the four blocks say, so it is hidden
+               from AT rather than read out twice. -->
+          <div class="caps-cube-wrap reveal" style="--d:60ms" aria-hidden="true">
+            <div class="caps-cube">
 
-        <article class="caps-item reveal">
-          <svg class="caps-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M4 6h16M4 12h10M4 18h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-            <path d="m17 16 2 2 3-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <h3>Задачи</h3>
-          <p>Дедлайны, напоминания, повторяющиеся дела. Себе и команде.</p>
-        </article>
+              <div class="caps-cf caps-cf-1">
+                <div class="caps-cf-head"><b>Контакты</b><i>01</i></div>
+                <div class="caps-cf-body">
+                  <div class="caps-sc-card">
+                    <span class="caps-sc-mono">А</span>
+                    <span><b>ООО «Альфа»</b><em>клиент</em></span>
+                  </div>
+                  <ul class="caps-sc-time">
+                    <li>Звонок 12 мин<time>вчера</time></li>
+                    <li>Смета отправлена<time>3 дня</time></li>
+                  </ul>
+                  <div class="caps-cf-tabs"><i class="is-on"></i><i></i><i></i><i></i></div>
+                </div>
+              </div>
 
-        <article class="caps-item reveal">
-          <svg class="caps-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="3.5" y="5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M8 3.5V6M16 3.5V6M3.5 10h17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-          <h3>Календарь</h3>
-          <p>Встречи и звонки рядом со сделкой. Синхронизация с Яндекс Календарём.</p>
-        </article>
+              <div class="caps-cf caps-cf-2">
+                <div class="caps-cf-head"><b>Сделки</b><i>02</i></div>
+                <div class="caps-cf-body">
+                  <div class="caps-sc-board">
+                    <div class="caps-sc-col">
+                      <p class="caps-sc-h">Новый лид</p>
+                      <span class="caps-sc-stub"></span><span class="caps-sc-stub"></span>
+                    </div>
+                    <div class="caps-sc-col is-target">
+                      <p class="caps-sc-h">Переговоры</p>
+                      <span class="caps-sc-slot"></span><span class="caps-sc-stub"></span>
+                      <span class="caps-sc-drag"></span>
+                    </div>
+                    <div class="caps-sc-col">
+                      <p class="caps-sc-h">Счёт</p>
+                      <span class="caps-sc-stub"></span><span class="caps-sc-stub"></span>
+                    </div>
+                  </div>
+                  <div class="caps-cf-tabs"><i></i><i class="is-on"></i><i></i><i></i></div>
+                </div>
+              </div>
 
-        <article class="caps-item reveal">
-          <svg class="caps-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M4 19h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-            <path d="M7 19v-6M12 19V6M17 19v-9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-          </svg>
-          <h3>Аналитика</h3>
-          <p>Воронка, выручка, работа менеджеров, причины отказов. Без выгрузок в Excel.</p>
-        </article>
+              <div class="caps-cf caps-cf-3">
+                <div class="caps-cf-head"><b>Задачи</b><i>03</i></div>
+                <div class="caps-cf-body">
+                  <ul class="caps-sc-tasks">
+                    <li><i><svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i>Перезвонить Петрову<time>сегодня</time></li>
+                    <li class="is-done"><i><svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i>Выставить счёт<time>сделано</time></li>
+                    <li><i><svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i>Напомнить о смете<time>пятница</time></li>
+                  </ul>
+                  <div class="caps-cf-tabs"><i></i><i></i><i class="is-on"></i><i></i></div>
+                </div>
+              </div>
 
-        <article class="caps-item reveal">
-          <svg class="caps-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 4v6a3 3 0 0 0 3 3h6a3 3 0 0 1 3 3v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <circle cx="6" cy="4" r="2" stroke="currentColor" stroke-width="1.5"/>
-            <circle cx="18" cy="20" r="2" stroke="currentColor" stroke-width="1.5"/>
-          </svg>
-          <h3>Автоматизация и письма</h3>
-          <p>Сценарии по триггерам: сменился этап, выполнена задача, появился лид. Цепочки писем уходят только тем, кто дал согласие на рассылку, с отпиской в один клик.</p>
-        </article>
+              <div class="caps-cf caps-cf-4">
+                <div class="caps-cf-head"><b>Аналитика</b><i>04</i></div>
+                <div class="caps-cf-body">
+                  <div class="caps-sc-chart">
+                    <div class="caps-sc-bars">
+                      <i style="--h: 34%"></i><i style="--h: 52%"></i><i style="--h: 44%"></i>
+                      <i style="--h: 71%"></i><i style="--h: 63%"></i><i class="is-now" style="--h: 92%"></i>
+                    </div>
+                    <p class="caps-sc-foot">Выручка · 6 месяцев</p>
+                  </div>
+                  <div class="caps-cf-tabs"><i></i><i></i><i></i><i class="is-on"></i></div>
+                </div>
+              </div>
+
+              <div class="caps-cf caps-cf-top"><span>4куб</span></div>
+            </div>
+          </div>
+
+          <!-- The real content. An <ol>, because the four faces are the app's
+               four tabs IN the app's order — the order is meaningful, not
+               decorative, which is also why the printed 01–04 folio is a
+               duplicate of the list semantics and hidden from AT. -->
+          <div class="caps-reads-wrap reveal" style="--d:140ms">
+            <div class="caps-rail" aria-hidden="true">
+              <div><i></i><span>01</span></div>
+              <div><i></i><span>02</span></div>
+              <div><i></i><span>03</span></div>
+              <div><i></i><span>04</span></div>
+            </div>
+            <ol class="caps-reads">
+
+            <li class="caps-read caps-read-1">
+              <p class="caps-read-folio" aria-hidden="true">01 — Грань первая</p>
+              <h3>Контакты</h3>
+              <p>Карточка клиента, в которой лежит всё: звонки, заметки, задачи, сделки и переписка. Определился незнакомый номер — сразу видно, кто это и о чём договаривались.</p>
+            </li>
+
+            <li class="caps-read caps-read-2">
+              <p class="caps-read-folio" aria-hidden="true">02 — Грань вторая</p>
+              <h3>Сделки</h3>
+              <p>Канбан по этапам. Перетащили карточку, и история, задачи и сумма поехали вместе с ней. Дублировать ничего не нужно.</p>
+            </li>
+
+            <li class="caps-read caps-read-3">
+              <p class="caps-read-folio" aria-hidden="true">03 — Грань третья</p>
+              <h3>Задачи</h3>
+              <p>Дедлайны, напоминания, повторяющиеся дела — себе и команде. Задача привязана к клиенту или сделке, поэтому не теряется между ними.</p>
+            </li>
+
+            <li class="caps-read caps-read-4">
+              <p class="caps-read-folio" aria-hidden="true">04 — Грань четвёртая</p>
+              <h3>Аналитика</h3>
+              <p>Воронка, выручка, работа менеджеров, причины отказов. Один экран вместо выгрузок в Excel.</p>
+            </li>
+            </ol>
+          </div>
+
+        </div>
       </div>
+
+      <div class="caps-deeper reveal">
+        <p class="caps-deeper-rule">Глубже</p>
+        <div class="caps-more reveal-group">
+          <article class="caps-more-item reveal">
+            <h3>Календарь</h3>
+            <p>Встречи и звонки рядом со сделкой. Синхронизация с Яндекс Календарём.</p>
+          </article>
+          <article class="caps-more-item reveal">
+            <h3>Автоматизация и письма</h3>
+            <p>Сценарии по триггерам: сменился этап, выполнена задача, появился лид. Цепочки писем уходят только тем, кто дал согласие на рассылку, с отпиской в один клик.</p>
+          </article>
+        </div>
+      </div>
+
+      <!-- Not a feature: this is the reason someone leaves their current CRM,
+           so it gets its own field rather than a clause inside a card. -->
+      <aside class="caps-import reveal">
+        <div>
+          <p class="eyebrow">Переезд за один импорт</p>
+          <p class="caps-import-lead">Клиентскую базу не придётся набивать заново.</p>
+        </div>
+        <ul class="caps-import-list">
+          <li>Битрикс24</li><li>Excel</li><li>Telegram</li>
+          <li>WhatsApp</li><li>vCard</li><li>Телефонная книга</li>
+        </ul>
+      </aside>
+
     </div>
   </section>
 
   <!-- ═══════════ ASSISTANT ═══════════ -->
   <section class="asst section-pad" id="assistant">
-    <div class="shell">
-      <div class="asst-wrap">
-        <div class="asst-copy reveal">
-          <p class="eyebrow">ИИ-ассистент</p>
-          <h2 class="h2">Спросите своими словами</h2>
-          <p class="lede">Вместо фильтров и отчётов: вопрос обычным языком, ответ по вашим данным.</p>
-          <ul class="asst-points">
-            <li>
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              <span>Читает ваши контакты, сделки, задачи и календарь, а не интернет.</span>
-            </li>
-            <li>
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              <span>Права ровно ваши. Ассистент не покажет и не изменит того, что вам не разрешено.</span>
-            </li>
-            <li>
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              <span>Российский провайдер. Телефоны и email клиентов в модель не передаются.</span>
-            </li>
-          </ul>
+  <!-- The CTA's own second sun, so the two terracotta bands are the same
+       object seen twice rather than one colour used twice. -->
+  <div class="asst-veil" aria-hidden="true"></div>
+  <div class="shell">
+    <div class="asst-top">
+      <div class="asst-head reveal">
+        <p class="eyebrow">ИИ-ассистент</p>
+        <h2 class="h2">Спросите своими словами</h2>
+        <p class="lede">Вместо фильтров и отчётов: вопрос обычным языком, ответ по вашим данным.</p>
+      </div>
+
+      <div class="asst-ex reveal" style="--d:80ms">
+        <div class="asst-ex-head">
+          <span class="asst-mark" aria-hidden="true"></span>
+          <b>ИИ-ассистент</b>
+          <span class="asst-tag">пример</span>
         </div>
 
-        <div class="asst-chat reveal" role="img" aria-label="Пример диалога: на вопрос «с кем из клиентов давно не связывались» ассистент отвечает, что четыре контакта без активности больше 30 дней, и показывает, что обращался к данным CRM.">
-          <p class="asst-bubble is-you">С кем из клиентов давно не связывались?</p>
-          <p class="asst-bubble is-bot">Четыре контакта без активности больше 30 дней. У двух из них открытые сделки на этапе «Переговоры».</p>
-          <p class="asst-tool">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            Обращения к данным CRM · контакты, сделки
-          </p>
+        <p class="visually-hidden">Пример диалога.</p>
+
+        <div class="asst-field">
+          <p class="asst-q">С кем из клиентов давно не связывались?</p>
+          <span class="asst-key" aria-hidden="true">⏎</span>
         </div>
+        <div class="asst-thread">
+        <div class="asst-read">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        Обращения к данным CRM
+        <ul class="asst-src">
+            <li class="reveal" style="--n:0">контакты</li>
+            <li class="reveal" style="--n:1">сделки</li>
+        </ul>
+        <span class="asst-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      </div>
+
+      <p class="asst-a">Четыре контакта без активности больше 30 дней. У двух из них открытые сделки на этапе «Переговоры».</p>
+
+        </div>
+
+        <ul class="asst-stats" aria-hidden="true">
+        <li><b>4</b><span>контакта</span></li>
+        <li><b>2</b><span>сделки</span></li>
+        <li><b>30+</b><span>дней</span></li>
+        </ul>
       </div>
     </div>
-  </section>
 
-  <!-- ═══════════ TEAM / ROLES ═══════════ -->
+    <!-- Scope, full width under the exchange: what it MAY read, with the two it
+         actually used lit. Hidden from AT — rule 01 says it in a sentence. -->
+    <aside class="asst-scope reveal" aria-hidden="true">
+      <p class="asst-scope-h">Читает</p>
+      <ul>
+          <li class="is-on"><i></i>контакты</li>
+          <li class="is-on"><i></i>сделки</li>
+          <li><i></i>задачи</li>
+          <li><i></i>календарь</li>
+      </ul>
+      <p class="asst-scope-no"><i></i>не интернет</p>
+    </aside>
+
+    <ul class="asst-rules reveal-group">
+        <li class="reveal" style="--n:0">
+          <div class="asst-rule-top">
+            <p class="asst-rule-n" aria-hidden="true">01</p>
+            <span class="asst-fig is-scope"><i></i><i></i><i></i><i></i><b></b></span>
+          </div>
+          <p>Читает ваши контакты, сделки, задачи и календарь, а не интернет.</p>
+        </li>
+        <li class="reveal" style="--n:1">
+          <div class="asst-rule-top">
+            <p class="asst-rule-n" aria-hidden="true">02</p>
+            <span class="asst-fig is-rights"><i></i><i></i></span>
+          </div>
+          <p>Права ровно ваши. Ассистент не покажет и не изменит того, что вам не разрешено.</p>
+        </li>
+        <li class="reveal" style="--n:2">
+          <div class="asst-rule-top">
+            <p class="asst-rule-n" aria-hidden="true">03</p>
+            <span class="asst-fig is-host"><i></i><u></u><i></i></span>
+          </div>
+          <p>Российский провайдер. Телефоны и email клиентов в модель не передаются.</p>
+        </li>
+    </ul>
+  </div>
+</section>
+
   <section class="team section-pad" id="team">
     <div class="shell">
       <div class="team-head reveal">
@@ -240,59 +528,47 @@
         <p class="lede">Роль решает, что человек может делать. Структура команды решает, чьи данные он видит. Это две разные настройки, и они не мешают друг другу.</p>
       </div>
 
-      <div class="team-table-wrap reveal">
-        <table class="team-table">
-          <caption class="visually-hidden">Права ролей: контакты, сделки, деньги и управление командой</caption>
-          <thead>
-            <tr>
-              <th scope="col">Роль</th>
-              <th scope="col">Контакты</th>
-              <th scope="col">Сделки</th>
-              <th scope="col">Деньги</th>
-              <th scope="col">Команда</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="team-role">Владелец</td>
-              <td class="team-yes">полный</td><td class="team-yes">полный</td><td class="team-yes">да</td><td class="team-yes">да</td>
-            </tr>
-            <tr>
-              <td class="team-role">Администратор</td>
-              <td class="team-yes">полный</td><td class="team-yes">полный</td><td class="team-yes">да</td><td class="team-yes">да</td>
-            </tr>
-            <tr>
-              <td class="team-role">Руководитель отдела<small>плюс данные подчинённых</small></td>
-              <td class="team-yes">полный</td><td class="team-yes">полный</td><td class="team-yes">да</td><td class="team-no">нет</td>
-            </tr>
-            <tr>
-              <td class="team-role">Менеджер</td>
-              <td class="team-yes">полный</td><td class="team-yes">полный</td><td class="team-yes">да</td><td class="team-no">нет</td>
-            </tr>
-            <tr>
-              <td class="team-role">Бухгалтер<small>ничего не меняет</small></td>
-              <td class="team-no">чтение</td><td class="team-no">чтение</td><td class="team-yes">да</td><td class="team-no">нет</td>
-            </tr>
-            <tr>
-              <td class="team-role">Маркетолог</td>
-              <td class="team-yes">полный</td><td class="team-no">чтение</td><td class="team-yes">да</td><td class="team-no">нет</td>
-            </tr>
-            <tr>
-              <td class="team-role">Поддержка</td>
-              <td class="team-yes">полный</td><td class="team-no">нет</td><td class="team-no">нет</td><td class="team-no">нет</td>
-            </tr>
-            <tr>
-              <td class="team-role">Только просмотр</td>
-              <td class="team-no">чтение</td><td class="team-no">чтение</td><td class="team-no">нет</td><td class="team-no">нет</td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- The lede promises two settings, so the section draws two. Left: what a
+           person may DO. Right: whose data they SEE. -->
+      <div class="team-two reveal-group">
+        <div class="team-panel reveal">
+          <div class="team-panel-head"><b>Роль</b><span>что человек может делать</span></div>
+          <table class="team-grid">
+            <caption class="visually-hidden">Права ролей: контакты, сделки, деньги и управление командой</caption>
+            <thead>
+              <tr><th scope="col">Роль</th><th scope="col">Контакты</th><th scope="col">Сделки</th><th scope="col">Деньги</th><th scope="col">Команда</th></tr>
+            </thead>
+            <tbody>
+              <tr style="--n:0"><th scope="row">Владелец</th><td class="team-lv team-lv-full"><i></i><span>полный</span></td><td class="team-lv team-lv-full"><i></i><span>полный</span></td><td class="team-lv team-lv-full"><i></i><span>да</span></td><td class="team-lv team-lv-full"><i></i><span>да</span></td></tr>
+              <tr style="--n:1"><th scope="row">Администратор</th><td class="team-lv team-lv-full"><i></i><span>полный</span></td><td class="team-lv team-lv-full"><i></i><span>полный</span></td><td class="team-lv team-lv-full"><i></i><span>да</span></td><td class="team-lv team-lv-full"><i></i><span>да</span></td></tr>
+              <tr style="--n:2"><th scope="row">Руководитель отдела<small>плюс данные подчинённых</small></th><td class="team-lv team-lv-full"><i></i><span>полный</span></td><td class="team-lv team-lv-full"><i></i><span>полный</span></td><td class="team-lv team-lv-full"><i></i><span>да</span></td><td class="team-lv team-lv-none"><i></i><span>нет</span></td></tr>
+              <tr style="--n:3"><th scope="row">Менеджер</th><td class="team-lv team-lv-full"><i></i><span>полный</span></td><td class="team-lv team-lv-full"><i></i><span>полный</span></td><td class="team-lv team-lv-full"><i></i><span>да</span></td><td class="team-lv team-lv-none"><i></i><span>нет</span></td></tr>
+              <tr style="--n:4"><th scope="row">Бухгалтер<small>ничего не меняет</small></th><td class="team-lv team-lv-half"><i></i><span>чтение</span></td><td class="team-lv team-lv-half"><i></i><span>чтение</span></td><td class="team-lv team-lv-full"><i></i><span>да</span></td><td class="team-lv team-lv-none"><i></i><span>нет</span></td></tr>
+              <tr style="--n:5"><th scope="row">Маркетолог</th><td class="team-lv team-lv-full"><i></i><span>полный</span></td><td class="team-lv team-lv-half"><i></i><span>чтение</span></td><td class="team-lv team-lv-full"><i></i><span>да</span></td><td class="team-lv team-lv-none"><i></i><span>нет</span></td></tr>
+              <tr style="--n:6"><th scope="row">Поддержка</th><td class="team-lv team-lv-full"><i></i><span>полный</span></td><td class="team-lv team-lv-none"><i></i><span>нет</span></td><td class="team-lv team-lv-none"><i></i><span>нет</span></td><td class="team-lv team-lv-none"><i></i><span>нет</span></td></tr>
+              <tr style="--n:7"><th scope="row">Только просмотр</th><td class="team-lv team-lv-half"><i></i><span>чтение</span></td><td class="team-lv team-lv-half"><i></i><span>чтение</span></td><td class="team-lv team-lv-none"><i></i><span>нет</span></td><td class="team-lv team-lv-none"><i></i><span>нет</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Decorative: the tree repeats what the lede and the note below it
+             already say in words, so it is not read out a second time. -->
+        <div class="team-panel is-structure reveal">
+          <div class="team-panel-head"><b>Структура</b><span>чьи данные он видит</span></div>
+          <div class="team-tree" aria-hidden="true">
+            <div class="team-node"><i></i>Владелец<em>вся компания</em></div>
+            <div class="team-node team-lvl-2 is-seen"><i></i>Руководитель отдела<em>он сам</em></div>
+            <div class="team-node team-lvl-3 is-seen"><i></i>Менеджер<em>подчинённый</em></div>
+            <div class="team-node team-lvl-3 is-seen"><i></i>Менеджер<em>подчинённый</em></div>
+          </div>
+          <p class="team-tree-note">Руководитель видит себя и подчинённых</p>
+        </div>
       </div>
+
       <p class="team-foot">Сотрудник входит по коду компании: вы добавляете человека и выдаёте роль, пароль он придумывает сам.</p>
     </div>
   </section>
 
-  <!-- ═══════════ TRUST (light room) ═══════════ -->
   <section class="trust section-pad" id="trust">
     <div class="shell">
       <div class="trust-head reveal">
@@ -301,30 +577,83 @@
         <p class="lede">Не обещание в футере, а то, как система устроена.</p>
       </div>
 
-      <div class="trust-grid reveal-group">
-        <article class="trust-card reveal">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 20 6.5v5c0 4.6-3.2 8.4-8 9.5-4.8-1.1-8-4.9-8-9.5v-5L12 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-          <h3>Хостинг в России</h3>
-          <p>Серверы и база данных в Yandex Cloud, зона ru-central1. Требование ФЗ-152 о локализации выполнено по факту.</p>
-        </article>
+      <!-- Four viewports of scroll on desktop, one claim each. Everything here
+           renders without the pin: the record complete, the seal closed, all
+           four claims at full contrast. -->
+      <div class="trust-track">
+        <div class="trust-stage reveal-group">
 
-        <article class="trust-card reveal">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="1.5"/></svg>
-          <h3>Шифрование в базе</h3>
-          <p>Телефоны и email клиентов хранятся зашифрованными. Поиск по ним при этом работает: система ищет, не расшифровывая.</p>
-        </article>
+          <div class="trust-claims-wrap reveal" style="--d: 60ms">
+            <!-- An <ol>: four separate legal claims, numbered on screen, so
+                 the numbering has to be real. -->
+            <ol class="trust-claims">
+              <li class="trust-claim">
+                <p class="trust-folio" aria-hidden="true"><span>01</span></p>
+                <h3>Хостинг в России</h3>
+                <p>Серверы и база данных в Yandex Cloud, зона ru-central1. Требование ФЗ-152 о локализации выполнено по факту.</p>
+              </li>
 
-        <article class="trust-card reveal">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="m4 7 8 6 8-6" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-          <h3>Согласие на рассылку</h3>
-          <p>Письма уходят только тем, кто дал согласие. Дата и источник остаются в карточке, отписка работает в один клик, как требует ФЗ-38.</p>
-        </article>
+              <li class="trust-claim">
+                <p class="trust-folio" aria-hidden="true"><span>02</span></p>
+                <h3>Шифрование в базе</h3>
+                <p>Телефоны и email клиентов хранятся зашифрованными. Поиск по ним при этом работает: система ищет, не расшифровывая.</p>
+              </li>
 
-        <article class="trust-card reveal">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8.5a12 12 0 0 1 16 0M7 12a8 8 0 0 1 10 0M10 15.5a4 4 0 0 1 4 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="19" r="1.2" fill="currentColor"/></svg>
-          <h3>Работает офлайн</h3>
-          <p>Метро, стройка, поезд. Записи сохраняются на устройстве и уходят на сервер сами, когда связь вернётся.</p>
-        </article>
+              <li class="trust-claim">
+                <p class="trust-folio" aria-hidden="true"><span>03</span></p>
+                <h3>Согласие на рассылку</h3>
+                <p>Письма уходят только тем, кто дал согласие. Дата и источник остаются в карточке, отписка работает в один клик, как требует ФЗ-38.</p>
+              </li>
+
+              <li class="trust-claim">
+                <p class="trust-folio" aria-hidden="true"><span>04</span></p>
+                <h3>Работает офлайн</h3>
+                <p>Метро, стройка, поезд. Записи сохраняются на устройстве и уходят на сервер сами, когда связь вернётся.</p>
+              </li>
+            </ol>
+          </div>
+
+          <!-- The exhibit. It illustrates the four claims rather than adding
+               to them, so it is hidden from AT rather than read out twice —
+               which is also why its rows may dim and the claims may not. -->
+          <div class="trust-rec-wrap reveal" style="--d: 140ms" aria-hidden="true">
+            <div class="trust-rec">
+              <span class="trust-seal"><i class="is-t"></i><i class="is-r"></i><i class="is-b"></i><i class="is-l"></i></span>
+
+              <div class="trust-rec-head">
+                <b>Контакт · ООО «Альфа»</b>
+                <span class="trust-chip" data-p="1"><i></i>ru-central1</span>
+              </div>
+
+              <div class="trust-row"><span>Имя</span><b>ООО «Альфа»</b></div>
+              <div class="trust-row is-enc" data-p="2"><span>Телефон</span><b>a7 3f 91 d2 6b 0c e4 88</b><em class="trust-lock">шифр</em></div>
+              <div class="trust-row is-enc" data-p="2"><span>Email</span><b>5e c1 08 a4 7d 22 b9 f1</b><em class="trust-lock">шифр</em></div>
+
+              <hr class="trust-rec-rule">
+
+              <div class="trust-find" data-p="2">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <em>+7 921 …</em><u>1 совпадение</u>
+                <small>найдено без расшифровки</small>
+              </div>
+
+              <hr class="trust-rec-rule">
+
+              <div class="trust-consent" data-p="3">
+                <div class="trust-row"><span>Согласие</span><b>14.03.2026 · форма на сайте</b></div>
+                <div class="trust-row"><span>Отписка</span><b>в один клик · ФЗ-38</b></div>
+              </div>
+
+              <div class="trust-status" data-p="4">
+                <span class="trust-swap">
+                  <span class="trust-queue"><i></i>нет сети<b>в очереди 3</b></span>
+                  <span class="trust-sent"><i class="is-on"></i>связь вернулась<b>отправлено</b></span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   </section>
@@ -334,10 +663,16 @@
     <div class="cta-veil" aria-hidden="true"></div>
     <div class="shell">
       <div class="cta-inner reveal">
+        <p class="eyebrow">Начать</p>
         <h2 class="h2">Попробуйте на своей воронке</h2>
         <p class="lede">Регистрация занимает меньше минуты. Карта не нужна.</p>
         <div class="cta-actions">
-          <a class="btn btn-primary btn-lg" href="/register">Создать аккаунт</a>
+          <a class="btn btn-primary btn-lg" href="/register">
+            Создать аккаунт
+            <span class="btn-arrow" aria-hidden="true">
+              <svg viewBox="0 0 12 12" fill="none"><path d="M1 6h9M6.5 2.5 10 6l-3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+          </a>
         </div>
         <div class="cta-stores">
           <a class="cta-store" href="https://apps.apple.com/ru/app/id6776447873" rel="noopener">
@@ -371,7 +706,7 @@
       </div>
 
       <div class="foot-col">
-        <h4>Продукт</h4>
+        <h3>Продукт</h3>
         <ul>
           <li><a href="#caps">Возможности</a></li>
           <li><a href="#assistant">ИИ-ассистент</a></li>
@@ -381,7 +716,7 @@
       </div>
 
       <div class="foot-col">
-        <h4>Начать</h4>
+        <h3>Начать</h3>
         <ul>
           <li><a href="/register">Создать аккаунт</a></li>
           <li><a href="https://apps.apple.com/ru/app/id6776447873" rel="noopener">App Store</a></li>
@@ -398,6 +733,6 @@
   </div>
 </footer>
 
-<script src="/js/site.js?v=2" defer></script>
+<script src="/js/site.js?v=20" defer></script>
 </body>
 </html>

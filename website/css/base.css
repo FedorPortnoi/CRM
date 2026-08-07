@@ -1,70 +1,190 @@
 /* ============================================================================
    4КУБ — design system
    ----------------------------------------------------------------------------
-   Values are LIFTED FROM THE APP, not invented: src/theme/index.ts owns them.
-   The site and the product must not disagree about what the brand looks like.
+   PAPER WORLD. The site reads as warm printed stock: cream ground, near-black
+   ink, one terracotta accent, hairline rules, and type that is large and LIGHT
+   rather than large and heavy.
 
-   One accent: --accent (#CC785C terracotta). Nothing else competes with it.
-   Dark-first, because the app opens dark and the marketing site is the same
-   world. Two light "rooms" (--room-* below) give the page somewhere to breathe
-   without introducing a second palette.
+   The accent is still the app's own #CC785C (src/theme/index.ts). The surfaces
+   are not: the app opens dark, the site opens on paper. That is a deliberate
+   split — the marketing site is the poster, the product is the tool — and the
+   accent is what holds the two together. Anything that must feel like the
+   product (the night bands, .day-stage, .asst-chat) uses --night, which IS the
+   app's lacquer.
+
+   ONE ACCENT. --accent is a FILL colour: on cream it measures 2.75:1, which is
+   under the 3:1 floor, so it must never carry text. Accent-coloured TEXT uses
+   --accent-ink (5.6:1). This is the single easiest mistake to make here.
 
    SPACING MODEL, DECLARED ONCE: every section owns its own vertical padding via
    .section-pad. There are NO margins between sections and no negative margins
    pulling them together. Changing one section cannot move another.
    ========================================================================== */
 
+/* ---- fonts: self-hosted, cyrillic first --------------------------------- */
+/* Downloaded from Google Fonts and served from this origin. The site makes no
+   external request — required by the Russian-providers rule, and it is also why
+   the page still renders with the network cut after first load.
+   Cyrillic is declared BEFORE latin so the Russian face wins the cascade. */
+
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 200 600;
+  font-display: swap;
+  src: url('/fonts/exo2-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 200 600;
+  font-display: swap;
+  src: url('/fonts/exo2-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+                 U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+                 U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Zen Old Mincho';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/zenoldmincho-400-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Zen Old Mincho';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/zenoldmincho-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+                 U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+                 U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Zen Old Mincho';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/zenoldmincho-500-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Zen Old Mincho';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/zenoldmincho-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+                 U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+                 U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/jetbrainsmono-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/jetbrainsmono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+                 U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+                 U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+
 :root {
-  /* Surfaces — app: bg / bgDark / bgPanel */
-  --bg:            #0E0E0D;
-  --bg-deep:       #111110;
-  --panel:         #1A1A18;
-  --panel-raised:  #201F1C;
+  color-scheme: light;
 
-  /* Ink — app: text1 / textMuted / textFaint */
-  --ink:           #E8E0D4;
-  --ink-muted:     rgba(232, 224, 212, 0.58);
-  --ink-faint:     rgba(232, 224, 212, 0.34);
+  /* Paper. --paper is the ground; --rice lifts a card off it; --paper-deep is
+     the ground seen through something (table headers, pressed states). */
+  --paper:         #F4EADC;
+  --paper-soft:    #EFE1CE;
+  --paper-deep:    #E4D3B8;
+  --rice:          #FBF6EE;
 
-  /* The single accent, plus the app's two warm neighbours for depth only.
-     wheat and amber are never used as a second accent — only as ink on dark. */
+  /* Ink. Warm, never neutral grey — grey on cream reads as dirt. */
+  --ink:           #241D16;
+  --ink-soft:      #4A3D30;
+  --ash:           #6E5E4C;
+
+  /* Rules. --line is drawn; --line-soft is barely there. */
+  --line:          #CDB99D;
+  --line-soft:     rgba(36, 29, 22, 0.13);
+  --line-strong:   #B49C7C;
+
+  /* THE accent, unchanged from the app.
+     --accent      FILL only  (buttons, dots, the sun, underlines)
+     --accent-ink  TEXT       (5.60:1 on paper — safe at any size)
+     --accent-deep pressed / hover text                                       */
   --accent:        #CC785C;
-  --accent-warm:   #D4A27F;
-  --accent-quiet:  #EBDBBC;
-  --danger:        #CC5247;
+  --accent-ink:    #974329;
+  --accent-deep:   #77331F;
+  --accent-wash:   rgba(204, 120, 92, 0.13);
+  /* Accent-coloured TEXT on a night surface. --accent is tuned for paper and
+     drops to 1.77:1 over a lit image; this lifted tint clears 4:1 there. */
+  --accent-lift:   #E3A183;
+  --danger:        #A8321F;
 
-  /* Lines — app: border / borderStrong */
-  --line:          rgba(232, 224, 212, 0.10);
-  --line-strong:   rgba(232, 224, 212, 0.18);
+  /* Night. This IS the app's lacquer — the dark bands are the product showing
+     through the poster, so they must not drift from src/theme/index.ts. */
+  --night:         #14110E;
+  --night-soft:    #211B15;
+  --night-ink:     #EFE6D8;
+  --night-muted:   rgba(239, 230, 216, 0.62);
+  --night-line:    rgba(239, 230, 216, 0.16);
 
-  /* Light rooms. Pricing-style calm areas; same hues, inverted. */
-  --room-bg:       #F4F0EA;
-  --room-panel:    #FFFFFF;
-  --room-ink:      #2B2724;
-  --room-muted:    #6B5F58;
-  --room-line:     #E2D8D0;
-  --room-accent:   #B4552B;
+  /* Aliases kept so the trust island's self-contained rules need no rewrite. */
+  --bg:            var(--paper);
+  --bg-deep:       var(--paper-soft);
+  --panel:         var(--rice);
+  --panel-raised:  var(--paper-soft);
+  --ink-muted:     var(--ink-soft);
+  --ink-faint:     var(--ash);
+  --accent-warm:   var(--accent-ink);
+  --accent-quiet:  var(--accent-deep);
+  --room-bg:       var(--paper-soft);
+  --room-panel:    var(--rice);
+  --room-ink:      var(--ink);
+  --room-muted:    var(--ink-soft);
+  --room-line:     var(--line);
+  --room-accent:   var(--accent-ink);
 
-  /* Type. No Inter, no webfonts, no external requests. PT Serif leads the
-     display stack because it is a Cyrillic-first design; Georgia and Times both
-     carry Cyrillic as fallbacks, so Russian headlines never drop to a default. */
-  --font-display: 'PT Serif', Georgia, 'Times New Roman', serif;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-               'Helvetica Neue', Arial, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas,
-               'Liberation Mono', monospace;
+  /* Type. Three voices and no more:
+       display — Exo 2 at 200. Squared, technical, and LIGHT. Set uppercase.
+       prose   — Zen Old Mincho. A serif for anything meant to be read.
+       label   — JetBrains Mono, uppercase, widely tracked. Meta, never prose. */
+  --font-display: 'Exo 2', 'Segoe UI Variable Display', 'Segoe UI', system-ui, Arial, sans-serif;
+  --font-serif:   'Zen Old Mincho', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  --font-sans:    'Exo 2', 'Segoe UI Variable Text', 'Segoe UI', system-ui, Arial, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
-  /* Fluid display sizes. clamp() so 375px and 1440px both read correctly
-     without a media query per heading. */
-  --t-display: clamp(2.4rem, 1.5rem + 3.6vw, 4.6rem);
-  --t-h2:      clamp(1.7rem, 1.25rem + 1.7vw, 2.7rem);
-  --t-h3:      clamp(1.05rem, 0.98rem + 0.35vw, 1.3rem);
-  --t-body:    clamp(1rem, 0.96rem + 0.2vw, 1.1rem);
-  --t-label:   0.7rem;
+  --t-display: clamp(2.7rem, 1.3rem + 5.6vw, 6.6rem);
+  --t-h2:      clamp(1.85rem, 1.15rem + 2.7vw, 3.4rem);
+  --t-h3:      clamp(1.08rem, 1rem + 0.4vw, 1.32rem);
+  --t-body:    clamp(1rem, 0.97rem + 0.16vw, 1.0625rem);
+  --t-label:   0.6875rem;
 
   --shell: 1400px;
-  --radius: 14px;
-  --radius-lg: 22px;
+  /* Squared, not pill. The paper world is set with a ruler. */
+  --radius: 3px;
+  --radius-lg: 4px;
+
+  --button-ink: #24170F;
+  --nav-bg: rgba(244, 234, 220, 0.82);
+  --nav-bg-solid: rgba(244, 234, 220, 0.96);
+
+  --shadow-lift: 0 28px 90px rgba(60, 40, 24, 0.16);
 
   /* One easing vocabulary, so nothing on the page moves in a foreign accent. */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -80,15 +200,31 @@ html {
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--paper);
   color: var(--ink);
-  font-family: var(--font-sans);
+  font-family: var(--font-serif);
   font-size: var(--t-body);
-  line-height: 1.62;
+  line-height: 1.8;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
 }
+
+/* Paper grain. Generated, not downloaded: an feTurbulence tile costs no request
+   and stays sharp at any zoom. It sits above the background and below content,
+   and it must never intercept a click. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)' opacity='0.22'/%3E%3C/svg%3E");
+}
+/* Everything real sits above the grain. */
+body > * { position: relative; z-index: 1; }
 
 img, svg { display: block; max-width: 100%; }
 a { color: inherit; text-decoration: none; }
@@ -96,10 +232,12 @@ button { font: inherit; color: inherit; }
 
 /* Focus is visible, always. Keyboard users are not second-class. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-ink);
   outline-offset: 3px;
-  border-radius: 4px;
+  border-radius: 2px;
 }
+
+::selection { background: var(--accent); color: var(--button-ink); }
 
 /* ---- shared primitives (no section-crossing selectors) ------------------- */
 
@@ -113,57 +251,84 @@ button { font: inherit; color: inherit; }
 /* THE spacing model. Sections apply this; they never use margin. */
 .section-pad { padding-block: clamp(4.5rem, 9vw, 8.5rem); }
 
+/* Meta, not prose. Mono, uppercase, widely tracked — the reference's tell. */
 .eyebrow {
   font-family: var(--font-mono);
   font-size: var(--t-label);
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--ink-faint);
-  margin: 0 0 1.1rem;
+  font-weight: 600;
+  color: var(--accent-ink);
+  margin: 0 0 1.4rem;
 }
 
 .h2 {
   font-family: var(--font-display);
   font-size: var(--t-h2);
-  line-height: 1.1;
-  letter-spacing: -0.015em;
-  font-weight: 700;
+  /* See .hero-title: uppercase Cyrillic descenders (Д, Ц, Щ) need the extra
+     room that a latin-tuned 1.02 does not leave. */
+  line-height: 1.06;
+  letter-spacing: 0.005em;
+  text-transform: uppercase;
+  font-weight: 250;
   margin: 0;
   text-wrap: balance;
 }
 
 .lede {
-  font-size: clamp(1.02rem, 0.98rem + 0.3vw, 1.22rem);
-  line-height: 1.6;
-  color: var(--ink-muted);
+  font-family: var(--font-serif);
+  font-size: clamp(1.02rem, 0.98rem + 0.3vw, 1.2rem);
+  line-height: 1.75;
+  color: var(--ink-soft);
   max-width: 56ch;
-  margin: 1.1rem 0 0;
+  margin: 1.3rem 0 0;
 }
 
-/* Buttons. 48px min height clears the 44px touch-target floor. */
+/* Buttons. Squared and mono-labelled, like a printed ticket. 48px min height
+   clears the 44px touch-target floor. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem;
+  gap: 0.7rem;
   min-height: 48px;
-  padding: 0 1.5rem;
-  border-radius: 999px;
+  padding: 0 1.4rem;
+  border-radius: var(--radius);
   border: 1px solid transparent;
+  font-family: var(--font-mono);
   font-weight: 600;
-  font-size: 0.98rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  position: relative;
   cursor: pointer;
   transition: transform 0.25s var(--ease-out), background-color 0.25s var(--ease-out),
               border-color 0.25s var(--ease-out), color 0.25s var(--ease-out);
 }
-.btn-primary { background: var(--accent); color: #17110E; border-color: var(--accent); }
-.btn-primary:hover { background: var(--accent-warm); border-color: var(--accent-warm); transform: translateY(-2px); }
+.btn-primary {
+  background: var(--accent);
+  color: var(--button-ink);
+  border-color: var(--accent);
+}
+.btn-primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); color: var(--rice); transform: translateY(-2px); }
 .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line-strong); }
-.btn-ghost:hover { border-color: var(--accent); color: var(--accent-quiet); transform: translateY(-2px); }
-.btn-lg { min-height: 56px; padding: 0 2rem; font-size: 1.04rem; }
+.btn-ghost:hover { border-color: var(--accent-ink); color: var(--accent-ink); transform: translateY(-2px); }
+.btn.btn:active { transform: scale(0.985); }
+.btn-lg { min-height: 56px; padding: 0 1.9rem; font-size: 0.79rem; }
 .btn-full { width: 100%; }
 
-/* ---- reveal (motion dial 4: presence, not spectacle) -------------------- */
+/* The circled arrow inside a CTA — the reference's ticket button. */
+.btn-arrow {
+  width: 20px; height: 20px; flex: none;
+  border: 1px solid currentColor; border-radius: 50%;
+  display: grid; place-items: center;
+  transition: transform 0.3s var(--ease-out);
+}
+.btn-arrow svg { width: 9px; height: 9px; }
+.btn:hover .btn-arrow { transform: translateX(3px); }
+
+/* ---- reveal (motion dial 7: fluid storytelling) ------------------------- */
 
 /* Hidden ONLY once JS is confirmed, and confirmed by a synchronous script in
    <head> that runs before first paint.
@@ -174,14 +339,40 @@ button { font: inherit; color: inherit; }
    (no JS) or hidden before it was ever painted. */
 .js .reveal {
   opacity: 0;
-  transform: translateY(18px);
-  transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out);
+  transform: translate3d(var(--reveal-x, 0), var(--reveal-y, 34px), 0) scale(var(--reveal-scale, 0.985));
+  transition: opacity 0.86s var(--ease-out), transform 0.86s var(--ease-out);
   will-change: opacity, transform;
 }
-.js .reveal.is-in { opacity: 1; transform: none; }
+.js .reveal.is-in { opacity: 1; transform: none; will-change: auto; }
 
 /* Staggered children inside one island. Scoped by the parent, never global. */
 .js .reveal-group > * { transition-delay: var(--d, 0ms); }
+
+/* Native scroll progress. Unsupported browsers simply omit it; no JavaScript
+   scroll loop is needed. The line communicates position on this long page. */
+.scroll-progress {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 60;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes page-progress { to { transform: scaleX(1); } }
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: scroll()) {
+    .scroll-progress {
+      opacity: 1;
+      animation: page-progress linear both;
+      animation-timeline: scroll(root);
+    }
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -211,9 +402,13 @@ button { font: inherit; color: inherit; }
   top: -3rem;
   z-index: 100;
   background: var(--accent);
-  color: #17110E;
+  color: var(--button-ink);
   padding: 0.6rem 1rem;
-  border-radius: 8px;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
   font-weight: 600;
   transition: top 0.2s var(--ease-out);
 }

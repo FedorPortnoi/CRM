@@ -60,7 +60,7 @@
   font-size: var(--t-label);
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-ink);
   margin: 0;
 }
 
@@ -85,7 +85,7 @@
   display: inline-block;
   padding: 0.15rem 0.6rem;
   border: 1px solid var(--line-strong);
-  border-radius: 999px;
+  border-radius: var(--radius);
   color: var(--accent-quiet);
   font-size: 0.86rem;
 }
@@ -115,9 +115,9 @@
   flex: 0 0 auto;
   width: 24px; height: 24px;
   display: grid; place-items: center;
-  border-radius: 999px;
+  border-radius: var(--radius);
   background: rgba(204, 120, 92, 0.16);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 0.8rem;
   font-weight: 700;
 }
@@ -133,7 +133,7 @@
   text-align: left;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: rgba(26, 26, 24, 0.6);
+  background: var(--paper-soft);
 }
 .iv-fallback > summary {
   cursor: pointer;
@@ -172,7 +172,7 @@
   color: var(--accent-quiet);
   background: var(--bg-deep);
   border: 1px dashed var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   user-select: all;
 }
 
@@ -188,7 +188,7 @@
 .iv-mark {
   width: 56px; height: 56px;
   display: grid; place-items: center;
-  border-radius: 999px;
+  border-radius: var(--radius);
   margin-bottom: 0.2rem;
 }
 .iv-mark svg { width: 30px; height: 30px; }
