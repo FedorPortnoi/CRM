@@ -65,8 +65,16 @@ function normaliseTextContent(text) {
   return text.replace(/\r\n?/g, '\n');
 }
 
+/**
+ * The surrounding single quotes are part of the grammar, not decoration: CSP's
+ * hash-source production is `'sha256-<base64>'`, and Chrome answers a bare
+ * sha256-… with "contains an invalid source: … It will be ignored", then blocks
+ * the very script the hash was computed for. Emitting these unquoted shipped a
+ * policy that was strictly worse than none — every inline script on the site was
+ * refused while the header still looked correct in `curl -I`.
+ */
 function sha256(text) {
-  return `sha256-${crypto.createHash('sha256').update(text, 'utf8').digest('base64')}`;
+  return `'sha256-${crypto.createHash('sha256').update(text, 'utf8').digest('base64')}'`;
 }
 
 /**
