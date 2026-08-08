@@ -450,7 +450,13 @@ describe('static site security headers', () => {
     const scriptSrc = directive(cspForDocument(html), 'script-src');
     expect(scriptSrc).not.toContain(sha256Base64(asParsed(ldMatch![1])));
     // ...and its presence did not stop the real inline script being hashed.
-    expect(scriptSrc.split(' ').filter((t) => t.startsWith('sha256-')).length).toBeGreaterThan(0);
+    // Tokens are `'sha256-…'` WITH the quotes: CSP's hash-source grammar requires
+    // them, and emitting them bare made Chrome discard every digest as an invalid
+    // source and block the script it was computed for. Match on the quoted form so
+    // this cannot go green again against a policy that disables itself.
+    const hashTokens = scriptSrc.split(' ').filter((t) => t.startsWith("'sha256-"));
+    expect(hashTokens.length).toBeGreaterThan(0);
+    expect(hashTokens.every((t) => t.endsWith("'"))).toBe(true);
   });
 
   // ── Directives that are load-bearing for the site rendering at all ─────────
