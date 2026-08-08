@@ -54,6 +54,10 @@ export default function SetPasswordScreen() {
       setError(t('auth.passwordTooLong'));
       return;
     }
+    if (problem === 'common') {
+      setError(t('auth.passwordCommon'));
+      return;
+    }
     setIsLoading(true);
     try {
       if (needsEmail) {

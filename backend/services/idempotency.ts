@@ -389,10 +389,14 @@ function startReservationHeartbeat(reservationId: string, organizationId: string
 export async function reapIdempotencyKeys(
   now: Date = new Date(),
 ): Promise<{ expired: number; reclaimed: number }> {
+  // tenant-scope: cross-tenant — TTL sweep run by the server itself, never on
+  // behalf of a tenant; deletes expired leases in every org and returns no rows.
   const reclaimed = await db.idempotencyKey.deleteMany({
     where: { status_code: null, expires_at: { lte: now } },
   });
 
+  // tenant-scope: cross-tenant — same sweep, ordinary TTL half. Split from the
+  // one above only so `reclaimed` and `expired` stay separately countable.
   const expired = await db.idempotencyKey.deleteMany({
     where: { expires_at: { lte: now } },
   });

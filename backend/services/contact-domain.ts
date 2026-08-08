@@ -302,7 +302,7 @@ export async function createContactForUser(
   });
 
   if (contact.assigned_to && contact.assigned_to !== requestingUserId) {
-    void contactCtx(contact.id, requestingUserId).then((ctx) => {
+    void contactCtx({ orgId, contactId: contact.id, assignerId: requestingUserId }).then((ctx) => {
       if (ctx) void dispatchNotification({ eventType: 'contact.assigned', orgId, contact: ctx });
     });
   }
@@ -442,7 +442,7 @@ export async function updateContactForUser(
 
   if (patch.assigned_to !== undefined && patch.assigned_to !== existing.assigned_to && patch.assigned_to !== requestingUserId) {
     const eventType = existing.assigned_to ? 'contact.reassigned' : 'contact.assigned';
-    void contactCtx(contactId, requestingUserId).then((ctx) => {
+    void contactCtx({ orgId, contactId, assignerId: requestingUserId }).then((ctx) => {
       if (ctx) void dispatchNotification({ eventType, orgId, contact: ctx });
     });
   }

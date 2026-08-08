@@ -335,7 +335,7 @@ async function moveDealStage(request: FastifyRequest, reply: FastifyReply): Prom
       changes: { stage_id },
     });
 
-    void dealCtx(updated.id, updated.stage?.name, requester.sub).then((ctx) => {
+    void dealCtx({ orgId: context.org_id, dealId: updated.id, stageName: updated.stage?.name, actorId: requester.sub }).then((ctx) => {
       if (ctx) void dispatchNotification({ eventType: 'deal.stage_changed', orgId: context.org_id, deal: ctx });
     });
 

@@ -5,6 +5,9 @@ import { db } from '../../services/db';
 import { auditLog } from '../../services/audit';
 import { assignableRoles, isRole } from '../../services/capabilities';
 import { signSessionToken, uniqueUsernameForOrg, normalizeEmail } from './auth';
+import { issueCode } from '../../services/verification';
+import { sendEmail, isEmailSendingEnabled } from '../../services/email';
+import { isEmailVerificationEnforced } from '../../config/security';
 import {
   ACCEPT_TTL_MS,
   CLAIM_TTL_MS,
@@ -642,9 +645,11 @@ export const InviteController = {
           // must_change flags stay false.
           must_change_password: false,
           must_change_email: false,
-          // Neither address nor number has been proven yet. email_verified is
-          // set by the OTP step that follows; phone_verified has no mechanism at
-          // all in this product (no SMS provider) and stays false by design.
+          // Neither address nor number has been proven yet. is_verified and
+          // email_verified are set together by POST /auth/verify, whose code this
+          // handler issues below and which is the ONLY way this account acquires
+          // a session; phone_verified has no mechanism at all in this product (no
+          // SMS provider) and stays false by design.
           is_verified: false,
           email_verified: false,
           phone_verified: false,
@@ -669,6 +674,47 @@ export const InviteController = {
       metadata: { invite_id: invite.id, role: invite.role },
     });
 
+    /**
+     * THE ACCOUNT EXISTS. IT DOES NOT YET HAVE A LOGIN SURFACE.
+     *
+     * This used to sign a seven-day session here, immediately, on an address
+     * nobody had proven — the row two dozen lines up says `email_verified: false`
+     * and the comment beside it promised an OTP step that was never written. So
+     * whoever held a forwarded invite link could type any address they liked,
+     * including one belonging to somebody else, and use the organisation's CRM
+     * for as long as they cared to.
+     *
+     * The tail below is register's, structurally verbatim (AuthController.register):
+     * issue the code, try to deliver it, answer 201 with the user_id the client
+     * needs to call POST /auth/verify. That endpoint sets is_verified and mints
+     * the session — one screen later, on an address that has been proven.
+     *
+     * DELIVERY FAILURE MUST NOT ROLL ANYTHING BACK. The invite was consumed
+     * inside the transaction and the row is committed; throwing here would burn
+     * a single-use invite and leave an account nobody can reach. A caller that
+     * sees meta.email_sent === false calls POST /auth/verify/resend, exactly as
+     * a registrant does.
+     */
+    if (isEmailVerificationEnforced()) {
+      let emailDelivered = false;
+      try {
+        const emailCode = await issueCode(created.id, 'email');
+        const emailResult = isEmailSendingEnabled()
+          ? await sendEmail(email, 'Код подтверждения', `Ваш код: ${emailCode}. Действителен 10 минут.`)
+          : { success: false };
+        emailDelivered = emailResult.success;
+      } catch {
+        // silent — the invitee can call POST /auth/verify/resend
+      }
+
+      return reply.code(201).send({
+        data: { user_id: created.id, email: created.email, needs_verification: true },
+        meta: { email_sent: emailDelivered },
+      });
+    }
+
+    // REQUIRE_EMAIL_VERIFICATION=false — the pre-fix shape, kept whole so the
+    // switch is a real revert and not a half one. See isEmailVerificationEnforced.
     const token = await signSessionToken(request, reply, {
       id: created.id,
       organization_id: created.organization_id,

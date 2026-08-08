@@ -424,47 +424,82 @@ export async function dispatchNotification(ctx: EventContext): Promise<void> {
 }
 
 // ─── Context builders (fetch from DB) ────────────────────────────────────────
+//
+// These four read a tenant-owned row by bare id and put what they find into the
+// TITLE AND BODY OF A PUSH NOTIFICATION. That makes them the highest-value
+// unscoped readers in the codebase: whatever they return goes straight to a
+// device, past the visibility cone, with no second gate.
+//
+// Every caller already holds the org — it is on the request, or on the row the
+// caller just loaded — so `orgId` is REQUIRED and it is on the options object
+// rather than being a positional argument. That is deliberate: the ids here are
+// all `string`, so a positional orgId would let `taskCtx(taskId, actorId)`
+// keep compiling with the actor's id silently standing in for the org. Making
+// the argument an object turns every call site into a compile error, which is
+// how you enumerate them without trusting a search.
 
-async function userSnap(id: string | null | undefined): Promise<UserSnap | null> {
+async function userSnap(orgId: string, id: string | null | undefined): Promise<UserSnap | null> {
   if (!id) return null;
-  const u = await db.user.findUnique({ where: { id }, select: { id: true, name: true, push_token: true } });
+  const u = await db.user.findFirst({
+    where: { id, organization_id: orgId },
+    select: { id: true, name: true, push_token: true },
+  });
   return u ?? null;
 }
 
-export async function taskCtx(taskId: string, assignerId?: string): Promise<TaskCtx | null> {
-  const t = await db.task.findUnique({
-    where: { id: taskId },
+export async function taskCtx(input: {
+  orgId: string;
+  taskId: string;
+  assignerId?: string | null;
+}): Promise<TaskCtx | null> {
+  const { orgId, taskId, assignerId } = input;
+  const t = await db.task.findFirst({
+    where: { id: taskId, organization_id: orgId },
     select: { id: true, title: true, due_date: true, assigned_to: true, created_by: true },
   });
   if (!t) return null;
   const [assignee, assigner] = await Promise.all([
-    userSnap(t.assigned_to),
-    userSnap(assignerId ?? t.created_by),
+    userSnap(orgId, t.assigned_to),
+    userSnap(orgId, assignerId ?? t.created_by),
   ]);
   if (!assignee) return null;
   return { id: t.id, title: t.title, due_date: t.due_date, assignee, assigner };
 }
 
-export async function dealCtx(dealId: string, stageName?: string, actorId?: string): Promise<DealCtx | null> {
-  const d = await db.deal.findUnique({
-    where: { id: dealId },
+export async function dealCtx(input: {
+  orgId: string;
+  dealId: string;
+  stageName?: string;
+  actorId?: string | null;
+}): Promise<DealCtx | null> {
+  const { orgId, dealId, stageName, actorId } = input;
+  const d = await db.deal.findFirst({
+    where: { id: dealId, organization_id: orgId },
     select: { id: true, title: true, expected_close: true, assigned_to: true, created_by: true, stage: { select: { name: true } } },
   });
   if (!d) return null;
-  const [owner, creator] = await Promise.all([userSnap(d.assigned_to), userSnap(actorId ?? d.created_by)]);
+  const [owner, creator] = await Promise.all([
+    userSnap(orgId, d.assigned_to),
+    userSnap(orgId, actorId ?? d.created_by),
+  ]);
   return { id: d.id, title: d.title, expected_close: d.expected_close, stage_name: stageName ?? d.stage?.name, owner, creator };
 }
 
-export async function contactCtx(contactId: string, assignerId?: string): Promise<ContactCtx | null> {
-  const c = await db.contact.findUnique({
-    where: { id: contactId },
+export async function contactCtx(input: {
+  orgId: string;
+  contactId: string;
+  assignerId?: string | null;
+}): Promise<ContactCtx | null> {
+  const { orgId, contactId, assignerId } = input;
+  const c = await db.contact.findFirst({
+    where: { id: contactId, organization_id: orgId },
     select: { id: true, first_name: true, last_name: true, assigned_to: true, created_by: true },
   });
   if (!c || !c.assigned_to) return null;
   const name = [c.first_name, c.last_name].filter(Boolean).join(' ');
   const [assignee, assigner] = await Promise.all([
-    userSnap(c.assigned_to),
-    userSnap(assignerId ?? c.created_by),
+    userSnap(orgId, c.assigned_to),
+    userSnap(orgId, assignerId ?? c.created_by),
   ]);
   if (!assignee) return null;
   return { id: c.id, name, assignee, assigner };

@@ -312,4 +312,46 @@ describe('deals routes validation', () => {
     expect(response.body).not.toContain('node_modules');
     expect(response.body).not.toContain('at Object.');
   });
+
+  // ─── Documented, and absent ─────────────────────────────────────────────────
+  //
+  // docs/architecture/api-design.md listed `DELETE /deals/:id  Archive deal` from the
+  // Sprint-0 spec onward. No such route was ever built and there is no
+  // DealsController.archive to serve one: `is_archived` belongs to PipelineStage, not to
+  // Deal, and the only writer of DealStatus.archived is the amoCRM sync worker. The
+  // document now records that under Known Gaps instead of claiming the route.
+  //
+  // IF EITHER ASSERTION BELOW FLIPS, that Known Gaps entry is stale and must be corrected
+  // in the same commit that adds the route — the doc drifted in the first place precisely
+  // because nothing mechanical ever read it.
+
+  it('has no DELETE /deals/:id — archiving a deal is not an API operation', async () => {
+    const response = await app.inject({ method: 'DELETE', url: `/deals/${VALID_UUID}` });
+
+    expect(response.statusCode).toBe(404);
+    expect(routeMocks.noop).not.toHaveBeenCalled();
+  });
+
+  it('does not archive a deal through PATCH /deals/:id either', async () => {
+    // The obvious second reading of "archive a deal". UpdateDealSchema carries neither
+    // `is_archived` nor `status`, so Zod strips both and the controller is handed an
+    // update that says nothing about archival — it does not merely ignore the fields
+    // downstream, they never arrive.
+    const response = await app.inject({
+      method: 'PATCH',
+      url: `/deals/${VALID_UUID}`,
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ is_archived: true, status: 'archived' }),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(routeMocks.update).toHaveBeenCalledTimes(1);
+    expect(response.json()).toEqual({ data: {}, meta: {} });
+  });
+
+  it('has no GET /deals/pipelines/:id — read the list instead', async () => {
+    const response = await app.inject({ method: 'GET', url: `/deals/pipelines/${VALID_UUID}` });
+
+    expect(response.statusCode).toBe(404);
+  });
 });

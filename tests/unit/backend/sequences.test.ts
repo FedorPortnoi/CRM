@@ -96,7 +96,11 @@ import {
   unenrollContact,
   withUnsubscribeFooter,
 } from '../../../backend/services/sequences';
-import { SequencesController, denySequenceAdmin } from '../../../backend/api/controllers/sequences';
+import {
+  SEQUENCE_ADMIN_DENIAL_MESSAGE,
+  SequencesController,
+  denySequenceAdmin,
+} from '../../../backend/api/controllers/sequences';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -965,7 +969,10 @@ function fakeReply(): FakeReply {
   return reply;
 }
 
-function fakeRequest(role: 'owner' | 'admin' | 'member' | 'viewer', body: unknown = {}): FastifyRequest {
+function fakeRequest(
+  role: 'owner' | 'admin' | 'member' | 'viewer' | 'marketer' | 'accountant' | 'support',
+  body: unknown = {},
+): FastifyRequest {
   return {
     user: { sub: 'user-1', org_id: ORG, role, iat: 0, exp: 0 },
     params: { id: SEQ },
@@ -1003,6 +1010,47 @@ describe('sequence admin guard', () => {
       expect(denySequenceAdmin(fakeRequest(role), reply as unknown as FastifyReply)).toBeNull();
       expect(reply.statusCode).toBe(200);
     }
+  });
+
+  /**
+   * marketer holds `sequences.manage` and nothing else on this list — campaigns are the job.
+   * Pinned at the ROLE level, not only through the capability table, because the twin gate in
+   * api/authenticate.ts falls back to `org.manage` for an unmapped action and marketer does
+   * not hold that: the two doors must answer identically or one of them is an outage.
+   */
+  it('lets marketer through, the role whose job this surface is', () => {
+    const reply = fakeReply();
+
+    expect(denySequenceAdmin(fakeRequest('marketer'), reply as unknown as FastifyReply)).toBeNull();
+    expect(reply.statusCode).toBe(200);
+  });
+
+  /**
+   * Re-pins c6f959f at the role level. The guard used to ask `visibility.all`, which
+   * accountant holds; it asks `sequences.manage`, which accountant does not.
+   */
+  it.each(['accountant', 'support'] as const)('denies %s', (role) => {
+    const reply = fakeReply();
+
+    expect(denySequenceAdmin(fakeRequest(role), reply as unknown as FastifyReply)).toBe(reply);
+    expect(reply.statusCode).toBe(403);
+  });
+
+  /**
+   * DRIFT PIN. `adminRoutePolicy` in api/authenticate.ts now denies this surface FIRST and
+   * repeats this exact sentence as its policy `reason` — repeats rather than imports, so the
+   * request gate does not drag the sequences → email → encryption chain in behind it. The
+   * matching assertion on the other side lives in authenticate.test.ts. If either literal is
+   * edited alone, one of the two goes red and the client-visible body cannot silently change.
+   */
+  it('states the 403 body both doors must return', () => {
+    expect(SEQUENCE_ADMIN_DENIAL_MESSAGE).toBe('Only owner or admin can manage email sequences');
+
+    const reply = fakeReply();
+    denySequenceAdmin(fakeRequest('member'), reply as unknown as FastifyReply);
+    expect(reply.payload).toEqual({
+      error: { code: 'FORBIDDEN', message: SEQUENCE_ADMIN_DENIAL_MESSAGE },
+    });
   });
 
   it('never reaches the service layer for a member', async () => {

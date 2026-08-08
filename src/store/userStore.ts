@@ -53,9 +53,27 @@ type AuthUser = {
   must_change_email?: boolean;
 };
 
+/**
+ * An account that exists on the server but has not yet proven its email address,
+ * and therefore has no token and no session.
+ *
+ * Set by `acceptInvite` when the server answers `needs_verification`. It is the
+ * only thing the invite screen has to work with between account creation and
+ * `verifyOtp` — that call is what actually returns the user and the token — so
+ * losing it means losing the way into a real account whose invite has already
+ * been burned. Deliberately NOT persisted: a code lives ten minutes and
+ * POST /auth/verify/resend issues another, so a killed app restarts the step
+ * rather than resuming a stale one.
+ */
+type PendingVerification = {
+  userId: string;
+  email: string | null;
+};
+
 interface UserState {
   user: AuthUser | null;
   token: string | null;
+  pendingVerification: PendingVerification | null;
   isLoading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
@@ -94,6 +112,7 @@ function extractErrorMessage(body: unknown, status: number): string {
 export const useUserStore = create<UserState>()((set) => ({
   user: null,
   token: null,
+  pendingVerification: null,
   isLoading: false,
   error: null,
 
@@ -129,6 +148,24 @@ export const useUserStore = create<UserState>()((set) => ({
    * beforehand. The role is NEVER sent — it lives on the server's invite row,
    * and accepting a client-supplied role would make a forwarded link an
    * escalation primitive.
+   *
+   * ─── TWO RESPONSE SHAPES, ON PURPOSE ────────────────────────────────────────
+   *
+   * The server used to answer this call with a seven-day session on an address
+   * nobody had proven. It now answers with `needs_verification` and the account
+   * id, and the session is minted one screen later by `verifyOtp`, against a
+   * code that only reaches the real owner of the address.
+   *
+   * Both shapes are handled because the ORDER OF ROLLOUT CANNOT BE GUARANTEED.
+   * The account is created and the single-use invite is CONSUMED before either
+   * shape is written, so a client that understands only one of them strands a
+   * real person with a real account and a burned link — the failure is not a
+   * retry, it is unrecoverable without an owner minting a fresh invite. Reading
+   * whichever shape arrived removes the ordering from the risk entirely: an old
+   * server with this build works, and this build against the new server works.
+   *
+   * Drop the `token` branch only once no build that can reach a pre-fix server
+   * is still installed.
    */
   acceptInvite: async (input: {
     acceptToken: string;
@@ -152,11 +189,41 @@ export const useUserStore = create<UserState>()((set) => ({
       if (!response.ok) {
         throw new Error(extractErrorMessage(body, response.status));
       }
-      const { data } = body as { data: { user: AuthUser; token: string } };
-      const { user, token } = data;
-      await SecureStore.setItemAsync('crm_auth_token', token);
-      await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(user));
-      set({ user, token, isLoading: false });
+      const { data } = body as {
+        data: {
+          user?: AuthUser;
+          token?: string;
+          user_id?: string;
+          email?: string | null;
+          needs_verification?: boolean;
+        };
+      };
+
+      // Pre-fix server: a session arrived. Keyed on the token actually being
+      // present rather than on the absence of `needs_verification`, so a
+      // half-written response can never be mistaken for a grant.
+      if (typeof data.token === 'string' && data.user) {
+        const { user, token } = data as { user: AuthUser; token: string };
+        await SecureStore.setItemAsync('crm_auth_token', token);
+        await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(user));
+        set({ user, token, pendingVerification: null, isLoading: false });
+        return;
+      }
+
+      if (typeof data.user_id === 'string') {
+        // Nothing is written to SecureStore: there is no session yet, and
+        // persisting a half-account is how a device ends up believing it is
+        // signed in as somebody who never proved anything.
+        set({
+          pendingVerification: { userId: data.user_id, email: data.email ?? input.email.trim().toLowerCase() },
+          user: null,
+          token: null,
+          isLoading: false,
+        });
+        return;
+      }
+
+      throw new Error('Unknown error');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       set({ error: msg, isLoading: false });
@@ -202,7 +269,9 @@ export const useUserStore = create<UserState>()((set) => ({
       const { user, token } = data;
       await SecureStore.setItemAsync('crm_auth_token', token);
       await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(user));
-      set({ user, token, isLoading: false });
+      // This is where an invite-accepted account acquires its session — the step
+      // that used to happen at accept time, before anything had been proven.
+      set({ user, token, pendingVerification: null, isLoading: false });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       set({ error: msg, isLoading: false });

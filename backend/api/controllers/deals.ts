@@ -285,7 +285,7 @@ async function moveStage(
 
   void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: 'stage_changed', changes: { stage_id } });
 
-  void dealCtx(updated.id, updated.stage?.name, request.user.sub).then((ctx) => {
+  void dealCtx({ orgId: request.user.org_id, dealId: updated.id, stageName: updated.stage?.name, actorId: request.user.sub }).then((ctx) => {
     if (ctx) void dispatchNotification({ eventType: 'deal.stage_changed', orgId: request.user.org_id, deal: ctx });
   });
 
@@ -346,7 +346,7 @@ async function markWon(
 
   void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: 'won' });
 
-  void dealCtx(updated.id, undefined, request.user.sub).then((ctx) => {
+  void dealCtx({ orgId: request.user.org_id, dealId: updated.id, actorId: request.user.sub }).then((ctx) => {
     if (ctx) void dispatchNotification({ eventType: 'deal.won', orgId: request.user.org_id, deal: ctx });
   });
 
@@ -400,7 +400,7 @@ async function markLost(
 
   void logActivity({ organizationId: request.user.org_id, userId: request.user.sub, entityType: 'deal', entityId: updated.id, action: 'lost' });
 
-  void dealCtx(updated.id, undefined, request.user.sub).then((ctx) => {
+  void dealCtx({ orgId: request.user.org_id, dealId: updated.id, actorId: request.user.sub }).then((ctx) => {
     if (ctx) void dispatchNotification({ eventType: 'deal.lost', orgId: request.user.org_id, deal: ctx });
   });
 

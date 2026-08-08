@@ -26,6 +26,8 @@ import {
   type InviteLookupResult,
   type InvitePreview,
 } from '../utils/inviteDiscovery';
+import { PASSWORD_MAX_BYTES, utf8ByteLength } from '../utils/password';
+import { isCommonPassword } from '../utils/password-blocklist';
 
 /**
  * The invitee's half of the invite flow — the first screen a person who has no
@@ -299,7 +301,18 @@ export default function InviteScreen() {
     if (password.length === 0) return 'Придумайте пароль';
     const failed = PASSWORD_RULES.find((rule) => !rule.test(password));
     if (failed !== undefined) return failed.message;
-    if (password.length > 100) return 'Пароль слишком длинный — не более 100 символов';
+    // 72 BYTES, not 100 characters. This said `> 100` while the server refuses
+    // at 72 bytes — and Cyrillic is two bytes a letter, so a 40-character
+    // Russian passphrase passed here and was refused there, on a screen where a
+    // 400 is a dead end because the person has no account to retry from.
+    if (utf8ByteLength(password) > PASSWORD_MAX_BYTES) {
+      return 'Пароль слишком длинный — до 72 байт (кириллица считается за два символа)';
+    }
+    // Not expressible as a checklist row — a rule you satisfy by NOT being on a
+    // list has nothing to tick — so it lives here rather than in PASSWORD_RULES.
+    if (isCommonPassword(password)) {
+      return 'Этот пароль слишком простой — придумайте другой';
+    }
 
     if (confirmPassword.length === 0) return 'Повторите пароль ещё раз';
     if (password !== confirmPassword) return 'Пароли не совпадают';
@@ -328,7 +341,22 @@ export default function InviteScreen() {
     // `acceptInvite` reports failure by setting `error` on the store rather than
     // throwing, so success is read back off the store instead of inferred.
     const state = useUserStore.getState();
-    if (state.error === null && state.user !== null && state.token !== null) {
+    if (state.error !== null) return;
+
+    /**
+     * TWO DESTINATIONS, because the server has two answers — see `acceptInvite`.
+     *
+     * The verification branch is checked FIRST. Both branches are reachable only
+     * after the account has been created and the single-use invite CONSUMED, so
+     * failing to navigate is not a retry the invitee can make: the link is gone
+     * and only an owner can mint another. Whichever answer arrived, this screen
+     * must move.
+     */
+    if (state.pendingVerification !== null) {
+      router.replace('/verify' as never);
+      return;
+    }
+    if (state.user !== null && state.token !== null) {
       router.replace('/(tabs)' as never);
     }
   }, [preview, isLoading, validate, acceptInvite, trimmedPhone, normalizedEmail, password, router]);

@@ -13,6 +13,7 @@ import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod
 import { getCorsOrigin, getJwtSecret, validateProductionConfig } from './config/security';
 import { enforceAuthenticatedApiRequest } from './api/authenticate';
 import { auditSensitiveApiRequest } from './services/audit';
+import { HybridRateLimitStore, RateLimitStoreError } from './services/rate-limit-store';
 import authRoutes from './api/routes/auth';
 import contactsRoutes from './api/routes/contacts';
 import dealsRoutes from './api/routes/deals';
@@ -159,6 +160,18 @@ async function start() {
   });
 
   server.setErrorHandler((err, request, reply) => {
+    // The durable auth rate limiter fails CLOSED — see services/rate-limit-store.ts.
+    // Without this branch the refusal surfaces as an opaque 500
+    // INTERNAL_SERVER_ERROR that reads like a code bug rather than a dependency
+    // being down, and nothing in the logs names the cause.
+    if (err instanceof RateLimitStoreError) {
+      request.log.error({ err }, '[rate-limit] durable store unavailable — refusing auth request');
+      reply.status(503).header('retry-after', '30').send({
+        error: { code: 'SERVICE_UNAVAILABLE', message: 'Service temporarily unavailable' },
+      });
+      return;
+    }
+
     if (
       err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2023' ||
       err instanceof Prisma.PrismaClientValidationError && err.message.includes('UUID')
@@ -210,9 +223,17 @@ async function start() {
   await server.register(cors, { origin: getCorsOrigin() });
   await server.register(formbody);
   await server.register(jwt, { secret: getJwtSecret() });
+  // `store` is read ONLY here, once, at plugin registration — never from a route's
+  // `config.rateLimit` (@fastify/rate-limit index.js:115-117). Without this line
+  // the `store: PostgresRateLimitStore` written on the eight auth routes is inert
+  // and every one of their budgets is an in-process LruMap that a restart wipes.
+  // HybridRateLimitStore's child() is what honours the route-level declaration;
+  // everything else — this global 100/min limiter, the tracking pixel, the OTA
+  // manifest and assets, the amoCRM webhook — stays in process on purpose.
   await server.register(rateLimit, {
     max: getRateLimitMax(),
     timeWindow: getRateLimitWindowMs(),
+    store: HybridRateLimitStore,
   });
 
   await server.register(websocket);

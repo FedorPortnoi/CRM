@@ -74,9 +74,15 @@ export const KNOWN_CONSENT_SOURCES = CONSENT_SOURCES;
 /**
  * Mount at `/api/v1/sequences`.
  *
- * Every route here is authenticated AND owner/admin-only (the controller enforces the
- * role; `adminRoutePolicy` in api/authenticate.ts should also get an entry for
- * `/api/v1/sequences`, so the denial is audited the same way as the other admin surfaces).
+ * Every route here is authenticated AND gated on `sequences.manage` — owner, admin and
+ * marketer, not owner/admin alone, since marketer was granted that capability.
+ *
+ * TWO doors ask that question and both must stay. `adminRoutePolicy` in api/authenticate.ts
+ * carries the entry for `/api/v1/sequences` (action `sequences.manage_admin` → capability
+ * `sequences.manage`); it answers FIRST and is what writes the `outcome: 'denied'` audit
+ * row, the same way as the other admin surfaces. `denySequenceAdmin` in
+ * controllers/sequences.ts then re-checks the identical capability per handler, so a route
+ * added here is still gated even if the policy table is never updated to match.
  */
 export default async function sequencesRoutes(fastify: FastifyInstance): Promise<void> {
   const f = fastify.withTypeProvider<ZodTypeProvider>();

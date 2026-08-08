@@ -157,6 +157,30 @@ export function can(role: string | null | undefined, capability: Capability): bo
   return ROLE_CAPABILITIES[role].includes(capability);
 }
 
+/**
+ * Every role that holds a capability. The map read backwards.
+ *
+ * Exists because some gates are not "may the CALLER do X" but "is the TARGET
+ * one of the protected ones" — and those were written as role-name comparisons
+ * (`target.role === 'owner'`), which is the failure mode this whole module was
+ * built to end. A deny-list of one string does not notice `admin`, and would not
+ * notice a ninth role added next year either.
+ */
+export function rolesWith(capability: Capability): Role[] {
+  return (Object.keys(ROLE_CAPABILITIES) as Role[]).filter((role) => can(role, capability));
+}
+
+/**
+ * Is this role admin-level — i.e. one of the ones CAPABILITIES reserves to the
+ * owner with 'team.manage_admins' ("create or modify admin-level members")?
+ *
+ * Asked of the map, so a future role granted 'team.manage' is protected the day
+ * it is added rather than the day someone remembers to update a string list.
+ */
+export function isAdminLevelRole(role: string | null | undefined): boolean {
+  return can(role, 'team.manage');
+}
+
 /** True when the role may perform any mutation at all. Powers the write gate. */
 export function hasAnyWriteCapability(role: string | null | undefined): boolean {
   if (!role || !isRole(role)) return false;

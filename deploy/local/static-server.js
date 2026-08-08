@@ -14,28 +14,15 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+/* Content types, the security set and the caching rules live in static-headers.js
+   as pure functions. They are separated so a test can call them: this process
+   binds port 8080, which the live PM2 `crm-static` holds, so nothing may require
+   THIS file. See the header of that module for why a `require.main === module`
+   guard around listen() was not an acceptable alternative. */
+const { baseSecurityHeaders, cspForFile, notFoundHeaders, responseHeaders } = require('./static-headers');
 
 const ROOT = path.resolve(__dirname, '../../website');
 const PORT = Number(process.env.STATIC_PORT || 8080);
-
-const TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.json': 'application/json',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.ico': 'image/x-icon',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.txt': 'text/plain; charset=utf-8',
-  // Without this, sitemap.xml fell through to application/octet-stream and
-  // crawlers are entitled to refuse a sitemap on content type alone.
-  '.xml': 'application/xml; charset=utf-8',
-  '.webp': 'image/webp',
-};
 
 /**
  * Resolve a URL path to a file, refusing anything that escapes the web root.
@@ -84,59 +71,25 @@ const server = http.createServer((req, res) => {
     // homepage. Answer 404 with a 404, and serve a real page while doing it.
     const notFound = path.join(ROOT, '404.html');
     if (fs.existsSync(notFound)) {
-      res.writeHead(404, { 'Content-Type': TYPES['.html'], 'Cache-Control': 'no-store' });
+      // 404.html is a real document with an inline <style> block, so it needs
+      // the same treatment as any other page. This branch never reaches the
+      // header assembly below and is invisible to anything applied only there.
+      const headers404 = notFoundHeaders();
+      const csp404 = cspForFile(notFound);
+      if (csp404) headers404['Content-Security-Policy'] = csp404;
+      res.writeHead(404, headers404);
       fs.createReadStream(notFound).pipe(res);
       return;
     }
-    res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found');
+    res.writeHead(404, { 'Content-Type': 'text/plain', ...baseSecurityHeaders() }).end('Not found');
     return;
   }
 
   const ext = path.extname(file).toLowerCase();
-  const headers = { 'Content-Type': TYPES[ext] || 'application/octet-stream' };
-
-  // App Link / Universal Link association files. iOS refuses an
-  // apple-app-site-association served as anything but application/json, and the
-  // file has no extension — so the type is forced rather than inferred.
-  if (urlPath.startsWith('/.well-known/')) {
-    headers['Content-Type'] = 'application/json';
-    headers['Cache-Control'] = 'public, max-age=300';
-  } else if (urlPath === '/i' || urlPath === '/i.html') {
-    // The invite landing page. The token rides in the URL fragment so it never
-    // reaches this process at all, but the page renders a claim code, and that
-    // must not sit in a shared cache or a back-forward cache.
-    headers['Cache-Control'] = 'no-store, no-cache, must-revalidate';
-    headers['Referrer-Policy'] = 'no-referrer';
-    headers['X-Robots-Tag'] = 'noindex, nofollow';
-  } else if (urlPath.startsWith('/fonts/')) {
-    // Genuinely immutable: these are pinned subsets, and replacing one would
-    // mean a new file. Safe to promise a browser it never has to ask again.
-    headers['Cache-Control'] = 'public, max-age=2592000, immutable';
-  } else if (['.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.woff', '.woff2'].includes(ext)) {
-    /* These are edited IN PLACE at a fixed path — website/ is served straight to
-       4kub.ru — so the only thing separating a visitor from a stale stylesheet
-       is the ?v= query the HTML appends. That is a sound scheme and `immutable`
-       is the correct header FOR it, but the counter is bumped by hand and has
-       been missed twice: base.css was rewritten for the 2026-08-06 redesign
-       while privacy/register/verify/i went on asking for ?v=7, and the 08-07
-       clock fix sat on disk behind an unbumped ?v=37. `immutable` makes either
-       slip permanent for thirty days, because the browser will not revalidate
-       even on a reload.
-
-       So: still cached, but staleness is bounded to five minutes instead of a
-       month. A forgotten bump becomes a short delay rather than a silent month
-       of serving the wrong site. Restore `immutable` once these carry a content
-       hash generated at deploy rather than a number someone remembers. */
-    headers['Cache-Control'] = 'public, max-age=300, must-revalidate';
-  } else if (ext === '.html') {
-    /* The pages carry the ?v= stamps, so a stale page pins stale assets no
-       matter how the assets themselves are cached — this is the gate. It used
-       to send no Cache-Control at all, which does not mean "do not cache": with
-       no explicit policy a browser is free to guess a lifetime from
-       Last-Modified, and that guess grows as the file ages. Always revalidate;
-       with the ETag below that is a 304 and costs nothing. */
-    headers['Cache-Control'] = 'public, max-age=0, must-revalidate';
-  }
+  /* Content type, the security set and the caching rules, in that order — see
+     responseHeaders(). Content-Security-Policy is added further down, once
+     `stat` exists, because its hashes come from the bytes being served. */
+  const headers = responseHeaders(urlPath, ext);
 
   /* Conditional requests, so `must-revalidate` above costs a 304 rather than a
      fresh copy of every stylesheet on every page view. nginx did this for free
@@ -147,6 +100,17 @@ const server = http.createServer((req, res) => {
   const etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`;
   headers['Last-Modified'] = lastModified;
   headers['ETag'] = etag;
+
+  /* Documents only. A CSP on a stylesheet or a woff2 governs nothing, and the
+     hashes cost a synchronous read of the file — cheap and memoised on
+     (mtime, size), but not worth spending on every asset. Placed after `stat` so
+     the cache key is the same validator the ETag above is built from, and it
+     rides into the 304 branch below, which reuses this object and so refreshes
+     the policy stored against a cached copy. */
+  if (ext === '.html') {
+    const csp = cspForFile(file, stat);
+    if (csp) headers['Content-Security-Policy'] = csp;
+  }
 
   const inm = req.headers['if-none-match'];
   const ims = req.headers['if-modified-since'];

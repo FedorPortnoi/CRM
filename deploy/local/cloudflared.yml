@@ -18,13 +18,24 @@
 # reg.ru except moving the nameservers to Cloudflare.
 # ─────────────────────────────────────────────────────────────────────────────
 
-tunnel: REPLACE_WITH_TUNNEL_UUID
-credentials-file: C:\Users\fedor\.cloudflared\REPLACE_WITH_TUNNEL_UUID.json
+tunnel: 3f95c458-ffdb-405d-8d58-7e955619d132
+credentials-file: C:\Users\fedor\.cloudflared\3f95c458-ffdb-405d-8d58-7e955619d132.json
 
 # Ingress rules are evaluated TOP DOWN and the first match wins, so the API
 # routes must come before the catch-all. These reproduce the nginx vhost the VM
 # was running; where they differ, that is a bug rather than a decision.
 ingress:
+  # ── Staging hostname, used to prove the whole path before the apex is
+  # touched. 4kub.ru stays on the Yandex VM while this is exercised.
+  - hostname: test.4kub.ru
+    path: ^/api/.*
+    service: http://127.0.0.1:3000
+  - hostname: test.4kub.ru
+    path: ^/(health|version)$
+    service: http://127.0.0.1:3000
+  - hostname: test.4kub.ru
+    service: http://127.0.0.1:8080
+
   # ── API ────────────────────────────────────────────────────────────────────
   - hostname: 4kub.ru
     path: ^/api/.*

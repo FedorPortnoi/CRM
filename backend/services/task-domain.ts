@@ -9,6 +9,7 @@
 import { Prisma, TaskStatus, TaskPriority, WorkflowTrigger } from '@prisma/client';
 import { db } from './db';
 import { userBelongsToOrg } from './db-guards';
+import { can } from './capabilities';
 import { paginate } from './db-paginate';
 import { evaluateWorkflows } from './workflows';
 import { logActivity } from '../api/controllers/activities';
@@ -73,7 +74,28 @@ async function contactBelongsToOrg(contactId: string, orgId: string): Promise<bo
   return contact !== null;
 }
 
-async function dealBelongsToOrg(dealId: string, orgId: string): Promise<boolean> {
+/**
+ * ORG-WIDE, and therefore an existence oracle unless the caller may read the
+ * pipeline in the first place.
+ *
+ * There is no visibility cone and no capability inside this query, so its
+ * true/false answer — surfaced to the caller as success vs. a distinguishable
+ * 403 — tells anyone holding a UUID whether that deal exists in the org. That
+ * matters because `support` holds tasks.write and no deals.read: exactly the
+ * role the pipeline gates exist to exclude.
+ *
+ * Callers pass the requester so a role without deals.read is refused with the
+ * SAME body an out-of-org deal produces, without the deal ever being queried.
+ */
+async function dealBelongsToOrg(
+  dealId: string,
+  orgId: string,
+  requestingUser: Requester,
+): Promise<boolean> {
+  if (!can(requestingUser.role, 'deals.read')) {
+    return false;
+  }
+
   const deal = await db.deal.findFirst({
     where: { id: dealId, organization_id: orgId },
     select: { id: true },
@@ -130,6 +152,15 @@ export async function listTasksForUser(
 
   const visibleIds = await getVisibleUserIds(requestingUser, scope ?? 'direct');
   const assignedFilter = resolveAssignedFilter(visibleIds, assigned_to);
+  /**
+   * A task row is not a deal row, but it carries `deal_id`, and this query has
+   * no `select` — so every tasks.read holder got a free list of real deal UUIDs
+   * for an org whose pipeline they may not read. That is the step that turns the
+   * org-wide deal oracles elsewhere from "guess a v4 UUID" into a working
+   * attack. Same field-level omission as the calendar controller: the task is
+   * still theirs to see, its link to the pipeline is not.
+   */
+  const dealsVisible = can(requestingUser.role, 'deals.read');
 
   const where: Prisma.TaskWhereInput = {
     organization_id: orgId,
@@ -137,7 +168,8 @@ export async function listTasksForUser(
     ...(priority && { priority }),
     ...(assignedFilter !== undefined && { assigned_to: assignedFilter }),
     ...(contact_id && { contact_id }),
-    ...(deal_id && { deal_id }),
+    // Ignored, not rejected — a 400 answers the same question the filter asked.
+    ...(deal_id && dealsVisible && { deal_id }),
     ...(q && { title: { contains: q, mode: 'insensitive' } }),
     ...((due_before || due_after) && {
       due_date: {
@@ -160,7 +192,14 @@ export async function listTasksForUser(
     }),
   );
 
-  return { data: tasks, total, page, per_page };
+  return {
+    data: dealsVisible
+      ? tasks
+      : tasks.map(({ deal_id: _dealId, ...rest }) => rest) as typeof tasks,
+    total,
+    page,
+    per_page,
+  };
 }
 
 /**
@@ -225,7 +264,7 @@ export async function createTaskForUser(
       ? contactBelongsToOrg(body.contact_id, orgId)
       : Promise.resolve(true),
     body.deal_id
-      ? dealBelongsToOrg(body.deal_id, orgId)
+      ? dealBelongsToOrg(body.deal_id, orgId, requestingUser)
       : Promise.resolve(true),
   ]);
 
@@ -276,7 +315,7 @@ export async function createTaskForUser(
     action: 'created',
   });
 
-  void taskCtx(task.id).then((ctx) => {
+  void taskCtx({ orgId, taskId: task.id }).then((ctx) => {
     if (ctx) void dispatchNotification({ eventType: 'task.assigned', orgId, task: ctx });
   });
 
@@ -333,7 +372,7 @@ export async function updateTaskForUser(
       ? contactBelongsToOrg(patch.contact_id, orgId)
       : Promise.resolve(true),
     patch.deal_id !== undefined
-      ? dealBelongsToOrg(patch.deal_id, orgId)
+      ? dealBelongsToOrg(patch.deal_id, orgId, requestingUser)
       : Promise.resolve(true),
   ]);
 
@@ -407,7 +446,7 @@ export async function updateTaskForUser(
   });
 
   if (patch.assigned_to && patch.assigned_to !== existing.assigned_to) {
-    void taskCtx(updated.id, requestingUser.sub).then((ctx) => {
+    void taskCtx({ orgId, taskId: updated.id, assignerId: requestingUser.sub }).then((ctx) => {
       if (ctx) void dispatchNotification({ eventType: 'task.reassigned', orgId, task: ctx });
     });
   }
@@ -485,7 +524,7 @@ export async function completeTaskForUser(
   });
 
   if (updated.status === TaskStatus.done && existing.status !== TaskStatus.done) {
-    void taskCtx(updated.id).then((ctx) => {
+    void taskCtx({ orgId, taskId: updated.id }).then((ctx) => {
       if (ctx) void dispatchNotification({ eventType: 'task.completed', orgId, task: ctx });
     });
   }

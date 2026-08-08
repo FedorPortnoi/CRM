@@ -83,7 +83,61 @@ const mockTx = vi.hoisted(() => ({
 const auditLog = vi.hoisted(() => vi.fn());
 const createAuthSession = vi.hoisted(() => vi.fn());
 
+/**
+ * The OTP leg of acceptance. Mocked because both of these reach outside the
+ * process — `issueCode` writes a VerificationCode row, `sendEmail` calls a mail
+ * provider — and for no other reason: the decision to issue at all, and to
+ * answer 201 regardless of whether delivery worked, is the code under test.
+ */
+const issueCode = vi.hoisted(() => vi.fn());
+const sendEmail = vi.hoisted(() => vi.fn());
+const isEmailSendingEnabled = vi.hoisted(() => vi.fn());
+
 vi.mock('../../../backend/services/db', () => ({ db: mockDb }));
+
+/**
+ * The public invite routes now carry `enforceAuthIpFloor`, which spends a
+ * durable per-IP budget before the controller runs. `mockDb` has no `$queryRaw`,
+ * so the store's Postgres path throws a plain TypeError — and that is NOT the
+ * "relation does not exist" message the degraded-mode detector looks for, so it
+ * surfaces as a 500 and every assertion below reads it instead of the status the
+ * controller actually returned. Stub the two budget helpers, same as
+ * auth-routes-security.test.ts, so these tests keep measuring authorization.
+ */
+vi.mock('../../../backend/services/rate-limit-store', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../../../backend/services/rate-limit-store')
+  >();
+  return {
+    ...actual,
+    consumeAuthIpBudget: vi.fn(async () => ({ allowed: true, retryAfterSec: 1 })),
+    consumeScopedBudget: vi.fn(async () => ({ allowed: true, retryAfterSec: 1 })),
+    // Route registration still reads the real class off `store:`; swap in one
+    // that never reaches a database.
+    PostgresRateLimitStore: class {
+      incr(_key: string, cb: (e: Error | null, r: { current: number; ttl: number }) => void) {
+        cb(null, { current: 1, ttl: 900_000 });
+      }
+
+      child() {
+        return this;
+      }
+    },
+  };
+});
+
+vi.mock('../../../backend/services/verification', () => ({
+  issueCode,
+  verifyCode: vi.fn(async () => true),
+  generateOtp: vi.fn(() => '000000'),
+}));
+
+vi.mock('../../../backend/services/email', () => ({
+  sendEmail,
+  isEmailSendingEnabled,
+  getFromEmail: vi.fn(() => 'noreply@example.ru'),
+  EMAIL_SEND_TIMEOUT_MS: 20_000,
+}));
 
 vi.mock('../../../backend/services/audit', () => ({
   auditLog,
@@ -103,6 +157,7 @@ import Fastify from 'fastify';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import { InviteController } from '../../../backend/api/controllers/invites';
 import authRoutes from '../../../backend/api/routes/auth';
+import { assignableRoles, can } from '../../../backend/services/capabilities';
 import {
   ACCEPT_TTL_MS,
   CLAIM_TTL_MS,
@@ -310,6 +365,12 @@ function wireDb() {
   });
 
   createAuthSession.mockResolvedValue('session-id');
+
+  // The happy path for the OTP leg: a code is minted and the provider is
+  // configured and accepts it. Individual tests break one of these at a time.
+  issueCode.mockResolvedValue('123456');
+  isEmailSendingEnabled.mockReturnValue(true);
+  sendEmail.mockResolvedValue({ success: true });
 }
 
 beforeEach(() => {
@@ -515,8 +576,12 @@ describe('accept resolves the token against accept_hash, never handoff_hash', ()
 
     expect(reply.statusCode).toBe(201);
     expect(users).toHaveLength(1);
-    expect(data(reply).token).toBe('signed.jwt.token');
-    expect((data(reply).user as Row).email).toBe('petr@example.ru');
+    // The account exists and is named by its id, so the invitee can go on to
+    // prove the address. It does NOT come with a token — see the block at the
+    // end of this file for why that is the whole point of the change.
+    expect(data(reply).user_id).toBe(users[0].id);
+    expect(data(reply).email).toBe('petr@example.ru');
+    expect(data(reply).needs_verification).toBe(true);
   });
 });
 
@@ -1895,7 +1960,8 @@ describe('a failed redemption never says which kind of failure it was', () => {
 
     expect(reply.statusCode).toBe(201);
     expect(reply.payload).not.toEqual(UNAVAILABLE_BODY);
-    expect(data(reply).user).toBeTruthy();
+    expect(data(reply).user_id).toBeTruthy();
+    expect(data(reply).needs_verification).toBe(true);
   });
 });
 
@@ -1925,7 +1991,9 @@ describe('accept takes the role and the organisation from the stored invite', ()
     expect(reply.statusCode).toBe(201);
     expect(argsOf(mockTx.user.create).data.role).toBe('member');
     expect(users[0].role).toBe('member');
-    expect((data(reply).user as Row).role).toBe('member');
+    // The role is not echoed back at all now — the response is the user_id and
+    // the address, nothing a caller could mistake for a grant.
+    expect(JSON.stringify(reply.payload)).not.toContain('owner');
   });
 
   it('ignores an organization_id supplied in the request body', async () => {
@@ -1976,14 +2044,14 @@ describe('accept takes the role and the organisation from the stored invite', ()
     expect(created.password_hash).not.toBe(ACCEPT_BODY.password);
   });
 
-  it('signs the session for the account it just created, at that account role', async () => {
+  it('mints no session for the account it just created, at any role', async () => {
+    // The inverse of the test that used to stand here. Signing a session was the
+    // defect, not the contract: see the block at the end of this file.
     seedLookedUpInvite({ role: 'support', organization_id: ORG_A });
 
     await callAccept({ ...ACCEPT_BODY, ...HOSTILE_EXTRAS });
 
-    expect(createAuthSession).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: users[0].id, organizationId: ORG_A }),
-    );
+    expect(createAuthSession).not.toHaveBeenCalled();
   });
 
   it('refuses an email already in use without consuming the invite', async () => {
@@ -2237,5 +2305,165 @@ describe('the public invite routes reject a bad body before the controller sees 
     // Not findFirst: it returns one row whether one or five matched, which makes
     // the cardinality check unwritable.
     expect(mockDb.invite.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 12. Redemption creates an account; PROOF OF THE ADDRESS creates the session
+//     MUTATION: restoring the signSessionToken call at the end of `accept`.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * THE HOLE THIS BLOCK REFUSES.
+ *
+ * `accept` used to sign a seven-day session the instant the row was written, on
+ * an address nobody had proven — the row it writes says `email_verified: false`
+ * in as many words. Anyone holding a forwarded invite link could therefore type
+ * any address they liked, including one belonging to somebody else, and hold a
+ * working account in that organisation: contacts, deals, revenue, the audit
+ * trail, and (at admin) a long-lived public API key that outlives the JWT.
+ *
+ * The controller now ends the way `AuthController.register` ends — issue an OTP,
+ * answer 201 with the id the client needs for POST /auth/verify — and that
+ * endpoint is what mints the session, one screen later, on a proven address.
+ *
+ * Every test below has to be able to fail. The three that matter are:
+ *   • no session is created (the hole itself);
+ *   • a code IS issued and mailed (without which the fix is a bare token removal
+ *     that strands every future invitee with a burned invite and no way in);
+ *   • delivery failure still answers 201 and keeps the account (without which
+ *     onboarding becomes hostage to the mail provider, and a provider outage
+ *     burns single-use invites).
+ */
+describe('accept issues proof-of-address instead of a session', () => {
+  it('does not mint a session for an unproven address', async () => {
+    seedLookedUpInvite();
+
+    const reply = await callAccept(ACCEPT_BODY);
+
+    expect(reply.statusCode).toBe(201);
+    // No session row, no JWT, and nothing in the body a client could mistake for
+    // one. All four assertions, because the account IS created either way and
+    // only the credential it does not receive distinguishes fix from hole.
+    expect(createAuthSession).not.toHaveBeenCalled();
+    expect(data(reply).token).toBeUndefined();
+    expect(data(reply).user).toBeUndefined();
+    expect(JSON.stringify(reply.payload)).not.toContain('signed.jwt.token');
+    expect(data(reply).needs_verification).toBe(true);
+  });
+
+  it('issues an email OTP to the address the invitee supplied', async () => {
+    seedLookedUpInvite();
+
+    const reply = await callAccept(ACCEPT_BODY);
+
+    // Against the NORMALISED address, not the one as typed: the row stores
+    // 'petr@example.ru' and a code mailed anywhere else proves nothing about the
+    // account it unlocks.
+    expect(issueCode).toHaveBeenCalledWith(users[0].id, 'email');
+    expect(sendEmail).toHaveBeenCalledWith(
+      'petr@example.ru',
+      'Код подтверждения',
+      expect.stringContaining('Ваш код: 123456'),
+    );
+    expect(data(reply).user_id).toBe(users[0].id);
+    expect(reply.payload).toEqual(expect.objectContaining({ meta: { email_sent: true } }));
+  });
+
+  it('still returns 201 and keeps the account when email delivery fails', async () => {
+    seedLookedUpInvite();
+    sendEmail.mockResolvedValue({ success: false });
+
+    const reply = await callAccept(ACCEPT_BODY);
+
+    expect(reply.statusCode).toBe(201);
+    expect(reply.payload).toEqual(expect.objectContaining({ meta: { email_sent: false } }));
+    // The invite was consumed inside the transaction and the row is committed.
+    // Throwing here would burn a single-use link and leave an account nobody can
+    // reach; the caller retries through POST /auth/verify/resend instead.
+    expect(users).toHaveLength(1);
+    expect(invites[0].consumed_at).toBeInstanceOf(Date);
+  });
+
+  it('still returns 201 when the mail provider throws outright', async () => {
+    seedLookedUpInvite();
+    sendEmail.mockRejectedValue(new Error('ECONNRESET'));
+
+    const reply = await callAccept(ACCEPT_BODY);
+
+    expect(reply.statusCode).toBe(201);
+    expect(data(reply).needs_verification).toBe(true);
+    expect(users).toHaveLength(1);
+  });
+
+  it('still returns 201 when no mail provider is configured at all', async () => {
+    // RESEND_API_KEY unset. `register` answers 201 with email_sent: false here
+    // rather than failing, and this path must not diverge — a self-hosted
+    // deployment with no mail credentials must still be able to add people.
+    seedLookedUpInvite();
+    isEmailSendingEnabled.mockReturnValue(false);
+
+    const reply = await callAccept(ACCEPT_BODY);
+
+    expect(reply.statusCode).toBe(201);
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(reply.payload).toEqual(expect.objectContaining({ meta: { email_sent: false } }));
+  });
+
+  /**
+   * The revert switch, tested from the outside so it is known to be REAL.
+   *
+   * A kill switch nobody exercised is a claim, not a switch. This one exists
+   * because the OTP leg needs a client that can enter a code, and binaries
+   * already installed cannot; if field telemetry shows invitees stranded, this
+   * env var puts the old behaviour back without a deploy. It must therefore
+   * restore the WHOLE old shape — token and user — not half of it.
+   */
+  it('restores the pre-fix response when REQUIRE_EMAIL_VERIFICATION=false', async () => {
+    const previous = process.env.REQUIRE_EMAIL_VERIFICATION;
+    process.env.REQUIRE_EMAIL_VERIFICATION = 'false';
+    try {
+      seedLookedUpInvite();
+
+      const reply = await callAccept(ACCEPT_BODY);
+
+      expect(reply.statusCode).toBe(201);
+      expect(data(reply).token).toBe('signed.jwt.token');
+      expect((data(reply).user as Row).email).toBe('petr@example.ru');
+      expect(createAuthSession).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: users[0].id, organizationId: ORG_A }),
+      );
+      expect(issueCode).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env.REQUIRE_EMAIL_VERIFICATION;
+      else process.env.REQUIRE_EMAIL_VERIFICATION = previous;
+    }
+  });
+
+  // Positive control for the switch: with it at its default, the gate is ON.
+  // Without this, the test above would pass just as well against a controller
+  // that had never been fixed.
+  it('is enforced by default, with the switch unset', async () => {
+    expect(process.env.REQUIRE_EMAIL_VERIFICATION).toBeUndefined();
+    seedLookedUpInvite();
+
+    await callAccept(ACCEPT_BODY);
+
+    expect(createAuthSession).not.toHaveBeenCalled();
+    expect(issueCode).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * Why the escalation this hole enabled was worth a 403 rather than a note.
+   *
+   * An owner may mint an ADMIN invite, and admin holds integrations.manage,
+   * which is the whole gate on POST /api/v1/api-keys. An unverified
+   * invite-accepted admin could therefore trade its seven-day JWT for a
+   * long-lived API key and outlive the token entirely. Pinned here so that
+   * editing the role table makes this visible rather than silent.
+   */
+  it('keeps admin an assignable role for owner, which is what made this reachable', async () => {
+    expect(assignableRoles('owner')).toContain('admin');
+    expect(can('admin', 'integrations.manage')).toBe(true);
   });
 });

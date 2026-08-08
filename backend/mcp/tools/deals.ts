@@ -306,7 +306,7 @@ registerTool(
       changes: { stage_id },
     });
 
-    void dealCtx(updated.id, updated.stage?.name).then((ctx) => {
+    void dealCtx({ orgId: user.org_id, dealId: updated.id, stageName: updated.stage?.name }).then((ctx) => {
       if (ctx) void dispatchNotification({ eventType: 'deal.stage_changed', orgId: user.org_id, deal: ctx });
     });
 

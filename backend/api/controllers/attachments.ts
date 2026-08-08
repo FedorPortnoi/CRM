@@ -7,6 +7,7 @@ import { getContactForUser, ContactNotFoundError } from '../../services/contact-
 import { getDealForUser, DealDomainError } from '../../services/deal-domain';
 import { getTaskForUser } from '../../services/task-domain';
 import { getAccessibleUserIds } from '../../services/visibility';
+import { can } from '../../services/capabilities';
 
 // --- Validation --------------------------------------------------------------
 
@@ -63,6 +64,14 @@ const ATTACHMENT_ENTITY_TYPES = ['contact', 'deal', 'task', 'calendar_event'] as
  * Resolves each entity through its cone-enforcing accessor so a member/viewer
  * cannot list, attach, or detach files on an entity outside their org-chart
  * cone (org membership alone is not enough). Owner/admin are unrestricted.
+ *
+ * TWO AXES, BOTH ASKED. The cone answers "whose records may you see"; the
+ * capability answers "what may you do". `deal` is the one entity type where they
+ * differ today — `support` holds contacts.read and tasks.read but not
+ * deals.read, so resolving deals through the cone alone handed it the filenames
+ * and download URLs of pipeline documents (offers, contracts, price lists) that
+ * the deals.read gate in api/authenticate.ts exists to withhold. Attachments are
+ * the deal's contents by another door.
  */
 async function canSeeEntity(
   request: FastifyRequest,
@@ -81,6 +90,13 @@ async function canSeeEntity(
         throw err;
       }
     case 'deal':
+      // `false`, not a 403: every caller of this function turns false into the
+      // same ENTITY_NOT_FOUND an out-of-cone deal already returns, which is the
+      // deliberate non-oracle shape. A role without deals.read learns nothing it
+      // could not learn by guessing a uuid.
+      if (!can(request.user.role, 'deals.read')) {
+        return false;
+      }
       try {
         await getDealForUser(entityId, orgId, request.user);
         return true;

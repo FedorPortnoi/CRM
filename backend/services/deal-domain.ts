@@ -366,7 +366,7 @@ export async function createDealForUser(
   });
 
   if (deal.assigned_to) {
-    void dealCtx(deal.id).then((ctx) => {
+    void dealCtx({ orgId, dealId: deal.id }).then((ctx) => {
       if (ctx) void dispatchNotification({ eventType: 'deal.assigned', orgId, deal: ctx });
     });
   }
@@ -508,7 +508,7 @@ export async function updateDealForUser(
   });
 
   if (patch.assigned_to !== undefined && patch.assigned_to !== deal.assigned_to) {
-    void dealCtx(updated.id, undefined, requestingUserId).then((ctx) => {
+    void dealCtx({ orgId, dealId: updated.id, actorId: requestingUserId }).then((ctx) => {
       if (ctx) void dispatchNotification({ eventType: 'deal.reassigned', orgId, deal: ctx });
     });
   }

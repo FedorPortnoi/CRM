@@ -18,6 +18,7 @@ import {
 import { auditLog } from '../../services/audit';
 import { db } from '../../services/db';
 import { getVisibleUserIds, getAccessibleUserIds } from '../../services/visibility';
+import { can } from '../../services/capabilities';
 
 // ─── Local request types ──────────────────────────────────────────────────────
 
@@ -87,6 +88,44 @@ function hasInvalidEventWindow(startTime: Date, endTime: Date): boolean {
   return endTime.getTime() <= startTime.getTime();
 }
 
+/**
+ * THE PIPELINE LEAK THAT DOES NOT LIVE ON A /deals URL.
+ *
+ * `deals.read` is gated in api/authenticate.ts by matching the request PATH, and
+ * `/api/v1/calendar` matches nothing there — so a `support` user, whose whole
+ * definition is "contact record and activity, no pipeline, no money", read deal
+ * identity through the calendar: every event carried `deal: { id, title }` and
+ * the scalar `deal_id`, and `?deal_id=` filtered by a deal they may not see.
+ * Deal UUIDs to feed it come free from GET /api/v1/tasks.
+ *
+ * The answer is field-level omission rather than a 403 on the route: calendar
+ * events are legitimately support's work, and refusing the whole route would
+ * break their calendar. Same shape controllers/sync.ts and
+ * controllers/attachments.ts already chose for the identical question.
+ *
+ * BOTH the relation and the SCALAR have to go. `findMany({ include })` returns
+ * the whole model plus relations, so dropping only the `include` leaves
+ * `deal_id` on every row and the linkage is disclosed anyway — which also makes
+ * ignoring the `?deal_id=` filter pointless on its own. Hence one serializer,
+ * applied at every place this controller hands an event back, rather than an
+ * edit at the two sites that happened to carry an `include`.
+ */
+type EventWithMaybeDeal = { deal_id?: unknown; deal?: unknown };
+
+function mayReadDeals(request: FastifyRequest): boolean {
+  return can(request.user.role, 'deals.read');
+}
+
+function projectEvent<T extends EventWithMaybeDeal>(event: T, allowed: boolean): T {
+  if (allowed) return event;
+  const { deal: _deal, deal_id: _dealId, ...rest } = event;
+  return rest as unknown as T;
+}
+
+function projectEvents<T extends EventWithMaybeDeal>(events: T[], allowed: boolean): T[] {
+  return allowed ? events : events.map((event) => projectEvent(event, false));
+}
+
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 async function list(
@@ -100,13 +139,16 @@ async function list(
   // (consistent with the delta-sync scoping in sync.ts). Owner/admin => null =>
   // unrestricted.
   const visibleIds = await getVisibleUserIds(request.user, 'subtree');
+  const dealsVisible = mayReadDeals(request);
 
   const where: Prisma.CalendarEventWhereInput = {
     organization_id: request.user.org_id,
     ...(visibleIds !== null && { created_by: { in: visibleIds } }),
     ...(status ? { status } : { status: { not: CalendarEventStatus.cancelled } }),
     ...(contact_id && { contact_id }),
-    ...(deal_id && { deal_id }),
+    // Ignored, not rejected, for a caller who may not read the pipeline: a 400
+    // would answer the same question the filter was asking.
+    ...(deal_id && dealsVisible && { deal_id }),
     ...(attendee_id && { attendee_ids: { array_contains: attendee_id } }),
     ...((start || end) && {
       start_time: {
@@ -128,12 +170,15 @@ async function list(
       orderBy: { start_time: 'asc' },
       include: {
         contact: { select: { id: true, first_name: true, last_name: true } },
-        deal: { select: { id: true, title: true } },
+        ...(dealsVisible && { deal: { select: { id: true, title: true } } }),
       },
     }),
   );
 
-  reply.send({ data: events, meta: { total, page, per_page } });
+  reply.send({
+    data: projectEvents(events as EventWithMaybeDeal[], dealsVisible),
+    meta: { total, page, per_page },
+  });
 }
 
 async function create(
@@ -150,12 +195,19 @@ async function create(
     return;
   }
 
+  // A caller who may not read the pipeline never gets the deal queried on their
+  // behalf. dealBelongsToOrg is ORG-WIDE with no capability of its own, so its
+  // 201-vs-403 split was a free existence oracle for any deal UUID in the org.
+  // Refusing with the byte-identical body an out-of-org deal produces is what
+  // keeps the two answers indistinguishable.
   const [ownsContact, ownsDeal] = await Promise.all([
     rest.contact_id !== undefined
       ? contactBelongsToOrg(rest.contact_id, request.user.org_id)
       : Promise.resolve(true),
     rest.deal_id !== undefined
-      ? dealBelongsToOrg(rest.deal_id, request.user.org_id)
+      ? (mayReadDeals(request)
+        ? dealBelongsToOrg(rest.deal_id, request.user.org_id)
+        : Promise.resolve(false))
       : Promise.resolve(true),
   ]);
 
@@ -187,7 +239,10 @@ async function create(
 
   await syncYandexEventForUser(request.user.sub, event.id, request.user.org_id);
 
-  reply.status(201).send({ data: event, meta: {} });
+  reply.status(201).send({
+    data: projectEvent(event as EventWithMaybeDeal, mayReadDeals(request)),
+    meta: {},
+  });
 }
 
 async function getById(
@@ -208,7 +263,7 @@ async function getById(
     },
     include: {
       contact: { select: { id: true, first_name: true, last_name: true } },
-      deal: { select: { id: true, title: true } },
+      ...(mayReadDeals(request) && { deal: { select: { id: true, title: true } } }),
     },
   });
 
@@ -217,7 +272,7 @@ async function getById(
     return;
   }
 
-  reply.send({ data: event, meta: {} });
+  reply.send({ data: projectEvent(event as EventWithMaybeDeal, mayReadDeals(request)), meta: {} });
 }
 
 async function update(
@@ -228,7 +283,7 @@ async function update(
   const { attendees, start_time, end_time, send_invite: _send_invite, ...rest } =
     request.body as UpdateBody;
   const orgId = request.user.org_id;
-
+
   const visibleIds = await getAccessibleUserIds(request.user);
   const event = await db.calendarEvent.findFirst({
     where: {
@@ -263,12 +318,16 @@ async function update(
     return;
   }
 
+  // See the identical guard in create(): no deals.read, no deal lookup, and the
+  // same refusal body an out-of-org deal gets.
   const [ownsContact, ownsDeal] = await Promise.all([
     rest.contact_id !== undefined
       ? contactBelongsToOrg(rest.contact_id, orgId)
       : Promise.resolve(true),
     rest.deal_id !== undefined
-      ? dealBelongsToOrg(rest.deal_id, orgId)
+      ? (mayReadDeals(request)
+        ? dealBelongsToOrg(rest.deal_id, orgId)
+        : Promise.resolve(false))
       : Promise.resolve(true),
   ]);
 
@@ -312,7 +371,10 @@ async function update(
 
   await syncYandexEventForUser(request.user.sub, updated.id, orgId);
 
-  reply.send({ data: updated, meta: {} });
+  reply.send({
+    data: projectEvent(updated as EventWithMaybeDeal, mayReadDeals(request)),
+    meta: {},
+  });
 }
 
 async function cancel(
@@ -321,7 +383,7 @@ async function cancel(
 ): Promise<void> {
   const { id } = request.params as IdParams;
   const orgId = request.user.org_id;
-
+
   const visibleIds = await getAccessibleUserIds(request.user);
   const event = await db.calendarEvent.findFirst({
     where: {
@@ -367,7 +429,10 @@ async function cancel(
 
   await deleteYandexEventForUser(request.user.sub, updated.id, orgId);
 
-  reply.send({ data: updated, meta: {} });
+  reply.send({
+    data: projectEvent(updated as EventWithMaybeDeal, mayReadDeals(request)),
+    meta: {},
+  });
 }
 
 async function addPostMeetingNotes(
@@ -377,7 +442,7 @@ async function addPostMeetingNotes(
   const { id } = request.params as IdParams;
   const { notes } = request.body as PostMeetingNotesBody;
   const orgId = request.user.org_id;
-
+
   const visibleIds = await getAccessibleUserIds(request.user);
   const event = await db.calendarEvent.findFirst({
     where: {
@@ -421,7 +486,10 @@ async function addPostMeetingNotes(
     return;
   }
 
-  reply.send({ data: updated, meta: {} });
+  reply.send({
+    data: projectEvent(updated as EventWithMaybeDeal, mayReadDeals(request)),
+    meta: {},
+  });
 }
 
 async function markCompleted(
@@ -430,7 +498,7 @@ async function markCompleted(
 ): Promise<void> {
   const { id } = request.params as IdParams;
   const orgId = request.user.org_id;
-
+
   const visibleIds = await getAccessibleUserIds(request.user);
   const event = await db.calendarEvent.findFirst({
     where: {
@@ -477,7 +545,10 @@ async function markCompleted(
     return;
   }
 
-  reply.send({ data: updated, meta: {} });
+  reply.send({
+    data: projectEvent(updated as EventWithMaybeDeal, mayReadDeals(request)),
+    meta: {},
+  });
 }
 
 async function getAvailability(

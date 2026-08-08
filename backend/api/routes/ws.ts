@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import { requiresEmailVerification } from '../../config/security';
 import { verifyToken } from '../../mcp/server';
+import { db } from '../../services/db';
 import { validateAuthSession } from '../../services/sessions';
 import { joinRoom, leaveRoom } from '../../services/wsRooms';
 import {
@@ -75,6 +77,37 @@ export async function wsRoutes(fastify: FastifyInstance): Promise<void> {
 
       if (!user.sid) {
         socket.close(1008, 'Invalid token');
+        return;
+      }
+
+      /**
+       * THE VERIFICATION QUESTION, ASKED ONLY ON THIS BRANCH.
+       *
+       * GET /api/v1/ws is in isPublicApiRoute (../authenticate.ts), so the global
+       * preHandler — and with it the ACCOUNT_NOT_VERIFIED gate — never runs for
+       * this handler. The ticket branch above does not need it: GET
+       * /api/v1/ws/ticket is NOT public, so a ticket can only be minted by a
+       * request that already passed that gate, and the ticket is single-use with
+       * a short TTL. This branch takes a raw JWT straight off the wire and asks
+       * nothing, which made it the one door a session minted on an unproven
+       * address could still walk through.
+       *
+       * The read is inside the `else` on purpose: the ticket path stays at zero
+       * database queries per connect, and only the deprecated fallback pays for
+       * itself. Delete this block together with the fallback it guards.
+       */
+      const account = await db.user.findFirst({
+        where: { id: user.sub, organization_id: user.org_id, is_active: true },
+        select: { is_verified: true, created_at: true },
+      });
+
+      if (!account) {
+        socket.close(1008, 'Invalid token');
+        return;
+      }
+
+      if (requiresEmailVerification(account)) {
+        socket.close(1008, 'Account not verified');
         return;
       }
 

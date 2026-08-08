@@ -160,6 +160,92 @@
     return p.length >= 8 && /[a-z]/.test(p) && /[A-Z]/.test(p) && /[0-9]/.test(p) && /[^A-Za-z0-9]/.test(p);
   }
 
+  /**
+   * The blocklist, mirroring backend/services/password-blocklist.ts.
+   *
+   * A literal array and a hand-copied normalizer, because this page is served by
+   * the static server with no bundler — there is nothing to import from. The
+   * server is the authority; this only decides whether the user is told in
+   * Russian here or after a round trip.
+   *
+   * Order is load-bearing: symbol leet BEFORE stripping (or @ and $ are thrown
+   * away), digit leet AFTER dropping the trailing digit run (or `Password1!`
+   * folds to "passwordii", which is on no list of real passwords). Cyrillic is
+   * kept so `Пароль123!` is reachable.
+   */
+  var COMMON_PASSWORDS = new Set([
+    'password', 'passw', 'passwd', 'pass', 'mypassword', 'newpassword',
+    'qwerty', 'qwertyuiop', 'qwertyui', 'qwe', 'qweasd', 'qazwsx',
+    'asdf', 'asdfgh', 'asdfghjkl', 'zxcvbn', 'zxcvbnm',
+    'admin', 'administrator', 'root', 'superuser', 'guest', 'user', 'test',
+    'demo', 'default', 'changeme', 'letmein', 'welcome', 'login', 'secret',
+    'master', 'manager', 'director', 'boss', 'office', 'company', 'work', 'crm',
+    'monkey', 'dragon', 'shadow', 'sunshine', 'football', 'iloveyou',
+    'computer', 'internet', 'google', 'apple', 'hello', 'love', 'money',
+    'summer', 'winter', 'spring', 'autumn',
+    'abcdef', 'abcdefg', 'abcdefgh', 'aaaaaa', 'aaaaaaa', 'aaaaaaaa',
+    'parol', 'privet', 'spasibo', 'lyublyu', 'lyubov', 'schaste', 'udacha',
+    'rossiya', 'moskva', 'piter', 'peterburg', 'spartak', 'zenit', 'cska',
+    'natasha', 'marina', 'sergey', 'andrey', 'aleksandr', 'alex', 'dmitry',
+    'vladimir', 'mikhail', 'maksim', 'ivan', 'ivanov', 'petrov', 'petya',
+    'vasya', 'sasha', 'masha', 'katya', 'lena', 'olga', 'irina', 'anna', 'elena',
+    'yiukeng', 'ycuken', 'rabota', 'firma', 'kompaniya', 'direktor', 'sekret',
+    'пароль', 'парол', 'привет', 'спасибо', 'люблю', 'любовь', 'счастье',
+    'россия', 'москва', 'питер', 'спартак', 'зенит', 'цска',
+    'наташа', 'марина', 'сергей', 'андрей', 'александр', 'дмитрий', 'владимир',
+    'михаил', 'максим', 'иван', 'иванов', 'петров', 'петя', 'вася', 'саша',
+    'маша', 'катя', 'лена', 'ольга', 'ирина', 'анна', 'елена',
+    'йцукен', 'йцукенг', 'фыва', 'фывапролд',
+    'работа', 'фирма', 'компания', 'директор', 'секрет', 'солнышко',
+    'kub', '4kub', 'куб'
+  ]);
+
+  function normalizePasswordCandidates(value) {
+    var lowered = value.normalize('NFKC').toLowerCase();
+    var symbolLeet = { '@': 'a', '$': 's', '(': 'c', '+': 't' };
+    var digitLeet = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't' };
+
+    var folded = '';
+    for (var i = 0; i < lowered.length; i++) {
+      var ch = lowered[i];
+      folded += (symbolLeet[ch] || ch);
+    }
+
+    var stripped = '';
+    for (var j = 0; j < folded.length; j++) {
+      if (/[a-z0-9а-яё]/.test(folded[j])) stripped += folded[j];
+    }
+
+    var plain = stripped.replace(/[0-9]+$/, '');
+
+    var digitFolded = '';
+    for (var k = 0; k < plain.length; k++) {
+      digitFolded += (digitLeet[plain[k]] || plain[k]);
+    }
+
+    return plain === digitFolded ? [plain] : [plain, digitFolded];
+  }
+
+  function isCommonPassword(p) {
+    var candidates = normalizePasswordCandidates(p);
+    for (var i = 0; i < candidates.length; i++) {
+      if (COMMON_PASSWORDS.has(candidates[i])) return true;
+    }
+
+    // One character repeated, or a contiguous run up or down. Gated on length so
+    // a short residue can never trip it.
+    var n = candidates[0] || '';
+    if (n.length < 6) return false;
+    if (new Set(n).size === 1) return true;
+    var ascending = true, descending = true;
+    for (var m = 1; m < n.length; m++) {
+      var delta = n.charCodeAt(m) - n.charCodeAt(m - 1);
+      if (delta !== 1) ascending = false;
+      if (delta !== -1) descending = false;
+    }
+    return ascending || descending;
+  }
+
   $('submit-btn').addEventListener('click', async () => {
     setError('');
     ['name', 'org', 'email', 'phone', 'password'].forEach((f) => setFieldError(f, false));
@@ -177,6 +263,16 @@
     if (!isStrongPassword(password)) {
       setFieldError('password', true);
       setError('Минимум 8 символов: заглавная и строчная буквы, цифра и специальный символ');
+      $('password').focus();
+      return;
+    }
+    // Separate message from the character-class one above, on purpose: this page
+    // PRINTS the rule that produces `Password1!`, so a user who satisfies the
+    // printed rule and is still refused needs to be told why, not shown the same
+    // sentence again.
+    if (isCommonPassword(password)) {
+      setFieldError('password', true);
+      setError('Этот пароль слишком простой — придумайте другой');
       $('password').focus();
       return;
     }

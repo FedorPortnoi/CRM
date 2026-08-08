@@ -248,10 +248,19 @@ async function requireStage(stageId: string, orgId: string) {
   return stage;
 }
 
-async function siblingStages(pipelineId: string, exceptStageId?: string): Promise<StageRow[]> {
+/**
+ * PipelineStage carries no organization_id — it is tenant-owned only through
+ * Pipeline — so `pipeline_id` on its own is a bare foreign key, not a tenant
+ * scope. Both callers happen to run requirePipeline/requireStage first, which is
+ * why this has never leaked, but "safe because of what the caller did" is the
+ * exact shape this whole audit is about. `orgId` is required and the relation
+ * filter is stated here, so the function is correct on its own terms.
+ */
+async function siblingStages(pipelineId: string, orgId: string, exceptStageId?: string): Promise<StageRow[]> {
   return db.pipelineStage.findMany({
     where: {
       pipeline_id: pipelineId,
+      pipeline: { organization_id: orgId },
       ...(exceptStageId ? { id: { not: exceptStageId } } : {}),
     },
     select: {
@@ -388,7 +397,7 @@ export async function createStage(orgId: string, input: CreateStageInput) {
     );
   }
 
-  const siblings = await siblingStages(input.pipeline_id);
+  const siblings = await siblingStages(input.pipeline_id, orgId);
   assertNameFree(siblings, name);
   assertFlagsFree(siblings, isWon, isLost);
 
@@ -448,7 +457,7 @@ export async function updateStage(stageId: string, orgId: string, patch: UpdateS
     );
   }
 
-  const siblings = await siblingStages(stage.pipeline_id, stage.id);
+  const siblings = await siblingStages(stage.pipeline_id, orgId, stage.id);
 
   if (patch.name !== undefined && normalizeStageName(patch.name) !== normalizeStageName(stage.name)) {
     assertNameFree(siblings, patch.name);

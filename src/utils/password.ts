@@ -12,6 +12,8 @@
  * round trip, and what message the user reads when we do.
  */
 
+import { isCommonPassword } from './password-blocklist';
+
 export const PASSWORD_MIN_LENGTH = 8;
 
 /** bcrypt's Blowfish key schedule reads exactly 72 bytes and ignores the rest. */
@@ -42,7 +44,7 @@ export function utf8ByteLength(value: string): number {
   return bytes;
 }
 
-export type PasswordProblem = 'weak' | 'tooLong' | null;
+export type PasswordProblem = 'weak' | 'tooLong' | 'common' | null;
 
 /** Returns null when the password satisfies every rule the server enforces. */
 export function checkPassword(password: string): PasswordProblem {
@@ -55,5 +57,8 @@ export function checkPassword(password: string): PasswordProblem {
 
   if (!strong) return 'weak';
   if (utf8ByteLength(password) > PASSWORD_MAX_BYTES) return 'tooLong';
+  // Last, matching PasswordSchema's ordering, so a password that fails both the
+  // shape rules and the list is reported as the more actionable of the two.
+  if (isCommonPassword(password)) return 'common';
   return null;
 }

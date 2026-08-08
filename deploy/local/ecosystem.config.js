@@ -5,9 +5,15 @@
  * place of nginx, cloudflared in place of a public IP, and the database backup
  * job the self-hosted deployment otherwise does not have.
  *
- *   pm2 start deploy/local/ecosystem.config.js
+ *   pm2 start deploy/local/ecosystem.config.js --only crm-api,crm-static,crm-tunnel
  *   pm2 save                 remember them across reboots
  *   pm2 logs                 watch
+ *
+ * The `--only` is not optional politeness. Four apps are declared here and PM2
+ * currently manages three; the bare form additionally starts crm-backup, which
+ * runs a pg_dump against crm_prod the instant it comes up and installs a
+ * `30 3 * * *` cron restart that may duplicate an existing schedule. Add
+ * crm-backup to the list deliberately, when that is what you mean.
  *
  * `instances: 1` is stated explicitly on the API and it is load-bearing, not
  * decoration. Several things in this codebase are correct only in a single
@@ -99,6 +105,37 @@ module.exports = {
       cwd: ROOT,
       script: path.join(__dirname, 'static-server.js'),
       env: { STATIC_PORT: '8080' },
+      /**
+       * WHY THIS EXISTS. The security headers this server sends — the CSP with
+       * its per-page script hashes, nosniff, X-Frame-Options, Referrer-Policy —
+       * are computed by static-headers.js, which Node `require`s ONCE at process
+       * start. The site is deployed by editing files in place and nothing
+       * restarts this process, so the headers were correct in git and absent
+       * from every live response for hours, with no error anywhere and every
+       * unit test green. This closes that seam: change either file, PM2 bounces
+       * the process, and source and runtime cannot silently disagree again.
+       *
+       * PATHS ARE RELATIVE TO cwd, NOT TO THIS FILE. PM2 hands `watch` to
+       * chokidar with `cwd: pm_cwd` (pm2/lib/Watcher.js), and cwd is ROOT above,
+       * not deploy/local. Written as ['static-server.js','static-headers.js']
+       * these resolve to two paths that do not exist; with chokidar's
+       * ignoreInitial that emits nothing and errors nothing, so the watcher
+       * would look configured and fire on nothing — the same green-check-
+       * measuring-the-wrong-thing shape it is here to prevent. A test asserts
+       * every entry below resolves to a real file.
+       *
+       * website/ is deliberately NOT watched: every content edit would bounce
+       * the public site, and content changes need no restart (the CSP hashes are
+       * recomputed per request, memoised on mtime+size).
+       *
+       * This block only reaches the runtime through `pm2 delete crm-static &&
+       * pm2 start deploy/local/ecosystem.config.js --only crm-static`. A plain
+       * `pm2 restart` replays the STORED environment and never re-reads this
+       * file. Keep the `--only`: without it PM2 also starts crm-backup, which
+       * immediately runs a pg_dump against crm_prod.
+       */
+      watch: ['deploy/local/static-server.js', 'deploy/local/static-headers.js'],
+      watch_delay: 2000,
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -111,7 +148,10 @@ module.exports = {
       // either process above — there is no public IP and no port forwarding.
       name: 'crm-tunnel',
       cwd: ROOT,
-      script: 'cloudflared',
+      // Forward slashes on purpose: Windows accepts them, and a backslash path in
+      // a JS string is a minefield of escape sequences (\c, \P) that mangle
+      // silently rather than erroring.
+      script: 'C:/Program Files (x86)/cloudflared/cloudflared.exe',
       args: ['tunnel', '--config', path.join(__dirname, 'cloudflared.yml'), 'run'],
       interpreter: 'none',
       instances: 1,

@@ -1,3 +1,4 @@
+import { requiresEmailVerification } from '../config/security';
 import { can, type Capability } from '../services/capabilities';
 import { db } from '../services/db';
 import { validateAuthSession } from '../services/sessions';
@@ -34,7 +35,13 @@ export async function validateMcpPrincipal(user: McpPrincipal): Promise<McpToolE
   const [activeUser, org] = await Promise.all([
     db.user.findFirst({
       where: { id: user.sub, organization_id: user.org_id, is_active: true },
-      select: { id: true, role: true },
+      // is_verified and created_at are read for the gate below and for nothing
+      // else. Dropping them from this projection does not fail the gate loudly —
+      // requiresEmailVerification treats a row with no created_at as
+      // grandfathered — so it would reopen the hole while every behavioural test
+      // here still passed. tests/unit/backend/ws-mcp-verification.test.ts asserts
+      // the projection itself for that reason.
+      select: { id: true, role: true, is_verified: true, created_at: true },
     }),
     db.org.findUnique({
       where: { id: user.org_id },
@@ -44,6 +51,30 @@ export async function validateMcpPrincipal(user: McpPrincipal): Promise<McpToolE
 
   if (!activeUser || !org) {
     return mcpError('UNAUTHORIZED', 'Authenticated user is inactive or does not belong to an active organization');
+  }
+
+  /**
+   * THE SAME QUESTION THE REST preHandler ASKS, ASKED HERE TOO.
+   *
+   * enforceAuthenticatedApiRequest (../api/authenticate.ts) re-reads is_active,
+   * the live role, the live session AND is_verified on every /api/v1 request.
+   * This function re-read the first three and not the fourth, so the assistant
+   * was a softer door than the API for exactly the accounts the invite hole
+   * minted. Both surfaces must answer identically or one of them is the bypass.
+   *
+   * It is deliberately placed before validateAuthSession for the same reason it
+   * is there: a session-revoked error routes a client to login, which is the one
+   * place that cannot help an account that has never proved its address.
+   *
+   * See VERIFICATION_ENFORCED_SINCE for why accounts older than the cutover are
+   * admitted rather than locked out, and note that a projection missing
+   * created_at makes this admit everyone — see the select above.
+   */
+  if (requiresEmailVerification(activeUser)) {
+    return mcpError(
+      'ACCOUNT_NOT_VERIFIED',
+      'Please verify your account via the code sent to your email.',
+    );
   }
 
   const activeSession = await validateAuthSession({

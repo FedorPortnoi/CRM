@@ -51,6 +51,67 @@ function readTrimmedEnv(name: string, env: NodeJS.ProcessEnv = process.env): str
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+/**
+ * THE MOMENT A PROVEN EMAIL ADDRESS BECAME A CONDITION OF HOLDING A SESSION.
+ *
+ * Every account that existed before this instant is GRANDFATHERED: it keeps its
+ * session and its doors even with is_verified = false. Everything created after
+ * it must prove its address before a token is worth anything.
+ *
+ * Why a grandfather clause at all. Until this constant landed, the invite flow
+ * created accounts with is_verified = false and handed them a 7-day session
+ * anyway (backend/api/controllers/invites.ts), and /auth/join never asked the
+ * question. Real people are therefore sitting in production on unverified rows
+ * through no fault of their own, and none of them ever received an OTP. Gating
+ * them out would revoke live sessions mid-shift from users whose only remaining
+ * door — /auth/join — this same change closes, leaving them no recovery path at
+ * all. The set is finite and can only shrink: nothing after this instant joins
+ * it, and any member of it that verifies leaves it for good.
+ *
+ * IT MUST STAY A LITERAL. Written as `new Date()` it would be re-evaluated at
+ * every process start, grandfather every account that exists at boot, and turn
+ * the whole gate into a no-op that still reads like a gate. The unit tests
+ * assert against dates on either side of a hard-coded literal for that reason.
+ */
+export const VERIFICATION_ENFORCED_SINCE = new Date('2026-08-07T00:00:00.000Z');
+
+/**
+ * The revert switch for the three gates that depend on the constant above.
+ *
+ * Default ON. Set REQUIRE_EMAIL_VERIFICATION=false to put the server back to its
+ * pre-fix behaviour — invite acceptance mints a session again, /auth/join and
+ * the API preHandler stop asking — without a code change or a rebuild. It exists
+ * because the OTP leg of invite acceptance needs a client that knows how to
+ * enter a code: a backend that ships ahead of that client strands invitees on
+ * already-installed binaries, and ten seconds is the right amount of time for
+ * that to be undone.
+ */
+export function isEmailVerificationEnforced(env: NodeJS.ProcessEnv = process.env): boolean {
+  return readTrimmedEnv('REQUIRE_EMAIL_VERIFICATION', env) !== 'false';
+}
+
+/**
+ * Does this account still owe proof of its email address?
+ *
+ * The one place the two rules above are combined, so the API preHandler,
+ * /auth/join and anything added later cannot drift apart on either of them.
+ *
+ * A row with no created_at — which Prisma never produces, the column is NOT NULL
+ * with a default — is treated as grandfathered rather than blocked. Failing open
+ * on a value that cannot occur is the right direction for a gate whose worst
+ * outcome is locking real users out of a live CRM.
+ */
+export function requiresEmailVerification(
+  user: { is_verified?: boolean | null; created_at?: Date | null },
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (!isEmailVerificationEnforced(env)) return false;
+  if (user.is_verified === true) return false;
+  const createdAt = user.created_at;
+  if (!(createdAt instanceof Date)) return false;
+  return createdAt > VERIFICATION_ENFORCED_SINCE;
+}
+
 export function getRequiredSecret(
   name: string,
   options: RequiredSecretOptions = {},
@@ -442,7 +503,121 @@ function validateProductionUrl(
   return parsed;
 }
 
+/**
+ * The three literals `proxy-addr` accepts in place of an address, passed through
+ * unchanged. Everything else must be an IP or an IP/CIDR.
+ */
+const PROXY_ADDR_KEYWORDS = new Set(['loopback', 'linklocal', 'uniquelocal']);
+
+function isTrustedProxySegment(segment: string): boolean {
+  if (PROXY_ADDR_KEYWORDS.has(segment.toLowerCase())) {
+    return true;
+  }
+
+  const slash = segment.indexOf('/');
+  if (slash === -1) {
+    return net.isIP(segment) !== 0;
+  }
+
+  const address = segment.slice(0, slash);
+  const prefix = segment.slice(slash + 1);
+  const family = net.isIP(address);
+  if (family === 0 || !/^\d{1,3}$/.test(prefix)) {
+    return false;
+  }
+
+  const bits = Number(prefix);
+  return bits >= 0 && bits <= (family === 6 ? 128 : 32);
+}
+
+/**
+ * Is this process serving production traffic?
+ *
+ * Deliberately NOT `NODE_ENV === 'production'` alone. The failure this exists to
+ * catch is an operator hand-starting the API from the repo's own `.env` — and
+ * that file says NODE_ENV=development, so a guard keyed on NODE_ENV would be
+ * switched off by exactly the mistake it is meant to catch.
+ *
+ * The second clause is the predicate deploy/local/ecosystem.config.js already
+ * uses for the same reason: whatever NODE_ENV claims, a process attached to
+ * crm_prod is production.
+ */
+function isServingProduction(env: NodeJS.ProcessEnv): boolean {
+  if (env.NODE_ENV === 'production') return true;
+  return (readTrimmedEnv('DATABASE_URL', env) ?? '').includes('/crm_prod');
+}
+
+/**
+ * TRUSTED_PROXY: present, and an address rather than something that merely looks
+ * like one.
+ *
+ * WHY IT IS REQUIRED. backend/index.ts hands this value to Fastify's
+ * `trustProxy`. Unset, request.ip is the socket address — and behind cloudflared
+ * that is 127.0.0.1 for every human on Earth. Every per-IP rate limit then
+ * collapses into ONE bucket (the shared auth-IP floor is 60 requests / 15 min,
+ * so the 61st login attempt from anywhere locks out every customer), and every
+ * AuditEvent.ip_address is written 127.0.0.1, which destroys the forensic record
+ * permanently rather than for a window.
+ *
+ * WHY THE VALUE IS CHECKED AND NOT JUST ITS PRESENCE, and this is the part that
+ * matters most: `process.env` values are always strings, and Fastify only trusts
+ * every hop when trustProxy is the BOOLEAN true, so the "hop-count integer"
+ * form that reads like a sensible setting is not one. `TRUSTED_PROXY=2` is
+ * handed to proxy-addr, parsed by ipaddr.js as the address 0.0.0.2, compiles
+ * without complaint, trusts nothing, and collapses request.ip exactly as an
+ * unset value does — while looking correctly configured in the env file. That is
+ * strictly worse than the honest absence this check is named for, so an
+ * allowlist (IP, IP/CIDR, or a proxy-addr keyword) is the only safe shape;
+ * net.isIP rejects bare integers, which is what makes it work.
+ *
+ * `true`, `TRUE` and `yes` are rejected here too. They already fail — inside
+ * Fastify's constructor, as `TypeError: invalid IP address: true` — so this only
+ * converts an obscure library crash into a sentence naming the variable.
+ *
+ * THE ESCAPE HATCH. A deployment that genuinely takes client connections
+ * directly, with no proxy in front, has no address to name and must still boot.
+ * TRUSTED_PROXY_NOT_REQUIRED=true says so deliberately, in writing, in the same
+ * shape as ALLOW_LOCAL_DATABASE above.
+ */
+export function getTrustProxySetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const raw = readTrimmedEnv('TRUSTED_PROXY', env);
+
+  if (raw) {
+    const segments = raw.split(',').map((part) => part.trim());
+    if (segments.length === 0 || segments.some((segment) => !isTrustedProxySegment(segment))) {
+      throw new ConfigurationError(
+        'TRUSTED_PROXY must be an IP address, an IP/CIDR range, one of ' +
+          'loopback/linklocal/uniquelocal, or a comma-separated list of those. ' +
+          'It is not a hop count and it is not a boolean: a bare integer parses as an ' +
+          'address (2 becomes 0.0.0.2), trusts nothing, and silently collapses every ' +
+          "client's IP to the proxy's own.",
+      );
+    }
+    return raw;
+  }
+
+  if (isServingProduction(env) && readTrimmedEnv('TRUSTED_PROXY_NOT_REQUIRED', env) !== 'true') {
+    throw new ConfigurationError(
+      'TRUSTED_PROXY is required when serving production. Without it request.ip is the ' +
+        "reverse proxy's own address for every client, every per-IP rate limit collapses " +
+        'into a single shared bucket, and every audit record is written 127.0.0.1. Set it ' +
+        'to the proxy address (127.0.0.1 for a cloudflared tunnel on the same machine). If ' +
+        'this deployment really does receive client connections directly with no proxy in ' +
+        'front, set TRUSTED_PROXY_NOT_REQUIRED=true to acknowledge that deliberately.',
+    );
+  }
+
+  return undefined;
+}
+
 export function validateProductionConfig(env: NodeJS.ProcessEnv = process.env): void {
+  // Before the NODE_ENV gate below, on purpose. The scenario this catches is a
+  // hand-start that sourced the repo's .env, and that file sets
+  // NODE_ENV=development — so a check placed after the early return would be
+  // disabled by the very mistake it is looking for. getTrustProxySetting decides
+  // for itself whether this process is serving production.
+  getTrustProxySetting(env);
+
   if (env.NODE_ENV !== 'production') {
     return;
   }

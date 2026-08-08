@@ -12,6 +12,9 @@ const ru = {
     passwordTooShort: 'Пароль должен содержать не менее 8 символов',
     passwordWeak: 'Минимум 8 символов: заглавная и строчная буквы, цифра и специальный символ',
     passwordTooLong: 'Пароль слишком длинный (до 72 байт; кириллица считается за два символа)',
+    // Byte-identical to the server's message in PasswordSchema, so a shipped
+    // client and an updated one say the same thing about the same password.
+    passwordCommon: 'Этот пароль слишком простой — придумайте другой',
     signIn: 'Войти',
     loginSubtext: 'Контакты, сделки, задачи и встречи — всё в одном приложении.',
     orDivider: 'или',
@@ -25,6 +28,11 @@ const ru = {
     fillFields: 'Заполните поля',
     joinFillHint: 'Введите код компании, имя и пароль.',
     joinButton: 'Войти',
+    forgotPasswordIntro: 'Введите email, на который зарегистрирован аккаунт — мы пришлём код.',
+    forgotPasswordSent: 'Если такой аккаунт существует, код уже отправлен. Введите его и придумайте новый пароль.',
+    sendCode: 'Отправить код',
+    resetPassword: 'Сменить пароль',
+    codeInvalid: 'Код неверен или истёк',
     backToLogin: '← Назад',
     setPasswordTitle: 'Добро пожаловать, {{name}}!',
     setPasswordSubtitle: 'Придумайте свой пароль — никому не передавайте его.',

@@ -1,6 +1,9 @@
 // Data layer for the email-sequence screens.
 //
-// Backend (backend/api/routes/sequences.ts) — every route is authenticated AND owner/admin:
+// Backend (backend/api/routes/sequences.ts) — every route is authenticated AND gated on the
+// `sequences.manage` capability: owner, admin and MARKETER, not owner/admin alone. A role
+// without it gets 403 FORBIDDEN from the request gate before the handler runs:
+
 //   GET    /sequences                        list, optional ?status=
 //   POST   /sequences                        create, optionally with the first steps
 //   GET    /sequences/:id                    sequence + ordered steps + active_enrollments

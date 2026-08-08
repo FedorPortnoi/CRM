@@ -105,10 +105,24 @@ function handleSequenceError(error: unknown, reply: FastifyReply): FastifyReply 
 }
 
 /**
+ * The 403 body for this surface. Exported because `adminRoutePolicy` in api/authenticate.ts
+ * now denies first and must answer with the SAME bytes — a client that has always seen this
+ * sentence must not start seeing a different one just because the gate moved earlier in the
+ * pipeline. The literal is repeated there rather than imported: authenticate.ts is a leaf
+ * that pulls in only db/sessions/capabilities, and importing this controller would drag the
+ * whole sequences → email → encryption chain into the request-gate module. Both copies are
+ * pinned by tests (sequences.test.ts and authenticate.test.ts), so drift fails loudly.
+ */
+export const SEQUENCE_ADMIN_DENIAL_MESSAGE = 'Only owner or admin can manage email sequences';
+
+/**
  * Sequences are an org-wide marketing surface with legal exposure attached, so mutating
  * them is owner/admin only — the same bar `adminRoutePolicy` in api/authenticate.ts sets
- * for the other org-wide admin surfaces. Enforced here as well as there so the check holds
- * even if the route table and the policy table drift apart.
+ * for the other org-wide admin surfaces. That policy entry exists now
+ * (`sequences.manage_admin` → `sequences.manage`) and is what AUDITS the denial; this check
+ * is kept as the second door so the gate holds even if the route table and the policy table
+ * drift apart. Deliberately writes no audit row of its own: the preHandler returns before
+ * the handler runs, so auditing here too would only ever double-log.
  *
  * Returns the reply when it denies, never undefined, so callers can `return` it and stop.
  */
@@ -128,7 +142,7 @@ export function denySequenceAdmin(
   }
 
   return reply.status(403).send({
-    error: { code: 'FORBIDDEN', message: 'Only owner or admin can manage email sequences' },
+    error: { code: 'FORBIDDEN', message: SEQUENCE_ADMIN_DENIAL_MESSAGE },
   });
 }
 

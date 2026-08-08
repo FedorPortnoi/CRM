@@ -1339,3 +1339,31 @@ model AmoSyncConflict {
 
   @@index([organization_id, created_at])
 }
+
+/// Durable rate-limit counters for the UNAUTHENTICATED auth routes only.
+///
+/// Deliberately NOT used by the global limiter in backend/index.ts, nor by the
+/// high-volume route limiters (tracking pixel, OTA manifest and assets, amoCRM
+/// webhook, imports, export) — one INSERT per request there would be real write
+/// amplification on the same disk as the customer data, and none of them guards a
+/// secret worth counting durably. See services/rate-limit-store.ts.
+///
+/// No organization_id, and that is deliberate: every row here is written BEFORE
+/// authentication, so there is no tenant to scope to. Same exception, and the same
+/// reason, as the IdempotencyKey TTL sweep — server-side housekeeping, never a
+/// tenant read.
+///
+/// `id` is a SHA-256 digest of "<scope>|<key>", never the key itself. The key on
+/// POST /auth/login is the IP joined to the submitted email and LoginSchema caps
+/// neither, so storing it raw would be both a table-bloat vector on an
+/// unauthenticated endpoint and a new register of who tried to sign in from where
+/// (ФЗ-152).
+model RateLimitBucket {
+  id           String   @id
+  count        Int      @default(0)
+  window_start DateTime
+  expires_at   DateTime
+  updated_at   DateTime @updatedAt
+
+  @@index([expires_at])
+}

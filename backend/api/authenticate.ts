@@ -5,6 +5,8 @@ import { validateAuthSession } from '../services/sessions';
 import { TRACKING_OPEN_PATH_PREFIX } from '../services/open-tracking';
 import { UPDATES_ASSETS_PATH_PREFIX, UPDATES_MANIFEST_PATH } from '../services/updates-store';
 import { can, hasAnyWriteCapability, type Capability } from '../services/capabilities';
+import { requiresEmailVerification } from '../config/security';
+import { declaredRouteCapability } from './route-gates';
 
 // One-click opt-out from a marketing email. Kept next to the tracking prefix so both
 // public prefixes are visible in one place. The trailing slash is load-bearing: it makes
@@ -15,7 +17,17 @@ const CONSENT_UNSUBSCRIBE_PATH_PREFIX = '/api/v1/consent/unsubscribe/';
 type AdminRoutePolicy = {
   action: string;
   reason: string;
+  /**
+   * Set only by the declared table in api/route-gates.ts, which names its
+   * capability directly instead of going through ACTION_CAPABILITY. Everything
+   * else still resolves through that table so the whole authorization surface
+   * stays legible in one screen.
+   */
+  capability?: Capability;
 };
+
+/** Audit action for a denial that came from the declared route-gate table. */
+const DECLARED_CAPABILITY_ACTION = 'route.declared_capability';
 
 /**
  * Which capability each guarded route actually requires.
@@ -46,11 +58,33 @@ const ACTION_CAPABILITY: Record<string, Capability> = {
   'tasks.reminders_read': 'tasks.read',
   'tasks.reminders_write': 'tasks.write',
   'integrations.amocrm_manage': 'integrations.manage',
+  // Owner, admin AND marketer. Mapped explicitly because the unmapped fallback
+  // below is `org.manage`, which marketer does NOT hold — registering the route
+  // without this line would 403 every marketer on the entire marketing surface
+  // that is their job. Mirrors denySequenceAdmin in controllers/sequences.ts,
+  // which asks the identical question.
+  'sequences.manage_admin': 'sequences.manage',
   // Minting an invite link IS adding a member — the account it creates is real
   // the moment the link is redeemed. Gated identically to the rest of team
   // administration so the link route cannot become a softer door into the org
   // than the button beside it.
   'team.invite': 'team.manage',
+  // Team administration. These six routes were the last authorization decisions
+  // in the product made ENTIRELY outside this layer: adminRoutePolicy had no
+  // branch for /auth/users or /auth/company-code, so requiredCapability was
+  // undefined, the capability check was skipped, and a raw `role !== 'owner' &&
+  // role !== 'admin'` inside the controller was the only gate — which meant the
+  // denial was never audited either. Mapped here so both are true again.
+  //
+  // 'team.read', explicitly. GET /api/v1/auth/users is called by every role from
+  // the assignee picker, the DM composer and the API-keys screen, and the
+  // unmapped fallback below is `org.manage`: omitting this line 403s every
+  // head/member/support/marketer/accountant/viewer on shipped 1.1.6 builds.
+  'team.read_members': 'team.read',
+  'team.admin': 'team.manage',
+  // Owner-only, matching the literal it replaces. NOT team.manage — that would
+  // hand re-roling to every admin.
+  'team.role_change': 'team.manage_admins',
   // Pipelines, stages, workflows and example-data resets are organisation
   // configuration rather than day-to-day sales work — deliberately NOT
   // 'deals.write', which would hand them to every sales manager.
@@ -100,6 +134,11 @@ function isPublicApiRoute(request: FastifyRequest): boolean {
       path === '/api/v1/auth/join' ||
       path === '/api/v1/auth/verify' ||
       path === '/api/v1/auth/verify/resend' ||
+      // Password recovery. Whoever needs these cannot sign in by definition, so
+      // requiring a token would make the feature unreachable. Both answer
+      // identically whatever the address resolves to — see the controller.
+      path === '/api/v1/auth/forgot-password' ||
+      path === '/api/v1/auth/reset-password' ||
       // Invite redemption. The person on the other end has no account yet — that
       // is the entire point — so there is no token they could present. Each of
       // these instead requires a single-use secret from the invite itself, and
@@ -199,7 +238,37 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
   const path = apiPath(request);
   const method = request.method.toUpperCase();
 
-  if (method === 'GET' && path === '/api/v1/auth/audit') {
+  /**
+   * THE DECLARED TABLE, ASKED FIRST — and only ever to ADD a requirement.
+   *
+   * Keyed on `request.routeOptions.url`, the pattern Fastify actually matched,
+   * so it cannot be dodged by encoding and cannot drift from the registration.
+   * A route that is absent from the table falls straight through to the ordinary
+   * chain below, which is why this is safe to land ahead of the table being
+   * complete: it can refuse a route the chain would have allowed, never allow
+   * one the chain would have refused. On a 404 there is no matched pattern and
+   * `routeOptions.url` is undefined, so a typo stays a 404 rather than becoming
+   * a confusing 403.
+   */
+  const declared = declaredRouteCapability(method, request.routeOptions?.url);
+  if (declared) {
+    return {
+      action: DECLARED_CAPABILITY_ACTION,
+      capability: declared,
+      reason: declared === 'deals.read'
+        ? 'reading the pipeline requires deals.read'
+        : 'this route requires a capability your role does not hold',
+    };
+  }
+
+  // isReadOnlyMethod, not `method === 'GET'`, on every read gate in this function.
+  // Fastify auto-registers a HEAD twin for every GET route (exposeHeadRoutes
+  // defaults true and index.ts does not disable it), and that twin runs the SAME
+  // handler — it only discards the body on the way out. A gate anchored to GET
+  // therefore lets HEAD execute the handler and returns content-length, which is
+  // an existence-and-size oracle on top of doing the work (HEAD /export/contacts/pdf
+  // renders the whole PDF for a caller who does not hold data.export).
+  if (isReadOnlyMethod(method) && path === '/api/v1/auth/audit') {
     return { action: 'audit.read', reason: 'audit access requires owner or admin' };
   }
 
@@ -218,6 +287,69 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
       action: 'integrations.amocrm_manage',
       reason: 'managing the amoCRM integration requires owner or admin',
     };
+  }
+
+  // Email sequences. The controller (denySequenceAdmin, controllers/sequences.ts)
+  // already enforces the identical capability on all 14 routes; this entry exists
+  // so the DENIAL is AUDITED like every other admin surface. It changes who is
+  // permitted by exactly nothing — both doors ask can(role, 'sequences.manage').
+  //
+  // The reason string is byte-identical to the controller's 403 body on purpose:
+  // the preHandler now answers first, and no client should see the message change.
+  // It is SEQUENCE_ADMIN_DENIAL_MESSAGE in controllers/sequences.ts; both sides are
+  // pinned by tests (authenticate.test.ts and sequences.test.ts) so they cannot drift.
+  //
+  // Exact match plus trailing-slash prefix, not a bare startsWith: a future
+  // '/api/v1/sequences-archive' mount must not be swept in silently.
+  //
+  // Deliberately NOT extended to '/api/v1/consent' (withdrawal must stay open to
+  // every role — ФЗ-38 art. 18) nor to '/api/v1/email-templates' (reads there are
+  // open to any org member by design; see controllers/email-templates.ts).
+  if (path === '/api/v1/sequences' || path.startsWith('/api/v1/sequences/')) {
+    return {
+      action: 'sequences.manage_admin',
+      reason: 'Only owner or admin can manage email sequences',
+    };
+  }
+
+  /**
+   * Team administration.
+   *
+   * Exact paths and anchored regexes, never `startsWith('/api/v1/auth')` — that
+   * would swallow /auth/me/*, /auth/sessions and /auth/logout and 403 every
+   * read-only role out of its own account maintenance.
+   *
+   * Each `reason` is byte-identical to the controller's 403 body
+   * (TEAM_DENIAL_MESSAGES in controllers/auth.ts) because this hook now answers
+   * first and src/app/settings/team.tsx renders the message verbatim into an
+   * Alert. Both sides are pinned by tests/unit/backend/auth-team-admin-authz.test.ts.
+   */
+  if (isReadOnlyMethod(method) && path === '/api/v1/auth/users') {
+    return { action: 'team.read_members', reason: 'listing members requires team.read' };
+  }
+
+  if (method === 'POST' && path === '/api/v1/auth/users/invite') {
+    return { action: 'team.admin', reason: 'Only owners and admins can invite members' };
+  }
+
+  if (/^\/api\/v1\/auth\/users\/[^/]+\/deactivate$/.test(path)) {
+    return { action: 'team.admin', reason: 'Only owners and admins can deactivate members' };
+  }
+
+  if (/^\/api\/v1\/auth\/users\/[^/]+\/manager$/.test(path)) {
+    return { action: 'team.admin', reason: 'Only owners and admins can assign managers' };
+  }
+
+  if (/^\/api\/v1\/auth\/users\/[^/]+\/role$/.test(path)) {
+    return { action: 'team.role_change', reason: 'Only owners can change user roles' };
+  }
+
+  if (isReadOnlyMethod(method) && path === '/api/v1/auth/company-code') {
+    return { action: 'team.admin', reason: 'Only owners and admins can view the company code' };
+  }
+
+  if (method === 'POST' && path === '/api/v1/auth/company-code/rotate') {
+    return { action: 'team.admin', reason: 'Only owners and admins can rotate the company code' };
   }
 
   // Invite links. The three public redemption routes below (/invites/open,
@@ -252,14 +384,25 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
   // `/deals/stages/library` is listed explicitly because it is TWO segments past
   // `/deals`, and every clause above it stops at one: the regex is `[^/]+$`, and the
   // two literals are exact. A read that matches no clause here is authenticated but
-  // ungated, which is how `support` — the one role this branch exists to exclude —
-  // could read it. Any future `/deals/<a>/<b>` GET has the same hole by default.
+  // ungated.
+  //
+  // `/contacts/:id/deals` is the proof that this shape of gate does not hold: it
+  // returns full deal rows (deal-domain's dealInclude — value, currency,
+  // probability, expected_close) from a path that does not contain the word
+  // `deals` where this branch was looking, so `support` read the pipeline through
+  // the contact screen while being refused it one route over. The gate keys on the
+  // URL; the data does not. THE URL IS NOT THE AUTHORITY ON WHAT A HANDLER READS —
+  // before adding a route that returns deal rows, add it here AND to
+  // DEAL_READ_ROUTES in api/route-gates.ts, which now exists: it is keyed on the
+  // pattern Fastify matched rather than on a hand-written regex, and a drift test
+  // fails the build when a registered deal route is missing from it.
   if (
-    method === 'GET' &&
+    isReadOnlyMethod(method) &&
     (path === '/api/v1/deals' ||
       path === '/api/v1/deals/pipelines' ||
       path === '/api/v1/deals/stages/library' ||
-      /^\/api\/v1\/deals\/[^/]+$/.test(path))
+      /^\/api\/v1\/deals\/[^/]+$/.test(path) ||
+      /^\/api\/v1\/contacts\/[^/]+\/deals$/.test(path))
   ) {
     return { action: 'deals.read', reason: 'reading the pipeline requires deals.read' };
   }
@@ -274,7 +417,7 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
   // /analytics/export is matched by the data.export branch below and keeps that
   // stronger gate; this covers the read paths.
   if (
-    method === 'GET' &&
+    isReadOnlyMethod(method) &&
     (path === '/api/v1/analytics/dashboard' || path.startsWith('/api/v1/reports/'))
   ) {
     return { action: 'analytics.read_revenue', reason: 'revenue analytics require a role that may see money' };
@@ -282,8 +425,8 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
 
   if (
     (method === 'POST' && path === '/api/v1/analytics/export') ||
-    (method === 'GET' && path.startsWith('/api/v1/analytics/export/')) ||
-    (method === 'GET' && path.startsWith('/api/v1/export/'))
+    (isReadOnlyMethod(method) && path.startsWith('/api/v1/analytics/export/')) ||
+    (isReadOnlyMethod(method) && path.startsWith('/api/v1/export/'))
   ) {
     return { action: 'data.export', reason: 'exports require owner or admin' };
   }
@@ -389,12 +532,49 @@ export async function enforceAuthenticatedApiRequest(
       organization_id: tokenUser.org_id,
       is_active: true,
     },
-    select: { id: true, organization_id: true, role: true },
+    select: { id: true, organization_id: true, role: true, is_verified: true, created_at: true },
   });
 
   if (!activeUser) {
     return reply.status(401).send({
       error: { code: 'UNAUTHORIZED', message: 'User is inactive or no longer belongs to this organization' },
+    });
+  }
+
+  /**
+   * IDENTITY, ASKED ON EVERY REQUEST — not once at the login door.
+   *
+   * This hook already re-reads is_active, org membership, the live role and the
+   * live session, precisely because a token is a claim about the past. Whether
+   * the holder ever proved they own the address on the account was the one
+   * question it did not re-ask, and invite acceptance was minting seven-day
+   * sessions for addresses nobody had proven. A session that outlives the fact
+   * it was issued on is the same defect in both cases.
+   *
+   * It asks `is_verified`, not `email_verified`, so this door, /auth/login
+   * (auth.ts) and /auth/join all ask the identical question of the identical
+   * column — email_verified has never gated anything and was, until this change,
+   * written `true` for addresses that had proven nothing.
+   *
+   * 403 rather than 401: the account is real and the token is valid, so the
+   * client must route to the verification step. A 401 sends it to the login
+   * screen, where /auth/login refuses the same account for the same reason and
+   * the person has nowhere left to go.
+   *
+   * See VERIFICATION_ENFORCED_SINCE for why accounts older than the cutover are
+   * admitted rather than locked out.
+   */
+  if (requiresEmailVerification(activeUser)) {
+    await auditLog({
+      action: 'auth.unverified_session_rejected',
+      outcome: 'failure',
+      request,
+      organizationId: tokenUser.org_id,
+      userId: tokenUser.sub,
+      metadata: { reason: 'email_not_verified' },
+    });
+    return reply.status(403).send({
+      error: { code: 'ACCOUNT_NOT_VERIFIED', message: 'Please verify your account via the code sent to your email.' },
     });
   }
 
@@ -428,7 +608,7 @@ export async function enforceAuthenticatedApiRequest(
   // that only owner and admin hold — so forgetting to add a mapping locks a
   // route down rather than opening it up.
   const requiredCapability: Capability | undefined = adminPolicy
-    ? ACTION_CAPABILITY[adminPolicy.action] ?? 'org.manage'
+    ? adminPolicy.capability ?? ACTION_CAPABILITY[adminPolicy.action] ?? 'org.manage'
     : undefined;
 
   if (adminPolicy && requiredCapability && !can(activeUser.role, requiredCapability)) {

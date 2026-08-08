@@ -6,6 +6,7 @@ import { sendPushToUser } from './push';
 import { dispatchNotification, taskCtx, dealCtx } from './notificationEngine';
 import { runWebhookDeliveryTick } from './webhooks';
 import { reapIdempotencyKeys } from './idempotency';
+import { reapRateLimitBuckets } from './rate-limit-store';
 import { runSequenceTick } from './sequences';
 import {
   computeNextFire,
@@ -257,7 +258,7 @@ async function expireLapsedReminders(now: Date): Promise<void> {
       continue;
     }
 
-    const ctx = await taskCtx(reminder.task_id);
+    const ctx = await taskCtx({ orgId: reminder.organization_id, taskId: reminder.task_id });
     if (!ctx) continue;
 
     // `task.expired` is NOT yet a member of NotificationEventType. Adding it means editing
@@ -410,6 +411,9 @@ export async function runReminders(): Promise<void> {
   // they would have fired, rather than swept eagerly every minute. The seek is the same index
   // the delivery pass uses, so this costs nothing extra; an eager sweep would scan every
   // active reminder in the database once a minute to find the handful that changed.
+  // tenant-scope: cross-tenant — the scheduler's own retirement pass, run on a
+  // timer for every org at once. It writes only is_active and reads no row data;
+  // scoping it to one org would mean a query per org every minute.
   await db.taskReminder.updateMany({
     where: {
       is_active: true,
@@ -612,8 +616,10 @@ async function cleanupStaleUnverifiedAccounts(): Promise<void> {
         await tx.$executeRaw`DELETE FROM "PipelineStage" ps USING "Pipeline" p WHERE ps.pipeline_id = p.id AND p.organization_id = ${row.org_id}::uuid`;
         await tx.$executeRaw`DELETE FROM "Pipeline" WHERE organization_id = ${row.org_id}::uuid`;
         await tx.$executeRaw`DELETE FROM "AuthSession" WHERE organization_id = ${row.org_id}::uuid`;
+        // tenant-scope: cross-tenant — user_id came out of the org-scoped query above.
         await tx.$executeRaw`DELETE FROM "VerificationCode" WHERE user_id = ${row.user_id}::uuid`;
         await tx.$executeRaw`UPDATE organizations SET owner_id = NULL WHERE id = ${row.org_id}::uuid`;
+        // tenant-scope: cross-tenant — same, and the org is deleted on the next line.
         await tx.$executeRaw`DELETE FROM "User" WHERE id = ${row.user_id}::uuid`;
         await tx.$executeRaw`DELETE FROM organizations WHERE id = ${row.org_id}::uuid`;
       });
@@ -635,7 +641,7 @@ async function runDeadlineNotifications(): Promise<void> {
     select: { id: true, organization_id: true },
   });
   for (const t of tasks24h) {
-    const ctx = await taskCtx(t.id);
+    const ctx = await taskCtx({ orgId: t.organization_id, taskId: t.id });
     if (ctx) {
       await dispatchNotification({ eventType: 'task.deadline_24h', orgId: t.organization_id, task: ctx });
     }
@@ -650,7 +656,7 @@ async function runDeadlineNotifications(): Promise<void> {
     select: { id: true, organization_id: true },
   });
   for (const t of tasks2h) {
-    const ctx = await taskCtx(t.id);
+    const ctx = await taskCtx({ orgId: t.organization_id, taskId: t.id });
     if (ctx) {
       await dispatchNotification({ eventType: 'task.deadline_2h', orgId: t.organization_id, task: ctx });
     }
@@ -665,7 +671,7 @@ async function runDeadlineNotifications(): Promise<void> {
     select: { id: true, organization_id: true },
   });
   for (const t of overdueTasks) {
-    const ctx = await taskCtx(t.id);
+    const ctx = await taskCtx({ orgId: t.organization_id, taskId: t.id });
     if (ctx) {
       await dispatchNotification({ eventType: 'task.overdue', orgId: t.organization_id, task: ctx });
     }
@@ -680,7 +686,7 @@ async function runDeadlineNotifications(): Promise<void> {
     select: { id: true, organization_id: true },
   });
   for (const d of deals7d) {
-    const ctx = await dealCtx(d.id);
+    const ctx = await dealCtx({ orgId: d.organization_id, dealId: d.id });
     if (ctx) {
       await dispatchNotification({ eventType: 'deal.close_7d', orgId: d.organization_id, deal: ctx });
     }
@@ -695,7 +701,7 @@ async function runDeadlineNotifications(): Promise<void> {
     select: { id: true, organization_id: true },
   });
   for (const d of deals1d) {
-    const ctx = await dealCtx(d.id);
+    const ctx = await dealCtx({ orgId: d.organization_id, dealId: d.id });
     if (ctx) {
       await dispatchNotification({ eventType: 'deal.close_1d', orgId: d.organization_id, deal: ctx });
     }
@@ -751,6 +757,31 @@ function tickSequences(): void {
 }
 
 /**
+ * The hourly loop.
+ *
+ * Lifted out of startScheduler and exported so a test can drive it without starting
+ * two real timers; the jobs on it, and their order, are unchanged.
+ */
+export function runHourlyJobs(): void {
+  void runExclusively('stale-account-cleanup', cleanupStaleUnverifiedAccounts);
+  void runExclusively('join-code-rotation', rotateExpiredJoinCodes);
+  void runExclusively('idempotency-reaper', async () => {
+    await reapIdempotencyKeys();
+  });
+  // TTL sweep for the durable auth rate-limit buckets. Backed by
+  // @@index([expires_at]); see services/rate-limit-store.ts for why this is belt
+  // and braces rather than the only thing bounding the table.
+  void runExclusively('rate-limit-reaper', async () => {
+    await reapRateLimitBuckets();
+  });
+  // The reconciliation service gates itself to one configured UTC hour, so
+  // sharing the hourly loop does not turn this into an hourly full import.
+  void runExclusively('amocrm-reconcile', async () => {
+    await runAmoReconciliationTick();
+  });
+}
+
+/**
  * Every job on both timers goes through runExclusively, so none of them can overlap itself.
  * They are still started concurrently with each other — the guard is per job name, and a slow
  * webhook tick has no reason to hold up reminders.
@@ -775,26 +806,13 @@ export function startScheduler(): void {
     tickSequences();
   };
 
-  const hourlyJobs = (): void => {
-    void runExclusively('stale-account-cleanup', cleanupStaleUnverifiedAccounts);
-    void runExclusively('join-code-rotation', rotateExpiredJoinCodes);
-    void runExclusively('idempotency-reaper', async () => {
-      await reapIdempotencyKeys();
-    });
-    // The reconciliation service gates itself to one configured UTC hour, so
-    // sharing the hourly loop does not turn this into an hourly full import.
-    void runExclusively('amocrm-reconcile', async () => {
-      await runAmoReconciliationTick();
-    });
-  };
-
   // Outbound webhook retries and email-sequence sends share this loop rather than adding
   // second and third timers.
   minuteJobs();
   setInterval(minuteJobs, 60_000);
 
-  // Hourly cleanup of orgs whose owner never verified within 24 h, plus join-code rotation
-  // and the public-API idempotency TTL sweep.
-  hourlyJobs();
-  setInterval(hourlyJobs, 60 * 60_000);
+  // Hourly cleanup of orgs whose owner never verified within 24 h, plus join-code rotation,
+  // the public-API idempotency TTL sweep and the auth rate-limit bucket sweep.
+  runHourlyJobs();
+  setInterval(runHourlyJobs, 60 * 60_000);
 }

@@ -48,9 +48,13 @@ describe('MCP validation helpers', () => {
         message: 'Authenticated user is inactive or does not belong to an active organization',
       },
     });
+    // is_verified and created_at joined the projection when MCP started asking
+    // the verification question — requiresEmailVerification reads created_at to
+    // decide the grandfather cutoff, and a row missing it is treated as exempt.
+    // ws-mcp-verification.test.ts owns the behavioural side of that gate.
     expect(dbMock.user.findFirst).toHaveBeenCalledWith({
       where: { id: user.sub, organization_id: user.org_id, is_active: true },
-      select: { id: true, role: true },
+      select: { id: true, role: true, is_verified: true, created_at: true },
     });
   });
 

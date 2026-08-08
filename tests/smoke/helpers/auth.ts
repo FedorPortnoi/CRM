@@ -86,7 +86,11 @@ export async function verifyRegisteredSmokeUser({
   }
 }
 
-export const SMOKE_ORG_PASSWORD = "Password123!";
+// Was "Password123!" until the offline blocklist landed, which refuses it — and
+// registerVerifiedOrg() below runs at SETUP, so the whole Playwright suite died
+// before its first assertion rather than on one. Any replacement has to stay off
+// the list; verified with isBlockedPassword().
+export const SMOKE_ORG_PASSWORD = "Smoke7#kvartira";
 export const SMOKE_ORG_PHONE = "+70000000000";
 
 export interface RegisteredOrgUser {

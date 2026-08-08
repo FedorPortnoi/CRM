@@ -366,6 +366,28 @@ export default function LoginScreen() {
               >
                 <Text style={styles.inviteLinkText}>Меня пригласили — ввести код приглашения</Text>
               </Pressable>
+
+              {/* Shown only on the sign-in tab. /auth/join authenticates with a
+                  company code plus a username, and reset-by-email is keyed on
+                  User.email — invited members whose address is still NULL have no
+                  self-service path at all, so offering them this link would be a
+                  dead end rather than a recovery.
+
+                  Until this existed there was no password recovery anywhere in
+                  the product: both /auth/me routes need a session the locked-out
+                  user does not have, and the remedy was a hand-written UPDATE
+                  against the production database. */}
+              {!isJoin && (
+                <Pressable
+                  accessibilityLabel="Восстановить пароль"
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  onPress={() => router.push('/forgot-password' as never)}
+                  style={({ pressed }) => [styles.inviteLinkButton, pressed && styles.pressed]}
+                >
+                  <Text style={styles.inviteLinkText}>{t('auth.forgotPassword')}</Text>
+                </Pressable>
+              )}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>

@@ -1,6 +1,20 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 import { registerVerifiedOrg, SMOKE_ORG_PASSWORD, SMOKE_ORG_PHONE } from './helpers/auth';
 
+/**
+ * SMOKE_ORG_PASSWORD was "Password123!" until the offline blocklist landed in
+ * PasswordSchema (backend/services/password-blocklist.ts), which rejects it — it
+ * normalizes to "password". That constant is the shared entry point for the whole
+ * Playwright suite: registerVerifiedOrg() uses it, so every spec that calls it was
+ * failing at SETUP rather than on one assertion. helpers/auth.ts now declares a
+ * string off the list.
+ *
+ * The login assertion further down still uses a literal 'Password123!' deliberately
+ * and must NOT be swapped: LoginSchema is `z.string().min(1)` and is untouched by
+ * the blocklist on purpose, because applying the policy to a login would lock out
+ * every existing user whose stored password is on the list.
+ */
+
 function authHeaders(token: string) { return { Authorization: `Bearer ${token}` }; }
 function daysFromNow(n: number) { return new Date(Date.now() + n * 86400000).toISOString(); }
 
@@ -97,6 +111,9 @@ test('auth: wrong password on login returns 401 INVALID_CREDENTIALS', async ({ r
   expect(((await r.json()) as { error: { code: string } }).error.code).toBe('INVALID_CREDENTIALS');
 });
 test('auth: login with nonexistent email returns 401', async ({ request }) => {
+  // Deliberately a blocklisted string: LoginSchema does NOT apply the password
+  // policy, and this asserts that it still does not. A 400 here would mean
+  // someone pointed PasswordSchema at login and locked out every existing user.
   const r = await request.post('/api/v1/auth/login', { data: { email: `nobody-${Date.now()}@example.com`, password: 'Password123!' } });
   expect(r.status()).toBe(401);
 });
