@@ -4,6 +4,10 @@
 > the scattered `SESSION_LOG_*.md` files as the go-to reference for what the app is, how it's built,
 > and its current state. Keep it updated as the app evolves.
 >
+> **2026-08-07: the session logs no longer live in this repo.** They were moved to the Obsidian
+> vault — `Obsidian/Brain/Projects/CRM/SESSION_LOG_*.md` — which is now the single home for
+> narrative history. This file stays here as the in-repo reference; the vault holds the logs.
+>
 > **Last updated:** 2026-07-25
 
 ---
