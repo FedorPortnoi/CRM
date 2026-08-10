@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -23,7 +24,9 @@ import {
   baseSecurityHeaders,
   cspForDocument,
   documentForFile,
+  negotiateDocument,
   notFoundHeaders,
+  parseAcceptEncoding,
   responseHeaders,
   stampAssetVersions,
   versionedRefs,
@@ -577,7 +580,7 @@ describe('static site security headers', () => {
     expect(headers['X-Frame-Options']).toBe('DENY');
     expect(headers['Referrer-Policy']).toBe('strict-origin-when-cross-origin');
     expect(headers['Permissions-Policy']).toBeTruthy();
-    expect(headers['Cache-Control']).toBe('no-store');
+    expect(headers['Cache-Control']).toContain('no-store');
     expect(documentForFile(path.join(WEBSITE, '404.html'), null, noStamps)?.csp)
       .toContain("frame-ancestors 'none'");
   });
@@ -688,11 +691,13 @@ describe('static asset versions', () => {
     // Pages are the gate: a cached page pins its assets no matter how the
     // assets are cached, so this branch must win over any ?v= a visitor sends.
     const home: HeaderMap = responseHeaders('/', '.html', { pinned: true });
-    expect(home['Cache-Control']).toBe('public, max-age=0, must-revalidate');
+    expect(home['Cache-Control']).toContain('max-age=0');
+    expect(home['Cache-Control']).toContain('must-revalidate');
+    expect(home['Cache-Control']).not.toContain('immutable');
     // And the invite page still must not be stored at all — it renders a live
     // claim code.
     const invite: HeaderMap = responseHeaders('/i', '.html', { pinned: true });
-    expect(invite['Cache-Control']).toBe('no-store, no-cache, must-revalidate');
+    expect(invite['Cache-Control']).toContain('no-store');
   });
 
   it('derives the stamp from the bytes, so an in-place edit moves it', () => {
@@ -780,6 +785,101 @@ describe('static asset versions', () => {
         expect(fs.existsSync(path.join(WEBSITE, ref.slice(1))), `${page} -> ${ref}`).toBe(true);
       }
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPRESSING AT THE ORIGIN
+//
+// Documents carry `no-transform` so Cloudflare stops editing them — which is
+// what restores Content-Length end to end, and what stops a Web Analytics
+// beacon being injected into a page whose CSP refuses it. The edge then also
+// stops compressing, so the origin has to, or every page view ships 52 KB where
+// 11 will do over a link that drops several times a day.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('document compression', () => {
+  it('tells Cloudflare not to touch a page, and keys caches on the coding', () => {
+    const page: HeaderMap = responseHeaders('/', '.html');
+    expect(page['Cache-Control']).toContain('no-transform');
+    expect(page['Vary']).toBe('Accept-Encoding');
+
+    // Assets carry neither: nothing injects into a stylesheet, so the edge is
+    // welcome to compress them and they are fetched once.
+    const asset: HeaderMap = responseHeaders('/css/base.css', '.css', { pinned: true });
+    expect(asset['Cache-Control']).not.toContain('no-transform');
+    expect(asset['Vary']).toBeUndefined();
+  });
+
+  it('carries no-transform down EVERY document branch, not just the common one', () => {
+    /* This is the assertion that would have caught the real miss. /i takes the
+       no-store branch and never reaches the `.html` case, so it went on being
+       edited at the edge — beacon injected, body re-compressed, Content-Length
+       dropped — after every other page had stopped. The 404 document is built
+       by a different function again. Enumerate the branches; do not read the
+       if-chain and conclude. */
+    const documents: Array<[string, HeaderMap]> = [
+      ['home', responseHeaders('/', '.html')],
+      ['register', responseHeaders('/register', '.html')],
+      ['invite /i', responseHeaders('/i', '.html')],
+      ['invite /i.html', responseHeaders('/i.html', '.html')],
+      ['404', notFoundHeaders()],
+    ];
+    for (const [name, headers] of documents) {
+      expect(headers['Cache-Control'], name).toContain('no-transform');
+      expect(headers['Vary'], name).toBe('Accept-Encoding');
+    }
+    // And the invite page keeps everything that made it special.
+    const invite: HeaderMap = responseHeaders('/i', '.html');
+    expect(invite['Cache-Control']).toContain('no-store');
+    expect(invite['Referrer-Policy']).toBe('no-referrer');
+    expect(invite['X-Robots-Tag']).toBe('noindex, nofollow');
+  });
+
+  it('honours a qvalue of zero rather than searching for a substring', () => {
+    // `br;q=0` means "do not send me brotli". A client told otherwise receives
+    // a page it cannot read — and "br" is also a substring of tokens that are
+    // not brotli, which is the other half of why this is parsed, not matched.
+    expect(parseAcceptEncoding('gzip, deflate, br').get('br')).toBe(1);
+    expect(parseAcceptEncoding('br;q=0, gzip').get('br')).toBe(0);
+    expect(parseAcceptEncoding('BR;Q=0.5').get('br')).toBe(0.5);
+    expect(parseAcceptEncoding('').size).toBe(0);
+  });
+
+  it('picks a coding the client accepts, with a validator of its own', () => {
+    const doc = documentForFile(path.join(WEBSITE, 'index.html'), null, noStamps)!;
+
+    const browser = negotiateDocument(doc, 'gzip, deflate, br, zstd');
+    expect(browser.encoding).toBe('br');
+    const gzipOnly = negotiateDocument(doc, 'gzip');
+    expect(gzipOnly.encoding).toBe('gzip');
+    const refused = negotiateDocument(doc, 'br;q=0, gzip');
+    expect(refused.encoding).toBe('gzip');
+    // Identity is always a legal answer, so a client accepting nothing still
+    // gets a page rather than an error.
+    const none = negotiateDocument(doc, '');
+    expect(none.encoding).toBeNull();
+    expect(none.body).toBe(doc.body);
+
+    /* One validator per representation. Sharing them invites a shared cache to
+       answer a brotli request with the gzip body — which is not a slow page,
+       it is an unreadable one. */
+    const tags = [browser.etag, gzipOnly.etag, none.etag];
+    expect(new Set(tags).size).toBe(3);
+  });
+
+  it('compresses to something that decompresses back to the exact page', () => {
+    /* The failure this guards is silent and total: a body that is not valid
+       brotli is a blank page for every visitor, and every header still looks
+       right. Round-trip, do not trust the encoder. */
+    const doc = documentForFile(path.join(WEBSITE, 'index.html'), null, noStamps)!;
+    const br = negotiateDocument(doc, 'br');
+    const gz = negotiateDocument(doc, 'gzip');
+
+    expect(zlib.brotliDecompressSync(br.body).equals(doc.body)).toBe(true);
+    expect(zlib.gunzipSync(gz.body).equals(doc.body)).toBe(true);
+    // And it is worth doing at all.
+    expect(br.body.length).toBeLessThan(doc.body.length / 3);
   });
 });
 

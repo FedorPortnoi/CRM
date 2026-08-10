@@ -21,6 +21,35 @@
 tunnel: 3f95c458-ffdb-405d-8d58-7e955619d132
 credentials-file: C:\Users\fedor\.cloudflared\3f95c458-ffdb-405d-8d58-7e955619d132.json
 
+# ─────────────────────────────────────────────────────────────────────────────
+# TRANSPORT — http2, not the default quic, and the logs are the argument.
+#
+# cloudflared prefers QUIC, which is UDP on port 7844. One week of
+# logs/tunnel-error-4.log:
+#
+#   1285  failed to run the datagram handler        ← QUIC-only machinery
+#     32  Failed to dial a quic connection
+#          "timeout: no recent network activity"
+#     57  Connection terminated
+#     20  Failed to refresh DNS local resolver
+#
+# "no recent network activity" on a UDP dial is the signature of a path that
+# drops or ages out UDP rather than of a busy edge — a home router's NAT table,
+# or an ISP that treats sustained UDP differently from TCP. Every one of those
+# terminations cuts whatever was in flight, and a stylesheet cut off mid-flight
+# is discarded whole by the browser: that is how 4kub.ru came to render from
+# base.css alone on 2026-08-10.
+#
+# HTTP/2 rides ordinary TCP on 443, which is the one thing every residential
+# path is built to carry well. This tunnel forwards HTTP and nothing else — no
+# WARP routing, no UDP or ICMP proxying — so the QUIC-only features being given
+# up here are features this deployment does not use. The datagram handler noise
+# disappears with them.
+#
+# If the edge ever becomes unreachable over TCP, `auto` restores the old
+# behaviour: cloudflared then tries QUIC first and falls back to HTTP/2 itself.
+protocol: http2
+
 # Ingress rules are evaluated TOP DOWN and the first match wins, so the API
 # routes must come before the catch-all. These reproduce the nginx vhost the VM
 # was running; where they differ, that is a bug rather than a decision.

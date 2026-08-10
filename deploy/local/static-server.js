@@ -23,6 +23,7 @@ const {
   assetVersion,
   baseSecurityHeaders,
   documentForFile,
+  negotiateDocument,
   notFoundHeaders,
   responseHeaders,
 } = require('./static-headers');
@@ -142,10 +143,13 @@ const server = http.createServer((req, res) => {
       const headers404 = notFoundHeaders();
       const doc404 = documentForFile(notFound, null, versionFor);
       if (doc404) {
+        const sent = negotiateDocument(doc404, req.headers['accept-encoding']);
         headers404['Content-Security-Policy'] = doc404.csp;
-        headers404['Content-Length'] = doc404.body.length;
+        headers404['Content-Length'] = sent.body.length;
+        headers404['Vary'] = 'Accept-Encoding';
+        if (sent.encoding) headers404['Content-Encoding'] = sent.encoding;
         res.writeHead(404, headers404);
-        res.end(doc404.body);
+        res.end(sent.body);
         return;
       }
       res.writeHead(404, headers404);
@@ -197,9 +201,14 @@ const server = http.createServer((req, res) => {
      only when the page could not be read at this instant, in which case it is
      streamed from disk unstamped and without a policy; see documentForFile(). */
   const document = ext === '.html' ? documentForFile(file, stat, versionFor) : null;
+  /* Negotiated BEFORE the conditional check, because the validator belongs to
+     the representation being sent: a client holding the brotli copy sends the
+     brotli ETag, and comparing it against the identity one would answer 200
+     with a full page every time. */
+  const sent = document ? negotiateDocument(document, req.headers['accept-encoding']) : null;
   if (document) {
     headers['Content-Security-Policy'] = document.csp;
-    etag = document.etag;
+    etag = sent.etag;
   }
 
   headers['Last-Modified'] = lastModified;
@@ -228,9 +237,10 @@ const server = http.createServer((req, res) => {
      times a day — is then short by a length the client was told to expect, so
      it is a failed transfer everywhere instead of a judgement call. */
   if (document) {
-    headers['Content-Length'] = document.body.length;
+    headers['Content-Length'] = sent.body.length;
+    if (sent.encoding) headers['Content-Encoding'] = sent.encoding;
     res.writeHead(200, headers);
-    res.end(document.body);
+    res.end(sent.body);
     return;
   }
 

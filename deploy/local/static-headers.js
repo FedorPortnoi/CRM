@@ -30,6 +30,7 @@
 
 const fs = require('node:fs');
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
 
 /**
  * Script types a browser will EXECUTE. Everything else in a <script> element is
@@ -227,6 +228,76 @@ function stampAssetVersions(html, versionFor) {
   });
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * COMPRESSING PAGES HERE INSTEAD OF AT THE EDGE
+ *
+ * Documents go out with `no-transform`, which tells Cloudflare to pass the body
+ * through untouched. That is worth having for three reasons: it stops the Web
+ * Analytics beacon being injected into a page whose own CSP will always refuse
+ * it, it stops the mailto rewrite, and — the one that matters here — it leaves
+ * Content-Length intact end to end, so a response cut off in the tunnel is
+ * short by an announced length rather than a judgement call. Cloudflare was
+ * previously re-framing every page because it was editing it.
+ *
+ * The bill for `no-transform` is that Cloudflare also stops COMPRESSING, and
+ * index.html is 52 KB. Shipping 52 KB where 11 will do is not merely wasteful
+ * on a residential uplink: every extra byte is more time in flight over a link
+ * that drops several times a day, which is the exact failure this whole change
+ * exists to make rarer. So the origin compresses instead.
+ *
+ * Both variants are built once per document version and memoised beside the
+ * body, so quality 11 costs a few milliseconds after an edit and nothing after
+ * that. Assets are NOT compressed here — they carry no `no-transform`, so
+ * Cloudflare still compresses them at the edge, and they are fetched once.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+function compressDocument(body) {
+  return Object.freeze({
+    br: zlib.brotliCompressSync(body, {
+      params: {
+        [zlib.constants.BROTLI_PARAM_QUALITY]: 11,
+        [zlib.constants.BROTLI_PARAM_SIZE_HINT]: body.length,
+      },
+    }),
+    gzip: zlib.gzipSync(body, { level: 9 }),
+  });
+}
+
+/**
+ * Accept-Encoding as {token: qvalue}.
+ *
+ * The qvalue is not decoration: `br;q=0` means "do not send me brotli", and a
+ * client that says so and receives it anyway gets a page it cannot read. A
+ * substring test for "br" would also match "brotli" and, less obviously, the
+ * "br" inside a future token — parse rather than search.
+ */
+function parseAcceptEncoding(header) {
+  const out = new Map();
+  for (const part of String(header || '').split(',')) {
+    const [token, ...params] = part.trim().split(';');
+    if (!token) continue;
+    const q = params.map((p) => p.trim().toLowerCase()).find((p) => p.startsWith('q='));
+    out.set(token.trim().toLowerCase(), q ? Number(q.slice(2)) : 1);
+  }
+  return out;
+}
+
+/**
+ * Pick a content coding for one document.
+ *
+ * Brotli first — it beats gzip on this markup by a comfortable margin and every
+ * browser that reaches this site over https supports it. Identity is always a
+ * legal answer, so a client that accepts nothing still gets a page.
+ */
+function negotiateDocument(built, acceptEncoding) {
+  const accepted = parseAcceptEncoding(acceptEncoding);
+  const wants = (token) => accepted.has(token) && accepted.get(token) > 0;
+
+  if (wants('br')) return { encoding: 'br', body: built.encodings.br, etag: built.etagBr };
+  if (wants('gzip')) return { encoding: 'gzip', body: built.encodings.gzip, etag: built.etagGzip };
+  return { encoding: null, body: built.body, etag: built.etag };
+}
+
 /**
  * Headers that go on EVERY response, HTML or not.
  *
@@ -323,7 +394,14 @@ function responseHeaders(urlPath, ext, options = {}) {
     // The invite landing page. The token rides in the URL fragment so it never
     // reaches this process at all, but the page renders a claim code, and that
     // must not sit in a shared cache or a back-forward cache.
-    headers['Cache-Control'] = 'no-store, no-cache, must-revalidate';
+    /* `no-transform` belongs here too, and this branch is exactly where a fix
+       applied only to the `.html` case below goes missing: /i never reaches it.
+       It was the one page still being edited at the edge — beacon injected,
+       body re-compressed, Content-Length dropped — after every other document
+       had stopped. A test now asserts this across every document branch rather
+       than trusting the reading of an if-chain. */
+    headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, no-transform';
+    headers['Vary'] = 'Accept-Encoding';
     headers['Referrer-Policy'] = 'no-referrer';
     headers['X-Robots-Tag'] = 'noindex, nofollow';
   } else if (urlPath.startsWith('/fonts/')) {
@@ -363,7 +441,17 @@ function responseHeaders(urlPath, ext, options = {}) {
        no explicit policy a browser is free to guess a lifetime from
        Last-Modified, and that guess grows as the file ages. Always revalidate;
        with the ETag alongside that is a 304 and costs nothing. */
-    headers['Cache-Control'] = 'public, max-age=0, must-revalidate';
+    /* `no-transform` is addressed to Cloudflare, not to browsers. It stops the
+       edge editing this page — which it was doing on every response, and which
+       cost the Content-Length that makes a truncated transfer detectable. It
+       also stops the Web Analytics beacon being injected into a document whose
+       CSP refuses it, and the mailto rewrite, whose obfuscation was already
+       worth nothing: the same address sits in clear text in llms.txt, which
+       Cloudflare does not rewrite. The origin compresses in the edge's place —
+       see compressDocument(). */
+    headers['Cache-Control'] = 'public, max-age=0, must-revalidate, no-transform';
+    // Two codings share this URL now, so any shared cache has to key on it.
+    headers['Vary'] = 'Accept-Encoding';
   }
 
   return headers;
@@ -379,7 +467,11 @@ function responseHeaders(urlPath, ext, options = {}) {
 function notFoundHeaders() {
   return {
     'Content-Type': TYPES['.html'],
-    'Cache-Control': 'no-store',
+    // no-transform for the same reason every other document carries it: this is
+    // a real page, and the edge editing it costs the Content-Length and injects
+    // a script this site's CSP refuses.
+    'Cache-Control': 'no-store, no-transform',
+    Vary: 'Accept-Encoding',
     ...baseSecurityHeaders(),
   };
 }
@@ -510,13 +602,21 @@ function documentForFile(absPath, stat, versionFor) {
          edit — which is not hypothetical: it is what the test for this function
          caught, where two supposedly different snapshots were one object and
          compared equal to itself. */
+      /* Strong, and derived from the bytes it validates. `no-transform` should
+         now keep Cloudflare from weakening it in transit, but the comparison in
+         static-server.js stays the weak one RFC 9110 mandates for
+         If-None-Match — a validator is not the place to bet on a third party
+         behaving.
+         One per coding, because a gzip and a brotli copy of the same page are
+         different representations: handing them the same validator invites a
+         shared cache to answer a `br` request with the `gzip` body. */
+      const digest = crypto.createHash('sha256').update(body).digest('base64url').slice(0, 27);
       entry.built = Object.freeze({
         body,
-        /* Strong, and derived from the bytes it validates. Cloudflare may weaken
-           this on its way out — it rewrites the mailto on index.html — which is
-           why the comparison in static-server.js is the weak one RFC 9110
-           mandates for If-None-Match rather than string equality. */
-        etag: `"${crypto.createHash('sha256').update(body).digest('base64url').slice(0, 27)}"`,
+        etag: `"${digest}"`,
+        etagBr: `"${digest}-br"`,
+        etagGzip: `"${digest}-gz"`,
+        encodings: compressDocument(body),
         csp: cspForDocument(text),
       });
     }
@@ -546,6 +646,8 @@ module.exports = {
   styleHashes,
   cspForDocument,
   documentForFile,
+  negotiateDocument,
+  parseAcceptEncoding,
   assetVersion,
   versionedRefs,
   stampAssetVersions,
