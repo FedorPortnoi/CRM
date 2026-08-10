@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# 4КУБ → last-known-good copy of the public site.
+#
+# NOTHING SECRET GOES IN THIS FILE. It is committed to a PUBLIC repository.
+# This Worker holds no secrets: it proxies to the origin and keeps a copy of
+# public pages in KV. See src/index.js for what it does and does not cover.
+#
+# Deploy:  cd workers/site-failover && npx wrangler deploy
+# Remove:  npx wrangler delete            (the site returns to plain origin)
+# ---------------------------------------------------------------------------
+
+name = "kub-site-failover"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+# WHY THESE ARE `/*` AND NOT THE THREE PATHS THIS WORKER ACTUALLY SERVES.
+#
+# Cloudflare matches a route against the whole URL and rejects a `?` inside a
+# pattern (API error 10022), so only a trailing `*` can match a URL carrying a
+# query string: `4kub.ru/` does NOT match `4kub.ru/?utm_source=x`. Measured with
+# the origin stopped — the bare homepage served its stored copy, the same URL
+# with one tracking parameter got the 502. Every ad, share and campaign link
+# carries a query string, so a narrow pattern here would mean a failover that
+# works right up until the traffic that matters arrives.
+#
+# The narrowing therefore lives in isFailoverPath() in src/index.js, and
+# /api/*, /health and /version additionally carry routes of their own pointing
+# at NO Worker, so the CRM the phones talk to never enters this script and
+# never counts against a free-plan request ceiling. Those empty routes are not
+# managed by wrangler; see README.md before removing them.
+routes = [
+  { pattern = "4kub.ru/*", zone_name = "4kub.ru" },
+  { pattern = "www.4kub.ru/*", zone_name = "4kub.ru" },
+]
+
+# The copies. Public HTML and CSS only — see isStorable() in src/index.js, which
+# refuses anything the origin marked no-store.
+[[kv_namespaces]]
+binding = "SNAPSHOTS"
+id = "f6e23c85295f4f70a831f992d04f6a89"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
