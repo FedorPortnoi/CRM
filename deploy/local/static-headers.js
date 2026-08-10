@@ -49,8 +49,10 @@ const EXECUTABLE_SCRIPT_TYPES = new Set([
 /**
  * THE TRAP THIS FUNCTION EXISTS FOR.
  *
- * Every .html file in website/ is CRLF on disk (core.autocrlf=true, and the
- * files are served straight out of the working tree). CSP hashes "the element's
+ * Most .html files in website/ are CRLF on disk (core.autocrlf=true, and the
+ * files are served straight out of the working tree); 404.html and privacy.html
+ * happen to be pure LF, which is exactly why nothing here may assume either.
+ * CSP hashes "the element's
  * child text content" — but the HTML parser's input stream preprocessing
  * (HTML Standard 13.2.3.5) has already turned every CRLF and every bare CR into
  * a single LF before tokenisation. So the text a browser hashes never contains
