@@ -249,6 +249,49 @@ const server = http.createServer((req, res) => {
   sendFile(file, res);
 });
 
+/**
+ * Exit when this process's own source changes, so PM2 restarts it.
+ *
+ * PM2 is already configured to do this — `watch` in ecosystem.config.js, whose
+ * comment explains that the security headers are `require`d once at startup, so
+ * the correct policy sat in git for hours while every live response carried
+ * none. The trouble is that the flag does not survive ordinary operation: a
+ * `pm2 stop crm-static && pm2 start crm-static` brings the app back with
+ * `watch: undefined`, and a `pm2 save` then writes that state to the resurrect
+ * dump. Only `pm2 delete` plus `pm2 start ecosystem.config.js --only` restores
+ * it. That happened twice in one session on 2026-08-10, and both times nothing
+ * said so — the process was online, the site answered, and the file on disk had
+ * simply stopped being the file being served.
+ *
+ * So the guarantee lives in the process instead of in the flag. `autorestart`
+ * is what brings it back; exiting 0 is a clean way to ask.
+ */
+const WATCHED = [__filename, require.resolve('./static-headers')];
+const stampOf = (file) => {
+  try {
+    const st = fs.statSync(file);
+    return `${st.mtimeMs}:${st.size}`;
+  } catch {
+    return 'missing';
+  }
+};
+const startupStamps = WATCHED.map(stampOf);
+
+setInterval(() => {
+  for (const [i, file] of WATCHED.entries()) {
+    if (stampOf(file) === startupStamps[i]) continue;
+    console.log(`static server: ${path.basename(file)} changed on disk — exiting so PM2 restarts with it`);
+    // The server stops accepting, in-flight responses finish, then the process
+    // ends. A hard exit here would cut off whatever was mid-transfer, which is
+    // the failure this deployment spent the day removing.
+    server.close(() => process.exit(0));
+    // ...but not indefinitely: a held-open keep-alive should not postpone a
+    // restart forever.
+    setTimeout(() => process.exit(0), 5000).unref();
+    return;
+  }
+}, 15000).unref();
+
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`static server: http://127.0.0.1:${PORT} serving ${ROOT}`);
 });
