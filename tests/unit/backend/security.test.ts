@@ -19,11 +19,14 @@ import {
 // 8080 is held by the live PM2 `crm-static` process, so requiring it here would
 // EADDRINUSE against production.
 import {
+  assetVersion,
   baseSecurityHeaders,
   cspForDocument,
-  cspForFile,
+  documentForFile,
   notFoundHeaders,
   responseHeaders,
+  stampAssetVersions,
+  versionedRefs,
 } from '../../../deploy/local/static-headers';
 
 const jwtSecret = 'j'.repeat(32);
@@ -374,6 +377,13 @@ function asParsed(text: string): string {
 // open-ended by nature; type it that way.
 type HeaderMap = Record<string, string | undefined>;
 
+/**
+ * A version resolver that pins nothing, for the tests that are about the policy
+ * rather than the stamps. documentForFile() leaves a reference alone when the
+ * resolver returns null, so the body it builds is the file verbatim.
+ */
+const noStamps = () => null;
+
 function directive(csp: string, name: string): string {
   const found = csp.split('; ').find((d) => d === name || d.startsWith(`${name} `));
   return found ?? '';
@@ -398,6 +408,31 @@ describe('static site security headers', () => {
     // Clickjacking: https://4kub.ru/register is frameable today.
     expect(directive(csp, 'frame-ancestors')).toBe("frame-ancestors 'none'");
     expect(directive(csp, 'form-action')).toBe("form-action 'self'");
+  });
+
+  it('never names an external host in any directive', () => {
+    /* The pressure this is here to resist is real and already applied: every
+       visitor's console logs a CSP refusal because Cloudflare Web Analytics
+       injects a beacon at the edge, and the one-line "fix" is to allow
+       static.cloudflareinsights.com. That would make the App Store listing's
+       "no third-party analytics SDKs, no data shared with advertisers"
+       (docs/appstore-listing.md) false, and nothing else in this repo would
+       notice. The console message is Cloudflare's to stop, at the dashboard.
+
+       Written as a positive rule rather than a denylist of one hostname, so it
+       also catches the next CDN, font host or tag manager someone reaches for. */
+    for (const page of htmlPages) {
+      const csp = cspForDocument(fs.readFileSync(path.join(WEBSITE, page), 'utf8'));
+      for (const part of csp.split('; ')) {
+        const sources = part.split(/\s+/).slice(1);
+        for (const source of sources) {
+          expect(
+            /^('[^']*'|data:|blob:)$/.test(source),
+            `${page}: ${part.split(' ')[0]} names the external source ${source}`,
+          ).toBe(true);
+        }
+      }
+    }
   });
 
   it('never lets script-src degrade to a policy that permits everything', () => {
@@ -543,7 +578,8 @@ describe('static site security headers', () => {
     expect(headers['Referrer-Policy']).toBe('strict-origin-when-cross-origin');
     expect(headers['Permissions-Policy']).toBeTruthy();
     expect(headers['Cache-Control']).toBe('no-store');
-    expect(cspForFile(path.join(WEBSITE, '404.html'))).toContain("frame-ancestors 'none'");
+    expect(documentForFile(path.join(WEBSITE, '404.html'), null, noStamps)?.csp)
+      .toContain("frame-ancestors 'none'");
   });
 
   // ── Derivation, not a hand-maintained list ────────────────────────────────
@@ -553,12 +589,12 @@ describe('static site security headers', () => {
     const file = path.join(dir, 'page.html');
     try {
       fs.writeFileSync(file, '<!doctype html><script>alert(1)</script>');
-      const first = cspForFile(file);
+      const first = documentForFile(file, null, noStamps)!.csp;
       expect(first).toContain(sha256Base64('alert(1)'));
 
       // Memoised on (path, mtimeMs, size): an unchanged file is not re-read.
       const reads = vi.spyOn(fs, 'readFileSync');
-      expect(cspForFile(file)).toBe(first);
+      expect(documentForFile(file, null, noStamps)!.csp).toBe(first);
       expect(reads).not.toHaveBeenCalled();
       reads.mockRestore();
 
@@ -566,7 +602,7 @@ describe('static site security headers', () => {
       // place, so a cache that missed this would serve a stale hash and take
       // the page's own script down.
       fs.writeFileSync(file, '<!doctype html><script>alert(22222)</script>');
-      const second = cspForFile(file);
+      const second = documentForFile(file, null, noStamps)!.csp;
       expect(second).toContain(sha256Base64('alert(22222)'));
       expect(second).not.toContain(sha256Base64('alert(1)'));
     } finally {
@@ -578,7 +614,8 @@ describe('static site security headers', () => {
     // Fail OPEN. Hashes computed from nothing would block the page's own
     // scripts; briefly omitting a defence-in-depth header on a site that serves
     // fixed files off disk is strictly less harmful than breaking registration.
-    expect(cspForFile(path.join(WEBSITE, 'no-such-page.html'))).toBeNull();
+    // static-server.js reads the null and streams the file unstamped instead.
+    expect(documentForFile(path.join(WEBSITE, 'no-such-page.html'), null, noStamps)).toBeNull();
   });
 
   // ── Content regression guards ─────────────────────────────────────────────
@@ -616,6 +653,173 @@ describe('static site security headers', () => {
         .filter((u) => /^(https?:)?\/\//i.test(u));
       expect(externalStyles, page).toEqual([]);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ASSET VERSIONS AND THE CACHE THEY UNLOCK
+//
+// On 2026-08-10 4kub.ru rendered from base.css alone: sections.css was cut off
+// mid-flight by the tunnel and a browser discards a stylesheet it could not
+// finish reading, so the homepage came up as cream background, twelve list
+// bullets and a nav <svg> stretched the width of the window. The response was
+// only in flight at all because the assets carried `max-age=300,
+// must-revalidate` — a hand-bumped ?v= counter cannot support anything longer.
+//
+// These assert the two halves of the fix: a stamp derived from the bytes, and
+// an `immutable` that is granted per request only when the stamp proves itself.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('static asset versions', () => {
+  it('pins for a year only when the request proves it named these bytes', () => {
+    const pinned: HeaderMap = responseHeaders('/css/base.css', '.css', { pinned: true });
+    expect(pinned['Cache-Control']).toBe('public, max-age=31536000, immutable');
+
+    // Anything the server could not verify falls back to the bounded five
+    // minutes, so getting the check wrong costs a short cache and never a year
+    // of the wrong stylesheet.
+    const unpinned: HeaderMap = responseHeaders('/css/base.css', '.css', { pinned: false });
+    expect(unpinned['Cache-Control']).toBe('public, max-age=300, must-revalidate');
+    const unasked: HeaderMap = responseHeaders('/css/base.css', '.css');
+    expect(unasked['Cache-Control']).toBe('public, max-age=300, must-revalidate');
+  });
+
+  it('never lets a stamp on the URL cache a document', () => {
+    // Pages are the gate: a cached page pins its assets no matter how the
+    // assets are cached, so this branch must win over any ?v= a visitor sends.
+    const home: HeaderMap = responseHeaders('/', '.html', { pinned: true });
+    expect(home['Cache-Control']).toBe('public, max-age=0, must-revalidate');
+    // And the invite page still must not be stored at all — it renders a live
+    // claim code.
+    const invite: HeaderMap = responseHeaders('/i', '.html', { pinned: true });
+    expect(invite['Cache-Control']).toBe('no-store, no-cache, must-revalidate');
+  });
+
+  it('derives the stamp from the bytes, so an in-place edit moves it', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stamp-'));
+    const css = path.join(dir, 'app.css');
+    try {
+      fs.writeFileSync(css, 'a{color:red}');
+      const first = assetVersion(css);
+      expect(first).toMatch(/^[0-9a-f]{12}$/);
+      expect(assetVersion(css)).toBe(first);
+
+      // Different LENGTH on purpose: the memo key is (mtimeMs, size), and two
+      // same-size writes inside one millisecond are its one documented miss —
+      // a test that relied on the clock would be flaky about the wrong thing.
+      fs.writeFileSync(css, 'a{color:blue;background:teal}');
+      expect(assetVersion(css)).not.toBe(first);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rewrites the references the markup stamped, and only those', () => {
+    const html = [
+      '<link rel="stylesheet" href="/css/base.css?v=15">',
+      '<link rel="preload" as="font" href="/fonts/exo2-cyrillic.woff2" crossorigin>',
+      `<link rel="icon" href="data:image/svg+xml,<svg viewBox='0 0 24 24'></svg>">`,
+      '<a href="/register">Начать бесплатно</a>',
+      '<script src="/js/site.js?v=20"></script>',
+      '<link rel="stylesheet" href="/css/gone.css?v=3">',
+    ].join('');
+
+    const out = stampAssetVersions(html, (ref: string) =>
+      ({ '/css/base.css': 'aaaaaaaaaaaa', '/js/site.js': 'bbbbbbbbbbbb' })[ref] ?? null);
+
+    expect(out).toContain('/css/base.css?v=aaaaaaaaaaaa');
+    expect(out).toContain('/js/site.js?v=bbbbbbbbbbbb');
+    // The font carries no stamp and is immutable under its own rule; the
+    // favicon is a data: URI, not a path; a navigation link is not an asset.
+    expect(out).toContain('href="/fonts/exo2-cyrillic.woff2" crossorigin');
+    expect(out).toContain(`data:image/svg+xml,<svg viewBox='0 0 24 24'></svg>`);
+    expect(out).toContain('href="/register"');
+    // A reference to something that is not there keeps the author's stamp
+    // rather than being emptied or guessed at.
+    expect(out).toContain('/css/gone.css?v=3');
+  });
+
+  it("moves a page's validator when a stylesheet changes under it", () => {
+    /* The failure this prevents is silent. Pages are max-age=0 +
+       must-revalidate, so every visit is a conditional request; a validator
+       built from the page's own mtime would answer 304 after a stylesheet
+       edit — the page did not change — and the visitor would keep a cached
+       copy pinning the PREVIOUS hash, which is now cached as immutable. */
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-'));
+    const page = path.join(dir, 'page.html');
+    const css = path.join(dir, 'app.css');
+    const versionFor = (ref: string) => (ref === '/app.css' ? assetVersion(css) : null);
+    try {
+      fs.writeFileSync(css, 'a{color:red}');
+      fs.writeFileSync(page, '<!doctype html><link rel="stylesheet" href="/app.css?v=1">');
+
+      const first = documentForFile(page, null, versionFor)!;
+      expect(first.body.toString()).toContain(`/app.css?v=${assetVersion(css)}`);
+      expect(first.etag).toMatch(/^"[\w-]{27}"$/);
+
+      const untouched = documentForFile(page, null, versionFor)!;
+      expect(untouched.etag).toBe(first.etag);
+
+      // The page's own bytes never change here. Only the stylesheet's do.
+      fs.writeFileSync(css, 'a{color:blue;background:teal}');
+      const second = documentForFile(page, null, versionFor)!;
+      expect(second.body.toString()).toContain(`/app.css?v=${assetVersion(css)}`);
+      expect(second.etag).not.toBe(first.etag);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('ships pages whose every stamped reference resolves to a real file', () => {
+    // A stamp on a path that does not exist would be left alone by design, so
+    // nothing downstream would ever complain about it.
+    for (const page of htmlPages) {
+      const refs: string[] = versionedRefs(fs.readFileSync(path.join(WEBSITE, page), 'utf8'));
+      expect(refs.length, page).toBeGreaterThan(0);
+      for (const ref of refs) {
+        expect(fs.existsSync(path.join(WEBSITE, ref.slice(1))), `${page} -> ${ref}`).toBe(true);
+      }
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WHAT THE PAGE LOOKS LIKE WITH A STYLESHEET MISSING
+//
+// The stamps above make a lost stylesheet far less likely; these two make it
+// survivable. Both hold in the markup itself, so they cannot depend on the file
+// that has gone missing, and CSS overrides both whenever it does load.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('static site degradation without CSS', () => {
+  it('gives every inline <svg> an intrinsic size', () => {
+    /* An <svg> with only a viewBox has no intrinsic width, so `width: auto`
+       resolves to 100% of the container — that is why a 26px nav mark became a
+       1904px one. Every one of these is sized by a rule setting BOTH width and
+       height, so the attributes are inert whenever the stylesheet loads. */
+    for (const page of htmlPages) {
+      const html = fs.readFileSync(path.join(WEBSITE, page), 'utf8');
+      // Double-quoted viewBox is the markup's own SVGs. The favicon is a data:
+      // URI written with single quotes and is sized by the browser chrome.
+      const tags = [...html.matchAll(/<svg\b[^>]*>/g)]
+        .map((m) => m[0])
+        .filter((tag) => tag.includes('viewBox="'));
+      expect(tags.length, page).toBeGreaterThan(0);
+      for (const tag of tags) {
+        expect(/\bwidth="\d+"/.test(tag) && /\bheight="\d+"/.test(tag), `${page}: ${tag}`).toBe(true);
+      }
+    }
+  });
+
+  it('keeps the decorative intro plate out of an unstyled page', () => {
+    const html = fs.readFileSync(path.join(WEBSITE, 'index.html'), 'utf8');
+    // Unstyled, this plate IS the bug report: twelve <li> as bullets and a
+    // full-width lockup, with the real page pushed below all of it.
+    expect(/<div class="intro"[^>]*\shidden[\s>]/.test(html), 'index.html .intro is not hidden').toBe(true);
+    // ...and the sheet that knows how to draw it still overrides that, because
+    // an author rule beats the UA rule behind the attribute.
+    const sections = fs.readFileSync(path.join(WEBSITE, 'css/sections.css'), 'utf8');
+    expect(sections).toMatch(/\.js\s+\.intro\s*\{[^}]*display:\s*block/);
   });
 });
 

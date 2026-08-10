@@ -176,8 +176,18 @@ try {
      the plate is repeated verbatim further down the page. A screen reader lands
      on the nav and the hero, which is the right first stop anyway.
      No transform/filter on .intro or .intro-stage — either would make them the
-     containing block for the fixed lockup and ground the flight. -->
-<div class="intro" aria-hidden="true">
+     containing block for the fixed lockup and ground the flight.
+
+     `hidden` is load-bearing, not leftover. This plate is the one part of the
+     page that cannot survive losing its stylesheet: unstyled, its twelve motes
+     are twelve list bullets and its lockup is an <svg> the width of the window,
+     which is exactly what 4kub.ru rendered on 2026-08-10 when sections.css was
+     cut off mid-flight. The attribute is a UA-stylesheet rule, so the author
+     rule that knows how to draw this — `.js .intro` in sections.css — overrides
+     it in the normal case and nothing changes. When that sheet is missing, the
+     decoration removes itself instead of becoming the page. site.js needs no
+     change: it already returns early on a zero-width lockup (site.js:84). -->
+<div class="intro" aria-hidden="true" hidden>
   <div class="intro-stage">
     <div class="intro-sun"></div>
 
@@ -200,7 +210,7 @@ try {
          and the browser has scroll timelines it goes position:fixed and flies
          to the nav. One element, two modes — never two copies to keep in sync. -->
     <div class="intro-mark">
-      <svg viewBox="0 0 24 24" fill="none">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
         <path d="M12 2.5 21 7v10l-9 4.5L3 17V7l9-4.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
         <path d="M3 7l9 4.5L21 7M12 11.5V21.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" opacity=".55"/>
       </svg>
@@ -220,7 +230,7 @@ try {
   <div class="shell">
     <div class="nav-inner">
       <a class="nav-mark" href="/" aria-label="4КУБ, на главную">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 2.5 21 7v10l-9 4.5L3 17V7l9-4.5Z" stroke="#CC785C" stroke-width="1.5" stroke-linejoin="round"/>
           <path d="M3 7l9 4.5L21 7M12 11.5V21.5" stroke="#CC785C" stroke-width="1.5" stroke-linejoin="round" opacity=".55"/>
         </svg>
@@ -238,13 +248,13 @@ try {
         <a class="btn btn-primary" href="/register">
           Начать бесплатно
           <span class="btn-arrow" aria-hidden="true">
-            <svg viewBox="0 0 12 12" fill="none"><path d="M1 6h9M6.5 2.5 10 6l-3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 6h9M6.5 2.5 10 6l-3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </span>
         </a>
       </div>
 
       <button class="nav-burger" type="button" aria-label="Меню" aria-expanded="false" aria-controls="nav-panel">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
         </svg>
       </button>
@@ -287,7 +297,7 @@ try {
             <a class="btn btn-primary btn-lg" href="/register">
               Начать бесплатно
               <span class="btn-arrow" aria-hidden="true">
-                <svg viewBox="0 0 12 12" fill="none"><path d="M1 6h9M6.5 2.5 10 6l-3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 6h9M6.5 2.5 10 6l-3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </span>
             </a>
             <a class="btn btn-ghost btn-lg" href="#caps">Что внутри</a>
@@ -455,9 +465,9 @@ try {
                 <div class="caps-cf-head"><b>Задачи</b><i>03</i></div>
                 <div class="caps-cf-body">
                   <ul class="caps-sc-tasks">
-                    <li><i><svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i>Перезвонить Петрову<time>сегодня</time></li>
-                    <li class="is-done"><i><svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i>Выставить счёт<time>сделано</time></li>
-                    <li><i><svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i>Напомнить о смете<time>пятница</time></li>
+                    <li><i><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i>Перезвонить Петрову<time>сегодня</time></li>
+                    <li class="is-done"><i><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i>Выставить счёт<time>сделано</time></li>
+                    <li><i><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i>Напомнить о смете<time>пятница</time></li>
                   </ul>
                   <div class="caps-cf-tabs"><i></i><i></i><i class="is-on"></i><i></i></div>
                 </div>
@@ -581,7 +591,7 @@ try {
         </div>
         <div class="asst-thread">
         <div class="asst-read">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         Обращения к данным CRM
         <ul class="asst-src">
             <li class="reveal" style="--n:0">контакты</li>
@@ -753,7 +763,7 @@ try {
               <hr class="trust-rec-rule">
 
               <div class="trust-find" data-p="2">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 <em>+7 921 …</em><u>1 совпадение</u>
                 <small>найдено без расшифровки</small>
               </div>
@@ -791,17 +801,17 @@ try {
           <a class="btn btn-primary btn-lg" href="/register">
             Создать аккаунт
             <span class="btn-arrow" aria-hidden="true">
-              <svg viewBox="0 0 12 12" fill="none"><path d="M1 6h9M6.5 2.5 10 6l-3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 6h9M6.5 2.5 10 6l-3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </span>
           </a>
         </div>
         <div class="cta-stores">
           <a class="cta-store" href="https://apps.apple.com/ru/app/id6776447873" rel="noopener">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.8c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.6-1.3-.1-2.5.8-3.2.8-.7 0-1.7-.7-2.8-.7-1.4 0-2.7.8-3.5 2.1-1.5 2.6-.4 6.4 1.1 8.5.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7 1.1 0 1.8-1 2.5-2 .8-1.2 1.1-2.3 1.1-2.4-.1 0-2-.8-2-3.6ZM14.6 5.9c.6-.7 1-1.6.9-2.6-.9 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.5 1 .1 2-.5 2.5-1.2Z"/></svg>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.8c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.6-1.3-.1-2.5.8-3.2.8-.7 0-1.7-.7-2.8-.7-1.4 0-2.7.8-3.5 2.1-1.5 2.6-.4 6.4 1.1 8.5.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7 1.1 0 1.8-1 2.5-2 .8-1.2 1.1-2.3 1.1-2.4-.1 0-2-.8-2-3.6ZM14.6 5.9c.6-.7 1-1.6.9-2.6-.9 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.5 1 .1 2-.5 2.5-1.2Z"/></svg>
             App Store
           </a>
           <a class="cta-store" href="https://www.rustore.ru/catalog/app/com.fedorportnoi.crm" rel="noopener">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 5.5 19 3v18L5 18.5v-13Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 5.5 19 3v18L5 18.5v-13Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
             RuStore
           </a>
         </div>
@@ -817,7 +827,7 @@ try {
     <div class="foot-top">
       <div class="foot-col">
         <div class="foot-mark">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 2.5 21 7v10l-9 4.5L3 17V7l9-4.5Z" stroke="#CC785C" stroke-width="1.5" stroke-linejoin="round"/>
             <path d="M3 7l9 4.5L21 7M12 11.5V21.5" stroke="#CC785C" stroke-width="1.5" stroke-linejoin="round" opacity=".55"/>
           </svg>

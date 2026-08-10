@@ -146,6 +146,85 @@ function styleHashes(html) {
   return extractInlineStyles(html).flatMap(hashesForBody);
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * ASSET VERSIONS
+ *
+ * The same doctrine as the script hashes above, applied to the `?v=` stamps in
+ * the markup: derived from the bytes actually being served, never written down.
+ *
+ * WHY THIS WAS WORTH BUILDING. The old stamp was a counter a human bumped, and
+ * it was missed twice, so the only honest header for an asset was
+ * `max-age=300, must-revalidate` — every visitor re-asks for all 134 KB of CSS
+ * every five minutes. That re-ask is not free here. The origin is a laptop
+ * behind a cloudflared tunnel that drops repeatedly (one week of
+ * logs/tunnel-error-4.log holds 57 `Connection terminated` and 32 failed QUIC
+ * dials), and a stylesheet whose response is cut off mid-flight is NOT applied
+ * as far as it got — a browser discards the whole resource. On 2026-08-10 that
+ * landed on sections.css and 4kub.ru rendered from base.css alone: cream
+ * background, the intro's twelve <li> as bullets, and the nav <svg> — which
+ * only sections.css gives a width — stretched to the full width of the page.
+ *
+ * Deriving the stamp from content removes the human step AND the re-ask: a URL
+ * can no longer outlive the bytes it names, which is the one thing `immutable`
+ * requires. See responseHeaders() for the other half.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * One entry per asset, replaced when the file changes. Same (mtime, size) key
+ * as cspCache below and for the same reason: the site is deployed by editing
+ * files in place, so the validator has to notice an in-place edit.
+ */
+const assetVersionCache = new Map();
+
+/**
+ * Twelve hex characters of sha256 over the file's bytes.
+ *
+ * Bytes, not text: this hashes .woff2 and .webp as readily as .css, and a
+ * normalisation step would only add a way for the stamp to disagree with what
+ * the socket carries.
+ */
+function assetVersion(absPath, stat) {
+  const st = stat || fs.statSync(absPath);
+  const key = `${st.mtimeMs}:${st.size}`;
+  const hit = assetVersionCache.get(absPath);
+  if (hit && hit.key === key) return hit.version;
+
+  const version = crypto.createHash('sha256').update(fs.readFileSync(absPath)).digest('hex').slice(0, 12);
+  assetVersionCache.set(absPath, { key, version });
+  return version;
+}
+
+/**
+ * Matches a same-origin reference that already carries a `?v=` stamp.
+ *
+ * Deliberately narrow. It requires the leading slash, so the six data: SVG
+ * favicons are untouched; it requires an existing `?v=`, so /register and the
+ * preloaded fonts — which are immutable under their own rule and need no stamp
+ * — are left exactly as the author wrote them. Nothing here invents a stamp
+ * where the markup did not ask for one.
+ */
+const VERSIONED_REF = /((?:href|src)=")(\/[^"?#]+)\?v=[^"]*(")/g;
+
+/** The distinct asset paths one document pins, in no particular order. */
+function versionedRefs(html) {
+  return [...new Set([...html.matchAll(VERSIONED_REF)].map((m) => m[2]))];
+}
+
+/**
+ * Rewrite each stamp to the referenced file's current version.
+ *
+ * `versionFor` returning null — the file is missing, or unreadable at this
+ * instant — leaves that reference exactly as it was. Fail open: a stale stamp
+ * still resolves to a served file, whereas dropping the query or guessing a
+ * value could point the page at nothing.
+ */
+function stampAssetVersions(html, versionFor) {
+  return html.replace(VERSIONED_REF, (whole, lead, urlPath, tail) => {
+    const version = versionFor(urlPath);
+    return version ? `${lead}${urlPath}?v=${version}${tail}` : whole;
+  });
+}
+
 /**
  * Headers that go on EVERY response, HTML or not.
  *
@@ -226,7 +305,7 @@ const TYPES = {
  * one page on the site that renders a live claim code. A comment cannot fail;
  * a test can, which is the whole reason this is a function you can call.
  */
-function responseHeaders(urlPath, ext) {
+function responseHeaders(urlPath, ext, options = {}) {
   const headers = {
     'Content-Type': TYPES[ext] || 'application/octet-stream',
     ...baseSecurityHeaders(),
@@ -252,19 +331,29 @@ function responseHeaders(urlPath, ext) {
   } else if (['.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.woff', '.woff2'].includes(ext)) {
     /* These are edited IN PLACE at a fixed path — website/ is served straight to
        4kub.ru — so the only thing separating a visitor from a stale stylesheet
-       is the ?v= query the HTML appends. That is a sound scheme and `immutable`
-       is the correct header FOR it, but the counter is bumped by hand and has
-       been missed twice: base.css was rewritten for the 2026-08-06 redesign
-       while privacy/register/verify/i went on asking for ?v=7, and the 08-07
-       clock fix sat on disk behind an unbumped ?v=37. `immutable` makes either
-       slip permanent for thirty days, because the browser will not revalidate
-       even on a reload.
+       is the ?v= query the HTML appends. That query used to be a counter bumped
+       by hand, and it was missed twice: base.css was rewritten for the
+       2026-08-06 redesign while privacy/register/verify/i went on asking for
+       ?v=7, and the 08-07 clock fix sat on disk behind an unbumped ?v=37.
+       `immutable` would have made either slip permanent for a month, because a
+       browser holding one will not revalidate even on a reload — so the header
+       had to stay short, and every visitor re-asked for 134 KB of CSS every
+       five minutes over a tunnel that drops several times a day.
 
-       So: still cached, but staleness is bounded to five minutes instead of a
-       month. A forgotten bump becomes a short delay rather than a silent month
-       of serving the wrong site. Restore `immutable` once these carry a content
-       hash generated at deploy rather than a number someone remembers. */
-    headers['Cache-Control'] = 'public, max-age=300, must-revalidate';
+       The stamps are now content hashes applied to the bytes being served (see
+       ASSET VERSIONS above), so a URL cannot outlive the file it names and the
+       slip this header was defending against no longer has a way to happen.
+
+       `pinned` is that promise, and it is checked per request rather than
+       assumed: static-server.js sets it only when the ?v= on the URL equals the
+       hash of the file it is about to send. A request whose stamp does NOT
+       match — a bookmarked old URL, a page served from someone's cache before
+       an edit, a hand-typed query — falls through to the bounded five minutes
+       below. So the failure mode of getting this wrong is a short cache, never
+       a year of the wrong stylesheet. */
+    headers['Cache-Control'] = options.pinned
+      ? 'public, max-age=31536000, immutable'
+      : 'public, max-age=300, must-revalidate';
   } else if (ext === '.html') {
     /* The pages carry the ?v= stamps, so a stale page pins stale assets no
        matter how the assets themselves are cached — this is the gate. It used
@@ -341,8 +430,23 @@ function cspForDocument(html) {
     // are the four noise textures in base.css/sections.css.
     "img-src 'self' data:",
     "font-src 'self'",
-    // fetch() targets are /api/v1/* on this same origin. This is also what
-    // blocks the Cloudflare RUM beacon's telemetry POST.
+    /* fetch() targets are /api/v1/* on this same origin. This is also what
+       blocks the Cloudflare RUM beacon's telemetry POST, and script-src above
+       is what blocks the beacon SCRIPT that Web Analytics injects at the edge.
+
+       THAT IS THE INTENDED ANSWER, NOT A BUG TO ROUTE AROUND. The App Store
+       listing tells reviewers and users in as many words that this product
+       "uses no third-party analytics SDKs and shares no data with advertisers"
+       (docs/appstore-listing.md), and the whole stack is held to Russian
+       providers. Adding static.cloudflareinsights.com to script-src would make
+       that published claim false — quietly, and in the one place nobody
+       re-reads. A test asserts no directive here ever names a host.
+
+       The console message every visitor's browser logs is Cloudflare injecting
+       a script this site will always refuse. The fix for the NOISE is to stop
+       the injection — Cloudflare dashboard → the 4kub.ru zone → Analytics &
+       Logs → Web Analytics → turn off automatic setup — which is an owner
+       action on an account this deployment holds no token for. */
     "connect-src 'self'",
     "manifest-src 'self'",
     "media-src 'none'",
@@ -356,31 +460,74 @@ function cspForDocument(html) {
 }
 
 /**
- * One cached entry per path, replaced when the file changes. The key carries
- * mtimeMs AND size so an in-place edit — which is how this site is deployed —
- * invalidates it; a same-size same-second overwrite is the only miss, and the
- * process already stats every file on every request anyway.
+ * One cached entry per document, replaced when the page OR anything it stamps
+ * changes. The page key carries mtimeMs AND size so an in-place edit — which is
+ * how this site is deployed — invalidates it; a same-size same-second overwrite
+ * is the only miss, and the process already stats every file on every request
+ * anyway.
  */
-const cspCache = new Map();
+const documentCache = new Map();
 
-function cspForFile(absPath, stat) {
-  let csp;
+/**
+ * Everything a 200 for one HTML page needs: the bytes to send, a validator for
+ * them, and the policy that governs them.
+ *
+ * These three are built together, and that is the point. The body is not the
+ * file — the stamps in it are rewritten — so a CSP computed from the file and
+ * an ETag computed from the file's mtime would both be describing something
+ * other than what goes out on the wire. In particular the ETag has to move when
+ * a STYLESHEET changes, even though the page's own bytes on disk did not: the
+ * page is `max-age=0, must-revalidate`, so a validator that ignored the
+ * stylesheet would answer 304 and leave the visitor's cached copy pointing at
+ * the previous hash forever. Hashing the transformed body gets that for free.
+ *
+ * Returns null if the page cannot be read — see the catch.
+ */
+function documentForFile(absPath, stat, versionFor) {
   try {
     const st = stat || fs.statSync(absPath);
-    const key = `${st.mtimeMs}:${st.size}`;
-    const hit = cspCache.get(absPath);
-    if (hit && hit.key === key) return hit.csp;
+    const pageKey = `${st.mtimeMs}:${st.size}`;
 
-    csp = cspForDocument(fs.readFileSync(absPath, 'utf8'));
-    cspCache.set(absPath, { key, csp });
-    return csp;
+    let entry = documentCache.get(absPath);
+    if (!entry || entry.pageKey !== pageKey) {
+      const raw = fs.readFileSync(absPath, 'utf8');
+      entry = { pageKey, raw, refs: versionedRefs(raw), assetKey: null, built: null };
+      documentCache.set(absPath, entry);
+    }
+
+    // Cheap enough to recompute per request — a handful of memoised stats — and
+    // it is what makes an asset edit visible without touching the page.
+    const assetKey = entry.refs.map((ref) => `${ref}@${versionFor(ref) || ''}`).join(' ');
+    if (!entry.built || entry.assetKey !== assetKey) {
+      const text = stampAssetVersions(entry.raw, versionFor);
+      const body = Buffer.from(text, 'utf8');
+      entry.assetKey = assetKey;
+      /* A NEW frozen object every time, never a mutated one. The cache entry
+         itself is long-lived and a caller holding what it returned would
+         otherwise watch its body and validator change under it on the next
+         edit — which is not hypothetical: it is what the test for this function
+         caught, where two supposedly different snapshots were one object and
+         compared equal to itself. */
+      entry.built = Object.freeze({
+        body,
+        /* Strong, and derived from the bytes it validates. Cloudflare may weaken
+           this on its way out — it rewrites the mailto on index.html — which is
+           why the comparison in static-server.js is the weak one RFC 9110
+           mandates for If-None-Match rather than string equality. */
+        etag: `"${crypto.createHash('sha256').update(body).digest('base64url').slice(0, 27)}"`,
+        csp: cspForDocument(text),
+      });
+    }
+    return entry.built;
   } catch {
-    /* Fail OPEN. If the file cannot be read at the instant a request lands —
-       an editor rewriting it, a lock — the alternative is emitting a policy
-       whose hashes were computed from nothing, which blocks the page's own
-       scripts. This is a defence-in-depth header on a site that serves fixed
-       files off disk; briefly omitting it is strictly less harmful than briefly
-       breaking registration. Not cached, so the next request retries.
+    /* Fail OPEN. If the file cannot be read at the instant a request lands — an
+       editor rewriting it, a lock — the caller streams it straight off disk
+       instead. That serves the un-stamped page, which still resolves to real
+       files, and omits the policy rather than emitting one whose hashes were
+       computed from nothing, which would block the page's own scripts. This is
+       a defence-in-depth header on a site that serves fixed files off disk;
+       briefly omitting it is strictly less harmful than briefly breaking
+       registration. Not cached, so the next request retries.
        This catch also covers the stat itself, so a file that vanishes between
        the caller's existsSync and this call cannot throw out of a request
        handler and take the process down. */
@@ -396,7 +543,10 @@ module.exports = {
   scriptHashes,
   styleHashes,
   cspForDocument,
-  cspForFile,
+  documentForFile,
+  assetVersion,
+  versionedRefs,
+  stampAssetVersions,
   baseSecurityHeaders,
   responseHeaders,
   notFoundHeaders,
