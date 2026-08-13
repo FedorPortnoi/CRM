@@ -243,6 +243,7 @@ model User {
   pushDevices             PushDevice[]           @relation("PushDeviceUser")
   taskReminders           TaskReminder[]         @relation("TaskReminderRecipient")
   connectedAmoIntegrations AmoIntegration[]      @relation("AmoIntegrationConnectedBy")
+  createdLeadInboxes       LeadInbox[]           @relation("LeadInboxCreatedBy")
 
   // Employees log in by username, which only needs to be unique inside their org.
   @@unique([organization_id, username])
@@ -298,6 +299,8 @@ model Org {
   amoEntityMaps          AmoEntityMap[]
   amoSyncJobs            AmoSyncJob[]
   amoSyncConflicts       AmoSyncConflict[]
+  leadInbox              LeadInbox?
+  leadInboxMessages      LeadInboxMessage[]
 
   @@map("organizations")
 }
@@ -1337,6 +1340,97 @@ model AmoSyncConflict {
 
   organization Org @relation(fields: [organization_id], references: [id])
 
+  @@index([organization_id, created_at])
+}
+
+enum LeadInboxStatus {
+  active
+  paused
+  error
+}
+
+enum LeadInboxMode {
+  /// Заявки arrive at a per-org address of the PLATFORM's single collector
+  /// mailbox (LEAD_COLLECTOR_* env) — the org holds no mail credentials at
+  /// all, only `intake_token`, and its whole setup is pasting the address
+  /// into Яндекс Бизнес.
+  collector
+  /// The org's own IMAP mailbox — the advanced/self-hosted path.
+  custom
+}
+
+/// A mailbox polled for inbound lead-request notifications — today that means
+/// Яндекс Бизнес «Заявки»: the form on an organization's Maps profile can only
+/// exit through SMS, Telegram or EMAIL notifications (no API, no webhook), so a
+/// dedicated mailbox receives the notification and the scheduler turns it into
+/// a contact + deal in this org's funnel.
+///
+/// One inbox per organization, mirroring AmoIntegration. The password goes
+/// through services/encryption.ts (enc:v1: prefix), never plaintext — for
+/// Yandex Mail it is an app password («пароль приложения»), which the owner can
+/// revoke without changing the account password.
+model LeadInbox {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id   String          @unique @db.Uuid
+  mode              LeadInboxMode   @default(collector)
+  /// The org's slice of the collector mailbox: its address is the pattern env
+  /// with this token substituted (e.g. login+TOKEN@yandex.ru). Stable once
+  /// minted — the address is pasted into external cabinets and must not rot.
+  intake_token      String?         @unique
+  imap_host         String          @default("imap.yandex.ru")
+  imap_port         Int             @default(993)
+  /// Null in collector mode — the org holds no mail credentials there.
+  imap_user         String?
+  imap_password_enc String?
+  /// Target funnel. Left null, the org's default pipeline and its first open
+  /// stage are resolved at processing time — so archiving a stage can never
+  /// strand the inbox, it just falls back.
+  pipeline_id       String?         @db.Uuid
+  stage_id          String?         @db.Uuid
+  /// Every created contact/deal is assigned here. This is also what makes the
+  /// phone buzz: deal-domain fires `deal.assigned` for any assigned deal.
+  assigned_to       String?         @db.Uuid
+  source_label      String          @default("Яндекс Карты")
+  status            LeadInboxStatus @default(active)
+  last_polled_at    DateTime?
+  last_error        String?
+  created_by        String?         @db.Uuid
+  created_at        DateTime        @default(now())
+  updated_at        DateTime        @updatedAt
+
+  organization Org                @relation(fields: [organization_id], references: [id])
+  creator      User?              @relation("LeadInboxCreatedBy", fields: [created_by], references: [id])
+  messages     LeadInboxMessage[]
+}
+
+/// One row per email the poller has CLAIMED, unique on (inbox, uidvalidity, uid).
+///
+/// The claim is taken with createMany+skipDuplicates BEFORE anything is created
+/// from the message, so a crash between "deal created" and "\Seen flag set"
+/// cannot turn one заявка into two deals on the next tick. IMAP UIDs are only
+/// stable within one UIDVALIDITY epoch, which is why the epoch is part of the
+/// key; Message-ID catches the same email re-appearing across epochs.
+model LeadInboxMessage {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  inbox_id        String    @db.Uuid
+  organization_id String    @db.Uuid
+  uid_validity    BigInt
+  message_uid     Int
+  message_id      String?
+  from_addr       String?
+  subject         String?
+  contact_id      String?   @db.Uuid
+  deal_id         String?   @db.Uuid
+  /// 'claimed' | 'processed' | 'failed' | 'duplicate'
+  status          String    @default("claimed")
+  error           String?
+  received_at     DateTime?
+  created_at      DateTime  @default(now())
+
+  inbox        LeadInbox @relation(fields: [inbox_id], references: [id], onDelete: Cascade)
+  organization Org       @relation(fields: [organization_id], references: [id])
+
+  @@unique([inbox_id, uid_validity, message_uid])
   @@index([organization_id, created_at])
 }
 

@@ -10,10 +10,14 @@
 export type ProxyConfig = {
   /** Exact model ids the proxy will forward. Empty means "nothing is allowed". */
   allowedModels: string[];
+  /** Exact model ids /v1/audio/transcriptions will forward. Same rule: empty allows nothing. */
+  allowedTranscribeModels: string[];
   /** Hard ceiling on forwarded requests per day. */
   dailyRequestLimit: number;
   /** Largest request body we will read, in bytes. */
   maxBodyBytes: number;
+  /** Largest multipart body the transcription route will read, in bytes. */
+  maxAudioBodyBytes: number;
   /** Abort the upstream call after this long. */
   upstreamTimeoutMs: number;
   /** Whether `"stream": true` is accepted (see README — off by default). */
@@ -26,8 +30,10 @@ export type ProxyConfig = {
 
 export type ConfigVars = {
   ALLOWED_MODELS?: string;
+  ALLOWED_TRANSCRIBE_MODELS?: string;
   DAILY_REQUEST_LIMIT?: string;
   MAX_BODY_BYTES?: string;
+  MAX_AUDIO_BODY_BYTES?: string;
   UPSTREAM_TIMEOUT_MS?: string;
   ALLOW_STREAMING?: string;
   DAY_BOUNDARY_OFFSET_MINUTES?: string;
@@ -65,6 +71,7 @@ export function parseBool(raw: string | undefined, fallback: boolean): boolean {
 export function loadConfig(vars: ConfigVars): ProxyConfig {
   return {
     allowedModels: parseList(vars.ALLOWED_MODELS),
+    allowedTranscribeModels: parseList(vars.ALLOWED_TRANSCRIBE_MODELS),
     dailyRequestLimit: parseBoundedInt(vars.DAILY_REQUEST_LIMIT, {
       fallback: 500,
       min: 0,
@@ -74,6 +81,13 @@ export function loadConfig(vars: ConfigVars): ProxyConfig {
       fallback: 262_144,
       min: 1_024,
       max: 8_388_608,
+    }),
+    // 25 MiB — OpenAI's own per-file ceiling. A CRM voice message is ~1 MB per
+    // minute of AAC, so this is headroom, not an expected size.
+    maxAudioBodyBytes: parseBoundedInt(vars.MAX_AUDIO_BODY_BYTES, {
+      fallback: 26_214_400,
+      min: 1_024,
+      max: 104_857_600,
     }),
     upstreamTimeoutMs: parseBoundedInt(vars.UPSTREAM_TIMEOUT_MS, {
       fallback: 60_000,

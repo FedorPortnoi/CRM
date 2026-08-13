@@ -32,17 +32,19 @@ import {
   rehydrateMessagesForDisplay,
   type AliasContext,
 } from './contact-alias-resolver';
+import type {
+  AiError,
+  AiMessage,
+  AiToolCall,
+  AiToolDefinition,
+  AiToolResult,
+  AiUsage,
+} from './yandex-gpt';
 import {
   createCompletion,
-  isYandexGptConfigured,
-  serviceNotConfiguredError,
-  type AiError,
-  type AiMessage,
-  type AiToolCall,
-  type AiToolDefinition,
-  type AiToolResult,
-  type AiUsage,
-} from './yandex-gpt';
+  isModelProviderConfigured,
+  modelProviderNotConfiguredError,
+} from './model-provider';
 
 // ---------------------------------------------------------------------------
 // The agent loop. Takes a user message, offers the MCP tool layer to
@@ -674,8 +676,8 @@ export async function sendAssistantMessage(
 
   // Config gate first: never touch the database for a request the provider
   // cannot serve, and never throw for it.
-  if (!isYandexGptConfigured()) {
-    return { ok: false, error: serviceNotConfiguredError() };
+  if (!isModelProviderConfigured()) {
+    return { ok: false, error: modelProviderNotConfiguredError() };
   }
 
   // Contact-name aliasing, resolved once for the whole turn. `null` under a

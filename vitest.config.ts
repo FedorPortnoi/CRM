@@ -17,5 +17,15 @@ import { defineConfig, configDefaults } from 'vitest/config';
 export default defineConfig({
   test: {
     exclude: [...configDefaults.exclude, 'tests/smoke/**', 'workers/**'],
+    // Vitest (via Vite) loads the repo .env into process.env, so whatever
+    // MODEL_PROVIDER the developer's .env selects would silently flip
+    // model-jurisdiction.ts for the whole suite — and with it contact
+    // aliasing, provider routing and the PII projections. The unit suites
+    // assert the domestic baseline and individual tests opt into a foreign
+    // provider by setting process.env.MODEL_PROVIDER themselves, so the
+    // baseline is pinned here rather than inherited from .env.
+    env: {
+      MODEL_PROVIDER: 'yandex_foundation_models',
+    },
   },
 });

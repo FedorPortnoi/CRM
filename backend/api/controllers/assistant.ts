@@ -7,7 +7,12 @@ import {
   type AssistantCaller,
   type AssistantError,
 } from '../../services/assistant';
-import { isYandexGptConfigured } from '../../services/yandex-gpt';
+import { isModelProviderConfigured } from '../../services/model-provider';
+import { currentModelProvider } from '../../services/model-jurisdiction';
+import {
+  isVoiceInputConfigured,
+  transcribeVoiceMessage,
+} from '../../services/transcription';
 
 // --- Local request types ---
 
@@ -61,12 +66,88 @@ async function status(request: FastifyRequest, reply: FastifyReply): Promise<voi
   void request;
   reply.send({
     data: {
-      configured: isYandexGptConfigured(),
-      provider: 'yandex_foundation_models',
+      configured: isModelProviderConfigured(),
+      provider: currentModelProvider(),
       max_message_length: MAX_USER_MESSAGE_CHARS,
+      // Drives the microphone button in the app: false hides it entirely, so
+      // an unconfigured install never records anything it cannot transcribe.
+      voice_input: isVoiceInputConfigured(),
     },
     meta: {},
   });
+}
+
+// Container MIME types the mobile recorder can actually produce (AAC in an
+// mp4/m4a container on both platforms), plus the common encodings a future
+// web client would send. Everything else is refused before any bytes travel.
+const VOICE_MIME_ALLOWLIST = new Set([
+  'audio/mp4',
+  'audio/m4a',
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/webm',
+  'audio/ogg',
+  'audio/3gpp',
+]);
+
+async function transcribe(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (!request.isMultipart()) {
+    reply.status(415).send({
+      error: { code: 'VALIDATION_ERROR', message: 'Ожидается multipart/form-data с аудиофайлом' },
+    });
+    return;
+  }
+
+  const file = await request.file();
+  if (!file) {
+    reply.status(400).send({
+      error: { code: 'VALIDATION_ERROR', message: 'Аудиофайл не найден в запросе' },
+    });
+    return;
+  }
+
+  const mimeType = file.mimetype.split(';')[0].trim().toLowerCase();
+  if (!VOICE_MIME_ALLOWLIST.has(mimeType)) {
+    reply.status(415).send({
+      error: { code: 'VALIDATION_ERROR', message: 'Неподдерживаемый формат аудио' },
+    });
+    return;
+  }
+
+  let audio: Buffer;
+  try {
+    audio = await file.toBuffer();
+  } catch {
+    // @fastify/multipart throws when the stream exceeds the fileSize limit.
+    reply.status(413).send({
+      error: { code: 'VALIDATION_ERROR', message: 'Аудиофайл слишком большой' },
+    });
+    return;
+  }
+
+  if (audio.byteLength === 0) {
+    reply.status(400).send({
+      error: { code: 'VALIDATION_ERROR', message: 'Получен пустой аудиофайл' },
+    });
+    return;
+  }
+
+  const result = await transcribeVoiceMessage(audio, {
+    mimeType,
+    filename: file.filename,
+  });
+
+  if (!result.ok) {
+    reply.status(statusForError(result.error.code)).send({
+      error: { code: result.error.code, message: result.error.message },
+    });
+    return;
+  }
+
+  reply.send({ data: { text: result.text }, meta: {} });
 }
 
 async function send(request: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -134,6 +215,7 @@ async function getConversation(request: FastifyRequest, reply: FastifyReply): Pr
 export const AssistantController = {
   status,
   send,
+  transcribe,
   listConversations,
   getConversation,
 };

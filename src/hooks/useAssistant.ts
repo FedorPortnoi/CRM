@@ -2,6 +2,7 @@
 //
 // Backend: GET  /api/v1/assistant/status
 //          POST /api/v1/assistant/messages          { message, conversation_id? }
+//          POST /api/v1/assistant/transcribe        multipart { file }
 //          GET  /api/v1/assistant/conversations
 //          GET  /api/v1/assistant/conversations/:id
 //
@@ -42,6 +43,8 @@ export type AssistantStatus = {
   configured: boolean;
   provider: string;
   max_message_length: number;
+  /** Optional: absent on servers older than the voice-input release. */
+  voice_input?: boolean;
 };
 
 export type AssistantConversationSummary = {
@@ -109,7 +112,11 @@ async function requestAssistant<T>(
       ...init,
       headers: {
         Authorization: `Bearer ${token}`,
-        ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        // FormData must set its own multipart boundary — forcing JSON here
+        // would make the server reject the voice upload as malformed.
+        ...(init.body === undefined || init.body instanceof FormData
+          ? {}
+          : { 'Content-Type': 'application/json' }),
         ...(init.headers ?? {}),
       },
     });
@@ -229,6 +236,46 @@ export function useSendAssistantMessage(): UseMutationResult<
       // turn — without this, reopening the one just written from history would
       // replay the cached transcript and silently drop the newest answer.
       void queryClient.invalidateQueries({ queryKey: [ASSISTANT_QUERY_KEY, 'conversation'] });
+    },
+  });
+}
+
+// ─── Voice input ──────────────────────────────────────────────────────────────
+
+export type TranscribeVoiceInput = {
+  /** file:// URI of the finished recording (AAC in an m4a container). */
+  uri: string;
+};
+
+export type TranscribeVoiceResult = { text: string };
+
+/**
+ * One recording → one transcript. The server holds the audio only for the
+ * lifetime of the request and stores nothing; the transcript is placed in the
+ * composer for review rather than sent, because the assistant acts on CRM
+ * data and a mis-heard command should die in the text box, not in a tool call.
+ */
+export function useTranscribeVoice(): UseMutationResult<
+  TranscribeVoiceResult,
+  Error,
+  TranscribeVoiceInput
+> {
+  const token = useUserStore((s) => s.token);
+
+  return useMutation<TranscribeVoiceResult, Error, TranscribeVoiceInput>({
+    mutationFn: ({ uri }) => {
+      const form = new FormData();
+      // React Native's FormData takes a file descriptor, not a Blob; the cast
+      // bridges the DOM lib type that fetch's types insist on.
+      form.append('file', {
+        uri,
+        name: 'voice-message.m4a',
+        type: 'audio/m4a',
+      } as unknown as Blob);
+      return requestAssistant<TranscribeVoiceResult>('/transcribe', token ?? '', {
+        method: 'POST',
+        body: form,
+      });
     },
   });
 }

@@ -6,7 +6,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import worker, { type Env, readBodyWithLimit } from '../src/index.ts';
+import worker, { type Env, readBodyWithLimit, readRawBodyWithLimit } from '../src/index.ts';
 import { DailyQuota, type QuotaState } from '../src/quota.ts';
 import {
   dayKey,
@@ -43,8 +43,10 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     OPENAI_API_KEY: REAL_KEY,
     PROXY_TOKEN: GOOD_TOKEN,
     ALLOWED_MODELS: 'gpt-4o-mini,gpt-4o',
+    ALLOWED_TRANSCRIBE_MODELS: 'whisper-1,gpt-4o-mini-transcribe',
     DAILY_REQUEST_LIMIT: '500',
     MAX_BODY_BYTES: '262144',
+    MAX_AUDIO_BODY_BYTES: '26214400',
     UPSTREAM_TIMEOUT_MS: '60000',
     ALLOW_STREAMING: 'false',
     DAY_BOUNDARY_OFFSET_MINUTES: '180',
@@ -74,6 +76,28 @@ function makeRequest(
     method: 'POST',
     headers,
     ...(body === null ? {} : { body }),
+  });
+}
+
+// A recognisable ASCII marker inside the "audio" bytes plus a Cyrillic
+// filename — the privacy tests assert neither ever reaches a log line.
+const AUDIO_MARKER = 'VOICE-SECRET-MARKER-bytes';
+
+function makeAudioForm(model: string | null = 'whisper-1'): FormData {
+  const form = new FormData();
+  form.append('file', new File([`RIFF${AUDIO_MARKER}`], 'голос-иванова.m4a', { type: 'audio/mp4' }));
+  if (model !== null) form.append('model', model);
+  form.append('language', 'ru');
+  return form;
+}
+
+function makeTranscribeRequest(form: FormData = makeAudioForm()): Request {
+  // No explicit content-type: Request serialises the form and sets the
+  // multipart boundary itself, exactly as the CRM backend's fetch will.
+  return new Request('https://proxy.example.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${GOOD_TOKEN}` },
+    body: form,
   });
 }
 
@@ -401,6 +425,145 @@ describe('streaming', () => {
   });
 });
 
+// --- transcription route ---------------------------------------------------
+
+describe('transcription route', () => {
+  test('the happy path forwards to /v1/audio/transcriptions', async () => {
+    stubUpstream(
+      () =>
+        new Response(JSON.stringify({ text: 'привет' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    const response = await worker.fetch(makeTranscribeRequest(), makeEnv());
+    assert.equal(response.status, 200);
+    assert.equal(upstreamCalls.length, 1);
+    assert.equal(upstreamCalls[0].url, 'https://api.openai.com/v1/audio/transcriptions');
+    assert.deepEqual(await response.json(), { text: 'привет' });
+  });
+
+  test('the multipart body travels byte-for-byte with its boundary', async () => {
+    const request = makeTranscribeRequest();
+    const mirror = request.clone();
+    const response = await worker.fetch(request, makeEnv());
+    assert.equal(response.status, 200);
+    const headers = upstreamCalls[0].init.headers as Headers;
+    const sentType = String(headers.get('content-type'));
+    assert.ok(sentType.startsWith('multipart/form-data; boundary='), sentType);
+    assert.equal(sentType, mirror.headers.get('content-type'));
+    assert.equal(headers.get('authorization'), `Bearer ${REAL_KEY}`);
+    const expected = new Uint8Array(await mirror.arrayBuffer());
+    assert.deepEqual(upstreamCalls[0].init.body, expected);
+  });
+
+  test('GET on the transcription path is 404', async () => {
+    const response = await worker.fetch(
+      new Request('https://proxy.example.com/v1/audio/transcriptions'),
+      makeEnv(),
+    );
+    assert.equal(response.status, 404);
+    assert.equal(upstreamCalls.length, 0);
+  });
+
+  test('the transcription route requires the proxy token', async () => {
+    const request = new Request('https://proxy.example.com/v1/audio/transcriptions', {
+      method: 'POST',
+      body: makeAudioForm(),
+    });
+    const response = await worker.fetch(request, makeEnv());
+    assert.equal(response.status, 401);
+    assert.equal(upstreamCalls.length, 0);
+  });
+
+  test('JSON on the transcription route is 415', async () => {
+    const request = new Request('https://proxy.example.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${GOOD_TOKEN}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'whisper-1' }),
+    });
+    const response = await worker.fetch(request, makeEnv());
+    assert.equal(response.status, 415);
+    assert.equal(upstreamCalls.length, 0);
+  });
+
+  test('garbage with a multipart content-type is 400 and never echoed', async () => {
+    const request = new Request('https://proxy.example.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${GOOD_TOKEN}`,
+        'content-type': 'multipart/form-data; boundary=xyz',
+      },
+      body: 'Иванов Пётр — это не multipart',
+    });
+    const response = await worker.fetch(request, makeEnv());
+    assert.equal(response.status, 400);
+    const text = await response.text();
+    assert.ok(!text.includes('Иванов'));
+    assert.equal((JSON.parse(text) as { error: { code: string } }).error.code, 'invalid_multipart');
+    assert.equal(upstreamCalls.length, 0);
+  });
+
+  test('oversized audio is 413 before any upstream call', async () => {
+    const form = new FormData();
+    form.append('model', 'whisper-1');
+    form.append('file', new File([new Uint8Array(8192)], 'voice.m4a', { type: 'audio/mp4' }));
+    const response = await worker.fetch(
+      makeTranscribeRequest(form),
+      makeEnv({ MAX_AUDIO_BODY_BYTES: '2048' }),
+    );
+    assert.equal(response.status, 413);
+    assert.equal(upstreamCalls.length, 0);
+  });
+
+  test('a chat model is not authorised for transcription', async () => {
+    const response = await worker.fetch(
+      makeTranscribeRequest(makeAudioForm('gpt-4o-mini')),
+      makeEnv(),
+    );
+    assert.equal(response.status, 400);
+    const parsed = (await response.json()) as { error: { code: string } };
+    assert.equal(parsed.error.code, 'model_not_allowed');
+    assert.equal(upstreamCalls.length, 0);
+  });
+
+  test('a missing model field is refused', async () => {
+    const response = await worker.fetch(makeTranscribeRequest(makeAudioForm(null)), makeEnv());
+    assert.equal(response.status, 400);
+    assert.equal(upstreamCalls.length, 0);
+  });
+
+  test('stream=true is refused while ALLOW_STREAMING is false', async () => {
+    const form = makeAudioForm('gpt-4o-mini-transcribe');
+    form.append('stream', 'true');
+    const response = await worker.fetch(makeTranscribeRequest(form), makeEnv());
+    assert.equal(response.status, 400);
+    const parsed = (await response.json()) as { error: { code: string } };
+    assert.equal(parsed.error.code, 'streaming_disabled');
+    assert.equal(upstreamCalls.length, 0);
+  });
+
+  test('chat and transcription share one daily budget', async () => {
+    const env = makeEnv({ DAILY_REQUEST_LIMIT: '1' });
+    const chat = await worker.fetch(makeRequest(), env);
+    assert.equal(chat.status, 200);
+    const voice = await worker.fetch(makeTranscribeRequest(), env);
+    assert.equal(voice.status, 429);
+    assert.equal(upstreamCalls.length, 1, 'the voice request must not reach OpenAI');
+  });
+
+  test('no log line contains the filename, the form fields or the audio bytes', async () => {
+    await worker.fetch(makeTranscribeRequest(), makeEnv());
+    const joined = logLines.join('\n');
+    for (const secret of [AUDIO_MARKER, 'голос', 'иванова', GOOD_TOKEN, REAL_KEY]) {
+      assert.ok(!joined.includes(secret), `log leaked ${secret}: ${joined}`);
+    }
+    const entry = JSON.parse(logLines[0]) as Record<string, unknown>;
+    assert.equal(entry.outcome, 'ok');
+    assert.equal(entry.model, 'whisper-1');
+  });
+});
+
 // --- output token cap ------------------------------------------------------
 
 describe('output token cap', () => {
@@ -686,5 +849,14 @@ describe('body reader', () => {
     // 10 Cyrillic characters = 20 UTF-8 bytes.
     const request = new Request('https://x/', { method: 'POST', body: 'о'.repeat(10) });
     assert.deepEqual(await readBodyWithLimit(request, 15), { ok: false });
+  });
+
+  test('the raw reader returns binary bytes untouched', async () => {
+    // Bytes that are not valid UTF-8 — a text decode would mangle them.
+    const bytes = new Uint8Array([0x00, 0xff, 0x80, 0x07, 0xfe]);
+    const request = new Request('https://x/', { method: 'POST', body: bytes });
+    const result = await readRawBodyWithLimit(request, 1024);
+    assert.ok(result.ok);
+    assert.deepEqual(result.bytes, bytes);
   });
 });

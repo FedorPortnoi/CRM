@@ -121,3 +121,4 @@ backend-log.txt
 # The PRIVATE key on the line below stays excluded and must never be committed — it is
 # what signs a manifest, so anyone holding it can push arbitrary code to every install.
 !certs/updates/certificate.pem
+dist.*-rollback/

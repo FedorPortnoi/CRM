@@ -417,6 +417,19 @@ export default function SettingsScreen(): JSX.Element {
             </TouchableOpacity>
             <View style={styles.divider} />
             <TouchableOpacity
+              onPress={() => router.push('/settings/lead-inbox' as never)}
+              accessibilityRole="button"
+            >
+              <View style={styles.row}>
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowLabel}>{t('settings.leadInbox')}</Text>
+                  <Text style={styles.comingSoon}>{t('settings.leadInboxDesc')}</Text>
+                </View>
+                <Text style={styles.chevron}>{'>'}</Text>
+              </View>
+            </TouchableOpacity>
+            <View style={styles.divider} />
+            <TouchableOpacity
               onPress={() => router.push('/settings/api-keys' as never)}
               accessibilityRole="button"
             >

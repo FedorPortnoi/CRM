@@ -63,11 +63,13 @@
  * Those are the subject of the summary and the model cannot write one without
  * them; that is a separate, deliberate decision recorded above.
  *
- * This matters beyond minimisation because `generateWithYandexGpt` below is an
- * adapter onto ./yandex-gpt — the SAME `createCompletion` the assistant uses,
- * and the single provider client in the backend. When Wave A repoints that
- * module at OpenAI through workers/openai-proxy, everything in this prompt
- * becomes a cross-border transfer under ст. 12 with no code change here.
+ * This matters beyond minimisation because `generateWithModelProvider` below
+ * is an adapter onto ./model-provider — the SAME `createCompletion` seam the
+ * assistant uses. Wave A happened 2026-08-11: MODEL_PROVIDER=openai repoints
+ * that seam at OpenAI through workers/openai-proxy, and everything in this
+ * prompt becomes a cross-border transfer under ст. 12 with no code change
+ * here — which is exactly why the aliasing above keys off
+ * personalNamesMayBeSent() instead of a constant.
  *
  * ---------------------------------------------------------------------------
  * DEGRADATION
@@ -88,9 +90,10 @@ import { aliasForContactId, rehydrateAliases } from './contact-alias';
 import {
   assertPersonalNamesMayBeSent,
   CrossBorderPersonalDataError,
+  currentModelProvider,
   personalNamesMayBeSent,
 } from './model-jurisdiction';
-import { createCompletion } from './yandex-gpt';
+import { createCompletion } from './model-provider';
 
 // ---------------------------------------------------------------------------
 // Tunables
@@ -119,7 +122,10 @@ const MAX_ACTIVITIES = 10;
 const MAX_NOTES_CHARS = 800;
 const MAX_ACTIVITY_TEXT_CHARS = 200;
 
-const AI_PROVIDER = 'yandexgpt';
+/** Reported in response payloads so the operator can see whose words these are. */
+function providerLabel(): string {
+  return currentModelProvider();
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -661,12 +667,12 @@ const PASSTHROUGH_STATUSES: Record<string, number> = {
 const TIMEOUT = Symbol('contact-ai-timeout');
 
 /**
- * Adapter onto backend/services/yandex-gpt. That module speaks a richer,
+ * Adapter onto backend/services/model-provider. That seam speaks a richer,
  * provider-agnostic message/tool protocol; everything here is a single-turn
  * text completion, so the seam this service is written against stays a plain
  * `(prompt) => text` and the shape conversion happens once, here.
  */
-async function generateWithYandexGpt(prompt: string): Promise<GenerateTextResult> {
+async function generateWithModelProvider(prompt: string): Promise<GenerateTextResult> {
   const result = await createCompletion({
     messages: [{ role: 'user', text: prompt }],
     temperature: AI_TEMPERATURE,
@@ -682,7 +688,7 @@ async function generateWithYandexGpt(prompt: string): Promise<GenerateTextResult
 }
 
 function resolveGenerator(deps: ContactAiDeps | undefined): GenerateTextFn {
-  return deps?.generateText ?? generateWithYandexGpt;
+  return deps?.generateText ?? generateWithModelProvider;
 }
 
 /**
@@ -850,7 +856,7 @@ export async function summarizeContact(params: {
         contact_id: contact.id,
         summary: forOperator(summary),
         next_action: nextAction ? forOperator(nextAction) : null,
-        provider: AI_PROVIDER,
+        provider: providerLabel(),
         generated_at: isoInstant(now) ?? new Date().toISOString(),
         context_counts: {
           deals: context.deals.length,
@@ -926,7 +932,7 @@ export async function suggestContactFields(params: {
           position: suggestionField(parsed.position, 150),
         },
         applied: false,
-        provider: AI_PROVIDER,
+        provider: providerLabel(),
         generated_at: isoInstant(now) ?? new Date().toISOString(),
       },
     };

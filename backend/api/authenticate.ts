@@ -58,6 +58,7 @@ const ACTION_CAPABILITY: Record<string, Capability> = {
   'tasks.reminders_read': 'tasks.read',
   'tasks.reminders_write': 'tasks.write',
   'integrations.amocrm_manage': 'integrations.manage',
+  'integrations.leadinbox_manage': 'integrations.manage',
   // Owner, admin AND marketer. Mapped explicitly because the unmapped fallback
   // below is `org.manage`, which marketer does NOT hold — registering the route
   // without this line would 403 every marketer on the entire marketing surface
@@ -276,6 +277,17 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
     return isReadOnlyMethod(method)
       ? { action: 'tasks.reminders_read', reason: 'reading task reminders requires tasks.read' }
       : { action: 'tasks.reminders_write', reason: 'changing task reminders requires tasks.write' };
+  }
+
+  // The whole lead-inbox surface reads or changes one organization-wide
+  // integration (its IMAP credentials among other things), so every method is
+  // owner/admin — same shape as the amoCRM branch below, and the controller
+  // re-asks the identical capability.
+  if (path.startsWith('/api/v1/integrations/lead-inbox')) {
+    return {
+      action: 'integrations.leadinbox_manage',
+      reason: 'managing the lead inbox integration requires owner or admin',
+    };
   }
 
   // Status, consent start, webhook subscription, reconciliation, conflict

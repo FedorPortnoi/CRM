@@ -23,6 +23,14 @@ head_sampling_rate = 1
 # snapshot such as "gpt-4o-mini-2024-07-18" must be listed on its own.
 ALLOWED_MODELS = "gpt-4o-mini,gpt-4o"
 
+# Same rule for POST /v1/audio/transcriptions — the assistant's voice-message
+# path. Empty would allow nothing.
+ALLOWED_TRANSCRIBE_MODELS = "whisper-1,gpt-4o-mini-transcribe"
+
+# Largest multipart body the transcription route accepts (25 MiB — OpenAI's
+# own per-file ceiling). A CRM voice message is roughly 1 MB per minute.
+MAX_AUDIO_BODY_BYTES = "26214400"
+
 # Hard ceiling on forwarded requests per day. This is the runaway-loop brake:
 # once it is hit, every further request is refused until the day rolls over.
 DAILY_REQUEST_LIMIT = "500"

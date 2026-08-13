@@ -20,7 +20,8 @@ export type NotificationEventType =
   | 'deal.close_7d'
   | 'deal.close_1d'
   | 'contact.assigned'
-  | 'contact.reassigned';
+  | 'contact.reassigned'
+  | 'lead.new';
 
 // Whether this event type needs deduplication (scheduled, fires repeatedly)
 const SCHEDULED_EVENTS = new Set<NotificationEventType>([
@@ -63,7 +64,12 @@ interface ContactCtx {
 type EventContext =
   | { eventType: 'task.assigned' | 'task.reassigned' | 'task.completed' | 'task.deadline_24h' | 'task.deadline_2h' | 'task.overdue' | 'task.expired'; orgId: string; task: TaskCtx }
   | { eventType: 'deal.assigned' | 'deal.reassigned' | 'deal.stage_changed' | 'deal.won' | 'deal.lost' | 'deal.close_7d' | 'deal.close_1d'; orgId: string; deal: DealCtx }
-  | { eventType: 'contact.assigned' | 'contact.reassigned'; orgId: string; contact: ContactCtx };
+  | { eventType: 'contact.assigned' | 'contact.reassigned'; orgId: string; contact: ContactCtx }
+  // An inbound client request (Яндекс Бизнес «Заявки» today). `source` is the
+  // human-readable channel («Яндекс Карты»), `details` the client's own
+  // name/phone/comment — the words the recipient needs to call back, not the
+  // words of a teammate handing over work.
+  | { eventType: 'lead.new'; orgId: string; deal: DealCtx; source: string; details?: string };
 
 // ─── Message templates ────────────────────────────────────────────────────────
 
@@ -289,6 +295,17 @@ function buildMessages(ctx: EventContext): Array<{ recipientId: string; role: st
       }
       break;
 
+    // ── Inbound leads ──────────────────────────────────────────────────────────
+    // Deliberately NOT the deal.assigned copy: nobody assigned anything — a
+    // client wrote in. lead-inbox guarantees the deal has an owner (falling back
+    // to the org's владелец), so this always reaches exactly one person.
+    case 'lead.new':
+      add(ctx.deal.owner?.id, 'assignee', {
+        title: `Новая заявка (${ctx.source})`,
+        body: ctx.details ?? ctx.deal.title,
+      });
+      break;
+
     // ── Contacts ───────────────────────────────────────────────────────────────
     case 'contact.assigned':
       add(ctx.contact.assignee.id, 'assignee', {
@@ -325,6 +342,9 @@ function buildMessages(ctx: EventContext): Array<{ recipientId: string; role: st
 function entityTypeFor(eventType: NotificationEventType): string {
   if (eventType.startsWith('task.')) return 'task';
   if (eventType.startsWith('deal.')) return 'deal';
+  // A lead.new notification is ABOUT the deal the заявка created — tapping it
+  // must open that deal, so the entity is the deal, not a contact.
+  if (eventType === 'lead.new') return 'deal';
   return 'contact';
 }
 

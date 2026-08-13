@@ -16,6 +16,7 @@ import {
 } from './reminders';
 import { runAmoSyncTick } from './amocrm/sync-worker';
 import { runAmoReconciliationTick } from './amocrm/reconcile';
+import { runLeadInboxTick } from './lead-inbox';
 
 const JOIN_CODE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -802,6 +803,13 @@ export function startScheduler(): void {
     void runExclusively('webhook-delivery', runWebhookDeliveryTick);
     void runExclusively('amocrm-sync', async () => {
       await runAmoSyncTick();
+    });
+    // Inbound lead mailboxes (Яндекс Бизнес «Заявки» → воронка). Every message
+    // is claimed in LeadInboxMessage before anything is created from it, so
+    // the per-row dedup holds even beyond this in-process guard; the guard is
+    // here so a slow IMAP server cannot stack ticks.
+    void runExclusively('lead-inbox', async () => {
+      await runLeadInboxTick();
     });
     tickSequences();
   };

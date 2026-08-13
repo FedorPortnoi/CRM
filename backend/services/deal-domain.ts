@@ -256,6 +256,11 @@ export async function createDealForUser(
   orgId: string,
   requestingUser: Requester | string,
   body: CreateDealInput,
+  // `silentAssignment` skips the deal.assigned notification ONLY. The event's
+  // copy is "X назначил вам" — words for a teammate handing over work. A system
+  // caller that creates pre-assigned deals (lead-inbox) sends its own event
+  // instead, and without this flag the recipient would get both.
+  options?: { silentAssignment?: boolean },
 ): Promise<CreateDealResult> {
   const requester = await resolveRequester(orgId, requestingUser);
   const requestingUserId = requester.sub;
@@ -365,7 +370,7 @@ export async function createDealForUser(
     action: 'created',
   });
 
-  if (deal.assigned_to) {
+  if (deal.assigned_to && !options?.silentAssignment) {
     void dealCtx({ orgId, dealId: deal.id }).then((ctx) => {
       if (ctx) void dispatchNotification({ eventType: 'deal.assigned', orgId, deal: ctx });
     });

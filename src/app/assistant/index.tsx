@@ -2,6 +2,7 @@
 //
 // Backend: GET  /api/v1/assistant/status
 //          POST /api/v1/assistant/messages          { message, conversation_id? }
+//          POST /api/v1/assistant/transcribe        multipart { file }
 //          GET  /api/v1/assistant/conversations
 //          GET  /api/v1/assistant/conversations/:id
 // i18n:    assistant.*
@@ -26,6 +27,13 @@
 // A `viewer` is refused by the global role rule in backend/api/authenticate.ts
 // (403 on any non-GET), so the composer is replaced with a note rather than
 // letting them type into a guaranteed failure.
+//
+// Voice input (the mic in the composer) is record → transcribe → REVIEW: the
+// transcript lands in the text box instead of being sent, because the
+// assistant acts on CRM data and a mis-heard «удали» must die in the box, not
+// in a tool call. The mic only appears when the server reports voice_input —
+// the server keeps it off until the owner has accepted that recordings go to
+// a foreign speech-recognition provider (see backend/services/transcription.ts).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -43,7 +51,14 @@ import {
 import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { History, Plus, Send, ServerCog, Sparkles } from 'lucide-react-native';
+import { Check, History, Mic, Plus, Send, ServerCog, Sparkles, X } from 'lucide-react-native';
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from 'expo-audio';
 import { useUserStore } from '../../store/userStore';
 import { formatMarketDateTime, formatMarketTime } from '../../market/profile';
 import {
@@ -54,6 +69,7 @@ import {
   useAssistantConversations,
   useAssistantStatus,
   useSendAssistantMessage,
+  useTranscribeVoice,
   type AssistantBubble,
   type AssistantErrorCode,
 } from '../../hooks/useAssistant';
@@ -85,6 +101,50 @@ function isNotConfiguredCode(code: AssistantErrorCode | null): boolean {
   return code === 'SERVICE_NOT_CONFIGURED' || code === 'AI_UNAUTHORIZED';
 }
 
+// ── Voice input ──────────────────────────────────────────────────────────────
+
+/** Mono 64 kbps AAC in an m4a container — ~0.5 MB per minute of speech. The
+ * HIGH_QUALITY preset is the base because LOW_QUALITY switches Android to
+ * 3gp/AMR, which the transcription service does not accept. */
+const VOICE_RECORDING_OPTIONS = {
+  ...RecordingPresets.HIGH_QUALITY,
+  numberOfChannels: 1,
+  bitRate: 64_000,
+};
+
+/** Hard stop, mirrored nowhere server-side on purpose: the server caps bytes
+ * (15 MiB), the client caps time, and both are generous for a spoken command. */
+const MAX_VOICE_RECORDING_MS = 120_000;
+
+/** Recordings shorter than this are treated as an accidental tap and dropped
+ * without an upload or an error. */
+const MIN_VOICE_RECORDING_MS = 500;
+
+type VoiceState = 'idle' | 'recording' | 'transcribing';
+
+function voiceErrorKey(code: AssistantErrorCode): string {
+  switch (code) {
+    case 'SERVICE_NOT_CONFIGURED':
+    case 'AI_UNAUTHORIZED':
+      return 'assistant.notConfigured';
+    case 'AI_RATE_LIMITED':
+      return 'assistant.rateLimited';
+    case 'AI_TIMEOUT':
+      return 'assistant.timeout';
+    case 'NETWORK_ERROR':
+      return 'errors.networkError';
+    default:
+      return 'assistant.voiceTranscribeFailed';
+  }
+}
+
+function formatVoiceDuration(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes)}:${String(seconds).padStart(2, '0')}`;
+}
+
 export default function AssistantScreen(): JSX.Element {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -110,6 +170,12 @@ export default function AssistantScreen(): JSX.Element {
   const conversationsQuery = useAssistantConversations(historyOpen);
   const conversationQuery = useAssistantConversation(openedConversationId);
   const sendMutation = useSendAssistantMessage();
+
+  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  const [voiceErrorText, setVoiceErrorText] = useState<string | null>(null);
+  const recorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
+  const recorderState = useAudioRecorderState(recorder);
+  const { mutate: transcribeVoice } = useTranscribeVoice();
 
   const isSending = sendMutation.isPending;
 
@@ -214,6 +280,95 @@ export default function AssistantScreen(): JSX.Element {
     submit(failed.content);
   }, [bubbles, submit]);
 
+  // ── Voice input: record → transcribe → review in the composer ─────────────
+  const startRecording = useCallback(async (): Promise<void> => {
+    setVoiceErrorText(null);
+    try {
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        setVoiceErrorText(t('assistant.voiceMicDenied'));
+        return;
+      }
+      // allowsRecording routes iOS audio through the record-capable session;
+      // without it record() silently produces an empty file.
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setVoiceState('recording');
+    } catch {
+      setVoiceState('idle');
+      setVoiceErrorText(t('assistant.voiceRecordFailed'));
+    }
+  }, [recorder, t]);
+
+  const cancelRecording = useCallback(async (): Promise<void> => {
+    setVoiceState('idle');
+    try {
+      await recorder.stop();
+    } catch {
+      // Already stopped (auto-stop raced the tap) — nothing to clean up.
+    }
+    void setAudioModeAsync({ allowsRecording: false }).catch(() => undefined);
+  }, [recorder]);
+
+  const finishRecording = useCallback(async (): Promise<void> => {
+    const durationMs = recorderState.durationMillis;
+    let uri: string | null = null;
+    try {
+      await recorder.stop();
+      uri = recorder.uri;
+    } catch {
+      uri = null;
+    }
+    void setAudioModeAsync({ allowsRecording: false }).catch(() => undefined);
+
+    // A sub-second tap is an accident, not a message — drop it silently.
+    if (durationMs < MIN_VOICE_RECORDING_MS) {
+      setVoiceState('idle');
+      return;
+    }
+    if (uri === null) {
+      setVoiceState('idle');
+      setVoiceErrorText(t('assistant.voiceRecordFailed'));
+      return;
+    }
+
+    setVoiceState('transcribing');
+    transcribeVoice(
+      { uri },
+      {
+        onSuccess: ({ text }) => {
+          setVoiceState('idle');
+          if (text.length === 0) {
+            setVoiceErrorText(t('assistant.voiceEmpty'));
+            return;
+          }
+          // Appended, not sent: the user reviews (and can fix) the transcript
+          // before the assistant is allowed to act on it.
+          setDraft((prev) =>
+            (prev.trim().length === 0 ? text : `${prev.trimEnd()} ${text}`).slice(
+              0,
+              ASSISTANT_MAX_MESSAGE_CHARS,
+            ),
+          );
+        },
+        onError: (error) => {
+          setVoiceState('idle');
+          setVoiceErrorText(t(voiceErrorKey(assistantErrorCode(error))));
+        },
+      },
+    );
+  }, [recorder, recorderState.durationMillis, t, transcribeVoice]);
+
+  // The duration check lives in an effect rather than a timer so it keeps
+  // counting from the recorder's own clock, which survives re-renders.
+  useEffect(() => {
+    if (voiceState !== 'recording') return;
+    if (recorderState.durationMillis >= MAX_VOICE_RECORDING_MS) {
+      void finishRecording();
+    }
+  }, [voiceState, recorderState.durationMillis, finishRecording]);
+
   const startNewConversation = useCallback((): void => {
     setConversationId(null);
     setOpenedConversationId(null);
@@ -239,6 +394,10 @@ export default function AssistantScreen(): JSX.Element {
   const charsLeft = ASSISTANT_MAX_MESSAGE_CHARS - draft.length;
   const composerDisabled = isSending || notConfigured;
   const isLoadingConversation = conversationQuery.isPending && openedConversationId !== null;
+  // The server decides: voice_input stays false until transcription is
+  // configured AND the cross-border transfer has been explicitly accepted.
+  const voiceAvailable = statusQuery.data?.voice_input === true && !notConfigured;
+  const showMicButton = voiceAvailable && draft.trim().length === 0 && voiceState === 'idle';
 
   const renderBubble = useCallback(
     ({ item }: { item: AssistantBubble }): JSX.Element => {
@@ -434,38 +593,88 @@ export default function AssistantScreen(): JSX.Element {
 
         {canChat ? (
           <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+            {voiceErrorText !== null ? (
+              <Text style={styles.errorText}>{voiceErrorText}</Text>
+            ) : null}
             {charsLeft <= CHARS_LEFT_WARNING ? (
               <Text style={styles.charsLeft}>{t('assistant.charsLeft', { count: charsLeft })}</Text>
             ) : null}
-            <View style={styles.composerRow}>
-              <TextInput
-                style={styles.input}
-                value={draft}
-                onChangeText={setDraft}
-                placeholder={t('assistant.inputPlaceholder')}
-                placeholderTextColor={colors.placeholder}
-                multiline
-                maxLength={ASSISTANT_MAX_MESSAGE_CHARS}
-                editable={!composerDisabled}
-                accessibilityLabel={t('assistant.inputPlaceholder')}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  (composerDisabled || draft.trim().length === 0) && styles.sendButtonDisabled,
-                ]}
-                onPress={handleSend}
-                disabled={composerDisabled || draft.trim().length === 0}
-                accessibilityRole="button"
-                accessibilityLabel={t('assistant.send')}
-              >
-                {isSending ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
+            {voiceState === 'transcribing' ? (
+              <Text style={styles.voiceHint}>{t('assistant.voiceTranscribing')}</Text>
+            ) : null}
+            {voiceState === 'recording' ? (
+              <View style={styles.composerRow}>
+                <TouchableOpacity
+                  style={styles.voiceCancelButton}
+                  onPress={() => { void cancelRecording(); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('assistant.voiceCancel')}
+                >
+                  <X size={20} color={colors.red} strokeWidth={2.2} />
+                </TouchableOpacity>
+                <View style={styles.voiceStatus}>
+                  <View style={styles.voiceDot} />
+                  <Text style={styles.voiceStatusText}>{t('assistant.voiceRecording')}</Text>
+                  <Text style={styles.voiceTimer}>
+                    {formatVoiceDuration(recorderState.durationMillis)}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.sendButton}
+                  onPress={() => { void finishRecording(); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('assistant.voiceStop')}
+                >
+                  <Check size={18} color="#FFFFFF" strokeWidth={2.4} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.composerRow}>
+                <TextInput
+                  style={styles.input}
+                  value={draft}
+                  onChangeText={setDraft}
+                  placeholder={t('assistant.inputPlaceholder')}
+                  placeholderTextColor={colors.placeholder}
+                  multiline
+                  maxLength={ASSISTANT_MAX_MESSAGE_CHARS}
+                  editable={!composerDisabled}
+                  accessibilityLabel={t('assistant.inputPlaceholder')}
+                />
+                {voiceState === 'transcribing' ? (
+                  <View style={[styles.sendButton, styles.sendButtonDisabled]}>
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  </View>
+                ) : showMicButton ? (
+                  <TouchableOpacity
+                    style={[styles.sendButton, composerDisabled && styles.sendButtonDisabled]}
+                    onPress={() => { void startRecording(); }}
+                    disabled={composerDisabled}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('assistant.voiceRecord')}
+                  >
+                    <Mic size={18} color="#FFFFFF" strokeWidth={2.4} />
+                  </TouchableOpacity>
                 ) : (
-                  <Send size={18} color="#FFFFFF" strokeWidth={2.4} />
+                  <TouchableOpacity
+                    style={[
+                      styles.sendButton,
+                      (composerDisabled || draft.trim().length === 0) && styles.sendButtonDisabled,
+                    ]}
+                    onPress={handleSend}
+                    disabled={composerDisabled || draft.trim().length === 0}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('assistant.send')}
+                  >
+                    {isSending ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Send size={18} color="#FFFFFF" strokeWidth={2.4} />
+                    )}
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
-            </View>
+              </View>
+            )}
           </View>
         ) : (
           <View style={styles.banner}>
@@ -665,6 +874,28 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
   },
   sendButtonDisabled: { opacity: 0.45 },
+
+  voiceCancelButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: c.inputBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceStatus: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 6,
+  },
+  voiceDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: c.red },
+  voiceStatusText: { color: c.text1, fontSize: 14, fontWeight: '600' },
+  voiceTimer: { color: c.amber, fontSize: 14, fontVariant: ['tabular-nums'] },
+  voiceHint: { fontSize: 11, color: c.amber, textAlign: 'right' },
 
   modalBackdrop: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
   modalCard: {

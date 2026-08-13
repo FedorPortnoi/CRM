@@ -607,7 +607,9 @@ describe('summarizeContact — result', () => {
       contact_id: CONTACT_ID,
       summary: 'Клиент в активной работе.',
       next_action: 'Позвонить в пятницу.',
-      provider: 'yandexgpt',
+      // The label is the configured provider id, so an operator reading a
+      // stored summary can tell whose model wrote it after a Wave A switch.
+      provider: 'yandex_foundation_models',
       generated_at: '2026-07-25T00:00:00.000Z',
       context_counts: { deals: 1, tasks: 1, activities: 1 },
       last_activity_at: '2026-07-22T12:00:00.000Z',
@@ -689,7 +691,7 @@ describe('suggestContactFields', () => {
         position: 'Коммерческий директор',
       },
       applied: false,
-      provider: 'yandexgpt',
+      provider: 'yandex_foundation_models',
       generated_at: '2026-07-25T00:00:00.000Z',
     });
 

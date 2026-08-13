@@ -4,18 +4,19 @@
 CRM backend calls the Worker, the Worker calls OpenAI. It holds the OpenAI key,
 so the CRM never does.
 
-It is deliberately not a general-purpose proxy. It forwards exactly one
-endpoint, for an allowlist of models, behind its own shared secret, under a
-daily request ceiling.
+It is deliberately not a general-purpose proxy. It forwards exactly two
+endpoints — chat completions and audio transcriptions (the assistant's
+voice-message path) — each with its own allowlist of models, behind one shared
+secret, under one daily request ceiling.
 
 ```
-backend/services/assistant.ts
-        │  Authorization: Bearer <PROXY_TOKEN>
-        ▼
-  this Worker  ──(daily counter: Durable Object)
+backend/services/assistant.ts        backend/services/transcription.ts
+        │  Authorization: Bearer <PROXY_TOKEN>      │
+        ▼                                           ▼
+  this Worker  ──(daily counter: Durable Object, shared by both routes)
         │  Authorization: Bearer <OPENAI_API_KEY>   ← injected here, never leaves Cloudflare
-        ▼
-  api.openai.com/v1/chat/completions
+        ▼                                           ▼
+  api.openai.com/v1/chat/completions   api.openai.com/v1/audio/transcriptions
 ```
 
 ---
@@ -211,13 +212,23 @@ they contain no body content.
 
 ## Security decisions
 
-**One route, no passthrough.** Only `POST /v1/chat/completions` is served;
-everything else — including `GET` on that same path — returns 404. A proxy that
-forwards whatever path it is given is an open relay in front of a funded OpenAI
-account: anyone with the token could reach `/v1/images/generations`,
-`/v1/fine_tuning/jobs`, or the account's own management surface. The CRM calls
-exactly one endpoint, so exactly one endpoint is exposed. There is deliberately
-no `/health` route either — a 404 from the Worker is already proof it is alive.
+**Two routes, no passthrough.** Only `POST /v1/chat/completions` and
+`POST /v1/audio/transcriptions` are served; everything else — including `GET`
+on those same paths — returns 404. A proxy that forwards whatever path it is
+given is an open relay in front of a funded OpenAI account: anyone with the
+token could reach `/v1/images/generations`, `/v1/fine_tuning/jobs`, or the
+account's own management surface. The CRM calls exactly two endpoints, so
+exactly two endpoints are exposed. There is deliberately no `/health` route
+either — a 404 from the Worker is already proof it is alive.
+
+**The transcription route keeps every guarantee.** The multipart body is
+parsed once, in memory, only to check `model` against
+`ALLOWED_TRANSCRIBE_MODELS` (a separate allowlist — a chat model does not
+authorise transcription, or vice versa) and to apply the streaming gate; the
+original bytes are then forwarded verbatim with their boundary. Nothing from
+the form — filename, audio, prompt text — is ever logged, and the body cap
+(`MAX_AUDIO_BODY_BYTES`, 25 MiB default to match OpenAI's own file limit) is
+enforced on the stream exactly like the JSON cap.
 
 **Two separate secrets.** `PROXY_TOKEN` authenticates the caller;
 `OPENAI_API_KEY` authenticates the Worker to OpenAI. The CRM only ever holds the
@@ -331,7 +342,9 @@ redeploy. Values are clamped to sane ranges; garbage falls back to the default.
 
 | Var | Default | Meaning |
 | --- | --- | --- |
-| `ALLOWED_MODELS` | `gpt-4o-mini,gpt-4o` | Comma-separated exact model ids. Empty = nothing allowed. |
+| `ALLOWED_MODELS` | `gpt-4o-mini,gpt-4o` | Comma-separated exact model ids for chat. Empty = nothing allowed. |
+| `ALLOWED_TRANSCRIBE_MODELS` | `whisper-1,gpt-4o-mini-transcribe` | Same, for `/v1/audio/transcriptions`. |
+| `MAX_AUDIO_BODY_BYTES` | `26214400` | Largest multipart body on the transcription route (25 MiB). |
 | `DAILY_REQUEST_LIMIT` | `500` | Forwarded requests per day before everything is refused. |
 | `MAX_BODY_BYTES` | `262144` | Largest accepted request body (256 KiB). |
 | `UPSTREAM_TIMEOUT_MS` | `60000` | Abort the OpenAI call after this long. |

@@ -123,6 +123,8 @@ export const TENANT_KEY_BY_MODEL: Readonly<Record<string, 'organization_id' | 'o
   EmailTemplate: 'organization_id',
   IdempotencyKey: 'organization_id',
   Invite: 'organization_id',
+  LeadInbox: 'organization_id',
+  LeadInboxMessage: 'organization_id',
   Message: 'organization_id',
   Notification: 'organization_id',
   PendingCapture: 'org_id',
@@ -181,6 +183,11 @@ const EXTRA_IDENTITY_KEYS: Readonly<Record<string, readonly string[]>> = {
   // per org). Dropping it would fail that assertion, not relax anything.
   AmoIntegration: ['organization_id'],
   ApiKey: ['key_hash'],
+  // Same shape as AmoIntegration: one lead inbox per org, organization_id is
+  // `@unique`, and the schema test wants the field-level unique set mirrored.
+  // intake_token is the org's slice of the shared collector mailbox — a
+  // globally unique routing key, addressing at most one row by construction.
+  LeadInbox: ['organization_id', 'intake_token'],
   AuthSession: ['token_hash'],
   Contact: ['unsubscribe_token'],
   EmailSend: ['open_token'],

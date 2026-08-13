@@ -71,6 +71,7 @@ const MODULES: Array<[string, string]> = [
   ['imports', '/api/v1/import'],
   ['amocrm', '/api/v1/amocrm'],
   ['amocrm-webhook', '/api/v1/integrations/amocrm'],
+  ['lead-inbox', '/api/v1/integrations/lead-inbox'],
   ['org', '/api/v1/org'],
   ['reporting', '/api/v1/reports'],
   ['webhooks', '/api/v1/webhooks'],

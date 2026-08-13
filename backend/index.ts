@@ -33,6 +33,7 @@ import chatRoutes from './api/routes/chat';
 import importsRoutes from './api/routes/imports';
 import amocrmRoutes from './api/routes/amocrm';
 import amocrmWebhookRoutes from './api/routes/amocrm-webhook';
+import leadInboxRoutes from './api/routes/lead-inbox';
 import orgRoutes from './api/routes/org';
 import reportingRoutes from './api/routes/reporting';
 import webhooksRoutes from './api/routes/webhooks';
@@ -275,6 +276,7 @@ async function start() {
   await server.register(importsRoutes, { prefix: '/api/v1/import' });
   await server.register(amocrmRoutes, { prefix: '/api/v1/amocrm' });
   await server.register(amocrmWebhookRoutes, { prefix: '/api/v1/integrations/amocrm' });
+  await server.register(leadInboxRoutes, { prefix: '/api/v1/integrations/lead-inbox' });
   await server.register(orgRoutes, { prefix: '/api/v1/org' });
   await server.register(reportingRoutes, { prefix: '/api/v1/reports' });
   await server.register(webhooksRoutes, { prefix: '/api/v1/webhooks' });
