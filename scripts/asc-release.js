@@ -35,19 +35,24 @@ const SUBMIT = process.argv.includes('--submit');
 const RELEASE_TYPE = process.argv.includes('--manual') ? 'MANUAL' : 'AFTER_APPROVAL';
 
 const WHATS_NEW_RU = [
-  'Этапы воронки теперь настраиваются: добавляйте свои этапы, меняйте порядок,',
-  'цвет и вероятность сделки.',
+  'Заявки с Яндекс Карт: подключите приём заявок в настройках — и каждая заявка',
+  'с профиля вашей организации сама станет контактом и сделкой в воронке,',
+  'а вам придёт уведомление с именем и телефоном клиента.',
   '',
-  'Напоминания стали гибче — ежедневно, по будням или по выбранным дням недели,',
-  'в удобное время и до нужной даты.',
+  'Голосовой ввод в ИИ-ассистенте: диктуйте вопрос — приложение расшифрует',
+  'и ответит.',
+  '',
+  'Приглашения в команду теперь можно принимать прямо в приложении.',
 ].join('\n');
 
 const WHATS_NEW_EN = [
-  'Funnel stages are now editable: add your own stages, reorder them, and set',
-  'colour and deal probability.',
+  'Yandex Maps lead intake: enable it in settings and every client request from',
+  'your organization profile becomes a contact and a deal in your funnel,',
+  'with a notification carrying the client name and phone.',
   '',
-  'Reminders are more flexible — daily, on weekdays, or on chosen days of the week,',
-  'at a time you pick and until a date you choose.',
+  'Voice input for the AI assistant: dictate your question and get an answer.',
+  '',
+  'Team invitations can now be accepted right in the app.',
 ].join('\n');
 
 function envValue(key) {

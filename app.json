@@ -2,7 +2,7 @@
   "expo": {
     "name": "4KUB",
     "slug": "crm",
-    "version": "1.1.6",
+    "version": "1.1.7",
     "owner": "flada",
     "scheme": "crm",
     "orientation": "portrait",
@@ -55,7 +55,7 @@
       "edgeToEdgeEnabled": true,
       "allowBackup": false,
       "package": "com.fedorportnoi.crm",
-      "versionCode": 11,
+      "versionCode": 12,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED",
