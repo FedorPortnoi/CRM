@@ -303,11 +303,12 @@ function negotiateDocument(built, acceptEncoding) {
  *
  * Returns a fresh object each call — callers mutate it.
  *
- * No Strict-Transport-Security. It is the one header here that cannot be undone
- * by reverting a file: max-age pins in every visitor's browser and outlives the
- * rollback. It belongs to the Cloudflare dashboard toggle and to an explicit
- * decision by the owner, not to this change. includeSubDomains would also
- * capture test.4kub.ru.
+ * No Strict-Transport-Security HERE — it is sent since 2026-08-14, but from
+ * static-server.js, which knows the request's scheme; this module does not,
+ * and HSTS belongs on https responses only. The value there is a deliberate
+ * low-commitment start (max-age=86400, no includeSubDomains — test.4kub.ru is
+ * a separate concern — and no preload), to be raised after a burn-in period,
+ * because max-age pins in every visitor's browser and outlives a rollback.
  */
 function baseSecurityHeaders() {
   return {
@@ -408,7 +409,25 @@ function responseHeaders(urlPath, ext, options = {}) {
     // Genuinely immutable: these are pinned subsets, and replacing one would
     // mean a new file. Safe to promise a browser it never has to ask again.
     headers['Cache-Control'] = 'public, max-age=2592000, immutable';
-  } else if (['.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.woff', '.woff2'].includes(ext)) {
+  } else if (urlPath.startsWith('/img/')) {
+    /* A week, not five minutes and not a year. The ?v= pipeline cannot reach
+       these cleanly: the hero is referenced from css/sections.css url() and
+       the day cards from style="" attributes in index.html, and
+       stampAssetVersions() rewrites neither — it restamps href/src
+       attributes in HTML documents only. Reaching into CSS bodies would
+       break the invariant the whole pipeline rests on (assetVersion() hashes
+       the file's bytes on disk, and the ?v= on /css/sections.css must name
+       exactly the bytes sent), and the preload hrefs in index.html must stay
+       byte-identical to the CSS url()s or the browser double-downloads the
+       hero. That is a rewrite, not an extension — so images get a bounded
+       lifetime instead. The site deploys by replacing files in place, and a
+       week-stale image is cosmetic in a way a week-stale stylesheet is not.
+       `pinned` still wins when a stamped URL arrives and matches, so a
+       future stamped <img src> gets the full year with no change here. */
+    headers['Cache-Control'] = options.pinned
+      ? 'public, max-age=31536000, immutable'
+      : 'public, max-age=604800';
+  } else if (['.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.webp', '.woff', '.woff2'].includes(ext)) {
     /* These are edited IN PLACE at a fixed path — website/ is served straight to
        4kub.ru — so the only thing separating a visitor from a stale stylesheet
        is the ?v= query the HTML appends. That query used to be a counter bumped

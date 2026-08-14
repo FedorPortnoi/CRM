@@ -14,8 +14,15 @@
 <meta property="og:description" content="Контакты, сделки и задачи в телефоне. Работает офлайн. Шифрование данных и согласия по ФЗ-38.">
 <meta property="og:url" content="https://4kub.ru/">
 <meta property="og:locale" content="ru_RU">
+<meta property="og:image" content="https://4kub.ru/img/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="4КУБ — мобильная CRM для клиентов, сделок и команды. Терракотовый куб-логотип на кремовой бумаге; работает офлайн, App Store и RuStore.">
+<meta name="twitter:card" content="summary_large_image">
 <!-- Favicon is the same drawn cube as the nav mark, inline so the two cannot drift
-     and no extra request is made. -->
+     and no extra request is made. The touch icon is the same cube rendered
+     full-bleed at 180px — iOS applies its own corner mask. -->
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='5' fill='%230E0E0D'/><path d='M12 4.5 19 8v8l-7 3.5L5 16V8l7-3.5Z' fill='none' stroke='%23CC785C' stroke-width='1.6' stroke-linejoin='round'/><path d='M5 8l7 3.5L19 8M12 11.5v8' fill='none' stroke='%23CC785C' stroke-width='1.6' stroke-linejoin='round' opacity='.55'/></svg>">
 <!-- Synchronous on purpose: it must mark JS BEFORE the stylesheets paint, or
      the reveal targets flash visible and then fade out.
@@ -32,9 +39,13 @@ try {
   /* Private mode / storage disabled: show the intro. Not worth failing over. */
 }
 </script>
-<!-- The two faces the first screen actually paints in. Cyrillic only: the latin
-     subsets are still declared in CSS but no Russian glyph needs them, so
-     preloading them would buy a render nothing and cost 72 KB. -->
+<!-- The two faces the first screen actually paints in. Cyrillic only ON PURPOSE,
+     but not because the latin subsets go unused — digits (09:40, the sums),
+     "CRM", "App Store · RuStore" and the bold serif numerals pull all four of
+     them, ~105 KB total. They stay unpreloaded because font-display: swap lets
+     the page paint without them (measured: LCP unchanged, CLS 0), and
+     preloading 105 KB would only contend with the CSS and the hero plate on a
+     slow link. -->
 <link rel="preload" as="font" type="font/woff2" href="/fonts/exo2-cyrillic.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="/fonts/zenoldmincho-400-cyrillic.woff2" crossorigin>
 <!-- The hero artwork is the LCP element. Preloaded per breakpoint so a phone
@@ -60,6 +71,8 @@ try {
       "legalName": "ИП Портной Фёдор",
       "url": "https://4kub.ru/",
       "email": "hello@4kub.ru",
+      "logo": "https://4kub.ru/img/logo.png",
+      "founder": { "@type": "Person", "name": "Фёдор Портной" },
       "areaServed": { "@type": "Country", "name": "Россия" }
     },
     {
@@ -90,7 +103,7 @@ try {
         "Работает офлайн, записи уходят на сервер при появлении связи",
         "ИИ-ассистент по своим данным на российском провайдере",
         "Восемь ролей с раздельными правами",
-        "Импорт из Битрикс24, Excel, Telegram, WhatsApp, vCard и телефонной книги",
+        "Импорт из Битрикс24, amoCRM, Excel, Telegram, WhatsApp, vCard и телефонной книги",
         "Синхронизация с Яндекс Календарём",
         "Шифрование телефонов и email в базе (AES-256-GCM)"
       ],
@@ -100,6 +113,36 @@ try {
         "priceCurrency": "RUB",
         "description": "На время закрытого пилота регистрация бесплатная, банковская карта не нужна."
       },
+      "screenshot": [
+        {
+          "@type": "ImageObject",
+          "url": "https://4kub.ru/img/screens/app-1.webp",
+          "width": 640,
+          "height": 1422,
+          "caption": "Экран «Сегодня» в 4КУБ: 10 открытых сделок на 7 435 000 ₽, план на месяц выполнен на 39 %, шесть сделок без следующего шага и кнопки быстрых действий"
+        },
+        {
+          "@type": "ImageObject",
+          "url": "https://4kub.ru/img/screens/app-2.webp",
+          "width": 640,
+          "height": 1422,
+          "caption": "Список контактов в 4КУБ: вкладки «Клиенты», «Партнёры» и «Лиды», карточки с телефоном, кнопками звонка, WhatsApp и Telegram и давностью последней активности"
+        },
+        {
+          "@type": "ImageObject",
+          "url": "https://4kub.ru/img/screens/app-3.webp",
+          "width": 640,
+          "height": 1422,
+          "caption": "Воронка продаж в 4КУБ: канбан-доска, этап «Новый лид» с суммами сделок в рублях, метками «Просрочено» и «Застоялась — 88 дней на этапе»"
+        },
+        {
+          "@type": "ImageObject",
+          "url": "https://4kub.ru/img/screens/app-4.webp",
+          "width": 640,
+          "height": 1422,
+          "caption": "Ассистент в 4КУБ: экран «Чем помочь?» с подсказками — «Какие сделки закрываются на этой неделе?», «С кем из клиентов давно не связывались?», «Сколько у меня задач на сегодня?»"
+        }
+      ],
       "sameAs": [
         "https://apps.apple.com/ru/app/id6776447873",
         "https://www.rustore.ru/catalog/app/com.fedorportnoi.crm"
@@ -113,10 +156,10 @@ try {
       "mainEntity": [
         {
           "@type": "Question",
-          "name": "Работает ли CRM 4КУБ без интернета?",
+          "name": "Работает ли 4КУБ без интернета?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Да. Метро, стройка, поезд: записи сохраняются на устройстве и уходят на сервер сами, когда связь вернётся."
+            "text": "Да. Метро, стройка, поезд: записи сохраняются на устройстве и уходят на сервер сами, когда связь вернётся. Это не кэш для чтения — создавать и править записи можно офлайн."
           }
         },
         {
@@ -124,7 +167,7 @@ try {
           "name": "Где хранятся данные 4КУБ?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Идёт закрытый пилот: сервер контролируется оператором лично и находится за пределами России. Идёт перенос на российский хостинг — до этого момента мы не заявляем, что требование ФЗ-152 о локализации выполнено. Телефоны и email клиентов хранятся в базе зашифрованными (AES-256-GCM)."
+            "text": "Идёт закрытый пилот. Сервер контролируется оператором лично и физически находится на территории США — это трансграничная передача персональных данных. Мы переносим хранение на российский хостинг и до завершения переезда НЕ заявляем, что требование ФЗ-152 о локализации выполнено. Персональные данные (телефоны, email) шифруются алгоритмом AES-256-GCM."
           }
         },
         {
@@ -132,15 +175,23 @@ try {
           "name": "Шифруются ли телефоны и email клиентов?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Да. Телефоны и email клиентов хранятся зашифрованными. Поиск по ним при этом работает: система ищет, не расшифровывая."
+            "text": "Да, в базе они хранятся зашифрованными. Поиск по ним при этом работает: система ищет, не расшифровывая."
           }
         },
         {
           "@type": "Question",
-          "name": "Можно ли перенести базу из Битрикс24 в 4КУБ?",
+          "name": "Соблюдает ли 4КУБ правила рассылок?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Да, за один импорт: Битрикс24, Excel, Telegram, WhatsApp, vCard и телефонная книга. Клиентскую базу не придётся набивать заново."
+            "text": "Письма уходят только тем, кто дал согласие. Дата и источник согласия остаются в карточке клиента, отписка работает в один клик — как требует ФЗ-38."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Можно ли перенести базу из Битрикс24?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Да. Импорт за один шаг из Битрикс24, amoCRM, Excel, Telegram, WhatsApp, vCard и телефонной книги. Клиентскую базу не придётся набивать заново."
           }
         },
         {
@@ -148,15 +199,31 @@ try {
           "name": "Какие роли и права есть в 4КУБ?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Восемь ролей: Владелец, Администратор, Руководитель отдела, Менеджер, Бухгалтер, Маркетолог, Поддержка и Только просмотр. Права разделены по контактам, сделкам, деньгам и управлению командой: руководитель отдела видит данные подчинённых, бухгалтер ничего не меняет, роль «только просмотр» не видит деньги."
+            "text": "Восемь ролей: Владелец, Администратор, Руководитель отдела, Менеджер, Бухгалтер, Маркетолог, Поддержка, Только просмотр. Права разделены по четырём осям — контакты, сделки, деньги, управление командой. Руководитель отдела видит данные своих подчинённых; Бухгалтер ничего не меняет; Только просмотр не видит деньги."
           }
         },
         {
           "@type": "Question",
-          "name": "Сколько стоит 4КУБ?",
+          "name": "Что умеет ИИ-ассистент?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "На время закрытого пилота регистрация бесплатная и банковская карта не нужна."
+            "text": "Отвечает на вопросы о ваших данных обычным языком, вместо фильтров и отчётов. Читает контакты, сделки, задачи и календарь — не интернет. Права ассистента ровно ваши: он не покажет и не изменит того, что вам не разрешено. Работает на российском провайдере (Yandex Foundation Models); телефоны и email клиентов в модель не передаются."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Есть ли интеграции?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Календарь синхронизируется с Яндекс Календарём. Есть интеграция с amoCRM, автоматизация по триггерам (сменился этап, выполнена задача, появился лид) и цепочки писем."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Сколько стоит?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "На время пилота регистрация бесплатная и карта не нужна."
           }
         }
       ]
@@ -289,8 +356,11 @@ try {
     <div class="shell">
       <div class="hero-grid">
         <div class="hero-body reveal">
-          <p class="eyebrow">CRM для малого и среднего бизнеса</p>
-          <h1 class="hero-title">Продажи<br>не ждут<br><em>офиса</em></h1>
+          <!-- The eyebrow is part of the H1 on purpose: same words, same pixels,
+               but the category term now carries heading weight — the one place
+               «CRM» is heading-visible to a crawler. Styled by .eyebrow exactly
+               as the old sibling <p>; display:block keeps the line break. -->
+          <h1 class="hero-title"><span class="eyebrow h1-eyebrow">CRM для малого и среднего бизнеса</span>Продажи<br>не ждут<br><em>офиса</em></h1>
           <p class="hero-accent">Работает без интернета</p>
           <p class="hero-sub">Контакты, сделки и задачи в телефоне. Открывается в метро, на стройке и в поезде — записи уходят на сервер сами, когда связь вернётся.</p>
           <div class="hero-actions">
@@ -305,7 +375,7 @@ try {
           <dl class="hero-meta">
             <div>
               <dt>Платформы</dt>
-              <dd>App Store · RuStore</dd>
+              <dd><a href="https://apps.apple.com/ru/app/id6776447873" target="_blank" rel="noopener">App Store</a> · <a href="https://www.rustore.ru/catalog/app/com.fedorportnoi.crm" target="_blank" rel="noopener">RuStore</a></dd>
             </div>
             <div>
               <dt>Данные</dt>
@@ -555,11 +625,70 @@ try {
           <p class="caps-import-lead">Клиентскую базу не придётся набивать заново.</p>
         </div>
         <ul class="caps-import-list">
-          <li>Битрикс24</li><li>Excel</li><li>Telegram</li>
+          <li>Битрикс24</li><li>amoCRM</li><li>Excel</li><li>Telegram</li>
           <li>WhatsApp</li><li>vCard</li><li>Телефонная книга</li>
         </ul>
       </aside>
 
+    </div>
+  </section>
+
+  <!-- ═══════════ SCREENS ═══════════
+       The cube above DRAWS the four screens; this section shows them for real.
+       Four screenshots captured from the CURRENT build (1.1.7) running on
+       seeded demo data — the organisation on screen is literally named
+       «ООО „Ромашка" (демо-данные)», so no real customer's records can leak.
+       Filenames are app-*.webp, NOT reused shot-*.webp: /img/ now carries a
+       7-day cache, so replacing bytes under an old name would serve stale
+       images for a week. New content = new URL, always.
+       Alt texts are copied VERBATIM from img/screens/manifest.json — one set of
+       words, two copies, and the manifest is the original. The printed folios
+       under the plates repeat what each alt already says, so they are hidden
+       from AT rather than read out twice.
+       No script: the strip is a plain <ul> that grids on wide screens and
+       scrolls on narrow ones. width/height are the real intrinsic pixels, so
+       the plates reserve their space before the lazy images arrive. -->
+  <section class="screens section-pad" id="screens">
+    <div class="shell">
+      <div class="screens-head reveal">
+        <p class="eyebrow">Живой продукт</p>
+        <h2 class="h2">Настоящие экраны приложения</h2>
+        <p class="lede">Не отрисованные макеты, а живые экраны текущей сборки на демонстрационных данных. Установите — увидите ровно эти экраны.</p>
+      </div>
+
+      <ul class="screens-strip reveal-group">
+        <li class="screens-item reveal">
+          <span class="screens-frame">
+            <img src="/img/screens/app-1.webp" width="640" height="1422" loading="lazy" decoding="async"
+                 alt="Экран «Сегодня» в 4КУБ: 10 открытых сделок на 7 435 000 ₽, план на месяц выполнен на 39 %, шесть сделок без следующего шага и кнопки быстрых действий">
+          </span>
+          <span class="screens-folio" aria-hidden="true"><i>01</i>Сегодня</span>
+        </li>
+
+        <li class="screens-item reveal" style="--d:70ms">
+          <span class="screens-frame">
+            <img src="/img/screens/app-2.webp" width="640" height="1422" loading="lazy" decoding="async"
+                 alt="Список контактов в 4КУБ: вкладки «Клиенты», «Партнёры» и «Лиды», карточки с телефоном, кнопками звонка, WhatsApp и Telegram и давностью последней активности">
+          </span>
+          <span class="screens-folio" aria-hidden="true"><i>02</i>Контакты</span>
+        </li>
+
+        <li class="screens-item reveal" style="--d:140ms">
+          <span class="screens-frame">
+            <img src="/img/screens/app-3.webp" width="640" height="1422" loading="lazy" decoding="async"
+                 alt="Воронка продаж в 4КУБ: канбан-доска, этап «Новый лид» с суммами сделок в рублях, метками «Просрочено» и «Застоялась — 88 дней на этапе»">
+          </span>
+          <span class="screens-folio" aria-hidden="true"><i>03</i>Воронка</span>
+        </li>
+
+        <li class="screens-item reveal" style="--d:210ms">
+          <span class="screens-frame">
+            <img src="/img/screens/app-4.webp" width="640" height="1422" loading="lazy" decoding="async"
+                 alt="Ассистент в 4КУБ: экран «Чем помочь?» с подсказками — «Какие сделки закрываются на этой неделе?», «С кем из клиентов давно не связывались?», «Сколько у меня задач на сегодня?»">
+          </span>
+          <span class="screens-folio" aria-hidden="true"><i>04</i>Ассистент</span>
+        </li>
+      </ul>
     </div>
   </section>
 
@@ -785,6 +914,136 @@ try {
           </div>
 
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ FAQ ═══════════
+       The nine answers are the FAQPage JSON-LD in <head> and llms.txt, word for
+       word — one set of answers, three copies, and this visible one is the
+       original. Change the words HERE first, then mirror them into the other
+       two, or the machine-readable copies become the lie the head comment warns
+       about.
+       <details>, so the answers are in the DOM whether open or closed and a
+       reader without JavaScript loses nothing. No script anywhere in this
+       section. -->
+  <section class="faq section-pad" id="faq">
+    <div class="shell">
+      <div class="faq-head reveal">
+        <p class="eyebrow">Вопросы и ответы</p>
+        <h2 class="h2">Частые вопросы</h2>
+        <p class="lede">То, о чём спрашивают перед регистрацией: офлайн, хранение данных, переезд базы и цена.</p>
+      </div>
+
+      <div class="faq-body">
+      <div class="faq-list reveal-group">
+        <details class="faq-item reveal">
+          <summary>
+            <span class="faq-n" aria-hidden="true">01</span>
+            <h3 class="faq-q">Работает ли 4КУБ без интернета?</h3>
+            <span class="faq-mark" aria-hidden="true"></span>
+          </summary>
+          <div class="faq-a">
+            <p>Да. Метро, стройка, поезд: записи сохраняются на устройстве и уходят на сервер сами, когда связь вернётся. Это не кэш для чтения — создавать и править записи можно офлайн.</p>
+          </div>
+        </details>
+
+        <details class="faq-item reveal">
+          <summary>
+            <span class="faq-n" aria-hidden="true">02</span>
+            <h3 class="faq-q">Где хранятся данные 4КУБ?</h3>
+            <span class="faq-mark" aria-hidden="true"></span>
+          </summary>
+          <div class="faq-a">
+            <p>Идёт закрытый пилот. Сервер контролируется оператором лично и физически находится на территории США — это трансграничная передача персональных данных. Мы переносим хранение на российский хостинг и до завершения переезда НЕ заявляем, что требование ФЗ-152 о локализации выполнено. Персональные данные (телефоны, email) шифруются алгоритмом AES-256-GCM.</p>
+          </div>
+        </details>
+
+        <details class="faq-item reveal">
+          <summary>
+            <span class="faq-n" aria-hidden="true">03</span>
+            <h3 class="faq-q">Шифруются ли телефоны и email клиентов?</h3>
+            <span class="faq-mark" aria-hidden="true"></span>
+          </summary>
+          <div class="faq-a">
+            <p>Да, в базе они хранятся зашифрованными. Поиск по ним при этом работает: система ищет, не расшифровывая.</p>
+          </div>
+        </details>
+
+        <details class="faq-item reveal">
+          <summary>
+            <span class="faq-n" aria-hidden="true">04</span>
+            <h3 class="faq-q">Соблюдает ли 4КУБ правила рассылок?</h3>
+            <span class="faq-mark" aria-hidden="true"></span>
+          </summary>
+          <div class="faq-a">
+            <p>Письма уходят только тем, кто дал согласие. Дата и источник согласия остаются в карточке клиента, отписка работает в один клик — как требует ФЗ-38.</p>
+          </div>
+        </details>
+
+        <details class="faq-item reveal">
+          <summary>
+            <span class="faq-n" aria-hidden="true">05</span>
+            <h3 class="faq-q">Можно ли перенести базу из Битрикс24?</h3>
+            <span class="faq-mark" aria-hidden="true"></span>
+          </summary>
+          <div class="faq-a">
+            <p>Да. Импорт за один шаг из Битрикс24, amoCRM, Excel, Telegram, WhatsApp, vCard и телефонной книги. Клиентскую базу не придётся набивать заново.</p>
+          </div>
+        </details>
+
+        <details class="faq-item reveal">
+          <summary>
+            <span class="faq-n" aria-hidden="true">06</span>
+            <h3 class="faq-q">Какие роли и права есть в 4КУБ?</h3>
+            <span class="faq-mark" aria-hidden="true"></span>
+          </summary>
+          <div class="faq-a">
+            <p>Восемь ролей: Владелец, Администратор, Руководитель отдела, Менеджер, Бухгалтер, Маркетолог, Поддержка, Только просмотр. Права разделены по четырём осям — контакты, сделки, деньги, управление командой. Руководитель отдела видит данные своих подчинённых; Бухгалтер ничего не меняет; Только просмотр не видит деньги.</p>
+          </div>
+        </details>
+
+        <details class="faq-item reveal">
+          <summary>
+            <span class="faq-n" aria-hidden="true">07</span>
+            <h3 class="faq-q">Что умеет ИИ-ассистент?</h3>
+            <span class="faq-mark" aria-hidden="true"></span>
+          </summary>
+          <div class="faq-a">
+            <p>Отвечает на вопросы о ваших данных обычным языком, вместо фильтров и отчётов. Читает контакты, сделки, задачи и календарь — не интернет. Права ассистента ровно ваши: он не покажет и не изменит того, что вам не разрешено. Работает на российском провайдере (Yandex Foundation Models); телефоны и email клиентов в модель не передаются.</p>
+          </div>
+        </details>
+
+        <details class="faq-item reveal">
+          <summary>
+            <span class="faq-n" aria-hidden="true">08</span>
+            <h3 class="faq-q">Есть ли интеграции?</h3>
+            <span class="faq-mark" aria-hidden="true"></span>
+          </summary>
+          <div class="faq-a">
+            <p>Календарь синхронизируется с Яндекс Календарём. Есть интеграция с amoCRM, автоматизация по триггерам (сменился этап, выполнена задача, появился лид) и цепочки писем.</p>
+          </div>
+        </details>
+
+        <details class="faq-item reveal">
+          <summary>
+            <span class="faq-n" aria-hidden="true">09</span>
+            <h3 class="faq-q">Сколько стоит?</h3>
+            <span class="faq-mark" aria-hidden="true"></span>
+          </summary>
+          <div class="faq-a">
+            <p>На время пилота регистрация бесплатная и карта не нужна.</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- Who is behind the answers. Facts only: one person, hands-on, answers
+           the mail himself, real pilot users. Nothing here is a credential.
+           On a wide screen it stands beside the list as a margin note. -->
+      <aside class="faq-founder reveal">
+        <p class="eyebrow">Кто это делает</p>
+        <p class="faq-founder-text">4КУБ делает один человек — Фёдор Портной (ИП Портной Фёдор). Приложение он пишет сам и сам отвечает на письма поддержки в <a href="mailto:hello@4kub.ru">hello@4kub.ru</a>. Первые пользователи пилота — настоящие малые бизнесы, а не тестовые аккаунты.</p>
+      </aside>
       </div>
     </div>
   </section>

@@ -3,6 +3,19 @@
    Three jobs: reveal sequencing, nav scrolled-state, and the mobile disclosure.
    No scroll loop — both scroll-linked effects are done by the browser (the nav
    via an IntersectionObserver marker, the progress bar via scroll-timeline).
+
+   SHAPE OF THIS FILE: two halves, split by WHEN they may run.
+   The synchronous half only WRITES (class lists, custom properties, listener
+   registration) — nothing in it reads layout. Everything that measures —
+   offsetWidth, offsetTop, getBoundingClientRect, getComputedStyle, and even
+   touching document.fonts.ready, which forces a full style+layout pass in
+   Chromium all by itself — lives in initDeferred(), scheduled one frame after
+   first paint. Run synchronously, those reads welded HTML parse, script and a
+   full-document layout into one multi-second main-thread task on a throttled
+   phone, with first paint queued behind it. Nothing measured here is needed
+   before the first frame: every custom property the scroll timelines consume
+   has a workable default, and at scroll position 0 every timeline is holding
+   its `from` frame regardless of where its range ends.
    ========================================================================== */
 (function () {
   'use strict';
@@ -51,6 +64,28 @@
     }
   }
 
+  /* ---- mobile disclosure -------------------------------------------------- */
+  /* Stays synchronous: it is the only piece a reader can interact with in the
+     first fraction of a second, and it neither reads nor invalidates layout. */
+
+  var burger = document.querySelector('.nav-burger');
+  var panel = document.getElementById('nav-panel');
+  if (burger && panel) {
+    burger.addEventListener('click', function () {
+      var open = panel.getAttribute('data-open') === 'true';
+      panel.setAttribute('data-open', open ? 'false' : 'true');
+      burger.setAttribute('aria-expanded', open ? 'false' : 'true');
+    });
+    // Any in-page jump closes the panel, otherwise it covers the target.
+    var links = panel.querySelectorAll('a');
+    for (var l = 0; l < links.length; l++) {
+      links[l].addEventListener('click', function () {
+        panel.setAttribute('data-open', 'false');
+        burger.setAttribute('aria-expanded', 'false');
+      });
+    }
+  }
+
   /* Distance from the top of the DOCUMENT. Walks the offsetParent chain rather
      than reading offsetTop directly: base.css sets `body > * { position:
      relative }`, which makes <main> the offsetParent, so a bare offsetTop is
@@ -61,140 +96,159 @@
     return y;
   }
 
-  /* ---- intro lockup flight ---------------------------------------------- */
+  /* ═══ DEFERRED HALF — everything below runs one frame after first paint ═══ */
 
-  /* The travel itself is a CSS scroll timeline. This only measures the two ends
-     and publishes them, because CSS cannot ask how wide a word is or where the
-     nav mark landed inside a centred, padded shell.
-       --fly-dx/--fly-dy  offset that puts the big lockup in the viewport centre
-       --fly-end          scale that shrinks it to nav-mark width
-       --mark-x/--mark-y  where it comes to rest
-     Measured with offsetWidth (layout size, unaffected by the transform the
-     animation is applying) and the nav mark's own rect, which is untransformed. */
+  function initDeferred() {
 
-  var introEl = document.querySelector('.intro');
-  var introMark = document.querySelector('.intro-mark');
-  var navMarkEl = document.querySelector('.nav-mark');
-  var introSeen = document.documentElement.classList.contains('intro-seen');
+    /* ---- hero pin + curtain geometry -------------------------------------- */
 
-  if (introEl && introMark && navMarkEl && !introSeen) {
-    var measureFlight = function () {
-      var flyW = introMark.offsetWidth;
-      var flyH = introMark.offsetHeight;
-      if (!flyW || !flyH) return;
-      var mark = navMarkEl.getBoundingClientRect();
-      var root = document.documentElement.style;
-      // Scale is set from WIDTH, so the landed height rarely equals the nav
-      // mark's (the lockup's glyph-to-gap ratio differs). Centre it on that
-      // height instead of top-aligning, or it comes to rest a couple of pixels
-      // high and the hand-off shows.
-      var endScale = mark.width / flyW;
-      root.setProperty('--mark-x', mark.left + 'px');
-      root.setProperty('--mark-y', (mark.top + (mark.height - flyH * endScale) / 2) + 'px');
-      root.setProperty('--fly-end', endScale);
-      root.setProperty('--fly-dx', ((window.innerWidth - flyW) / 2 - mark.left) + 'px');
-      root.setProperty('--fly-dy', ((window.innerHeight - flyH) / 2 - mark.top) + 'px');
-      document.documentElement.classList.add('intro-ready');
-    };
+    /* The hero is held at the top of the viewport until .day reaches it, then the
+       halves part to uncover it. Those two distances cannot be written in CSS:
+       the hero is taller than one viewport (its own content decides how much), and
+       whether an intro spacer sits above it changes where it starts. Hard-coding
+       200vh left .day still a third of a screen down when the curtains finished.
 
-    // Fonts first: the lockup is type, so its width is wrong until they load.
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(measureFlight);
-    } else {
-      measureFlight();
+       offsetTop, not getBoundingClientRect: the hero is mid-transform while this
+       runs, and a rect would report where it is drawn rather than where it lives.
+
+       This block runs BEFORE the intro flight on purpose, and the order is a
+       read/write discipline rather than taste: on fonts.ready the two callbacks
+       fire back-to-back in registration order. This one only reads layout and
+       writes custom properties nothing lays out against, so the flight's reads
+       land on a still-clean tree — flight-first meant its writes (left/top on
+       the fixed lockup, the intro-ready class) dirtied layout and this block's
+       documentTop walk forced a second full pass in the same task. */
+
+    var heroEl = document.querySelector('.hero');
+    var dayEl = document.querySelector('.day');
+    var measureHero = null;
+
+    if (heroEl && dayEl) {
+      measureHero = function () {
+        var heroTop = documentTop(heroEl);
+        var dayTop = documentTop(dayEl);
+        var heroH = heroEl.offsetHeight;
+        var vh = window.innerHeight;
+        if (dayTop <= heroTop) return;
+
+        /* SETTLE is the scroll position where the hero's own bottom reaches the
+           bottom of the viewport. Holding the hero before that point strands
+           whatever does not fit — pinning it at the top from the very start made
+           the buttons and the meta row permanently unreachable, because the reader
+           cannot scroll to something that is being held still. So: arrive, then
+           scroll normally until the whole hero has been seen, and only then hold.
+           On a viewport taller than the hero this collapses to heroTop and the
+           free-scroll phase simply has zero length. */
+        var settle = Math.max(heroTop, heroTop + heroH - vh);
+
+        var root = document.documentElement.style;
+        root.setProperty('--hero-arrive-from', -heroTop + 'px');
+        root.setProperty('--hero-arrive-end', heroTop + 'px');
+        root.setProperty('--hero-settle', settle + 'px');
+        root.setProperty('--hero-pin-end', dayTop + 'px');
+        root.setProperty('--hero-hold-to', (dayTop - settle) + 'px');
+        /* The hold is split in two so the acts do not collide: the curtains clear
+           over the first ~55% of it, and only then does .day begin to appear.
+           Overlapping them (the fade used to start at 34%) meant the hero was
+           still a third on screen while the next section was already surfacing
+           through the gap, and the two read as one muddled layer. */
+        var hold = dayTop - settle;
+        root.setProperty('--hero-part-end', Math.round(settle + hold * 0.55) + 'px');
+        // .day is held at the top of the viewport across the whole span and fades
+        // in there, so it is uncovered rather than delivered by scrolling.
+        root.setProperty('--day-from', (settle - dayTop) + 'px');
+        root.setProperty('--day-fade-start', Math.round(settle + hold * 0.6) + 'px');
+      };
+      measureHero();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(measureHero);
+      window.addEventListener('resize', measureHero);
     }
-    // Not a scroll loop — resize only, and the geometry genuinely changes.
-    window.addEventListener('resize', measureFlight);
-  }
 
-  /* ---- hero pin + curtain geometry -------------------------------------- */
+    /* ---- intro lockup flight ---------------------------------------------- */
 
-  /* The hero is held at the top of the viewport until .day reaches it, then the
-     halves part to uncover it. Those two distances cannot be written in CSS:
-     the hero is taller than one viewport (its own content decides how much), and
-     whether an intro spacer sits above it changes where it starts. Hard-coding
-     200vh left .day still a third of a screen down when the curtains finished.
+    /* The travel itself is a CSS scroll timeline. This only measures the two ends
+       and publishes them, because CSS cannot ask how wide a word is or where the
+       nav mark landed inside a centred, padded shell.
+         --fly-dx/--fly-dy  offset that puts the big lockup in the viewport centre
+         --fly-end          scale that shrinks it to nav-mark width
+         --mark-x/--mark-y  where it comes to rest
+       Measured with offsetWidth (layout size, unaffected by the transform the
+       animation is applying) and the nav mark's own rect, which is untransformed. */
 
-     offsetTop, not getBoundingClientRect: the hero is mid-transform while this
-     runs, and a rect would report where it is drawn rather than where it lives. */
+    var introEl = document.querySelector('.intro');
+    var introMark = document.querySelector('.intro-mark');
+    var navMarkEl = document.querySelector('.nav-mark');
+    var introSeen = document.documentElement.classList.contains('intro-seen');
 
-  var heroEl = document.querySelector('.hero');
-  var dayEl = document.querySelector('.day');
+    if (introEl && introMark && navMarkEl && !introSeen) {
+      var measureFlight = function () {
+        var flyW = introMark.offsetWidth;
+        var flyH = introMark.offsetHeight;
+        if (!flyW || !flyH) return;
+        var mark = navMarkEl.getBoundingClientRect();
+        var root = document.documentElement.style;
+        // Scale is set from WIDTH, so the landed height rarely equals the nav
+        // mark's (the lockup's glyph-to-gap ratio differs). Centre it on that
+        // height instead of top-aligning, or it comes to rest a couple of pixels
+        // high and the hand-off shows.
+        var endScale = mark.width / flyW;
+        root.setProperty('--mark-x', mark.left + 'px');
+        root.setProperty('--mark-y', (mark.top + (mark.height - flyH * endScale) / 2) + 'px');
+        root.setProperty('--fly-end', endScale);
+        root.setProperty('--fly-dx', ((window.innerWidth - flyW) / 2 - mark.left) + 'px');
+        root.setProperty('--fly-dy', ((window.innerHeight - flyH) / 2 - mark.top) + 'px');
+        document.documentElement.classList.add('intro-ready');
+      };
 
-  if (heroEl && dayEl) {
-    var measureHero = function () {
-      var heroTop = documentTop(heroEl);
-      var dayTop = documentTop(dayEl);
-      var heroH = heroEl.offsetHeight;
-      var vh = window.innerHeight;
-      if (dayTop <= heroTop) return;
+      // Fonts first: the lockup is type, so its width is wrong until they load.
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(measureFlight);
+      } else {
+        measureFlight();
+      }
+      // Not a scroll loop — resize only, and the geometry genuinely changes.
+      window.addEventListener('resize', measureFlight);
+    }
 
-      /* SETTLE is the scroll position where the hero's own bottom reaches the
-         bottom of the viewport. Holding the hero before that point strands
-         whatever does not fit — pinning it at the top from the very start made
-         the buttons and the meta row permanently unreachable, because the reader
-         cannot scroll to something that is being held still. So: arrive, then
-         scroll normally until the whole hero has been seen, and only then hold.
-         On a viewport taller than the hero this collapses to heroTop and the
-         free-scroll phase simply has zero length. */
-      var settle = Math.max(heroTop, heroTop + heroH - vh);
+    /* ---- day: five beats, one screen each ---------------------------------- */
 
-      var root = document.documentElement.style;
-      root.setProperty('--hero-arrive-from', -heroTop + 'px');
-      root.setProperty('--hero-arrive-end', heroTop + 'px');
-      root.setProperty('--hero-settle', settle + 'px');
-      root.setProperty('--hero-pin-end', dayTop + 'px');
-      root.setProperty('--hero-hold-to', (dayTop - settle) + 'px');
-      /* The hold is split in two so the acts do not collide: the curtains clear
-         over the first ~55% of it, and only then does .day begin to appear.
-         Overlapping them (the fade used to start at 34%) meant the hero was
-         still a third on screen while the next section was already surfacing
-         through the gap, and the two read as one muddled layer. */
-      var hold = dayTop - settle;
-      root.setProperty('--hero-part-end', Math.round(settle + hold * 0.55) + 'px');
-      // .day is held at the top of the viewport across the whole span and fades
-      // in there, so it is uncovered rather than delivered by scrolling.
-      root.setProperty('--day-from', (settle - dayTop) + 'px');
-      root.setProperty('--day-fade-start', Math.round(settle + hold * 0.6) + 'px');
-    };
-    measureHero();
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(measureHero);
-    window.addEventListener('resize', measureHero);
-  }
+    /* The section stops being something you scroll past and becomes five frames
+       shown one at a time, centred, each replacing the last:
+         0  the heading + lede        1..3  each moment on its own        4  the row
 
-  /* ---- day: five beats, one screen each ---------------------------------- */
+       Scroll-driven, never timed. Stop scrolling and the current frame stays up
+       for as long as you want to read it; scroll continuously and each gets about
+       --day-beat worth of travel, which at a normal wheel speed is roughly two
+       seconds. It cannot be exactly two seconds for everyone — a trackpad flick
+       covers the same distance several times faster — so --day-beat is the single
+       number to turn if it feels wrong.
 
-  /* The section stops being something you scroll past and becomes five frames
-     shown one at a time, centred, each replacing the last:
-       0  the heading + lede        1..3  each moment on its own        4  the row
+       The three solo cards are CLONES of the real ones and are hidden from
+       assistive tech; the row in the final beat is the original markup. One source
+       of truth, so an edit to a card can never apply to only half the section.
 
-     Scroll-driven, never timed. Stop scrolling and the current frame stays up
-     for as long as you want to read it; scroll continuously and each gets about
-     --day-beat worth of travel, which at a normal wheel speed is roughly two
-     seconds. It cannot be exactly two seconds for everyone — a trackpad flick
-     covers the same distance several times faster — so --day-beat is the single
-     number to turn if it feels wrong.
+       Built only when it can actually run. No JS, reduced motion, no scroll
+       timelines, or a narrow screen (where the row would not fit one frame) all
+       fall through to the ordinary section that is in the HTML.
 
-     The three solo cards are CLONES of the real ones and are hidden from
-     assistive tech; the row in the final beat is the original markup. One source
-     of truth, so an edit to a card can never apply to only half the section.
+       Scheduled at idle (capped), not in this frame: the build clones DOM,
+       reads getComputedStyle and re-walks offsets — deep below-the-fold work.
+       A reader cannot reach .day before idle arrives; the hero pin above holds
+       the first 200vh of scroll regardless, published from defaults-safe vars. */
 
-     Built only when it can actually run. No JS, reduced motion, no scroll
-     timelines, or a narrow screen (where the row would not fit one frame) all
-     fall through to the ordinary section that is in the HTML. */
+    var dayCinema = document.querySelector('.day');
+    var canCinema = !reduceMotion &&
+                    window.CSS && CSS.supports && CSS.supports('animation-timeline: scroll()') &&
+                    window.innerWidth >= 860;
 
-  var dayCinema = document.querySelector('.day');
-  var canCinema = !reduceMotion &&
-                  window.CSS && CSS.supports && CSS.supports('animation-timeline: scroll()') &&
-                  window.innerWidth >= 860;
+    var buildCinema = function () {
+      var shell = dayCinema.querySelector('.shell');
+      var dayHead = dayCinema.querySelector('.day-head');
+      var dayRail = dayCinema.querySelector('.day-rail');
+      var dayCards = dayRail ? dayRail.querySelectorAll('.day-card') : [];
 
-  if (dayCinema && canCinema) {
-    var shell = dayCinema.querySelector('.shell');
-    var dayHead = dayCinema.querySelector('.day-head');
-    var dayRail = dayCinema.querySelector('.day-rail');
-    var dayCards = dayRail ? dayRail.querySelectorAll('.day-card') : [];
+      if (!(shell && dayHead && dayRail && dayCards.length === 3)) return;
 
-    if (shell && dayHead && dayRail && dayCards.length === 3) {
       var reel = document.createElement('div');
       reel.className = 'day-reel';
       var frame = document.createElement('div');
@@ -209,8 +263,12 @@
           b.setAttribute('aria-hidden', 'true');
           // The picture is hoisted off the card and onto the beat, because the
           // beat is the whole screen and that is what now carries it.
+          // Stashed as data, not set as the property: the moment --card-img
+          // lands on a rendered beat the browser fetches the file, and that is
+          // 219 KB the first screen never shows. The observer below applies it
+          // when the reel is two viewports out.
           var img = node.style.getPropertyValue('--card-img');
-          if (img) b.style.setProperty('--card-img', img);
+          if (img) b.setAttribute('data-card-img', img);
           /* Split the time into characters so each can roll on its own slightly
              later window — the whole block moving as one reads as a slide, the
              cascade reads as digits turning over. Clones only, so the row at
@@ -387,6 +445,26 @@
       if (!shell.children.length) shell.remove();
       dayCinema.classList.add('is-cinema');
 
+      /* The three plates, fetched on the first scroll instead of at load. The
+         reel cannot be intersection-observed for this: day-arrive holds .day
+         translated to the top of the viewport behind the hero from the very
+         first frame, so its VISUAL rect always overlaps the viewport and an
+         observer fires immediately. Scroll is the honest signal — the first
+         solo beat is ~3 viewports of travel past the first scroll event, so
+         the pixels always win the race. A {once} listener, not a scroll loop:
+         it runs a single time and unregisters itself. The originals keep
+         their inline --card-img untouched — no selector outside cinema mode
+         ever reads it, so nothing downloads on narrow screens or without
+         JavaScript either way. */
+      var applyCardImgs = function () {
+        for (var i = 0; i < beats.length; i++) {
+          var u = beats[i].getAttribute('data-card-img');
+          if (u) beats[i].style.setProperty('--card-img', u);
+        }
+      };
+      if (window.scrollY > 0) applyCardImgs();
+      else window.addEventListener('scroll', applyCardImgs, { once: true, passive: true });
+
       var measureBeats = function () {
         var beatPx = parseFloat(getComputedStyle(dayCinema).getPropertyValue('--day-beat')) || 1200;
         // Height = every beat's travel plus one screen, which is exactly how
@@ -408,42 +486,39 @@
       if (document.fonts && document.fonts.ready) document.fonts.ready.then(measureBeats);
       window.addEventListener('resize', measureBeats);
       // The hero's exit ends where .day begins, and .day just got much taller.
-      if (typeof measureHero === 'function') measureHero();
+      if (typeof measureHero === 'function' && measureHero) measureHero();
+    };
+
+    if (dayCinema && canCinema) {
+      if ('requestIdleCallback' in window) requestIdleCallback(buildCinema, { timeout: 1500 });
+      else setTimeout(buildCinema, 200);
+    }
+
+    /* ---- nav ------------------------------------------------------------- */
+
+    var nav = document.querySelector('.nav');
+    if (nav && 'IntersectionObserver' in window) {
+      // A tiny non-visual marker gives the fixed nav its scrolled state without a
+      // handler running on every scroll frame.
+      var navMarker = document.createElement('span');
+      navMarker.setAttribute('aria-hidden', 'true');
+      navMarker.style.cssText = 'position:absolute;top:12px;left:0;width:1px;height:1px;pointer-events:none';
+      document.body.prepend(navMarker);
+
+      var navObserver = new IntersectionObserver(function (entries) {
+        nav.setAttribute('data-scrolled', entries[0].isIntersecting ? 'false' : 'true');
+      }, { threshold: 0 });
+      navObserver.observe(navMarker);
     }
   }
 
-  /* ---- nav ------------------------------------------------------------- */
-
-  var nav = document.querySelector('.nav');
-  if (nav && 'IntersectionObserver' in window) {
-    // A tiny non-visual marker gives the fixed nav its scrolled state without a
-    // handler running on every scroll frame.
-    var navMarker = document.createElement('span');
-    navMarker.setAttribute('aria-hidden', 'true');
-    navMarker.style.cssText = 'position:absolute;top:12px;left:0;width:1px;height:1px;pointer-events:none';
-    document.body.prepend(navMarker);
-
-    var navObserver = new IntersectionObserver(function (entries) {
-      nav.setAttribute('data-scrolled', entries[0].isIntersecting ? 'false' : 'true');
-    }, { threshold: 0 });
-    navObserver.observe(navMarker);
-  }
-
-  var burger = document.querySelector('.nav-burger');
-  var panel = document.getElementById('nav-panel');
-  if (burger && panel) {
-    burger.addEventListener('click', function () {
-      var open = panel.getAttribute('data-open') === 'true';
-      panel.setAttribute('data-open', open ? 'false' : 'true');
-      burger.setAttribute('aria-expanded', open ? 'false' : 'true');
-    });
-    // Any in-page jump closes the panel, otherwise it covers the target.
-    var links = panel.querySelectorAll('a');
-    for (var l = 0; l < links.length; l++) {
-      links[l].addEventListener('click', function () {
-        panel.setAttribute('data-open', 'false');
-        burger.setAttribute('aria-expanded', 'false');
-      });
-    }
+  /* One frame, then a task of its own: the rAF lands just before the first
+     paint, the nested setTimeout just after it. requestIdleCallback is wrong
+     for THIS hop — idle can arrive seconds late on a busy phone, and the hero
+     pin geometry should be real before anyone has meaningfully scrolled. */
+  if ('requestAnimationFrame' in window) {
+    requestAnimationFrame(function () { setTimeout(initDeferred, 0); });
+  } else {
+    setTimeout(initDeferred, 0);
   }
 })();

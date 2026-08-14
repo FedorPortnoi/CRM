@@ -122,6 +122,55 @@ function etagMatches(header, etag) {
 
 const server = http.createServer((req, res) => {
   const target = req.url || '/';
+
+  /* ── Canonical scheme and host ──────────────────────────────────────────
+     Cloudflare terminates TLS and the tunnel delivers plain HTTP, so the
+     scheme the visitor used survives only as the X-Forwarded-Proto header the
+     edge attaches. A request WITHOUT that header — local curl against
+     127.0.0.1:8080, a health probe — is left alone: the redirects below are
+     for edge traffic only, and local testing must keep working.
+
+     The original hostname is checked against X-Forwarded-Host as well as
+     Host, because cloudflared.yml sets `httpHostHeader: 4kub.ru`, which
+     rewrites Host on the way in for EVERY ingress rule (test.4kub.ru
+     included). If neither header still says www, the information is gone and
+     the www branch simply never fires — Cloudflare serves www with apex
+     content either way, so nothing breaks; it is just not canonicalised at
+     this origin. test.4kub.ru is deliberately excluded from the http
+     redirect when it is identifiable: it is a separate concern and must not
+     be folded into the apex. */
+  const proto = String(req.headers['x-forwarded-proto'] || '').toLowerCase();
+  const originalHost = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+    .toLowerCase()
+    .replace(/:\d+$/, '');
+  if ((proto === 'http' && originalHost !== 'test.4kub.ru') || originalHost === 'www.4kub.ru') {
+    /* An origin-form request target always begins with '/'. Anything else is
+       a hand-crafted absolute-form request, and echoing it into Location
+       would let the sender pick the redirect target — send those home. Node
+       already refuses CR/LF in req.url, so header injection is not in play. */
+    const location = `https://4kub.ru${target.startsWith('/') ? target : '/'}`;
+    res.writeHead(301, {
+      Location: location,
+      'Content-Length': 0,
+      'Cache-Control': 'public, max-age=3600',
+      ...baseSecurityHeaders(),
+    });
+    res.end();
+    return;
+  }
+
+  /* Strict-Transport-Security — deliberate low-commitment start: one day, no
+     includeSubDomains (test.4kub.ru is served separately and must not be
+     captured), no preload. Raise max-age after a burn-in period shows nothing
+     ever needs to fall back to http. Only on responses the visitor received
+     over https — a browser ignores HSTS on http anyway. setHeader rather
+     than the per-branch writeHead objects, so every branch — 200, 304, 404,
+     /i — carries it without any of them being touched: Node merges implicit
+     headers with writeHead's, and nothing else sets this name. */
+  if (proto === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=86400');
+  }
+
   const mark = target.indexOf('?');
   const urlPath = mark === -1 ? target : target.slice(0, mark);
   // slice, not split('?')[1]: a second '?' is legal inside a query string and

@@ -66,8 +66,17 @@
   justify-content: center;
   /* Held back until site.js has measured the flight, otherwise the lockup would
      paint centred, then jump once the custom properties arrive. Doubles as the
-     entrance. */
-  opacity: 0;
+     entrance.
+     0.01 and not 0, and the hundredth is load-bearing: Chromium records a text
+     node's ONE chance at being a largest-contentful-paint candidate at its
+     first paint, and effective opacity 0 discards it permanently — with every
+     above-the-fold element opacity-gated, the homepage emitted NO LCP entry at
+     all (crawlers and CrUX land on a fresh session, so this is exactly the
+     state they scored). At 1% the plate is invisible to an eye on cream but
+     the paint is real, so the lockup registers as LCP at first-paint time.
+     Verified: /privacy.html was the positive control, and the entrance
+     transition from 0.01 is frame-identical to the one from 0. */
+  opacity: 0.01;
   transition: opacity 0.9s var(--ease-out);
 }
 .intro-ready .intro-stage { opacity: 1; }
@@ -257,7 +266,14 @@
     /* Fixed, so the plate never slides: it holds still and dissolves. */
     .js:not(.intro-seen) .intro-stage { position: fixed; }
 
-    .js:not(.intro-seen) .intro-mark {
+    /* intro-ready-gated so the pre-measure lockup keeps its natural centred
+       flex position instead of sitting at the var() fallbacks top-left. It was
+       invisible there at opacity 0, but the stage now paints at 0.01 (see the
+       LCP note above) — painted-but-invisible still counts for CLS, and the
+       jump to the measured coordinates scored 0.001 of layout shift. Gated,
+       the switch to fixed lands in the same frame as the real coordinates and
+       the rect never moves. */
+    .js.intro-ready:not(.intro-seen) .intro-mark {
       position: fixed;
       left: var(--mark-x, 2rem);
       top: var(--mark-y, 1.5rem);
@@ -517,6 +533,14 @@
   margin: 0;
 }
 .hero-title em { font-style: normal; color: var(--accent-ink); }
+/* The eyebrow lives inside the H1 now (heading weight for the category term)
+   but must paint exactly as the sibling <p> it replaced: block, body-ish
+   line-height instead of the title's 1, and .eyebrow's own margin. */
+.hero-title .h1-eyebrow {
+  display: block;
+  line-height: 1.8;
+  letter-spacing: 0.18em;
+}
 
 /* The serif line under the headline — the one moment of warmth in the block. */
 .hero-accent {
@@ -560,6 +584,11 @@
   letter-spacing: 0.08em;
   color: var(--ink);
 }
+/* The store names are real links now. At rest they look exactly as the plain
+   text did (global `a` already inherits colour, no underline); hover borrows
+   the nav's accent so a mouse can tell them apart. */
+.hero-meta dd a { transition: color 0.2s var(--ease-out); }
+.hero-meta dd a:hover { color: var(--accent-ink); }
 
 /* The drawn product. Deliberately not a screenshot: it stays crisp at any
    density, weighs nothing, and cannot leak a real customer's data. */
@@ -1530,6 +1559,96 @@
 }
 
 
+/* ─── SCREENS (four plates from the store listing) ────────────────────────────
+
+   PAPER GROUND, REAL PICTURES. The cube above draws the app's screens as an
+   object; this island shows them as evidence — four untouched screenshots, the
+   same files the App Store and RuStore listings carry. Standing between two
+   coloured fields (caps is night, asst is terracotta) it needs no fold of its
+   own: the ground change IS the seam on both edges.
+
+   The plates are tipped in like photographs in a printed book: a hairline of
+   --line-strong around each — the screenshots are nearly the paper's own
+   cream, so without the rule they would dissolve into the ground — a shallow
+   lift shadow, and a ruled mono folio underneath, the same caption idiom
+   .day-foot uses. The folios are aria-hidden; the alt on each image is the
+   reading copy, taken verbatim from img/screens/manifest.json.
+
+   Wide screens set the four in a row. Narrow ones swap to a scroll strip that
+   bleeds to the viewport edge so the cut-off plate advertises the swipe.
+   overflow-x lives on the STRIP alone — the page never scrolls sideways — and
+   scroll-snap lands the swipe on a plate rather than between two.
+   NOT PINNED, no script: photographs want to be looked at, not driven. */
+
+.screens-head { max-width: 54rem; }
+
+.screens-strip {
+  list-style: none;
+  margin: clamp(2.6rem, 5vw, 4.4rem) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(1.2rem, 2.4vw, 2.2rem);
+}
+
+.screens-frame {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--rice);
+  /* The same two-part lift .team-panel carries: a catch of light on the top
+     edge, then a soft fall away from the paper. */
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5), 0 22px 48px -34px rgba(60, 40, 24, 0.55);
+}
+/* height:auto keeps the width/height attributes' ratio; nothing ever jumps. */
+.screens-frame img { width: 100%; height: auto; }
+
+/* The plate caption: ruled off like .day-foot, folio numeral in accent ink. */
+.screens-folio {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+.screens-folio i {
+  font-style: normal;
+  letter-spacing: 0.18em;
+  color: var(--accent-ink);
+}
+
+/* Narrow: the grid becomes the strip. The negative margin is HORIZONTAL bleed
+   inside one section — the spacing model's "no negative margins" rule is about
+   the vertical seams between sections, and this touches neither neighbour. */
+@media (max-width: 899px) {
+  .screens-strip {
+    display: flex;
+    gap: 0.9rem;
+    margin-inline: calc(-1 * clamp(1.25rem, 4vw, 3rem));
+    padding-inline: clamp(1.25rem, 4vw, 3rem);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: clamp(1.25rem, 4vw, 3rem);
+    /* Room under the plates for the thin scrollbar, so it never sits on them. */
+    padding-bottom: 0.9rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  .screens-item {
+    flex: 0 0 min(66vw, 19rem);
+    scroll-snap-align: start;
+  }
+}
+
+
 /* ─── ASSISTANT (terracotta band: the CTA's ground, taken deliberately) ──── */
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2188,8 +2307,10 @@
   --on-paper-soft: rgba(251, 246, 238, 0.1);
   --on-paper-mid: rgba(251, 246, 238, 0.42);
 }
-/* The CTA ends in the same colour this section starts in. Without a fold the
-   two run together into one field and the CTA stops being an event. */
+/* Kept although .faq now stands between the two: if that paper sheet is ever
+   removed, trust and .cta are adjacent terracotta again and run together into
+   one field without this fold. While .faq is there the selector never matches
+   and costs nothing. */
 .trust + .cta { border-top: 1px solid rgba(36, 23, 15, 0.3); }
 
 /* Paper grain, multiplied — on a saturated field it reads as ink laid on
@@ -2531,6 +2652,144 @@
     @keyframes trust-seal-b { 0%, 47% { transform: scaleX(0) } 72%, 100% { transform: scaleX(1) } }
     @keyframes trust-seal-l { 0%, 72% { transform: scaleY(0) } 95%, 100% { transform: scaleY(1) } }
   }
+}
+
+
+/* ─── FAQ (paper between the two terracotta fields) ──────────────────────────
+
+   Reading matter, so it returns to paper: nine questions answered in exactly
+   the words llms.txt and the FAQPage JSON-LD carry. The visible copy is the
+   original; the machine copies mirror it.
+
+   Standing here it also does the band rhythm a favour: trust and .cta were two
+   terracotta fields sharing a hairline fold, and a sheet of paper between them
+   is a better fold than a border — the CTA becomes an event again.
+
+   The questions are set like .asst-q rather than like the uppercase h3s: both
+   are a person asking in their own words, and the rhyme is deliberate.
+
+   No script. <details> opens and closes itself, the answers are in the DOM
+   either way, and the only moving part is a drawn plus turning into a cross. */
+
+.faq-head { max-width: 54rem; }
+
+.faq-body { margin-top: clamp(2.2rem, 4.5vw, 3.4rem); }
+/* Wide screens: the founder note takes the margin beside the list — the same
+   move the hero makes with its vertical rule — instead of leaving half the
+   shell as empty cream and the note below the fold. */
+@media (min-width: 1180px) {
+  .faq-body {
+    display: grid;
+    grid-template-columns: minmax(0, 54rem) minmax(0, 1fr);
+    gap: clamp(3rem, 5vw, 5.5rem);
+    align-items: start;
+  }
+}
+
+.faq-list {
+  max-width: 54rem;
+  border-top: 1px solid var(--line);
+}
+
+.faq-item { border-bottom: 1px solid var(--line); }
+
+.faq-item summary {
+  display: grid;
+  grid-template-columns: 2.6rem minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.4rem 1rem;
+  padding-block: 1.2rem;
+  cursor: pointer;
+  /* The drawn mark replaces the UA triangle. */
+  list-style: none;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+
+.faq-n {
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--accent-ink);
+}
+
+.faq-q {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 250;
+  font-size: clamp(1.12rem, 1.02rem + 0.55vw, 1.5rem);
+  line-height: 1.3;
+  letter-spacing: 0.005em;
+  color: var(--ink);
+  transition: color 0.2s var(--ease-out);
+  text-wrap: balance;
+}
+.faq-item summary:hover .faq-q { color: var(--accent-ink); }
+
+/* The mark: a plus drawn with two hairlines in a ticket-square, turning into a
+   cross when the item is open. An empty box has no baseline to align to, so it
+   centres itself against the row instead. */
+.faq-mark {
+  position: relative;
+  align-self: center;
+  width: 30px; height: 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  transition: border-color 0.25s var(--ease-out);
+}
+.faq-item summary:hover .faq-mark { border-color: var(--accent-ink); }
+.faq-mark::before, .faq-mark::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  background: var(--accent-ink);
+  transition: transform 0.3s var(--ease-out);
+}
+.faq-mark::before { width: 11px; height: 1px; transform: translate(-50%, -50%); }
+.faq-mark::after  { width: 1px; height: 11px; transform: translate(-50%, -50%); }
+.faq-item[open] .faq-mark::before { transform: translate(-50%, -50%) rotate(45deg); }
+.faq-item[open] .faq-mark::after  { transform: translate(-50%, -50%) rotate(45deg); }
+
+/* The answer aligns under the question, clear of the folio column. */
+.faq-a { padding: 0.15rem 0 1.5rem calc(2.6rem + 1rem); }
+.faq-a p {
+  margin: 0 0 0.9rem;
+  color: var(--ink-soft);
+  font-size: 0.99rem;
+  line-height: 1.75;
+  max-width: 58ch;
+}
+.faq-a p:last-child { margin-bottom: 0; }
+
+/* ── who is behind the answers ───────────────────────────────────────────── */
+/* Quiet on purpose: facts in the site's own reading voice, no card, no badge.
+   Below the wide breakpoint it follows the list, ruled off by its last
+   hairline; above it, it is a margin note that rides beside the questions. */
+.faq-founder { max-width: 54rem; margin-top: clamp(2.4rem, 5vw, 3.6rem); }
+@media (min-width: 1180px) {
+  .faq-founder {
+    margin-top: 1.2rem;      /* optically level with the first question */
+    position: sticky;
+    top: 7rem;               /* clear of the fixed nav */
+    max-width: 34rem;
+  }
+}
+.faq-founder .eyebrow { margin-bottom: 0.8rem; }
+.faq-founder-text {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.99rem;
+  line-height: 1.75;
+  max-width: 62ch;
+}
+.faq-founder-text a { color: var(--accent-ink); transition: color 0.2s var(--ease-out); }
+.faq-founder-text a:hover { color: var(--accent-deep); }
+
+/* Phones: the folio leaves and the answer takes the full measure. */
+@media (max-width: 640px) {
+  .faq-item summary { grid-template-columns: minmax(0, 1fr) auto; }
+  .faq-n { display: none; }
+  .faq-a { padding-left: 0; }
 }
 
 
