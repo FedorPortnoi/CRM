@@ -76,6 +76,7 @@
     "expo-status-bar": "~3.0.0",
     "expo-task-manager": "~14.0.0",
     "expo-updates": "~29.0.19",
+    "expo-video": "~3.0.16",
     "fastify": "^5.0.0",
     "fastify-type-provider-zod": "^4.0.2",
     "google-auth-library": "^10.6.2",

@@ -15,6 +15,7 @@ import {
 } from '../utils/notifications';
 import { queryClient, persistOptions } from '../utils/queryClient';
 import SyncStatusBar from '../components/SyncStatusBar';
+import AnimatedSplash from '../components/AnimatedSplash';
 import { ConflictToast } from '../components/ConflictToast';
 import { OnboardingWalkthrough } from '../components/OnboardingWalkthrough';
 import NavHeader from '../components/NavHeader';
@@ -45,6 +46,7 @@ export default function RootLayout() {
   const { token, user, restoreSession } = useUserStore();
   const fetchOnboarding = useOnboardingStore((s) => s.fetch);
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
+  const [splashDone, setSplashDone] = useState<boolean>(false);
   const pushRegistrationAttemptRef = useRef<string | null>(null);
   const callCaptureCleanupRef = useRef<(() => void) | null>(null);
   const handledNotifRef = useRef<string | null>(null);
@@ -203,9 +205,16 @@ export default function RootLayout() {
     return (
       <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" />
+          {/* Dark, not a white spinner: the animated splash overlays this
+              branch, and the backdrop must match its #0A0A0A so a slow video
+              first-frame can never flash white. The spinner stays as the
+              no-video fallback underneath. */}
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0A0A0A' }}>
+            <ActivityIndicator size="large" color="#CC785C" />
           </View>
+          {/* key must match the main branch so React keeps ONE splash instance
+              (and one playing video) across the isRestoring branch switch. */}
+          <AnimatedSplash key="animated-splash" ready={false} onFinish={() => setSplashDone(true)} />
         </GestureHandlerRootView>
       </PersistQueryClientProvider>
     );
@@ -234,6 +243,9 @@ export default function RootLayout() {
         </Stack>
         <OnboardingWalkthrough />
         <ConflictToast />
+        {!splashDone && (
+          <AnimatedSplash key="animated-splash" ready onFinish={() => setSplashDone(true)} />
+        )}
       </GestureHandlerRootView>
     </PersistQueryClientProvider>
   );
