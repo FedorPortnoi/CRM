@@ -39,7 +39,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function LoginScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { user, isLoading, error, login, join } = useUserStore();
+  const { user, isLoading, error, pendingVerification, login, join } = useUserStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -62,6 +62,16 @@ export default function LoginScreen() {
       }
     }
   }, [user, isLoading, error, router]);
+
+  // login() and join() both land here — instead of an error banner — when the
+  // password was right but the address on file still needs its code. Same
+  // pendingVerification handle acceptInvite() produces, so /verify needs no
+  // changes to serve either origin.
+  useEffect(() => {
+    if (!isLoading && pendingVerification !== null) {
+      router.replace('/verify' as never);
+    }
+  }, [pendingVerification, isLoading, router]);
 
   const isJoin = activeTab === 'join';
 

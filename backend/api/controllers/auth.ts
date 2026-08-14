@@ -18,7 +18,7 @@ import {
   DEFAULT_PIPELINE_STAGE_NAMES,
   DEFAULT_TIME_ZONE,
 } from '../../config/market';
-import { requiresEmailVerification } from '../../config/security';
+import { requiresEmailVerification, isEmailVerificationEnforced } from '../../config/security';
 import { consumeScopedBudget } from '../../services/rate-limit-store';
 
 const saltRounds = process.env.NODE_ENV === 'test' ? 4 : 12;
@@ -409,9 +409,30 @@ export const AuthController = {
       return invalidCredentials(reply);
     }
 
-    if (credentialStatus === 'non_counted_failure') {
+    if (credentialStatus === 'non_counted_failure' && user) {
+      /**
+       * user_id AND email, not just the message.
+       *
+       * Without them, a person who kills the app between setting their
+       * credentials and entering the code — or between accepting an invite and
+       * entering the code — had no way back in. /auth/verify/resend needs a
+       * user_id and had none to send it; the invite link is single-use and
+       * already consumed; the only remaining door was an admin re-invite.
+       *
+       * Safe to reveal here specifically because credentialStatus is
+       * 'non_counted_failure' ONLY when passwordMatches is already true — this
+       * branch is unreachable without the correct password, so it discloses
+       * nothing to someone who does not already hold the account's credentials.
+       * `user.email` is guaranteed non-empty: this row was found BY that email
+       * in the findUnique above.
+       */
       return reply.code(403).send({
-        error: { code: 'ACCOUNT_NOT_VERIFIED', message: 'Please verify your account via the code sent to your phone and email.' },
+        error: {
+          code: 'ACCOUNT_NOT_VERIFIED',
+          message: 'Please verify your account via the code sent to your phone and email.',
+          user_id: user.id,
+          email: user.email,
+        },
       });
     }
 
@@ -706,8 +727,17 @@ export const AuthController = {
      */
     if (requiresEmailVerification(user)) {
       await auditLog({ action: 'auth.join', outcome: 'failure', request, organizationId: org.id, userId: user.id, metadata: { reason: 'email_not_verified' } });
+      // user_id and email travel with the refusal for the same reason as
+      // login's identical branch: this door is unreachable without the correct
+      // password, so it discloses nothing new, and it is what lets the client
+      // reattach a killed-and-reopened app to /auth/verify instead of dead-ending.
       return reply.code(403).send({
-        error: { code: 'ACCOUNT_NOT_VERIFIED', message: 'Please verify your account via the code sent to your phone and email.' },
+        error: {
+          code: 'ACCOUNT_NOT_VERIFIED',
+          message: 'Please verify your account via the code sent to your phone and email.',
+          user_id: user.id,
+          email: user.email,
+        },
       });
     }
 
@@ -771,28 +801,83 @@ export const AuthController = {
     }
 
     const newHash = await bcrypt.hash(new_password, saltRounds);
-    // `email_verified: false`, because nothing here proved anything. This wrote
-    // `true` for whatever address the caller typed — no OTP, no possession check
-    // of any kind — which made the column actively false data rather than merely
-    // unenforced. Nothing reads it today, so this changes no behaviour; it stops
-    // the row from lying to whatever reads it next.
-    //
-    // `is_verified` is deliberately NOT touched. AuthController.inviteUser writes
-    // it true when it creates these accounts, and these are the users who reach
-    // this handler (must_change_email gates entry, three lines up). Clearing it
-    // would lock them out of /auth/login and /auth/join on their first-run screen
-    // — and no OTP could rescue them, because POST /auth/verify refuses any
-    // account whose is_verified is already true.
+
+    /**
+     * PROVE THE ADDRESS, do not merely record it.
+     *
+     * AuthController.inviteUser mints these accounts is_verified: true so the
+     * employee can /auth/join before they own an email at all — a bootstrap, not
+     * a proof. This screen is where they name their real address, so it is where
+     * the proof begins: is_verified flips back to false and an OTP goes to the
+     * address just typed. POST /auth/verify then flips is_verified AND
+     * email_verified true against a code that only the real mailbox receives, and
+     * mints the session. A typo now dead-ends at the code screen instead of
+     * silently redirecting this person's password recovery to a stranger.
+     *
+     * The old warning here — that clearing is_verified strands the user because
+     * /auth/verify refuses an already-verified account — held ONLY while this
+     * handler issued no code. It issues one now, in the same write, so verify
+     * accepts it. The gate is real: requiresEmailVerification() blocks every
+     * authenticated route for this row until the code is entered, and /auth/verify
+     * is public, so the session revoked below is not needed to finish the step.
+     *
+     * FAIL OPEN when the address cannot be proven. With no mail provider
+     * (isEmailSendingEnabled) or verification switched off
+     * (REQUIRE_EMAIL_VERIFICATION=false) an OTP would never arrive, so those
+     * deployments keep the prior behaviour — email set, is_verified untouched, no
+     * verification step — rather than locking the employee out for good.
+     */
+    const requireVerify = isEmailSendingEnabled() && isEmailVerificationEnforced();
+
     const user = await db.user.update({
       where: { id: request.user.sub },
-      data: { email, password_hash: newHash, email_verified: false, must_change_password: false, must_change_email: false },
+      data: {
+        email,
+        password_hash: newHash,
+        // `email_verified: false` regardless: nothing has proven the address at
+        // THIS point. The verify step sets it true; the fail-open path leaves it
+        // honestly false rather than writing a proof that never happened.
+        email_verified: false,
+        must_change_password: false,
+        must_change_email: false,
+        ...(requireVerify ? { is_verified: false } : {}),
+      },
     });
 
     await revokeAllUserSessions(request.user.sub, request.user.org_id, 'credentials_changed');
 
-    await auditLog({ action: 'auth.set_credentials', outcome: 'success', request, organizationId: request.user.org_id, userId: request.user.sub, metadata: { email } });
+    if (requireVerify) {
+      // Issued before the response so the code exists the moment the client lands
+      // on /verify. Delivery failure is logged, not fatal — the verify screen's
+      // resend button (POST /auth/verify/resend) mints another.
+      const code = await issueCode(request.user.sub, 'email');
+      const result = await sendEmail(email, 'Код подтверждения', `Ваш код: ${code}. Действителен 10 минут.`);
+      if (!result.success) {
+        request.log.error(
+          { userId: request.user.sub, orgId: request.user.org_id, errorCode: result.errorCode },
+          '[set-credentials] verification code issued but email delivery failed',
+        );
+      }
+    }
 
-    return reply.send({ data: { user: publicUser(user) }, meta: {} });
+    await auditLog({
+      action: 'auth.set_credentials',
+      outcome: 'success',
+      request,
+      organizationId: request.user.org_id,
+      userId: request.user.sub,
+      metadata: { email, verification_required: requireVerify },
+    });
+
+    return reply.send({
+      data: {
+        user: publicUser(user),
+        // Present only when the client must now collect an OTP. Same shape the
+        // invite-accept flow returns, so verify.tsx consumes it unchanged.
+        ...(requireVerify ? { pending_verification: { user_id: request.user.sub, email } } : {}),
+      },
+      meta: {},
+    });
   },
 
   setTimezone: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -1330,17 +1415,25 @@ export const AuthController = {
           : { success: false, errorCode: 'SERVICE_NOT_CONFIGURED' as const };
 
         // sendEmail RETURNS a failure, it does not throw. Recording the outcome
-        // is the only way an operator can see that recovery is dead on a box
-        // with no RESEND_API_KEY — the HTTP body cannot say so without becoming
-        // the oracle again.
+        // is how an operator sees that recovery is dead on a box with no
+        // RESEND_API_KEY — the HTTP body cannot say so without becoming the
+        // oracle again. Two records, both server-side: the audit row is the
+        // durable, org-scoped copy; the log line is the real-time one, so an
+        // operator watching pm2 error logs notices a dead recovery path without
+        // querying the audit table. errorCode separates an unconfigured box
+        // (SERVICE_NOT_CONFIGURED) from a provider or timeout failure.
         if (!result.success) {
+          request.log.error(
+            { userId, orgId, errorCode: result.errorCode },
+            '[password-reset] code issued but email delivery failed',
+          );
           await auditLog({
             action: 'auth.password_reset_request',
             outcome: 'failure',
             request,
             organizationId: orgId,
             userId,
-            metadata: { reason: 'delivery_failed' },
+            metadata: { reason: 'delivery_failed', errorCode: result.errorCode ?? null },
           });
         }
       } catch {

@@ -62,6 +62,15 @@ export default function SetPasswordScreen() {
     try {
       if (needsEmail) {
         await setCredentials(email.trim().toLowerCase(), newPassword);
+        // The server may now require the new address to be proven by an emailed
+        // code. When it does, setCredentials populates pendingVerification and the
+        // old session is gone — the only next screen is /verify, which mints the
+        // real session on success. Read it back off the store rather than the
+        // closed-over `user`, which predates this call.
+        if (useUserStore.getState().pendingVerification !== null) {
+          router.replace('/verify' as never);
+          return;
+        }
       } else {
         await changePassword(newPassword);
       }

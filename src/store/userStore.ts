@@ -109,6 +109,23 @@ function extractErrorMessage(body: unknown, status: number): string {
   return `Request failed with status ${status}`;
 }
 
+/**
+ * Recognizes the 403 ACCOUNT_NOT_VERIFIED shape login() and join() now share
+ * with acceptInvite(): a real account, a correct password, and an address that
+ * has not been proven yet. `user_id` is what turns "dead end, ask an admin to
+ * re-invite you" into "reattach to /auth/verify and finish the code" — see the
+ * comment on this branch in backend/api/controllers/auth.ts for why sending it
+ * here is safe.
+ */
+function extractPendingVerification(body: unknown): PendingVerification | null {
+  if (body === null || typeof body !== 'object' || !('error' in body)) return null;
+  const err = (body as { error: unknown }).error;
+  if (err === null || typeof err !== 'object') return null;
+  const { code, user_id: userId, email } = err as Record<string, unknown>;
+  if (code !== 'ACCOUNT_NOT_VERIFIED' || typeof userId !== 'string') return null;
+  return { userId, email: typeof email === 'string' ? email : null };
+}
+
 export const useUserStore = create<UserState>()((set) => ({
   user: null,
   token: null,
@@ -126,6 +143,16 @@ export const useUserStore = create<UserState>()((set) => ({
       });
       const body: unknown = await response.json();
       if (!response.ok) {
+        // A real account, right password, unproven address: not a failure to
+        // surface as an error banner, but the same mid-flow state acceptInvite
+        // already knows how to resume from. No SecureStore write — there is no
+        // session, and persisting a half-account is how a device ends up
+        // believing it is signed in as somebody who never proved anything.
+        const pending = extractPendingVerification(body);
+        if (pending) {
+          set({ pendingVerification: pending, user: null, token: null, isLoading: false });
+          return;
+        }
         throw new Error(extractErrorMessage(body, response.status));
       }
       const { data } = body as { data: { user: AuthUser; token: string } };
@@ -240,6 +267,12 @@ export const useUserStore = create<UserState>()((set) => ({
       });
       const body: unknown = await response.json();
       if (!response.ok) {
+        // Same resumable state as login() above — see the comment there.
+        const pending = extractPendingVerification(body);
+        if (pending) {
+          set({ pendingVerification: pending, user: null, token: null, isLoading: false });
+          return;
+        }
         throw new Error(extractErrorMessage(body, response.status));
       }
       const { data } = body as { data: { user: AuthUser; token: string } };
@@ -319,7 +352,28 @@ export const useUserStore = create<UserState>()((set) => ({
     const body: unknown = await response.json();
     if (!response.ok) throw new Error(extractErrorMessage(body, response.status));
 
-    const { data } = body as { data: { user: AuthUser } };
+    const { data } = body as {
+      data: { user: AuthUser; pending_verification?: { user_id: string; email: string | null } };
+    };
+
+    // When the server asks for the address to be proven, the session it revoked
+    // is already dead: drop the stored token so restoreSession() cannot try it,
+    // and hand the verify screen the same pendingVerification handle acceptInvite
+    // produces. verifyOtp mints the real session one screen later.
+    if (data.pending_verification) {
+      await SecureStore.deleteItemAsync('crm_auth_token');
+      await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(data.user));
+      set({
+        user: data.user,
+        token: null,
+        pendingVerification: {
+          userId: data.pending_verification.user_id,
+          email: data.pending_verification.email,
+        },
+      });
+      return;
+    }
+
     await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(data.user));
     set({ user: data.user });
   },

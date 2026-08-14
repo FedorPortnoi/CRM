@@ -32,6 +32,8 @@ vi.mock('../../../backend/services/db', () => ({
 import { AuthController } from '../../../backend/api/controllers/auth';
 import { MessagesController } from '../../../backend/api/controllers/messages';
 import { VERIFICATION_ENFORCED_SINCE } from '../../../backend/config/security';
+import * as emailService from '../../../backend/services/email';
+import * as verificationService from '../../../backend/services/verification';
 
 const orgId = '00000000-0000-4000-a000-000000000123';
 
@@ -296,6 +298,11 @@ describe('AuthController.join asks the same question /auth/login asks', () => {
       error: {
         code: 'ACCOUNT_NOT_VERIFIED',
         message: 'Please verify your account via the code sent to your phone and email.',
+        // Lets a killed-and-reopened app reattach to /auth/verify instead of
+        // dead-ending — see the comment on this branch in controllers/auth.ts.
+        // Safe to disclose: unreachable without the correct password.
+        user_id: '00000000-0000-4000-a000-0000000000f1',
+        email: 'petr@example.ru',
       },
     });
     // No token, and no session row either — a 403 that still signed one would
@@ -365,18 +372,50 @@ describe('AuthController.join asks the same question /auth/login asks', () => {
   });
 });
 
-describe('AuthController.setCredentials does not certify an address it never checked', () => {
+describe('AuthController.setCredentials proves the address it is given', () => {
+  const originalEnforce = process.env.REQUIRE_EMAIL_VERIFICATION;
+
   beforeEach(() => {
     vi.clearAllMocks();
     dbMock.$executeRaw.mockResolvedValue(1);
     dbMock.$queryRaw.mockResolvedValue([]);
   });
 
-  it('writes email_verified false for the address the caller typed', async () => {
-    // This wrote `true`. No OTP, no possession check of any kind — the column
-    // was actively false data. Nothing reads it today, so flipping it changes no
-    // behaviour; it stops the row from lying to whatever reads it next, which
-    // after this change includes three separate doors asking about identity.
+  afterEach(() => {
+    if (originalEnforce === undefined) {
+      delete process.env.REQUIRE_EMAIL_VERIFICATION;
+    } else {
+      process.env.REQUIRE_EMAIL_VERIFICATION = originalEnforce;
+    }
+    vi.restoreAllMocks();
+  });
+
+  function callSetCredentials(reply: TestReply) {
+    return AuthController.setCredentials(
+      {
+        body: { email: 'Novy@Example.RU', new_password: 'Password123!' },
+        user: { sub: 'user-1', org_id: orgId },
+        headers: { 'user-agent': 'vitest' },
+        ip: '127.0.0.1',
+        log: { error: vi.fn() },
+      } as never,
+      reply as never,
+    );
+  }
+
+  it('clears is_verified, issues a code and returns a pending_verification handle when the address can be proven', async () => {
+    // The whole point: inviteUser mints these accounts is_verified: true so they
+    // can /auth/join before they own an email. This screen is where the real
+    // address is named, so it is where the proof begins — is_verified flips false
+    // and an OTP goes to the address just typed. POST /auth/verify flips both
+    // is_verified and email_verified back true against a code only the real
+    // mailbox receives, so a typo dead-ends at the code screen instead of
+    // redirecting recovery to a stranger.
+    process.env.REQUIRE_EMAIL_VERIFICATION = 'true';
+    vi.spyOn(emailService, 'isEmailSendingEnabled').mockReturnValue(true);
+    const sendSpy = vi.spyOn(emailService, 'sendEmail').mockResolvedValue({ success: true, messageId: 'm1' });
+    const issueSpy = vi.spyOn(verificationService, 'issueCode').mockResolvedValue('123456');
+
     dbMock.user.findUnique
       .mockResolvedValueOnce({ must_change_email: true })  // the entry gate
       .mockResolvedValueOnce(null);                        // no address collision
@@ -389,26 +428,57 @@ describe('AuthController.setCredentials does not certify an address it never che
     });
     const reply = createReply();
 
-    await AuthController.setCredentials(
-      {
-        body: { email: 'Novy@Example.RU', new_password: 'Password123!' },
-        user: { sub: 'user-1', org_id: orgId },
-        headers: { 'user-agent': 'vitest' },
-        ip: '127.0.0.1',
-      } as never,
-      reply as never,
-    );
+    await callSetCredentials(reply);
+
+    expect(reply.statusCode).toBe(200);
+    const written = dbMock.user.update.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(written.data.is_verified).toBe(false);
+    expect(written.data.email_verified).toBe(false);
+    expect(written.data.email).toBe('novy@example.ru');
+    expect(written.data.must_change_email).toBe(false);
+    expect(written.data.must_change_password).toBe(false);
+
+    expect(issueSpy).toHaveBeenCalledWith('user-1', 'email');
+    expect(sendSpy).toHaveBeenCalledWith('novy@example.ru', expect.any(String), expect.stringContaining('123456'));
+
+    const payload = reply.payload as { data: { pending_verification?: { user_id: string; email: string } } };
+    expect(payload.data.pending_verification).toEqual({ user_id: 'user-1', email: 'novy@example.ru' });
+  });
+
+  it('fails open with no mail provider: records the address unverified and skips the verification step', async () => {
+    // With no way to deliver an OTP, requiring one would lock the employee out
+    // for good. So the address is set, is_verified is left untouched (inviteUser's
+    // true), email_verified stays honestly false, and no pending_verification is
+    // returned — the client proceeds straight in, exactly as before this feature.
+    vi.spyOn(emailService, 'isEmailSendingEnabled').mockReturnValue(false);
+    const sendSpy = vi.spyOn(emailService, 'sendEmail');
+    const issueSpy = vi.spyOn(verificationService, 'issueCode');
+
+    dbMock.user.findUnique
+      .mockResolvedValueOnce({ must_change_email: true })
+      .mockResolvedValueOnce(null);
+    dbMock.user.update.mockResolvedValue({
+      id: 'user-1',
+      email: 'novy@example.ru',
+      name: 'Пётр',
+      role: 'member',
+      organization_id: orgId,
+    });
+    const reply = createReply();
+
+    await callSetCredentials(reply);
 
     expect(reply.statusCode).toBe(200);
     const written = dbMock.user.update.mock.calls[0][0] as { data: Record<string, unknown> };
     expect(written.data.email_verified).toBe(false);
-    expect(written.data.email).toBe('novy@example.ru');
-    // `is_verified` is deliberately NOT cleared. inviteUser set it true when it
-    // created these accounts, and clearing it here would lock the user out of
-    // /auth/login and /auth/join on their own first-run screen — with no rescue,
-    // since POST /auth/verify refuses any account already marked verified.
     expect(written.data).not.toHaveProperty('is_verified');
     expect(written.data.must_change_email).toBe(false);
     expect(written.data.must_change_password).toBe(false);
+
+    expect(issueSpy).not.toHaveBeenCalled();
+    expect(sendSpy).not.toHaveBeenCalled();
+
+    const payload = reply.payload as { data: { pending_verification?: unknown } };
+    expect(payload.data.pending_verification).toBeUndefined();
   });
 });
