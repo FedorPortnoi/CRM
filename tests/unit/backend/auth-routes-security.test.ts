@@ -308,7 +308,7 @@ describe('auth routes that are deliberately absent', () => {
     // No app refresh tokens: login returns an access token only. Every `refresh_token`
     // in the repo belongs to amoCRM or Yandex Calendar OAuth.
     ['POST', '/auth/refresh'],
-    // No generic profile route. The only /me routes are the three narrow ones below.
+    // No generic profile route. The only /me routes are the four narrow ones below.
     ['GET', '/auth/me'],
     ['PATCH', '/auth/me'],
     // No single-member read; only GET /auth/users.
@@ -324,8 +324,8 @@ describe('auth routes that are deliberately absent', () => {
     expect(response.statusCode).toBe(404);
   });
 
-  it('does register the three narrow /me routes the absent ones are confused with', async () => {
-    for (const url of ['/auth/me/password', '/auth/me/credentials', '/auth/me/timezone']) {
+  it('does register the four narrow /me routes the absent ones are confused with', async () => {
+    for (const url of ['/auth/me/password', '/auth/me/credentials', '/auth/me/timezone', '/auth/me/session-preference']) {
       const response = await app.inject({
         method: 'PATCH',
         url,

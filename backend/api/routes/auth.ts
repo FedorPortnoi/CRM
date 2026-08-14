@@ -162,6 +162,10 @@ const SetManagerSchema = z.object({
   manager_id: z.string().uuid().nullable(),
 });
 
+const SessionPreferenceSchema = z.object({
+  stay_signed_in: z.boolean(),
+});
+
 const SetTimezoneSchema = z.object({
   timezone: z
     .string()
@@ -383,6 +387,9 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.patch('/me/timezone', {
     schema: { body: SetTimezoneSchema },
   }, AuthController.setTimezone);
+  fastify.patch('/me/session-preference', {
+    schema: { body: SessionPreferenceSchema },
+  }, AuthController.setSessionPreference);
   fastify.post('/verify', {
     config: { rateLimit: authRateLimit(10, '15 minutes') },
     preHandler: enforceAuthIpFloor,

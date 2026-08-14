@@ -657,7 +657,7 @@ export const InviteController = {
         select: {
           id: true, email: true, username: true, name: true, role: true,
           organization_id: true, timezone: true,
-          must_change_password: true, must_change_email: true,
+          must_change_password: true, must_change_email: true, stay_signed_in: true,
         },
       });
 
@@ -719,6 +719,7 @@ export const InviteController = {
       id: created.id,
       organization_id: created.organization_id,
       role: created.role,
+      stay_signed_in: created.stay_signed_in,
     });
 
     return reply.code(201).send({

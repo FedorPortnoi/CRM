@@ -124,7 +124,7 @@ function onboardingCompleted(state: Prisma.JsonValue | null): boolean {
   return record.completed === true || typeof record.completed_at === 'string';
 }
 
-function publicUser(user: { id: string; email: string | null; username?: string | null; name: string; role: string; organization_id: string; timezone?: string; onboarding_state?: Prisma.JsonValue | null; must_change_password?: boolean; must_change_email?: boolean; manager_id?: string | null }) {
+function publicUser(user: { id: string; email: string | null; username?: string | null; name: string; role: string; organization_id: string; timezone?: string; onboarding_state?: Prisma.JsonValue | null; must_change_password?: boolean; must_change_email?: boolean; manager_id?: string | null; stay_signed_in?: boolean }) {
   return {
     id: user.id,
     email: user.email,
@@ -137,6 +137,9 @@ function publicUser(user: { id: string; email: string | null; username?: string 
     onboarding_completed: onboardingCompleted(user.onboarding_state ?? null),
     must_change_password: user.must_change_password ?? false,
     must_change_email: user.must_change_email ?? false,
+    // Settings' "stay signed in" toggle reflects this straight off the already-
+    // loaded user object — see AuthController.setSessionPreference.
+    stay_signed_in: user.stay_signed_in ?? false,
   };
 }
 
@@ -245,12 +248,23 @@ async function verifyPasswordWithLockout(
   return outcome;
 }
 
+/**
+ * The lifetime a "stay signed in" session gets, vs. the JWT_EXPIRES_IN default
+ * (7d) everyone else gets. A fixed window from the moment it is minted, not a
+ * sliding one — using the app does not push it further out. Chosen over "no
+ * expiry while the toggle is on" so a lost or stolen phone still has a
+ * time-bounded exposure even if nobody notices and logs out.
+ */
+export const STAY_SIGNED_IN_EXPIRES_IN = '90d';
+
 export async function signSessionToken(
   request: FastifyRequest,
   reply: FastifyReply,
-  user: { id: string; organization_id: string; role: AuthRole },
+  user: { id: string; organization_id: string; role: AuthRole; stay_signed_in?: boolean },
 ): Promise<string> {
-  const expiresIn = process.env.JWT_EXPIRES_IN ?? '7d';
+  const expiresIn = user.stay_signed_in
+    ? STAY_SIGNED_IN_EXPIRES_IN
+    : (process.env.JWT_EXPIRES_IN ?? '7d');
   const sessionId = await createAuthSession({
     request,
     userId: user.id,
@@ -909,6 +923,71 @@ export const AuthController = {
     return reply.send({ data: { timezone }, meta: {} });
   },
 
+  /**
+   * PATCH /auth/me/session-preference — the Settings "stay signed in" toggle.
+   *
+   * Persists the preference so every FUTURE login/join/verify mints a
+   * STAY_SIGNED_IN_EXPIRES_IN session instead of the JWT_EXPIRES_IN default —
+   * see signSessionToken. That alone would do nothing visible right now: a JWT
+   * carries its own expiry baked in at mint time, so the token this request is
+   * authenticated with keeps whatever lifetime it already had.
+   *
+   * Turning it ON therefore also re-mints THIS session immediately, at the long
+   * expiry, and returns the new token — the person who just tapped the switch
+   * sees it take effect rather than wondering if it did anything until they
+   * happen to log in again. The old session is revoked by id, not by user: this
+   * is a device declaring its own preference, and has no business ending a
+   * session open on someone's other phone.
+   *
+   * Turning it OFF does not force a re-login. The session already running keeps
+   * running until whatever expiry it was minted with — up to 90 days out if it
+   * was long-lived — because logging someone out the moment they uncheck a box
+   * is a worse surprise than the box's own description promised. Only the NEXT
+   * login is shorter.
+   */
+  setSessionPreference: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { stay_signed_in } = request.body as { stay_signed_in: boolean };
+
+    const updated = await db.user.updateMany({
+      where: {
+        id: request.user.sub,
+        organization_id: request.user.org_id,
+        is_active: true,
+      },
+      data: { stay_signed_in },
+    });
+
+    if (updated.count !== 1) {
+      return reply.status(404).send({
+        error: { code: 'USER_NOT_FOUND', message: 'User not found' },
+      });
+    }
+
+    let token: string | undefined;
+    if (stay_signed_in) {
+      if (request.user.sid) {
+        await revokeAuthSession(request.user.sid, request.user.sub, request.user.org_id, 'session_preference_elevated');
+      }
+      token = await signSessionToken(request, reply, {
+        id: request.user.sub,
+        organization_id: request.user.org_id,
+        role: request.user.role as AuthRole,
+        stay_signed_in: true,
+      });
+    }
+
+    await auditLog({
+      action: 'auth.set_session_preference',
+      outcome: 'success',
+      request,
+      organizationId: request.user.org_id,
+      userId: request.user.sub,
+      metadata: { stay_signed_in },
+    });
+
+    return reply.send({ data: { stay_signed_in, ...(token ? { token } : {}) }, meta: {} });
+  },
+
   deactivateUser: async (request: FastifyRequest, reply: FastifyReply) => {
     const callerRole = request.user.role as AuthRole;
     if (!can(callerRole, 'team.manage')) {
@@ -1117,7 +1196,10 @@ export const AuthController = {
 
     const user = await db.user.findUnique({
       where: { id: user_id },
-      select: { id: true, email: true, name: true, role: true, organization_id: true, timezone: true, is_verified: true, is_active: true },
+      select: {
+        id: true, email: true, name: true, role: true, organization_id: true, timezone: true,
+        is_verified: true, is_active: true, stay_signed_in: true,
+      },
     });
 
     if (!user || !user.is_active) {
@@ -1159,6 +1241,7 @@ export const AuthController = {
       id: user.id,
       organization_id: user.organization_id,
       role: user.role as AuthRole,
+      stay_signed_in: user.stay_signed_in,
     });
 
     return reply.code(200).send({

@@ -102,8 +102,8 @@ function isReadOnlyMethod(method: string): boolean {
 
 /**
  * Account/session maintenance is not business-data mutation. A read-only role
- * must still be able to sign out, rotate its own password and set the timezone
- * used to interpret reminders.
+ * must still be able to sign out, rotate its own password, set the timezone
+ * used to interpret reminders, and choose how long its own session lasts.
  */
 function isSelfServiceWrite(request: FastifyRequest): boolean {
   const path = apiPath(request);
@@ -113,7 +113,8 @@ function isSelfServiceWrite(request: FastifyRequest): boolean {
     (method === 'PATCH' && (
       path === '/api/v1/auth/me/password' ||
       path === '/api/v1/auth/me/credentials' ||
-      path === '/api/v1/auth/me/timezone'
+      path === '/api/v1/auth/me/timezone' ||
+      path === '/api/v1/auth/me/session-preference'
     ))
   );
 }

@@ -51,6 +51,7 @@ type AuthUser = {
   onboarding_completed?: boolean;
   must_change_password?: boolean;
   must_change_email?: boolean;
+  stay_signed_in?: boolean;
 };
 
 /**
@@ -84,6 +85,7 @@ interface UserState {
   changePassword: (newPassword: string) => Promise<void>;
   setCredentials: (email: string, newPassword: string) => Promise<void>;
   setTimezone: (timezone: string) => Promise<void>;
+  setStaySignedIn: (value: boolean) => Promise<void>;
   logout: () => Promise<void>;
   restoreSession: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
@@ -394,6 +396,39 @@ export const useUserStore = create<UserState>()((set) => ({
     const updated = { ...user, timezone };
     await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(updated));
     set({ user: updated });
+  },
+
+  setStaySignedIn: async (value: boolean): Promise<void> => {
+    const token = await SecureStore.getItemAsync('crm_auth_token');
+    const response = await fetch(`${API_URL}/auth/me/session-preference`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token ?? ''}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stay_signed_in: value }),
+    });
+    const body: unknown = await response.json();
+    if (!response.ok) throw new Error(extractErrorMessage(body, response.status));
+
+    const { data } = body as { data: { stay_signed_in: boolean; token?: string } };
+
+    const userJson = await SecureStore.getItemAsync('crm_auth_user');
+    const updated = userJson
+      ? { ...(JSON.parse(userJson) as AuthUser), stay_signed_in: data.stay_signed_in }
+      : null;
+    if (updated) {
+      await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(updated));
+    }
+
+    // A token comes back only when turning the toggle ON — the server re-mints
+    // the current session at the long expiry right then, because a JWT cannot
+    // be extended after the fact. Turning it OFF just persists the preference
+    // for next login; the session already running is untouched, so there is
+    // nothing new to store.
+    if (data.token) {
+      await SecureStore.setItemAsync('crm_auth_token', data.token);
+      set({ token: data.token, ...(updated ? { user: updated } : {}) });
+    } else if (updated) {
+      set({ user: updated });
+    }
   },
 
   logout: async (): Promise<void> => {

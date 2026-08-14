@@ -8,6 +8,7 @@ const dbMock = vi.hoisted(() => ({
     findUnique: vi.fn(),
     findFirst: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   contact: {
     findFirst: vi.fn(),
@@ -480,5 +481,81 @@ describe('AuthController.setCredentials proves the address it is given', () => {
 
     const payload = reply.payload as { data: { pending_verification?: unknown } };
     expect(payload.data.pending_verification).toBeUndefined();
+  });
+});
+
+describe('AuthController.setSessionPreference', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    dbMock.$executeRaw.mockResolvedValue(1);
+    dbMock.$queryRaw.mockResolvedValue([]);
+  });
+
+  function callSetSessionPreference(stayOn: boolean, reply: TestReply) {
+    return AuthController.setSessionPreference(
+      {
+        body: { stay_signed_in: stayOn },
+        user: { sub: 'user-1', org_id: orgId, role: 'member', sid: 'session-abc' },
+        headers: { 'user-agent': 'vitest' },
+        ip: '127.0.0.1',
+      } as never,
+      reply as never,
+    );
+  }
+
+  it('turning it ON persists the flag and immediately re-mints the current session at the long expiry', async () => {
+    // A JWT carries its own expiry baked in at mint time — flipping the DB flag
+    // alone would do nothing the person tapping the switch could see until
+    // their next login. So this is the one branch that returns a fresh token.
+    dbMock.user.updateMany.mockResolvedValue({ count: 1 });
+    const reply = createReply();
+
+    await callSetSessionPreference(true, reply);
+
+    expect(reply.statusCode).toBe(200);
+    expect(dbMock.user.updateMany).toHaveBeenCalledWith({
+      where: { id: 'user-1', organization_id: orgId, is_active: true },
+      data: { stay_signed_in: true },
+    });
+    // reply.jwtSign is createReply()'s stub — its call proves signSessionToken
+    // actually ran, not just that a truthy token string appeared in the payload.
+    expect(reply.jwtSign).toHaveBeenCalled();
+    const payload = reply.payload as { data: { stay_signed_in: boolean; token?: string } };
+    expect(payload.data.stay_signed_in).toBe(true);
+    expect(payload.data.token).toBe('signed-token');
+  });
+
+  it('turning it OFF persists the flag but does not force a re-login', async () => {
+    // The session already running keeps the expiry it was minted with. Forcing
+    // a logout the instant someone unchecks the box would be a worse surprise
+    // than what the setting's own description promises — only the NEXT login
+    // is shorter.
+    dbMock.user.updateMany.mockResolvedValue({ count: 1 });
+    const reply = createReply();
+
+    await callSetSessionPreference(false, reply);
+
+    expect(reply.statusCode).toBe(200);
+    expect(dbMock.user.updateMany).toHaveBeenCalledWith({
+      where: { id: 'user-1', organization_id: orgId, is_active: true },
+      data: { stay_signed_in: false },
+    });
+    expect(reply.jwtSign).not.toHaveBeenCalled();
+    const payload = reply.payload as { data: { stay_signed_in: boolean; token?: string } };
+    expect(payload.data.stay_signed_in).toBe(false);
+    expect(payload.data.token).toBeUndefined();
+  });
+
+  it('answers 404 rather than silently no-op when the row cannot be reached', async () => {
+    // Mirrors setTimezone's guard: a deactivated account or a stale org_id
+    // (impossible under normal auth, but not something to paper over) updates
+    // zero rows, and that must surface rather than answer 200 for nothing.
+    dbMock.user.updateMany.mockResolvedValue({ count: 0 });
+    const reply = createReply();
+
+    await callSetSessionPreference(true, reply);
+
+    expect(reply.statusCode).toBe(404);
+    expect(reply.jwtSign).not.toHaveBeenCalled();
   });
 });

@@ -102,6 +102,7 @@ describe('enforceAuthenticatedApiRequest', () => {
     ['PATCH', '/api/v1/auth/me/password'],
     ['PATCH', '/api/v1/auth/me/credentials'],
     ['PATCH', '/api/v1/auth/me/timezone'],
+    ['PATCH', '/api/v1/auth/me/session-preference'],
   ])('allows a read-only user to maintain their own account: %s %s', async (method, url) => {
     dbMock.user.findFirst.mockResolvedValue({
       id: '00000000-0000-4000-a000-000000000001',

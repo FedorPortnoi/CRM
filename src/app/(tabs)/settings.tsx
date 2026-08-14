@@ -37,6 +37,7 @@ export default function SettingsScreen(): JSX.Element {
   const user = useUserStore((s) => s.user);
   const token = useUserStore((s) => s.token);
   const logout = useUserStore((s) => s.logout);
+  const setStaySignedIn = useUserStore((s) => s.setStaySignedIn);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const toggleTheme = useThemeStore((s) => s.toggle);
   const { colors } = useTheme();
@@ -50,6 +51,8 @@ export default function SettingsScreen(): JSX.Element {
   const [exporting, setExporting] = useState<ExportKind | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportResult, setExportResult] = useState<ExportResult | null>(null);
+  const [isSavingStaySignedIn, setIsSavingStaySignedIn] = useState(false);
+  const [staySignedInError, setStaySignedInError] = useState<string | null>(null);
   const [monthlyTarget, setMonthlyTarget] = useState<string>('');
   const [isSavingTarget, setIsSavingTarget] = useState(false);
   const [targetSaved, setTargetSaved] = useState(false);
@@ -212,6 +215,18 @@ export default function SettingsScreen(): JSX.Element {
       }
     } finally {
       setIsRegisteringNotifications(false);
+    }
+  };
+
+  const handleStaySignedInToggle = async (nextValue: boolean): Promise<void> => {
+    setIsSavingStaySignedIn(true);
+    setStaySignedInError(null);
+    try {
+      await setStaySignedIn(nextValue);
+    } catch (e: unknown) {
+      setStaySignedInError(e instanceof Error ? e.message : t('settings.staySignedInSaveFailed'));
+    } finally {
+      setIsSavingStaySignedIn(false);
     }
   };
 
@@ -557,6 +572,24 @@ export default function SettingsScreen(): JSX.Element {
           </View>
         ) : null}
         {exportError ? <Text style={styles.errorText}>{exportError}</Text> : null}
+      </View>
+
+      <Text style={styles.sectionHeader}>{t('settings.security')}</Text>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View style={styles.rowMain}>
+            <Text style={styles.rowLabel}>{t('settings.staySignedIn')}</Text>
+            <Text style={styles.helperText}>{t('settings.staySignedInDesc')}</Text>
+          </View>
+          <Switch
+            value={user?.stay_signed_in ?? false}
+            onValueChange={(value) => { void handleStaySignedInToggle(value); }}
+            disabled={isSavingStaySignedIn}
+            trackColor={{ false: 'rgba(232,224,212,0.08)', true: '#CC785C' }}
+            thumbColor='#FFFFFF'
+          />
+        </View>
+        {staySignedInError !== null ? <Text style={styles.errorText}>{staySignedInError}</Text> : null}
       </View>
 
       <TouchableOpacity style={styles.logoutButton} onPress={() => { void handleLogout(); }} accessibilityRole='button'>

@@ -204,6 +204,11 @@ model User {
   email_verified         Boolean   @default(false)
   must_change_password   Boolean   @default(false)
   must_change_email      Boolean   @default(false)
+  /// Opt-in from Settings. Read at every session-minting endpoint (login, join,
+  /// verify, invite-accept) to choose the JWT's expiresIn: STAY_SIGNED_IN_EXPIRES_IN
+  /// (90d) when true, JWT_EXPIRES_IN (7d default) otherwise. See signSessionToken
+  /// in backend/api/controllers/auth.ts.
+  stay_signed_in         Boolean   @default(false)
 
   // Relations
   organization     Org       @relation("UserOrg", fields: [organization_id], references: [id])
