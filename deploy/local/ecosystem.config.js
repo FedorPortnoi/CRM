@@ -163,6 +163,48 @@ module.exports = {
       out_file: path.join(ROOT, 'logs/tunnel-out.log'),
     },
     {
+      // A second public door, alongside crm-tunnel, for the Russia-reachability fix:
+      // 2026-08-14, Cloudflare's IP ranges are throttled/blocked inside Russia (ECH
+      // block since 11.2024, ~16KB-cutoff IP-range throttle since 06.2025 — see
+      // 4kub-cloudflare-blocked-in-russia.md in the memory vault). This forwards the
+      // laptop's existing crm-api (:3000) and crm-static (:8080) to loopback-only
+      // ports on the reg.ru VPS that already serves shtirletzsled.ru (IBP), so a NEW
+      // nginx site there (4kub.conf) can reverse-proxy 4kub.ru traffic back here —
+      // without touching that VPS's existing nginx/gunicorn/redis config at all.
+      //
+      // -R binds are explicitly 127.0.0.1 on the remote side (GatewayPorts defaults
+      // to 'no' anyway, but stated for clarity): only processes on the VPS itself —
+      // i.e. its nginx — can reach these ports, never the public internet directly.
+      //
+      // ServerAliveInterval/CountMax stand in for autossh, which isn't available on
+      // Windows: a dead link is detected and the process exits, and PM2's
+      // autorestart brings it back. TCP, not UDP — deliberately, given the QUIC/NAT
+      // drops already recorded against cloudflared on this same network in
+      // cloudflared.yml.
+      name: 'crm-vps-tunnel',
+      cwd: ROOT,
+      script: 'C:/Windows/System32/OpenSSH/ssh.exe',
+      args: [
+        '-N',
+        '-o', 'ServerAliveInterval=30',
+        '-o', 'ServerAliveCountMax=3',
+        '-o', 'ExitOnForwardFailure=yes',
+        '-o', 'StrictHostKeyChecking=accept-new',
+        '-i', 'C:/Users/fedor/.ssh/id_ed25519_ibp',
+        '-R', '127.0.0.1:13000:127.0.0.1:3000',
+        '-R', '127.0.0.1:18080:127.0.0.1:8080',
+        'root@194.67.99.107',
+      ],
+      interpreter: 'none',
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      restart_delay: 5000,
+      time: true,
+      error_file: path.join(ROOT, 'logs/vps-tunnel-error.log'),
+      out_file: path.join(ROOT, 'logs/vps-tunnel-out.log'),
+    },
+    {
       // A one-shot process: PM2 starts it once when this ecosystem is installed, then its cron
       // restart runs it every night. autorestart stays false so a successful dump does not loop.
       // Dumps default to C:\Users\<user>\crm-backups and keep 30 generations; BACKUP_DIR and

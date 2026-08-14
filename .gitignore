@@ -122,3 +122,11 @@ backend-log.txt
 # what signs a manifest, so anyone holding it can push arbitrary code to every install.
 !certs/updates/certificate.pem
 dist.*-rollback/
+
+# Scratch outputs, not app source — kept on disk, not shipped in the public repo.
+# tools/splash-remotion: Remotion project + a dozen draft .mp4 iterations used to
+# produce assets/splash-intro.mp4; the final render is committed, the drafts aren't.
+# website/4kub.ru-audit: raw SEO-audit tool output (page dumps, screenshots, JSON) —
+# analysis artifacts, not something the site serves.
+tools/splash-remotion/
+website/4kub.ru-audit/
