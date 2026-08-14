@@ -28,16 +28,18 @@
  *
  * ─── THE GUARD ──────────────────────────────────────────────────────────────
  *
- * The runtime version policy is `fingerprint`. The fingerprint covers the NATIVE
- * side of the app — dependencies, config plugins, app config. Change any of it
- * and the fingerprint changes, which means the update you just published is
- * addressed to a runtime version that no installed build will ever ask for.
- * Nothing errors. The publish "succeeds", every device keeps running the old
- * bundle, and the only symptom is that the fix never arrives.
+ * The runtime version policy is `appVersion` (app.json — deliberately not
+ * `fingerprint`, see the comment on resolveRuntimeVersion() below for why that
+ * one could not converge). A runtimeVersion this script computes but that no
+ * build has ever declared means the update you just published is addressed to
+ * a runtime no installed binary will ever ask for. Nothing errors. The publish
+ * "succeeds", every device keeps running the old bundle, and the only symptom
+ * is that the fix never arrives.
  *
- * So a fingerprint that matches no runtimeVersion already in the store aborts
- * the publish. `--new-runtime` is the acknowledgement that you know a new native
- * build has to ship to the stores before this update can reach anyone.
+ * So a runtimeVersion that matches nothing already in the store aborts the
+ * publish. `--new-runtime` is the acknowledgement that you know a new native
+ * build — carrying the version bump appVersion requires — has to ship to the
+ * stores before this update can reach anyone.
  *
  * ─── WHY THE BUILD PROFILE'S ENV IS APPLIED ─────────────────────────────────
  *
@@ -243,23 +245,27 @@ function runExpo(args, env, { capture = true } = {}) {
 }
 
 /**
- * Runtime version for one platform, computed twice and cross-checked.
+ * Runtime version for one platform.
  *
- * `fingerprint:generate` is the raw fingerprint; `runtimeversion:resolve` is the
- * fingerprint AFTER app.json's runtimeVersion policy is applied. With
- * policy=fingerprint they must be the same string. If they ever differ, the
- * policy is not what this script assumes and publishing under either value would
- * address an update to a runtime version no build asks for — so it stops.
+ * This used to compute `fingerprint:generate` and cross-check it against
+ * `runtimeversion:resolve`, which only makes sense under
+ * runtimeVersion.policy: "fingerprint" — the two commands are supposed to
+ * derive the same string from the same inputs. app.json moved OFF that policy
+ * in 776c1bd5 (2026-08-02): react-native-rustore-push is fetched via a git
+ * checkout from GitFlic, and a git checkout does not hash identically across
+ * machines, so `fingerprint:generate` returned a DIFFERENT value per machine —
+ * sometimes per run — with zero real native changes. Comparing that against
+ * anything was not a consistency check, it was a coin flip that happened to
+ * read like one, and it would fail this script's own guard on every single
+ * invocation from this point on.
+ *
+ * policy is now "appVersion", which is deterministic, and
+ * `runtimeversion:resolve` already applies whichever policy app.json
+ * declares — it is the sole authority under any policy, fingerprint or
+ * appVersion or otherwise. Trust it directly rather than re-deriving a second
+ * opinion that cannot agree with itself.
  */
 function resolveRuntimeVersion(platform, env) {
-  let fingerprint;
-  try {
-    const raw = runExpo(['expo-updates', 'fingerprint:generate', '--platform', platform], env);
-    fingerprint = JSON.parse(raw).hash;
-  } catch (err) {
-    fail(`fingerprint:generate failed for ${platform}: ${err.message}`);
-  }
-
   let resolved;
   try {
     const raw = runExpo(['expo-updates', 'runtimeversion:resolve', '--platform', platform], env);
@@ -268,16 +274,8 @@ function resolveRuntimeVersion(platform, env) {
     fail(`runtimeversion:resolve failed for ${platform}: ${err.message}`);
   }
 
-  if (!fingerprint || !resolved) {
+  if (!resolved) {
     fail(`could not compute a runtime version for ${platform}`);
-  }
-
-  if (fingerprint !== resolved) {
-    fail(
-      `runtime version mismatch for ${platform}: fingerprint:generate says "${fingerprint}" ` +
-        `but runtimeversion:resolve says "${resolved}". app.json's runtimeVersion policy is not ` +
-        '"fingerprint" any more, and this script would publish to the wrong address.',
-    );
   }
 
   return resolved;

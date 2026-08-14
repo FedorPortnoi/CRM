@@ -42,12 +42,14 @@
  *           assets/<md5>                       content-addressed assets
  *
  * `<runtimeVersion>` is per-platform on purpose. The policy in app.json is
- * `fingerprint`, and the iOS and Android fingerprints of the same commit are
- * different strings. scripts/publish-update.js therefore writes the same publish
- * under each platform's own runtimeVersion directory, carrying only that
- * platform's bundle and assets. A directory whose name no installed build's
- * fingerprint matches is simply never requested — which is the failure the
- * publish script's `--new-runtime` guard exists to make loud.
+ * `appVersion` (not `fingerprint` — that one could never converge here, see the
+ * comment on resolveRuntimeVersion() in scripts/publish-update.js), but iOS and
+ * Android can still ship at different versions across a release, so
+ * scripts/publish-update.js writes the same publish under each platform's own
+ * runtimeVersion directory, carrying only that platform's bundle and assets. A
+ * directory whose name no installed build's runtimeVersion matches is simply
+ * never requested — which is the failure the publish script's `--new-runtime`
+ * guard exists to make loud.
  *
  * `update.json` is the ONLY file this module parses. The tree beside it is
  * served verbatim by the asset route, so the paths inside update.json are
