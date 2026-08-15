@@ -459,6 +459,7 @@
   --art-in: 14%;
   --art-full: 52%;
   background-image: url('/img/hero-riviera.webp');
+  background-image: image-set(url('/img/hero-riviera.avif') type('image/avif'), url('/img/hero-riviera.webp') type('image/webp'));
   background-size: cover;
   background-position: 58% center;
   -webkit-mask-image: linear-gradient(90deg,
@@ -710,6 +711,7 @@
     height: 52%;
     opacity: 0.9;
     background-image: url('/img/hero-riviera-sm.webp');
+    background-image: image-set(url('/img/hero-riviera-sm.avif') type('image/avif'), url('/img/hero-riviera-sm.webp') type('image/webp'));
     background-position: 62% center;
     -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 42%);
     mask-image: linear-gradient(180deg, transparent 0%, #000 42%);

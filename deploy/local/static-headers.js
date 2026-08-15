@@ -366,6 +366,10 @@ const TYPES = {
   // crawlers are entitled to refuse a sitemap on content type alone.
   '.xml': 'application/xml; charset=utf-8',
   '.webp': 'image/webp',
+  // The hero's primary format since 2026-08-15 (image-set() in sections.css).
+  // Absent from this map it would go out as application/octet-stream, and with
+  // nosniff that is not a cosmetic bug — the browser refuses to paint the LCP.
+  '.avif': 'image/avif',
 };
 
 /**

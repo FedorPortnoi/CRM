@@ -159,16 +159,17 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  /* Strict-Transport-Security — deliberate low-commitment start: one day, no
-     includeSubDomains (test.4kub.ru is served separately and must not be
-     captured), no preload. Raise max-age after a burn-in period shows nothing
-     ever needs to fall back to http. Only on responses the visitor received
-     over https — a browser ignores HSTS on http anyway. setHeader rather
-     than the per-branch writeHead objects, so every branch — 200, 304, 404,
-     /i — carries it without any of them being touched: Node merges implicit
-     headers with writeHead's, and nothing else sets this name. */
+  /* Strict-Transport-Security — raised to a year on 2026-08-15 after the
+     one-day burn-in that started 08-14: nothing ever needed to fall back to
+     http, and http 301s to https at the edge. Still no includeSubDomains
+     (test.4kub.ru is served separately and must not be captured) and
+     therefore no preload, which requires it. Only on responses the visitor
+     received over https — a browser ignores HSTS on http anyway. setHeader
+     rather than the per-branch writeHead objects, so every branch — 200, 304,
+     404, /i — carries it without any of them being touched: Node merges
+     implicit headers with writeHead's, and nothing else sets this name. */
   if (proto === 'https') {
-    res.setHeader('Strict-Transport-Security', 'max-age=86400');
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   }
 
   const mark = target.indexOf('?');
