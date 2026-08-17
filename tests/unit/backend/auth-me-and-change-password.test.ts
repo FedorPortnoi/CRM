@@ -121,6 +121,26 @@ describe('GET /auth/me', () => {
     expect(reply.code).toHaveBeenCalledWith(401);
     expect(reply.payload).toMatchObject({ error: { code: 'SESSION_REVOKED' } });
   });
+
+  it('never reports must_change_password/email true for an owner, whatever the row says', async () => {
+    // register() is the only path that mints an owner (hardcoded 'owner'::"UserRole"),
+    // so an owner is never invited — but the row's own flags went wrong at least once
+    // on a real account with no confirmed root cause, so this is deliberately NOT
+    // "the flag happens to be false right now": it holds even with a row insisting
+    // otherwise, exactly the case that put a real owner on a screen with no way off it.
+    dbMock.user.findFirst.mockResolvedValue({
+      id: USER, email: 'owner@example.com', name: 'Owner', role: 'owner', organization_id: ORG,
+      must_change_password: true, must_change_email: true,
+    });
+    const reply = createReply();
+
+    await AuthController.getMe(createRequest(), reply as never);
+
+    expect(reply.statusCode).toBe(200);
+    expect(reply.payload).toMatchObject({
+      data: { role: 'owner', must_change_password: false, must_change_email: false },
+    });
+  });
 });
 
 describe('PATCH /auth/me/password', () => {

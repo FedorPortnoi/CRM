@@ -134,6 +134,17 @@ function onboardingCompleted(state: Prisma.JsonValue | null): boolean {
 }
 
 function publicUser(user: { id: string; email: string | null; username?: string | null; name: string; role: string; organization_id: string; timezone?: string; onboarding_state?: Prisma.JsonValue | null; must_change_password?: boolean; must_change_email?: boolean; manager_id?: string | null; stay_signed_in?: boolean }) {
+  // Owners are never invited — register() is the only path that mints one
+  // (hardcoded 'owner'::"UserRole"; inviteUser's targets are always the other
+  // three roles), so an owner account has nothing a first-run screen needs to
+  // collect, by construction. Enforced HERE, on the way out, rather than
+  // trusted from the row: an owner's must_change_password went wrong in the
+  // data at least once already (an unexplained stray `true` on a real
+  // account, root cause never confirmed) with no back button on the screen it
+  // forced. Every caller of publicUser — login, join, getMe, setCredentials,
+  // verifyTotp — gets the guarantee for free here instead of relying on each
+  // one to separately remember the rule.
+  const isOwner = user.role === 'owner';
   return {
     id: user.id,
     email: user.email,
@@ -144,8 +155,8 @@ function publicUser(user: { id: string; email: string | null; username?: string 
     timezone: user.timezone ?? DEFAULT_TIME_ZONE,
     manager_id: user.manager_id ?? null,
     onboarding_completed: onboardingCompleted(user.onboarding_state ?? null),
-    must_change_password: user.must_change_password ?? false,
-    must_change_email: user.must_change_email ?? false,
+    must_change_password: isOwner ? false : (user.must_change_password ?? false),
+    must_change_email: isOwner ? false : (user.must_change_email ?? false),
     // Settings' "stay signed in" toggle reflects this straight off the already-
     // loaded user object — see AuthController.setSessionPreference.
     stay_signed_in: user.stay_signed_in ?? false,
