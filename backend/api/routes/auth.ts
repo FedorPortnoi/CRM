@@ -174,7 +174,11 @@ const SetCredentialsSchema = z.object({
 });
 
 const ChangePasswordSchema = z.object({
-  current_password: z.string().min(1).max(100),
+  // Optional: the forced must_change_password flow (AuthController.changePassword)
+  // never collects it — a valid session already establishes identity there, same
+  // as must_change_email's setCredentials. Required only when the account is not
+  // in that state, which the handler checks server-side.
+  current_password: z.string().min(1).max(100).optional(),
   new_password: PasswordSchema,
 });
 
@@ -407,6 +411,9 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   fastify.get('/company-code', AuthController.getCompanyCode);
   fastify.post('/company-code/rotate', AuthController.rotateCompanyCode);
+  // Lets the client reconcile its cached user snapshot against the server on
+  // app boot instead of trusting SecureStore indefinitely — see AuthController.getMe.
+  fastify.get('/me', AuthController.getMe);
   fastify.patch('/me/password', {
     schema: { body: ChangePasswordSchema },
   }, AuthController.changePassword);

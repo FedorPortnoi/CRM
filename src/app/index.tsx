@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { initI18n } from '../i18n';
 import { getStoredLanguage, hasSelectedLanguage } from '../i18n/storage';
+import { API_URL } from '../utils/api';
 
 type StoredUser = {
   onboarding_completed?: boolean;
@@ -21,6 +22,41 @@ function parseStoredUser(value: string | null): StoredUser | null {
     return parsed && typeof parsed === 'object' ? parsed : null;
   } catch {
     return null;
+  }
+}
+
+// How long the boot gate waits on GET /auth/me before falling back to the
+// SecureStore snapshot. Short enough that a slow or absent network never stalls
+// the launch screen, long enough to beat a warm mobile round trip.
+const ME_REFRESH_TIMEOUT_MS = 4000;
+
+/**
+ * Best-effort reconciliation against the server. SecureStore's cached user only
+ * ever changes locally — on login, or on completing /set-password — so a
+ * server-side correction to must_change_password/must_change_email (an ops fix
+ * to a bad row, say) can never reach an already-installed app without this: the
+ * device would otherwise keep re-showing /set-password on every cold start
+ * forever, no matter how many times it's closed and reopened. Returns null on
+ * any failure (offline, timeout, expired token, ...) so the caller falls back to
+ * the cached snapshot exactly as it did before this existed.
+ */
+async function fetchFreshUser(token: string): Promise<StoredUser | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ME_REFRESH_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const body = (await response.json()) as { data?: StoredUser };
+    return body.data ?? null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -48,10 +84,23 @@ export default function AppIndex() {
       ]);
 
       if (mounted) {
-        const user = parseStoredUser(userJson);
-        if (!token || !user) {
+        const cachedUser = parseStoredUser(userJson);
+        if (!token || !cachedUser) {
           router.replace('/login');
           return;
+        }
+
+        const freshUser = await fetchFreshUser(token);
+        if (!mounted) {
+          return;
+        }
+
+        let user = cachedUser;
+        if (freshUser !== null) {
+          user = { ...cachedUser, ...freshUser };
+          // Persist the reconciled copy so restoreSession() (src/store/userStore.ts)
+          // and every other screen see it too, not just this one routing decision.
+          await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(user));
         }
 
         if (user.must_change_password || user.must_change_email) {

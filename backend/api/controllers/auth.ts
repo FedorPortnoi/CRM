@@ -1361,18 +1361,52 @@ export const AuthController = {
     });
   },
 
+  /**
+   * GET /auth/me — the read-back the mobile boot path was missing. It used to
+   * route to /set-password purely off whatever user JSON SecureStore last held,
+   * with no way to learn that the server's view had since changed (an ops fix to
+   * a bad must_change_password row, for instance, never reached an already-
+   * installed app). The client now calls this first and falls back to the cached
+   * copy only if the request fails, so a server-side correction is picked up on
+   * the next cold start instead of requiring a fresh login.
+   */
+  getMe: async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = await db.user.findFirst({
+      where: { id: request.user.sub, organization_id: request.user.org_id },
+    });
+    if (!user) {
+      return reply.code(401).send({
+        error: { code: 'SESSION_REVOKED', message: 'Authentication session has expired or was revoked' },
+      });
+    }
+    return reply.send({ data: publicUser(user), meta: {} });
+  },
+
   changePassword: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { current_password, new_password } = request.body as { current_password: string; new_password: string };
+    const { current_password, new_password } = request.body as { current_password?: string; new_password: string };
 
     const user = await db.user.findFirst({
       where: { id: request.user.sub, organization_id: request.user.org_id },
-      select: { password_hash: true },
+      select: { password_hash: true, must_change_password: true },
     });
-    const currentPasswordMatches = await bcrypt.compare(current_password, user?.password_hash ?? DUMMY_HASH);
-    if (!user || !currentPasswordMatches) {
+    if (!user) {
       return reply.code(401).send({
         error: { code: 'INVALID_CURRENT_PASSWORD', message: 'Current password is incorrect' },
       });
+    }
+
+    // A forced reset doesn't ask the caller to prove the password it exists to
+    // replace — same reasoning as setCredentials/acceptInvite skipping proof for
+    // must_change_email: a valid, unexpired session already establishes identity,
+    // and the temp/errant password being replaced is not something the
+    // legitimate holder of that session is guaranteed to still have handy.
+    if (!user.must_change_password) {
+      const currentPasswordMatches = await bcrypt.compare(current_password ?? '', user.password_hash);
+      if (!currentPasswordMatches) {
+        return reply.code(401).send({
+          error: { code: 'INVALID_CURRENT_PASSWORD', message: 'Current password is incorrect' },
+        });
+      }
     }
 
     const newHash = await bcrypt.hash(new_password, saltRounds);

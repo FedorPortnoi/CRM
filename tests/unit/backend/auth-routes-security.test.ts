@@ -40,6 +40,9 @@ const routeMocks = vi.hoisted(() => ({
   verifyTotp: vi.fn(async (_request: unknown, reply: { send: (p: unknown) => unknown }) => {
     reply.send({ data: { user: {}, token: 'x' }, meta: {} });
   }),
+  getMe: vi.fn(async (_request: unknown, reply: { send: (p: unknown) => unknown }) => {
+    reply.send({ data: {}, meta: {} });
+  }),
 }));
 
 /** The invite plugin's own controller — /auth/invites/accept is registered from it. */
@@ -443,8 +446,10 @@ describe('auth routes that are deliberately absent', () => {
     // No app refresh tokens: login returns an access token only. Every `refresh_token`
     // in the repo belongs to amoCRM or Yandex Calendar OAuth.
     ['POST', '/auth/refresh'],
-    // No generic profile route. The only /me routes are the four narrow ones below.
-    ['GET', '/auth/me'],
+    // No generic profile WRITE route — only narrow, single-purpose PATCH /me/* routes.
+    // GET /auth/me (below, registered) is the one generic read, added so the mobile
+    // boot path can reconcile its cached user snapshot against the server instead of
+    // trusting SecureStore indefinitely — see AuthController.getMe.
     ['PATCH', '/auth/me'],
     // No single-member read; only GET /auth/users.
     ['GET', '/auth/users/00000000-0000-4000-a000-000000000001'],
@@ -471,5 +476,16 @@ describe('auth routes that are deliberately absent', () => {
       // 400 (schema rejected the empty body), never 404 — the route is there.
       expect(response.statusCode).not.toBe(404);
     }
+  });
+
+  it('does register GET /auth/me, the one generic read', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      headers: { 'content-type': 'application/json' },
+    });
+
+    // Reaches the (mocked) handler rather than 404ing at the router — the route is there.
+    expect(response.statusCode).not.toBe(404);
   });
 });

@@ -35,24 +35,20 @@ const SUBMIT = process.argv.includes('--submit');
 const RELEASE_TYPE = process.argv.includes('--manual') ? 'MANUAL' : 'AFTER_APPROVAL';
 
 const WHATS_NEW_RU = [
-  'Заявки с Яндекс Карт: подключите приём заявок в настройках — и каждая заявка',
-  'с профиля вашей организации сама станет контактом и сделкой в воронке,',
-  'а вам придёт уведомление с именем и телефоном клиента.',
+  'Двухфакторная аутентификация (2FA): включите в Настройках → Безопасность —',
+  'дополнительный код из приложения-аутентификатора при входе, плюс 10',
+  'резервных кодов на случай потери телефона. Отключена по умолчанию —',
+  'решаете сами, включать или нет.',
   '',
-  'Голосовой ввод в ИИ-ассистенте: диктуйте вопрос — приложение расшифрует',
-  'и ответит.',
-  '',
-  'Приглашения в команду теперь можно принимать прямо в приложении.',
+  'Мелкие исправления стабильности.',
 ].join('\n');
 
 const WHATS_NEW_EN = [
-  'Yandex Maps lead intake: enable it in settings and every client request from',
-  'your organization profile becomes a contact and a deal in your funnel,',
-  'with a notification carrying the client name and phone.',
+  'Two-factor authentication (2FA): turn it on in Settings -> Security for an',
+  'extra code from an authenticator app at login, plus 10 backup codes in case',
+  'you lose your phone. Off by default -- opt in whenever you want it.',
   '',
-  'Voice input for the AI assistant: dictate your question and get an answer.',
-  '',
-  'Team invitations can now be accepted right in the app.',
+  'Minor stability fixes.',
 ].join('\n');
 
 function envValue(key) {

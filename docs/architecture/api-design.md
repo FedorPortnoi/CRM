@@ -76,7 +76,13 @@ POST   /auth/logout                   Revoke the current session
 POST   /auth/logout-all               Revoke every session for this user
 GET    /auth/sessions                 List this user's active sessions
 
-PATCH  /auth/me/password              Change own password (needs the current one)
+GET    /auth/me                       Read own profile fresh, incl. must_change_password/
+                                       must_change_email — the mobile boot path reconciles
+                                       its cached copy against this instead of trusting
+                                       SecureStore indefinitely
+PATCH  /auth/me/password              Change own password (needs the current one, unless
+                                       must_change_password is set — a forced reset proves
+                                       identity via the session instead)
 PATCH  /auth/me/credentials           Set own email + password on first sign-in
 PATCH  /auth/me/timezone              Set the timezone reminders are interpreted in
 
@@ -351,8 +357,11 @@ to "try the reset link again".
 - **Refresh tokens** — `POST /auth/login` returns an access token only, and there is no
   `POST /auth/refresh`. Every `refresh_token` in the repo belongs to amoCRM or Yandex
   Calendar OAuth, not to app sessions.
-- **`GET /auth/me` / `PATCH /auth/me`** — no generic profile route. The only `/me` routes
-  are the three narrow ones listed above (`password`, `credentials`, `timezone`).
+- **`PATCH /auth/me`** — no generic profile write route. Every write is one of the narrow
+  `/me/*` routes listed above. `GET /auth/me` USED TO BE IN THIS ENTRY and now exists (see
+  above) — the mobile app's boot path needed a way to reconcile its cached user snapshot
+  against the server, having previously trusted SecureStore indefinitely with no way to
+  learn that a server-side value (e.g. `must_change_password`) had since changed.
 - **Billing** — no `GET /organization/billing`; there is no billing in the product.
 - **Archiving a deal** — no `DELETE /deals/:id` and no other route that sets a deal's
   status to `archived`. `DealStatus.archived` exists in the schema and is filterable on
