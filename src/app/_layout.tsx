@@ -112,7 +112,7 @@ export default function RootLayout() {
    * stranded, and the invitee lands on a login screen for an account that does
    * not exist.
    */
-  const UNAUTHENTICATED_ROUTES = ['/login', '/i', '/invite', '/language-select'];
+  const UNAUTHENTICATED_ROUTES = ['/login', '/i', '/invite', '/language-select', '/verify-totp'];
 
   useEffect(() => {
     if (isRestoring || token !== null) return;

@@ -209,6 +209,14 @@ model User {
   /// (90d) when true, JWT_EXPIRES_IN (7d default) otherwise. See signSessionToken
   /// in backend/api/controllers/auth.ts.
   stay_signed_in         Boolean   @default(false)
+  /// Opt-in two-factor authentication (TOTP, RFC 6238). Encrypted at rest via
+  /// encryptField/decryptField (backend/services/encryption.ts) — never a hash,
+  /// because the server must recompute the code on every check. Null until
+  /// POST /auth/2fa/setup mints a pending secret; totp_enabled stays false until
+  /// that secret is confirmed by POST /auth/2fa/enable. See backend/services/totp.ts.
+  totp_secret       String?
+  totp_enabled      Boolean   @default(false)
+  totp_confirmed_at DateTime?
 
   // Relations
   organization     Org       @relation("UserOrg", fields: [organization_id], references: [id])
@@ -249,6 +257,7 @@ model User {
   taskReminders           TaskReminder[]         @relation("TaskReminderRecipient")
   connectedAmoIntegrations AmoIntegration[]      @relation("AmoIntegrationConnectedBy")
   createdLeadInboxes       LeadInbox[]           @relation("LeadInboxCreatedBy")
+  totpBackupCodes          TotpBackupCode[]
 
   // Employees log in by username, which only needs to be unique inside their org.
   @@unique([organization_id, username])
@@ -811,6 +820,26 @@ model VerificationCode {
 
   @@index([user_id, channel])
 }
+
+/// One single-use TOTP backup code, hashed. Unlike VerificationCode's 10-minute
+/// email OTPs, these carry no expiry — they exist to survive a lost authenticator
+/// app for as long as the user keeps 2FA enabled, so their only lifecycle event is
+/// `used_at` being set (or the whole row being replaced by
+/// POST /auth/2fa/backup-codes/regenerate). Minted 10 at a time by
+/// AuthController.enableTotp and regenerateBackupCodes; see backend/services/totp.ts
+/// for the plaintext generation and hashing helpers.
+model TotpBackupCode {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  code_hash  String
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+
 model ChatMessage {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organization_id String   @db.Uuid

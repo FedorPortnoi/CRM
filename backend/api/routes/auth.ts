@@ -100,6 +100,26 @@ const LoginSchema = z.object({
   password: z.string().min(1),
 });
 
+// ── Two-factor authentication (TOTP) ────────────────────────────────────────
+
+const EnableTotpSchema = z.object({
+  code: z.string().min(1).max(20),
+});
+
+// Password re-auth, shared by disable and backup-code regeneration — both are
+// "prove you still are this account" before a sensitive 2FA change, exactly
+// like ChangePasswordSchema's current_password field.
+const DisableTotpSchema = z.object({
+  password: z.string().min(1),
+});
+
+// code accepts EITHER a live 6-digit TOTP or an XXXX-XXXX (8-char) backup
+// code, hence the wider bounds than VerifyOtpSchema's fixed length(6).
+const VerifyTotpSchema = z.object({
+  user_id: z.string().uuid(),
+  code: z.string().min(4).max(9),
+});
+
 // ── Invite links ───────────────────────────────────────────────────────────
 
 const CreateInviteSchema = z.object({
@@ -260,10 +280,19 @@ function authRateLimit(max: number, timeWindow: string, includeEmail = false) {
  * cannot work: the plugin sets a `rateLimitRan` flag on the request (index.js:281)
  * and every later hook of its own returns immediately.
  *
- * Declared as `preHandler`, matching `hook: 'preHandler'` above, so a request
- * that fails schema validation still gets its 400 without spending budget. The
- * plugin appends its own hook after this one, so the cheap shared ceiling is
- * charged first.
+ * Wired as `onRequest`, NOT `preHandler` — that was the bug. Fastify runs
+ * schema validation between preValidation and preHandler, so a `preHandler`
+ * floor never sees a request whose body fails Zod: it gets its 400 for free,
+ * no budget spent, no count, no log line. That made a flood of malformed
+ * bodies against POST /login completely unmetered — cheaper per-request than
+ * a valid attempt, and invisible to every rate limiter in this file, both
+ * this one and the plugin's own. `onRequest` runs before parsing even starts,
+ * so it now sees every request regardless of body validity. It only reads
+ * `request.ip`, so moving it earlier changes nothing about what it checks —
+ * only that it can no longer be skipped. The plugin's own per-(ip,email)
+ * budget stays on `preHandler` (its `keyGenerator` needs the parsed body),
+ * so it still only engages for well-formed requests; this floor is what
+ * covers the rest.
  */
 export async function enforceAuthIpFloor(
   request: FastifyRequest,
@@ -296,17 +325,17 @@ export async function enforceAuthIpFloor(
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post('/', {
     config: { rateLimit: authRateLimit(5, '15 minutes') },
-    preHandler: enforceAuthIpFloor,
+    onRequest: enforceAuthIpFloor,
     schema: { body: RegisterSchema },
   }, AuthController.register);
   fastify.post('/login', {
     config: { rateLimit: authRateLimit(5, '15 minutes', true) },
-    preHandler: enforceAuthIpFloor,
+    onRequest: enforceAuthIpFloor,
     schema: { body: LoginSchema },
   }, AuthController.login);
   fastify.post('/join', {
     config: { rateLimit: authRateLimit(5, '15 minutes') },
-    preHandler: enforceAuthIpFloor,
+    onRequest: enforceAuthIpFloor,
     schema: { body: JoinSchema },
   }, AuthController.join);
   /**
@@ -322,12 +351,12 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
    */
   fastify.post('/forgot-password', {
     config: { rateLimit: authRateLimit(3, '15 minutes', true) },
-    preHandler: enforceAuthIpFloor,
+    onRequest: enforceAuthIpFloor,
     schema: { body: ForgotPasswordSchema },
   }, AuthController.forgotPassword);
   fastify.post('/reset-password', {
     config: { rateLimit: authRateLimit(5, '15 minutes', true) },
-    preHandler: enforceAuthIpFloor,
+    onRequest: enforceAuthIpFloor,
     schema: { body: ResetPasswordSchema },
   }, AuthController.resetPassword);
   fastify.post('/logout', AuthController.logout);
@@ -362,17 +391,17 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   fastify.post('/invites/open', {
     config: { rateLimit: authRateLimit(20, '15 minutes') },
-    preHandler: enforceAuthIpFloor,
+    onRequest: enforceAuthIpFloor,
     schema: { body: OpenInviteSchema },
   }, InviteController.open);
   fastify.post('/invites/lookup', {
     config: { rateLimit: authRateLimit(20, '15 minutes') },
-    preHandler: enforceAuthIpFloor,
+    onRequest: enforceAuthIpFloor,
     schema: { body: LookupInviteSchema },
   }, InviteController.lookup);
   fastify.post('/invites/accept', {
     config: { rateLimit: authRateLimit(10, '15 minutes') },
-    preHandler: enforceAuthIpFloor,
+    onRequest: enforceAuthIpFloor,
     schema: { body: AcceptInviteSchema },
   }, InviteController.accept);
 
@@ -392,14 +421,43 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   }, AuthController.setSessionPreference);
   fastify.post('/verify', {
     config: { rateLimit: authRateLimit(10, '15 minutes') },
-    preHandler: enforceAuthIpFloor,
+    onRequest: enforceAuthIpFloor,
     schema: { body: VerifyOtpSchema },
   }, AuthController.verifyOtp);
   fastify.post('/verify/resend', {
     config: { rateLimit: authRateLimit(3, '5 minutes') },
-    preHandler: enforceAuthIpFloor,
+    onRequest: enforceAuthIpFloor,
     schema: { body: ResendVerificationSchema },
   }, AuthController.resendVerification);
+
+  // ── Two-factor authentication (TOTP) ───────────────────────────────────
+  //
+  // /2fa/verify is the ONLY public one — it is step two of login/join, called
+  // before any session exists, so it carries the same two layers every other
+  // public auth route does: a durable per-(user_id) budget in the controller
+  // and the shared per-IP floor here. It MUST also be listed in
+  // isPublicApiRoute() (api/authenticate.ts) or the global preHandler 401s it
+  // before AuthController.verifyTotp ever runs.
+  //
+  // The other four sit behind an existing session and need no route-level
+  // rateLimit/preHandler of their own — same as /logout, /sessions and
+  // /me/password below, which rely entirely on the global auth preHandler
+  // registered outside this file.
+  fastify.post('/2fa/verify', {
+    config: { rateLimit: authRateLimit(10, '15 minutes') },
+    onRequest: enforceAuthIpFloor,
+    schema: { body: VerifyTotpSchema },
+  }, AuthController.verifyTotp);
+  fastify.post('/2fa/setup', AuthController.setupTotp);
+  fastify.post('/2fa/enable', {
+    schema: { body: EnableTotpSchema },
+  }, AuthController.enableTotp);
+  fastify.post('/2fa/disable', {
+    schema: { body: DisableTotpSchema },
+  }, AuthController.disableTotp);
+  fastify.post('/2fa/backup-codes/regenerate', {
+    schema: { body: DisableTotpSchema },
+  }, AuthController.regenerateBackupCodes);
 };
 
 export default authRoutes;

@@ -25,6 +25,21 @@ const routeMocks = vi.hoisted(() => ({
   resetPassword: vi.fn(async (_request: unknown, reply: { code: (s: number) => { send: (p: unknown) => unknown } }) => {
     reply.code(200).send({ data: { reset: true }, meta: {} });
   }),
+  setupTotp: vi.fn(async (_request: unknown, reply: { send: (p: unknown) => unknown }) => {
+    reply.send({ data: { secret: 'x', qr_code: 'data:image/png;base64,', otpauth_url: 'otpauth://totp/x' }, meta: {} });
+  }),
+  enableTotp: vi.fn(async (_request: unknown, reply: { send: (p: unknown) => unknown }) => {
+    reply.send({ data: { backup_codes: [] }, meta: {} });
+  }),
+  disableTotp: vi.fn(async (_request: unknown, reply: { send: (p: unknown) => unknown }) => {
+    reply.send({ data: {}, meta: {} });
+  }),
+  regenerateBackupCodes: vi.fn(async (_request: unknown, reply: { send: (p: unknown) => unknown }) => {
+    reply.send({ data: { backup_codes: [] }, meta: {} });
+  }),
+  verifyTotp: vi.fn(async (_request: unknown, reply: { send: (p: unknown) => unknown }) => {
+    reply.send({ data: { user: {}, token: 'x' }, meta: {} });
+  }),
 }));
 
 /** The invite plugin's own controller — /auth/invites/accept is registered from it. */
@@ -48,7 +63,7 @@ vi.mock('../../../backend/api/controllers/invites', () => ({
 /**
  * The durable rate-limit store, stubbed.
  *
- * Every public auth route now carries `preHandler: enforceAuthIpFloor`, which
+ * Every public auth route now carries `onRequest: enforceAuthIpFloor`, which
  * calls consumeAuthIpBudget → Postgres. This file mocks the controller but not
  * the database, so without this the floor reaches a real Prisma client, fails
  * closed by design, and turns the 201 assertion below into a 500 — a red suite
@@ -92,6 +107,7 @@ vi.mock('../../../backend/api/controllers/auth', () => ({
 }));
 
 import authRoutes from '../../../backend/api/routes/auth';
+import { consumeAuthIpBudget } from '../../../backend/services/rate-limit-store';
 
 describe('auth routes security validation', () => {
   let app: ReturnType<typeof Fastify>;
@@ -180,6 +196,28 @@ describe('auth routes security validation', () => {
     const spies = { ...routeMocks, ...inviteMocks } as Record<string, unknown>;
     expect(spies[handler]).not.toHaveBeenCalled();
   });
+
+  /**
+   * Regression test for the gap fixed 2026-08-17: enforceAuthIpFloor used to
+   * run as `preHandler`, which Fastify only invokes AFTER schema validation
+   * succeeds. A malformed body never reached it, so a flood of invalid
+   * `/auth/login` bodies was completely unmetered — cheaper per request than a
+   * real attempt, and invisible to every rate limiter in this file. It is now
+   * `onRequest`, which runs before body validation (and before parsing), so
+   * the floor is spent regardless of whether the body turns out to be valid.
+   */
+  it('spends the per-IP floor even when the request body fails schema validation', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ email: 'not-an-email', password: '' }),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(routeMocks.login).not.toHaveBeenCalled();
+    expect(consumeAuthIpBudget).toHaveBeenCalledTimes(1);
+  });
 });
 
 /**
@@ -262,6 +300,103 @@ describe('password recovery routes', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.body).toContain('72');
+  });
+});
+
+/**
+ * Two-factor authentication (TOTP) routes.
+ *
+ * This file cannot exercise the public/authenticated split — that is
+ * authenticate.test.ts's job, since this app registers authRoutes directly
+ * with no global preHandler. What belongs here is what always belonged here:
+ * that all five routes are actually wired up, and that each Zod body schema
+ * rejects a malformed request BEFORE the (mocked) controller ever runs.
+ */
+describe('two-factor authentication routes', () => {
+  let app: ReturnType<typeof Fastify>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    app = Fastify();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    app.decorateRequest('jwtVerify', async function jwtVerify() {
+      return undefined;
+    });
+    await app.register(authRoutes, { prefix: '/auth' });
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it.each([
+    ['POST', '/auth/2fa/setup', {}],
+    ['POST', '/auth/2fa/enable', { code: '123456' }],
+    ['POST', '/auth/2fa/disable', { password: 'whatever' }],
+    ['POST', '/auth/2fa/backup-codes/regenerate', { password: 'whatever' }],
+    ['POST', '/auth/2fa/verify', { user_id: '00000000-0000-4000-a000-000000000001', code: '123456' }],
+  ])('%s %s is registered and reaches its handler', async (method, url, payload) => {
+    const response = await app.inject({
+      method: method as 'POST',
+      url,
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify(payload),
+    });
+
+    expect(response.statusCode).not.toBe(404);
+  });
+
+  it('rejects an empty body on /2fa/enable before the controller runs', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/2fa/enable',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({}),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(routeMocks.enableTotp).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['/auth/2fa/disable', 'disableTotp'],
+    ['/auth/2fa/backup-codes/regenerate', 'regenerateBackupCodes'],
+  ])('rejects an empty body on %s before the controller runs', async (url, handler) => {
+    const response = await app.inject({
+      method: 'POST',
+      url,
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({}),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect((routeMocks as Record<string, unknown>)[handler]).not.toHaveBeenCalled();
+  });
+
+  it('rejects /2fa/verify with a non-uuid user_id before the controller runs', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/2fa/verify',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ user_id: 'not-a-uuid', code: '123456' }),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(routeMocks.verifyTotp).not.toHaveBeenCalled();
+  });
+
+  it('rejects /2fa/verify with a code shorter than a backup code before the controller runs', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/2fa/verify',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ user_id: '00000000-0000-4000-a000-000000000001', code: '12' }),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(routeMocks.verifyTotp).not.toHaveBeenCalled();
   });
 });
 

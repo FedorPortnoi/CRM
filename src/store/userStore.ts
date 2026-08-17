@@ -52,6 +52,7 @@ type AuthUser = {
   must_change_password?: boolean;
   must_change_email?: boolean;
   stay_signed_in?: boolean;
+  totp_enabled?: boolean;
 };
 
 /**
@@ -71,10 +72,24 @@ type PendingVerification = {
   email: string | null;
 };
 
+/**
+ * A login/join that got the password right but needs a second factor before a
+ * session is minted. Set when either endpoint answers 403 TOTP_REQUIRED — see
+ * `extractTotpChallenge` below and the backend contract on
+ * POST /auth/2fa/verify. Kept SEPARATE from `pendingVerification`: an unproven
+ * email address and a missing TOTP code are different challenges with
+ * different next screens, and conflating them would let one flow's guard
+ * silently swallow the other's state.
+ */
+type PendingTotp = {
+  userId: string;
+};
+
 interface UserState {
   user: AuthUser | null;
   token: string | null;
   pendingVerification: PendingVerification | null;
+  pendingTotp: PendingTotp | null;
   isLoading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
@@ -82,6 +97,11 @@ interface UserState {
   acceptInvite: (input: { acceptToken: string; phone: string; email: string; password: string }) => Promise<void>;
   verifyOtp: (userId: string, code: string, channel: 'email') => Promise<void>;
   resendVerification: (userId: string, channel: 'email') => Promise<void>;
+  verifyTotp: (userId: string, code: string) => Promise<void>;
+  setupTotp: () => Promise<{ secret: string; qrCode: string; otpauthUrl: string }>;
+  enableTotp: (code: string) => Promise<{ backupCodes: string[] }>;
+  disableTotp: (password: string) => Promise<void>;
+  regenerateBackupCodes: (password: string) => Promise<{ backupCodes: string[] }>;
   changePassword: (newPassword: string) => Promise<void>;
   setCredentials: (email: string, newPassword: string) => Promise<void>;
   setTimezone: (timezone: string) => Promise<void>;
@@ -128,10 +148,26 @@ function extractPendingVerification(body: unknown): PendingVerification | null {
   return { userId, email: typeof email === 'string' ? email : null };
 }
 
+/**
+ * Recognizes the 403 TOTP_REQUIRED shape login() and join() answer with when
+ * the password was right and the account has 2FA enabled. `user_id` is what
+ * lets /verify-totp complete the SAME login via POST /auth/2fa/verify — see
+ * the backend contract's `loginChallengeShape`.
+ */
+function extractTotpChallenge(body: unknown): PendingTotp | null {
+  if (body === null || typeof body !== 'object' || !('error' in body)) return null;
+  const err = (body as { error: unknown }).error;
+  if (err === null || typeof err !== 'object') return null;
+  const { code, user_id: userId } = err as Record<string, unknown>;
+  if (code !== 'TOTP_REQUIRED' || typeof userId !== 'string') return null;
+  return { userId };
+}
+
 export const useUserStore = create<UserState>()((set) => ({
   user: null,
   token: null,
   pendingVerification: null,
+  pendingTotp: null,
   isLoading: false,
   error: null,
 
@@ -153,6 +189,11 @@ export const useUserStore = create<UserState>()((set) => ({
         const pending = extractPendingVerification(body);
         if (pending) {
           set({ pendingVerification: pending, user: null, token: null, isLoading: false });
+          return;
+        }
+        const totpChallenge = extractTotpChallenge(body);
+        if (totpChallenge) {
+          set({ pendingTotp: totpChallenge, user: null, token: null, isLoading: false });
           return;
         }
         throw new Error(extractErrorMessage(body, response.status));
@@ -275,6 +316,11 @@ export const useUserStore = create<UserState>()((set) => ({
           set({ pendingVerification: pending, user: null, token: null, isLoading: false });
           return;
         }
+        const totpChallenge = extractTotpChallenge(body);
+        if (totpChallenge) {
+          set({ pendingTotp: totpChallenge, user: null, token: null, isLoading: false });
+          return;
+        }
         throw new Error(extractErrorMessage(body, response.status));
       }
       const { data } = body as { data: { user: AuthUser; token: string } };
@@ -323,6 +369,131 @@ export const useUserStore = create<UserState>()((set) => ({
     } catch {
       // silent — UI shows generic "try again" message
     }
+  },
+
+  /**
+   * Step two of a login/join that answered 403 TOTP_REQUIRED — completes the
+   * SAME login POST /auth/2fa/verify was called for. `code` is either a live
+   * 6-digit TOTP or an XXXX-XXXX backup code; the server tries TOTP first.
+   * Shaped exactly like verifyOtp above: no JWT exists yet, so this is public,
+   * and failure is reported by setting `error` on the store rather than
+   * throwing — /verify-totp reads `state.error`/`state.token` back off the
+   * store the same way /verify already does for verifyOtp.
+   */
+  verifyTotp: async (userId: string, code: string): Promise<void> => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await fetch(`${API_URL}/auth/2fa/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, code }),
+      });
+      const body: unknown = await response.json();
+      if (!response.ok) {
+        throw new Error(extractErrorMessage(body, response.status));
+      }
+      const { data } = body as { data: { user: AuthUser; token: string } };
+      const { user, token } = data;
+      await SecureStore.setItemAsync('crm_auth_token', token);
+      await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(user));
+      set({ user, token, pendingTotp: null, isLoading: false });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      set({ error: msg, isLoading: false });
+    }
+  },
+
+  /**
+   * Starts (or restarts) enrollment: mints a pending TOTP secret and returns it
+   * both as a QR code the authenticator app scans and as plaintext for manual
+   * entry. `totp_enabled` stays false server-side until enableTotp confirms a
+   * live code, so calling this again before confirming just overwrites the
+   * pending secret — nothing to reconcile client-side.
+   */
+  setupTotp: async (): Promise<{ secret: string; qrCode: string; otpauthUrl: string }> => {
+    const token = await SecureStore.getItemAsync('crm_auth_token');
+    const response = await fetch(`${API_URL}/auth/2fa/setup`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token ?? ''}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const body: unknown = await response.json();
+    if (!response.ok) throw new Error(extractErrorMessage(body, response.status));
+
+    const { data } = body as { data: { secret: string; qr_code: string; otpauth_url: string } };
+    return { secret: data.secret, qrCode: data.qr_code, otpauthUrl: data.otpauth_url };
+  },
+
+  /**
+   * Confirms enrollment with a live code from the app that scanned setup's QR.
+   * Flips totp_enabled on the server; patches the local user the same way
+   * setTimezone does, so the settings screen reflects "enabled" without a
+   * refetch.
+   */
+  enableTotp: async (code: string): Promise<{ backupCodes: string[] }> => {
+    const token = await SecureStore.getItemAsync('crm_auth_token');
+    const response = await fetch(`${API_URL}/auth/2fa/enable`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token ?? ''}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    const body: unknown = await response.json();
+    if (!response.ok) throw new Error(extractErrorMessage(body, response.status));
+
+    const { data } = body as { data: { backup_codes: string[] } };
+
+    const userJson = await SecureStore.getItemAsync('crm_auth_user');
+    if (userJson) {
+      const user = JSON.parse(userJson) as AuthUser;
+      const updated = { ...user, totp_enabled: true };
+      await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(updated));
+      set({ user: updated });
+    }
+
+    return { backupCodes: data.backup_codes };
+  },
+
+  /**
+   * Turns 2FA off after re-proving the account password. Clears the secret and
+   * every backup code server-side; patches the local user's totp_enabled the
+   * same way setTimezone patches timezone.
+   */
+  disableTotp: async (password: string): Promise<void> => {
+    const token = await SecureStore.getItemAsync('crm_auth_token');
+    const response = await fetch(`${API_URL}/auth/2fa/disable`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token ?? ''}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    const body: unknown = await response.json();
+    if (!response.ok) throw new Error(extractErrorMessage(body, response.status));
+
+    const userJson = await SecureStore.getItemAsync('crm_auth_user');
+    if (!userJson) return;
+    const user = JSON.parse(userJson) as AuthUser;
+    const updated = { ...user, totp_enabled: false };
+    await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(updated));
+    set({ user: updated });
+  },
+
+  /**
+   * Re-proves the password and mints 10 fresh backup codes, shown exactly once.
+   * Only UNUSED codes are invalidated server-side — spent ones stay for audit
+   * history — so this never touches totp_enabled and there is nothing to patch
+   * on the local user.
+   */
+  regenerateBackupCodes: async (password: string): Promise<{ backupCodes: string[] }> => {
+    const token = await SecureStore.getItemAsync('crm_auth_token');
+    const response = await fetch(`${API_URL}/auth/2fa/backup-codes/regenerate`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token ?? ''}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    const body: unknown = await response.json();
+    if (!response.ok) throw new Error(extractErrorMessage(body, response.status));
+
+    const { data } = body as { data: { backup_codes: string[] } };
+    return { backupCodes: data.backup_codes };
   },
 
   changePassword: async (newPassword: string): Promise<void> => {

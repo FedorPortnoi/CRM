@@ -103,6 +103,13 @@ describe('enforceAuthenticatedApiRequest', () => {
     ['PATCH', '/api/v1/auth/me/credentials'],
     ['PATCH', '/api/v1/auth/me/timezone'],
     ['PATCH', '/api/v1/auth/me/session-preference'],
+    // 2FA is opt-in per user, not gated by role — a viewer must be able to
+    // turn on the second factor protecting their own account, same as they
+    // can already change their own password.
+    ['POST', '/api/v1/auth/2fa/setup'],
+    ['POST', '/api/v1/auth/2fa/enable'],
+    ['POST', '/api/v1/auth/2fa/disable'],
+    ['POST', '/api/v1/auth/2fa/backup-codes/regenerate'],
   ])('allows a read-only user to maintain their own account: %s %s', async (method, url) => {
     dbMock.user.findFirst.mockResolvedValue({
       id: '00000000-0000-4000-a000-000000000001',
@@ -603,7 +610,9 @@ describe('the /auth prefix is not blanket-public', () => {
     });
   });
 
-  // Exactly the eight in isPublicApiRoute(), and exactly the eight the document lists.
+  // Exactly the nine in isPublicApiRoute() — eight plus /auth/2fa/verify, added
+  // for the same reason /auth/verify is here: it is step two of a login/join
+  // that has not minted a session yet, so it cannot require one.
   // Registration is reachable without a token by a second route as well — the hook's own
   // guard is `startsWith('/api/v1/')` WITH the trailing slash, and '/api/v1/auth' has
   // none — but it is on the allowlist regardless, so the entry is not load-bearing twice.
@@ -616,6 +625,7 @@ describe('the /auth prefix is not blanket-public', () => {
     ['POST', '/api/v1/auth/invites/open'],
     ['POST', '/api/v1/auth/invites/lookup'],
     ['POST', '/api/v1/auth/invites/accept'],
+    ['POST', '/api/v1/auth/2fa/verify'],
   ];
 
   it.each(publicAuthRoutes)('%s %s is public', async (method, url) => {
@@ -648,6 +658,17 @@ describe('the /auth prefix is not blanket-public', () => {
     // A path that merely begins with a public one is not that route.
     ['POST', '/api/v1/auth/verify/resend/again'],
     ['POST', '/api/v1/auth/logins'],
+    // The four authenticated 2FA management routes. Each one reads or changes
+    // request.user.sub's OWN account, so — unlike /auth/2fa/verify above —
+    // none of them belongs on the public allowlist; they rely on the ordinary
+    // JWT + isSelfServiceWrite path, same as /auth/me/password.
+    ['POST', '/api/v1/auth/2fa/setup'],
+    ['POST', '/api/v1/auth/2fa/enable'],
+    ['POST', '/api/v1/auth/2fa/disable'],
+    ['POST', '/api/v1/auth/2fa/backup-codes/regenerate'],
+    // A path that merely begins with the public 2FA route is not that route.
+    ['GET', '/api/v1/auth/2fa/verify'],
+    ['POST', '/api/v1/auth/2fa/verify/again'],
   ];
 
   it.each(enforcedAuthRoutes)('%s %s still requires a JWT', async (method, url) => {

@@ -28,6 +28,15 @@ vi.mock('../../../src/store/syncStore', () => ({
   },
 }));
 
+// network.ts calls initRemoteLogger() as a side effect on import (see the
+// comment there — piggybacking on this module's existing startup wiring).
+// Unmocked, that pulls in api.ts -> expo-constants -> a react-native source
+// file vitest's SSR transform cannot parse (Flow syntax), unrelated to
+// anything this file tests.
+vi.mock('../../../src/utils/remoteLogger', () => ({
+  initRemoteLogger: vi.fn(),
+}));
+
 describe('network listener', () => {
   beforeEach(() => {
     vi.resetModules();

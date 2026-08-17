@@ -62,6 +62,14 @@ ingress:
   - hostname: test.4kub.ru
     path: ^/(health|version)$
     service: http://127.0.0.1:3000
+  # Client-reported debug log intake (backend/api/routes/debug-log.ts), mounted
+  # outside /api/v1 on purpose — see that file's header comment. Added
+  # 2026-08-17 alongside the equivalent fix on the VPS-nginx vhost; that config
+  # is the one actually in the live traffic path, this one caught up to match
+  # per the file-level rule above (divergence from it is a bug, not a choice).
+  - hostname: test.4kub.ru
+    path: ^/debug/.*
+    service: http://127.0.0.1:3000
   - hostname: test.4kub.ru
     service: http://127.0.0.1:8080
 
@@ -79,6 +87,14 @@ ingress:
     service: http://127.0.0.1:3000
   - hostname: www.4kub.ru
     path: ^/(health|version)$
+    service: http://127.0.0.1:3000
+
+  # See the comment on the test.4kub.ru /debug rule above.
+  - hostname: 4kub.ru
+    path: ^/debug/.*
+    service: http://127.0.0.1:3000
+  - hostname: www.4kub.ru
+    path: ^/debug/.*
     service: http://127.0.0.1:3000
 
   # ── Everything else: the website, /i, /.well-known ────────────────────────

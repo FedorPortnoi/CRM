@@ -39,7 +39,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function LoginScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { user, isLoading, error, pendingVerification, login, join } = useUserStore();
+  const { user, isLoading, error, pendingVerification, pendingTotp, login, join } = useUserStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -72,6 +72,15 @@ export default function LoginScreen() {
       router.replace('/verify' as never);
     }
   }, [pendingVerification, isLoading, router]);
+
+  // Same shape, different challenge: login()/join() land here — instead of an
+  // error banner — when the password was right and the account has 2FA turned
+  // on. verifyTotp mints the real session one screen later.
+  useEffect(() => {
+    if (!isLoading && pendingTotp !== null) {
+      router.replace('/verify-totp' as never);
+    }
+  }, [pendingTotp, isLoading, router]);
 
   const isJoin = activeTab === 'join';
 

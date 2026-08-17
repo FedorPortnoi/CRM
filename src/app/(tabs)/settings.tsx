@@ -2,6 +2,7 @@
 import {
   ActivityIndicator,
   Linking,
+  Platform,
   ScrollView,
   View,
   Text,
@@ -38,6 +39,8 @@ export default function SettingsScreen(): JSX.Element {
   const token = useUserStore((s) => s.token);
   const logout = useUserStore((s) => s.logout);
   const setStaySignedIn = useUserStore((s) => s.setStaySignedIn);
+  const disableTotp = useUserStore((s) => s.disableTotp);
+  const regenerateBackupCodes = useUserStore((s) => s.regenerateBackupCodes);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const toggleTheme = useThemeStore((s) => s.toggle);
   const { colors } = useTheme();
@@ -53,6 +56,11 @@ export default function SettingsScreen(): JSX.Element {
   const [exportResult, setExportResult] = useState<ExportResult | null>(null);
   const [isSavingStaySignedIn, setIsSavingStaySignedIn] = useState(false);
   const [staySignedInError, setStaySignedInError] = useState<string | null>(null);
+  const [twoFactorAction, setTwoFactorAction] = useState<'disable' | 'regenerate' | null>(null);
+  const [twoFactorPassword, setTwoFactorPassword] = useState('');
+  const [isTwoFactorSaving, setIsTwoFactorSaving] = useState(false);
+  const [twoFactorError, setTwoFactorError] = useState<string | null>(null);
+  const [newBackupCodes, setNewBackupCodes] = useState<string[] | null>(null);
   const [monthlyTarget, setMonthlyTarget] = useState<string>('');
   const [isSavingTarget, setIsSavingTarget] = useState(false);
   const [targetSaved, setTargetSaved] = useState(false);
@@ -227,6 +235,49 @@ export default function SettingsScreen(): JSX.Element {
       setStaySignedInError(e instanceof Error ? e.message : t('settings.staySignedInSaveFailed'));
     } finally {
       setIsSavingStaySignedIn(false);
+    }
+  };
+
+  // Disabling 2FA or rotating backup codes both need a fresh password, not
+  // just an active session — either action is a real security regression if
+  // a phone left unlocked on a desk could do it with a tap. Both re-auths
+  // land here rather than on two near-duplicate inline forms.
+  const openTwoFactorAction = (action: 'disable' | 'regenerate'): void => {
+    setTwoFactorAction(action);
+    setTwoFactorPassword('');
+    setTwoFactorError(null);
+    setNewBackupCodes(null);
+  };
+
+  const cancelTwoFactorAction = (): void => {
+    setTwoFactorAction(null);
+    setTwoFactorPassword('');
+    setTwoFactorError(null);
+  };
+
+  const submitTwoFactorAction = async (): Promise<void> => {
+    if (twoFactorAction === null || !twoFactorPassword) return;
+    setIsTwoFactorSaving(true);
+    setTwoFactorError(null);
+    try {
+      if (twoFactorAction === 'disable') {
+        await disableTotp(twoFactorPassword);
+        setTwoFactorAction(null);
+        setTwoFactorPassword('');
+      } else {
+        const result = await regenerateBackupCodes(twoFactorPassword);
+        setNewBackupCodes(result.backupCodes);
+        setTwoFactorAction(null);
+        setTwoFactorPassword('');
+      }
+    } catch (e: unknown) {
+      setTwoFactorError(
+        e instanceof Error
+          ? e.message
+          : t(twoFactorAction === 'disable' ? 'settings.twoFactorDisableFailed' : 'settings.twoFactorRegenerateFailed'),
+      );
+    } finally {
+      setIsTwoFactorSaving(false);
     }
   };
 
@@ -590,6 +641,105 @@ export default function SettingsScreen(): JSX.Element {
           />
         </View>
         {staySignedInError !== null ? <Text style={styles.errorText}>{staySignedInError}</Text> : null}
+
+        <View style={styles.divider} />
+        <View style={styles.row}>
+          <View style={styles.rowMain}>
+            <Text style={styles.rowLabel}>{t('settings.twoFactor')}</Text>
+            <Text style={styles.helperText}>
+              {user?.totp_enabled ? t('settings.twoFactorEnabledDesc') : t('settings.twoFactorDesc')}
+            </Text>
+          </View>
+          {user?.totp_enabled ? (
+            <View style={styles.twoFactorBadge}>
+              <Text style={styles.twoFactorBadgeText}>{t('settings.twoFactorEnabled')}</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.twoFactorSetupButton}
+              onPress={() => router.push('/2fa-setup' as never)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.twoFactorSetupButtonText}>{t('settings.twoFactorSetup')}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {user?.totp_enabled ? (
+          <View style={styles.twoFactorActionsRow}>
+            <TouchableOpacity
+              style={styles.twoFactorActionButton}
+              onPress={() => openTwoFactorAction('disable')}
+              accessibilityRole="button"
+            >
+              <Text style={styles.twoFactorActionButtonText}>{t('settings.twoFactorDisable')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.twoFactorActionButtonSecondary}
+              onPress={() => openTwoFactorAction('regenerate')}
+              accessibilityRole="button"
+            >
+              <Text style={styles.twoFactorActionButtonSecondaryText}>{t('settings.twoFactorRegenerate')}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {twoFactorAction !== null ? (
+          <View style={styles.twoFactorPanel}>
+            <TextInput
+              style={styles.twoFactorPasswordInput}
+              secureTextEntry
+              value={twoFactorPassword}
+              onChangeText={(v) => { setTwoFactorPassword(v); setTwoFactorError(null); }}
+              placeholder={t('settings.twoFactorPasswordPlaceholder')}
+              placeholderTextColor={colors.placeholder}
+              autoCapitalize="none"
+              autoComplete="current-password"
+              accessibilityLabel={t('settings.twoFactorPasswordPlaceholder')}
+            />
+            <View style={styles.twoFactorPanelActions}>
+              <TouchableOpacity
+                style={styles.twoFactorCancelButton}
+                onPress={cancelTwoFactorAction}
+                accessibilityRole="button"
+              >
+                <Text style={styles.twoFactorCancelButtonText}>{t('settings.twoFactorCancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.twoFactorConfirmButton, (isTwoFactorSaving || !twoFactorPassword) && styles.buttonDisabled]}
+                onPress={() => { void submitTwoFactorAction(); }}
+                disabled={isTwoFactorSaving || !twoFactorPassword}
+                accessibilityRole="button"
+              >
+                {isTwoFactorSaving ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.twoFactorConfirmButtonText}>{t('settings.twoFactorConfirm')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+            {twoFactorError !== null ? <Text style={styles.errorText}>{twoFactorError}</Text> : null}
+          </View>
+        ) : null}
+
+        {newBackupCodes !== null ? (
+          <View style={styles.twoFactorPanel}>
+            <Text style={styles.rowLabel}>{t('settings.twoFactorNewCodesTitle')}</Text>
+            <Text style={styles.helperText}>{t('settings.twoFactorBackupCodesWarning')}</Text>
+            <View style={styles.codesList}>
+              {newBackupCodes.map((backupCode) => (
+                <Text key={backupCode} style={styles.codeItem} selectable>{backupCode}</Text>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={styles.twoFactorConfirmButton}
+              onPress={() => setNewBackupCodes(null)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.twoFactorConfirmButtonText}>{t('settings.twoFactorSavedButton')}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
 
       <TouchableOpacity style={styles.logoutButton} onPress={() => { void handleLogout(); }} accessibilityRole='button'>
@@ -899,5 +1049,130 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  twoFactorBadge: {
+    backgroundColor: 'rgba(204,120,92,0.08)',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  twoFactorBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: c.orange,
+  },
+  twoFactorSetupButton: {
+    backgroundColor: c.orange,
+    borderRadius: 8,
+    minHeight: 36,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+  },
+  twoFactorSetupButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  twoFactorActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+  },
+  twoFactorActionButton: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.red,
+  },
+  twoFactorActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  twoFactorActionButtonSecondary: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: c.orange,
+  },
+  twoFactorActionButtonSecondaryText: {
+    color: c.orange,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  twoFactorPanel: {
+    marginHorizontal: 14,
+    marginBottom: 14,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.inputBg,
+    gap: 10,
+  },
+  twoFactorPasswordInput: {
+    borderWidth: 1.5,
+    borderColor: c.inputBorder,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: c.text1,
+    backgroundColor: c.bg,
+  },
+  twoFactorPanelActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  twoFactorCancelButton: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  twoFactorCancelButtonText: {
+    color: c.text1,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  twoFactorConfirmButton: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.orange,
+  },
+  twoFactorConfirmButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  codesList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  codeItem: {
+    width: '47%',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    color: c.text1,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    backgroundColor: c.bg,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: 6,
+    paddingVertical: 8,
   },
 });

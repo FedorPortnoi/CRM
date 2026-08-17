@@ -104,12 +104,27 @@ function isReadOnlyMethod(method: string): boolean {
  * Account/session maintenance is not business-data mutation. A read-only role
  * must still be able to sign out, rotate its own password, set the timezone
  * used to interpret reminders, and choose how long its own session lasts.
+ *
+ * The four authenticated /auth/2fa/* routes belong in this list for the same
+ * reason /me/password does: 2FA is opt-in PER USER, not gated by role, and
+ * every one of them only ever reads or changes request.user.sub's own account
+ * (see the controllers — none accepts a target id). Leaving them out would
+ * mean a viewer or accountant — the two roles this codebase already trusts
+ * with their own password — could never turn on the second factor meant to
+ * protect that very account.
  */
 function isSelfServiceWrite(request: FastifyRequest): boolean {
   const path = apiPath(request);
   const method = request.method.toUpperCase();
   return (
-    (method === 'POST' && (path === '/api/v1/auth/logout' || path === '/api/v1/auth/logout-all')) ||
+    (method === 'POST' && (
+      path === '/api/v1/auth/logout' ||
+      path === '/api/v1/auth/logout-all' ||
+      path === '/api/v1/auth/2fa/setup' ||
+      path === '/api/v1/auth/2fa/enable' ||
+      path === '/api/v1/auth/2fa/disable' ||
+      path === '/api/v1/auth/2fa/backup-codes/regenerate'
+    )) ||
     (method === 'PATCH' && (
       path === '/api/v1/auth/me/password' ||
       path === '/api/v1/auth/me/credentials' ||
@@ -136,6 +151,15 @@ function isPublicApiRoute(request: FastifyRequest): boolean {
       path === '/api/v1/auth/join' ||
       path === '/api/v1/auth/verify' ||
       path === '/api/v1/auth/verify/resend' ||
+      // Step two of login/join after either returns 403 TOTP_REQUIRED. No
+      // session exists yet at this point in the flow, so this has to be
+      // public exactly like /auth/verify above — and, like that route, it
+      // accepts only a body-carried secret (a TOTP code or a backup code)
+      // rather than anything read from an authenticated identity. The other
+      // four /auth/2fa/* routes (setup, enable, disable, backup-codes/regenerate)
+      // are NOT listed here and stay behind the global preHandler on purpose:
+      // each one reads or changes request.user.sub's own account.
+      path === '/api/v1/auth/2fa/verify' ||
       // Password recovery. Whoever needs these cannot sign in by definition, so
       // requiring a token would make the feature unreachable. Both answer
       // identically whatever the address resolves to — see the controller.

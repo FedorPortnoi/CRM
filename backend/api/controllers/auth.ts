@@ -20,6 +20,15 @@ import {
 } from '../../config/market';
 import { requiresEmailVerification, isEmailVerificationEnforced } from '../../config/security';
 import { consumeScopedBudget } from '../../services/rate-limit-store';
+import {
+  generateTotpSecret,
+  buildOtpauthUrl,
+  generateQrCodeDataUrl,
+  verifyTotpToken,
+  generateBackupCodes,
+  hashBackupCode,
+} from '../../services/totp';
+import { encryptField, decryptField } from '../../services/encryption';
 
 const saltRounds = process.env.NODE_ENV === 'test' ? 4 : 12;
 
@@ -198,6 +207,18 @@ function invalidCredentials(reply: FastifyReply) {
   return reply.code(401).send({
     error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' },
   });
+}
+
+/**
+ * Does this account require a second factor before a session may be minted?
+ *
+ * Opt-in, unlike requiresEmailVerification — there is no grandfather clause and
+ * no cutover date to reason about: a user who has never called POST
+ * /auth/2fa/enable simply has totp_enabled = false and this always returns
+ * false for them.
+ */
+function requiresTotpChallenge(user: { totp_enabled?: boolean | null }): boolean {
+  return user.totp_enabled === true;
 }
 
 export function normalizeEmail(email: string): string {
@@ -462,6 +483,41 @@ export const AuthController = {
         metadata: { email, reason },
       });
       return invalidCredentials(reply);
+    }
+
+    /**
+     * THE SECOND FACTOR, right where the password check used to hand straight
+     * to signSessionToken.
+     *
+     * Placed AFTER credentialStatus === 'success' is confirmed and BEFORE any
+     * session is minted: a session must never exist for an account that opted
+     * into 2FA until the second factor is also proven. 'denied' rather than
+     * 'failure' — the password was correct, so this is not a credential
+     * failure, it is a policy gate short of success — the same distinction
+     * 'denied' already carries everywhere else in this file (refuseAdminLevelTarget,
+     * the sequences/team admin gates in authenticate.ts).
+     *
+     * user_id travels in the body on purpose: POST /auth/2fa/verify is public
+     * and needs it to complete this same login. That is not a new disclosure —
+     * this branch is unreachable without the correct password, exactly like the
+     * ACCOUNT_NOT_VERIFIED branch above that already does the same thing.
+     */
+    if (requiresTotpChallenge(user)) {
+      await auditLog({
+        action: 'auth.login',
+        outcome: 'denied',
+        request,
+        organizationId: user.organization_id,
+        userId: user.id,
+        metadata: { email, reason: 'totp_required' },
+      });
+      return reply.code(403).send({
+        error: {
+          code: 'TOTP_REQUIRED',
+          message: 'Enter your two-factor authentication code.',
+          user_id: user.id,
+        },
+      });
     }
 
     const token = await signSessionToken(request, reply, { ...user, role: user.role as AuthRole });
@@ -751,6 +807,27 @@ export const AuthController = {
           message: 'Please verify your account via the code sent to your phone and email.',
           user_id: user.id,
           email: user.email,
+        },
+      });
+    }
+
+    /**
+     * THE SAME GATE /auth/login ASKS, asked here too — and it is not optional.
+     *
+     * Without it, /auth/join is a complete bypass of 2FA for any user who is
+     * also an org member able to join via company code: they would set up TOTP,
+     * have /auth/login refuse them, and simply authenticate through this door
+     * instead, which asks for nothing this account does not already satisfy.
+     * Same reasoning as the block above it, down to placement — after the
+     * password and verification checks, before any session is minted.
+     */
+    if (requiresTotpChallenge(user)) {
+      await auditLog({ action: 'auth.join', outcome: 'denied', request, organizationId: org.id, userId: user.id, metadata: { reason: 'totp_required' } });
+      return reply.code(403).send({
+        error: {
+          code: 'TOTP_REQUIRED',
+          message: 'Enter your two-factor authentication code.',
+          user_id: user.id,
         },
       });
     }
@@ -1198,7 +1275,7 @@ export const AuthController = {
       where: { id: user_id },
       select: {
         id: true, email: true, name: true, role: true, organization_id: true, timezone: true,
-        is_verified: true, is_active: true, stay_signed_in: true,
+        is_verified: true, is_active: true, stay_signed_in: true, totp_enabled: true,
       },
     });
 
@@ -1236,6 +1313,37 @@ export const AuthController = {
       userId: user_id,
       metadata: { channel },
     });
+
+    /**
+     * THE SAME GATE /auth/login AND /auth/join ASK, asked here too.
+     *
+     * This is the only door back into an account whose credentials step
+     * (setCredentials) already fired: that call sets is_verified=false and
+     * revokes every session, so an account with TOTP enabled that lands back
+     * here must still clear the second factor before a session is minted —
+     * otherwise the emailed code alone (public route, no TOTP/backup code
+     * required) would be a full bypass of 2FA for re-entry. Placed after the
+     * verification flags are persisted and audited, exactly like login/join,
+     * so the account is durably marked verified either way and the client is
+     * simply routed to POST /auth/2fa/verify instead of getting a token.
+     */
+    if (requiresTotpChallenge(user)) {
+      await auditLog({
+        action: 'auth.verify_otp',
+        outcome: 'denied',
+        request,
+        organizationId: user.organization_id,
+        userId: user_id,
+        metadata: { channel, reason: 'totp_required' },
+      });
+      return reply.code(403).send({
+        error: {
+          code: 'TOTP_REQUIRED',
+          message: 'Enter your two-factor authentication code.',
+          user_id: user.id,
+        },
+      });
+    }
 
     const token = await signSessionToken(request, reply, {
       id: user.id,
@@ -1619,5 +1727,320 @@ export const AuthController = {
     });
 
     return reply.code(200).send({ data: { reset: true }, meta: {} });
+  },
+
+  // ── Two-factor authentication (TOTP, RFC 6238) ──────────────────────────
+  //
+  // Opt-in, per user. See backend/services/totp.ts for the primitives and
+  // requiresTotpChallenge above for the login/join gate these five routes
+  // exist to satisfy.
+
+  /**
+   * POST /auth/2fa/setup — mint a PENDING secret.
+   *
+   * Always operates on request.user.sub, never a client-supplied id: this is
+   * the one property that must hold everywhere in this block, since a stray
+   * body-supplied user id would let one authenticated account arm 2FA on
+   * another. totp_enabled stays false here — the secret is not live until
+   * enableTotp confirms the caller's authenticator actually has it, which is
+   * also why calling this again before confirming simply overwrites the
+   * pending secret rather than erroring.
+   */
+  setupTotp: async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = await db.user.findUnique({
+      where: { id: request.user.sub },
+      select: { id: true, email: true, username: true, totp_enabled: true },
+    });
+
+    if (!user) {
+      return reply.status(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
+    }
+
+    if (user.totp_enabled) {
+      return reply.code(409).send({
+        error: {
+          code: 'TOTP_ALREADY_ENABLED',
+          message: 'Two-factor authentication is already enabled. Disable it first to reconfigure.',
+        },
+      });
+    }
+
+    const secret = generateTotpSecret();
+    const accountLabel = user.email ?? user.username ?? user.id;
+    const otpauth_url = buildOtpauthUrl(secret, accountLabel);
+    const qr_code = await generateQrCodeDataUrl(otpauth_url);
+
+    // Encrypted at the call site with encryptField, per services/encryption.ts —
+    // totp.ts never sees or handles ciphertext, only the plaintext secret.
+    await db.user.update({
+      where: { id: user.id },
+      data: { totp_secret: encryptField(secret) },
+    });
+
+    return reply.send({ data: { secret, qr_code, otpauth_url }, meta: {} });
+  },
+
+  /**
+   * POST /auth/2fa/enable — confirm the pending secret and turn 2FA on.
+   *
+   * Body: { code: string } — a live 6-digit TOTP code from the authenticator
+   * app that just scanned setupTotp's QR code.
+   */
+  enableTotp: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { code } = request.body as { code: string };
+
+    const user = await db.user.findUnique({
+      where: { id: request.user.sub },
+      select: { id: true, organization_id: true, totp_secret: true, totp_enabled: true },
+    });
+
+    if (!user || !user.totp_secret || user.totp_enabled) {
+      return reply.code(400).send({
+        error: { code: 'TOTP_SETUP_NOT_PENDING', message: 'Call POST /auth/2fa/setup first.' },
+      });
+    }
+
+    // Authenticated route, so this cannot be an account-enumeration oracle the
+    // way the public /auth/2fa/verify budget below has to guard against — it
+    // exists purely to slow down guessing against one already-known account.
+    const budget = await consumeScopedBudget('totp_enable', user.id, 5, 15 * 60 * 1000);
+    if (!budget.allowed) {
+      return reply
+        .header('retry-after', String(budget.retryAfterSec))
+        .code(429)
+        .send({ error: { code: 'RATE_LIMITED', message: 'Too many attempts. Try again later.' } });
+    }
+
+    const secret = decryptField(user.totp_secret);
+    const valid = verifyTotpToken(secret, code);
+
+    if (!valid) {
+      await auditLog({
+        action: 'auth.totp_enabled',
+        outcome: 'failure',
+        request,
+        organizationId: user.organization_id,
+        userId: user.id,
+        metadata: { reason: 'invalid_code' },
+      });
+      return reply.code(401).send({
+        error: { code: 'INVALID_TOTP_CODE', message: 'That code is incorrect or has expired.' },
+      });
+    }
+
+    const backupCodes = generateBackupCodes(10);
+    await db.$transaction([
+      db.user.update({
+        where: { id: user.id },
+        data: { totp_enabled: true, totp_confirmed_at: new Date() },
+      }),
+      db.totpBackupCode.createMany({
+        data: backupCodes.map((backupCode) => ({ user_id: user.id, code_hash: hashBackupCode(backupCode) })),
+      }),
+    ]);
+
+    await auditLog({
+      action: 'auth.totp_enabled',
+      outcome: 'success',
+      request,
+      organizationId: user.organization_id,
+      userId: user.id,
+      metadata: {},
+    });
+
+    // Shown exactly once — only the hash is ever persisted or retrievable again.
+    return reply.send({ data: { backup_codes: backupCodes }, meta: {} });
+  },
+
+  /**
+   * POST /auth/2fa/disable — password re-auth, then turn 2FA fully off.
+   *
+   * A stolen session token alone must not be able to remove the second
+   * factor it is itself missing — hence requiring the password again here,
+   * the same re-auth changePassword above requires for its own sensitive
+   * change.
+   */
+  disableTotp: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { password } = request.body as { password: string };
+
+    const user = await db.user.findUnique({
+      where: { id: request.user.sub },
+      select: { id: true, organization_id: true, password_hash: true },
+    });
+
+    // bcrypt runs before the null check, same DUMMY_HASH discipline as
+    // verifyPasswordWithLockout and changePassword above: an absent row must
+    // not answer faster than a present one with the wrong password.
+    const passwordMatches = await bcrypt.compare(password, user?.password_hash ?? DUMMY_HASH);
+    if (!user || !passwordMatches) {
+      return reply.code(401).send({
+        error: { code: 'INVALID_PASSWORD', message: 'Password is incorrect' },
+      });
+    }
+
+    await db.$transaction([
+      db.user.update({
+        where: { id: user.id },
+        data: { totp_secret: null, totp_enabled: false, totp_confirmed_at: null },
+      }),
+      db.totpBackupCode.deleteMany({ where: { user_id: user.id } }),
+    ]);
+
+    await auditLog({
+      action: 'auth.totp_disabled',
+      outcome: 'success',
+      request,
+      organizationId: user.organization_id,
+      userId: user.id,
+      metadata: {},
+    });
+
+    return reply.send({ data: {}, meta: {} });
+  },
+
+  /**
+   * POST /auth/2fa/backup-codes/regenerate — password re-auth, mint a fresh
+   * set of 10 codes.
+   *
+   * Only UNUSED codes are deleted. Already-spent codes are left in place
+   * rather than wiped, the same "evidence over tidiness" choice this file
+   * makes everywhere else an audit trail matters — they can never be redeemed
+   * again (verifyTotp's WHERE clause excludes used_at IS NOT NULL rows
+   * regardless), so keeping them costs nothing and preserves the history of
+   * which code covered which login.
+   */
+  regenerateBackupCodes: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { password } = request.body as { password: string };
+
+    const user = await db.user.findUnique({
+      where: { id: request.user.sub },
+      select: { id: true, organization_id: true, password_hash: true, totp_enabled: true },
+    });
+
+    const passwordMatches = await bcrypt.compare(password, user?.password_hash ?? DUMMY_HASH);
+    if (!user || !passwordMatches) {
+      return reply.code(401).send({
+        error: { code: 'INVALID_PASSWORD', message: 'Password is incorrect' },
+      });
+    }
+
+    if (!user.totp_enabled) {
+      return reply.code(400).send({
+        error: { code: 'TOTP_NOT_ENABLED', message: 'Two-factor authentication is not enabled.' },
+      });
+    }
+
+    const backupCodes = generateBackupCodes(10);
+    await db.$transaction([
+      db.totpBackupCode.deleteMany({ where: { user_id: user.id, used_at: null } }),
+      db.totpBackupCode.createMany({
+        data: backupCodes.map((backupCode) => ({ user_id: user.id, code_hash: hashBackupCode(backupCode) })),
+      }),
+    ]);
+
+    await auditLog({
+      action: 'auth.totp_backup_regenerated',
+      outcome: 'success',
+      request,
+      organizationId: user.organization_id,
+      userId: user.id,
+      metadata: {},
+    });
+
+    return reply.send({ data: { backup_codes: backupCodes }, meta: {} });
+  },
+
+  /**
+   * POST /auth/2fa/verify — PUBLIC. Step two of login/join after either
+   * returned 403 TOTP_REQUIRED.
+   *
+   * Body: { user_id, code } — code is either a live 6-digit TOTP or an
+   * XXXX-XXXX backup code; whichever matches first wins.
+   *
+   * NO ORACLE: an unknown user_id, a disabled-2FA account, an exhausted
+   * budget and a wrong code all answer with the SAME 401 INVALID_TOTP_CODE
+   * body, exactly as verifyOtp (email OTP) refuses to distinguish "no such
+   * account" from "wrong code". The rate-limit budget is spent
+   * UNCONDITIONALLY, before the user lookup, for the identical reason
+   * resendVerification's per-user budget is: a refusal that only a real
+   * account can trigger is the account-existence oracle this shape exists to
+   * avoid.
+   */
+  verifyTotp: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { user_id, code } = request.body as { user_id: string; code: string };
+
+    const refuse = async (organizationId: string | null, reason: string) => {
+      await auditLog({
+        action: 'auth.login',
+        outcome: 'failure',
+        request,
+        organizationId,
+        userId: user_id,
+        metadata: { reason },
+      });
+      return reply.code(401).send({
+        error: { code: 'INVALID_TOTP_CODE', message: 'That code is incorrect or has expired.' },
+      });
+    };
+
+    const budget = await consumeScopedBudget('totp_verify', user_id, 5, 15 * 60 * 1000);
+
+    const user = await db.user.findUnique({
+      where: { id: user_id },
+      select: {
+        id: true, email: true, username: true, name: true, role: true, organization_id: true,
+        timezone: true, manager_id: true, onboarding_state: true, must_change_password: true,
+        must_change_email: true, stay_signed_in: true, totp_enabled: true, totp_secret: true,
+      },
+    });
+
+    if (!user || !user.totp_enabled || !user.totp_secret) {
+      return refuse(user?.organization_id ?? null, !user ? 'unknown_user' : 'totp_not_enabled');
+    }
+
+    if (!budget.allowed) {
+      return refuse(user.organization_id, 'rate_limited');
+    }
+
+    const secret = decryptField(user.totp_secret);
+    const totpValid = verifyTotpToken(secret, code);
+
+    let usedBackupCode = false;
+    if (!totpValid) {
+      // Atomic single-use spend: the WHERE clause requires used_at IS NULL, so
+      // two concurrent requests holding the same guessed/leaked code cannot
+      // both win — only the first updateMany affects a row, exactly the
+      // optimistic-concurrency shape verifyCode() uses in services/verification.ts.
+      const consumed = await db.totpBackupCode.updateMany({
+        where: { user_id: user.id, code_hash: hashBackupCode(code), used_at: null },
+        data: { used_at: new Date() },
+      });
+      usedBackupCode = consumed.count === 1;
+    }
+
+    if (!totpValid && !usedBackupCode) {
+      return refuse(user.organization_id, 'invalid_code');
+    }
+
+    const token = await signSessionToken(request, reply, {
+      id: user.id,
+      organization_id: user.organization_id,
+      role: user.role as AuthRole,
+      stay_signed_in: user.stay_signed_in,
+    });
+
+    await auditLog({
+      action: 'auth.login',
+      outcome: 'success',
+      request,
+      organizationId: user.organization_id,
+      userId: user.id,
+      metadata: { via: usedBackupCode ? 'totp_backup_code' : 'totp' },
+    });
+
+    return reply.send({
+      data: { user: publicUser(user), token },
+      meta: {},
+    });
   },
 };

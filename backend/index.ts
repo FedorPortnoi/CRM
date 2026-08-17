@@ -45,6 +45,7 @@ import trackingRoutes from './api/routes/tracking';
 import updatesRoutes from './api/routes/updates';
 import publicApiRoutes, { apiKeysRoutes } from './api/routes/public-api';
 import { wsRoutes } from './api/routes/ws';
+import debugLogRoutes from './api/routes/debug-log';
 import { startScheduler } from './services/scheduler';
 
 // The version this endpoint advertises drives the "update available" alert in
@@ -300,6 +301,10 @@ async function start() {
   // above. The plugin installs its own error/not-found handlers and Cache-Control hook
   // because the ones on this instance only fire for /api/ URLs.
   await server.register(publicApiRoutes, { prefix: '/public/v1' });
+
+  // Client-reported debug log intake — see the header comment in
+  // api/routes/debug-log.ts for why this is outside /api/v1 too.
+  await server.register(debugLogRoutes, { prefix: '/debug' });
 
   server.get('/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() };

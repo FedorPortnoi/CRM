@@ -2,6 +2,14 @@ import { useEffect, useState } from 'react';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import * as offlineQueue from './offlineQueue';
 import { useSyncStore } from '../store/syncStore';
+// Piggybacking on this module's existing side-effect-import wiring in
+// src/app/_layout.tsx rather than adding a line there directly, since that
+// file has unrelated work in flight. Move this to _layout.tsx once that
+// settles — there's nothing network-specific about it, this is just the
+// first already-wired-at-startup file that wasn't also mid-edit.
+import { initRemoteLogger } from './remoteLogger';
+
+initRemoteLogger();
 
 let previouslyOnline: boolean | null = null;
 

@@ -81,9 +81,9 @@
  *   3. The legitimately cross-tenant paths would each need BYPASSRLS or a
  *      second connection, reinstating exactly the unguarded path RLS was bought
  *      to remove.
- *   4. PipelineStage, UserCalendarSync, PushDevice and VerificationCode have no
- *      tenant column and would need per-row subquery policies; NotificationSent
- *      has no path to an org at all.
+ *   4. PipelineStage, UserCalendarSync, PushDevice, VerificationCode and
+ *      TotpBackupCode have no tenant column and would need per-row subquery
+ *      policies; NotificationSent has no path to an org at all.
  *   5. A policy that is wrong in the restrictive direction locks every live
  *      user out of their own data on the first query, and reverting it means a
  *      migration against production.
@@ -149,6 +149,7 @@ export const TENANT_KEY_BY_MODEL: Readonly<Record<string, 'organization_id' | 'o
 export const TENANT_OWNED_VIA_RELATION: Readonly<Record<string, string>> = {
   PipelineStage: 'pipeline',
   PushDevice: 'user',
+  TotpBackupCode: 'user',
   UserCalendarSync: 'user',
   VerificationCode: 'user',
 };

@@ -80,6 +80,7 @@ const MODULES: Array<[string, string]> = [
   ['email-templates', '/api/v1/email-templates'],
   ['tracking', '/api/v1/tracking'],
   ['updates', '/api/v1/updates'],
+  ['debug-log', '/debug'],
 ];
 
 type RegisteredRoute = { method: string; url: string };
