@@ -13,7 +13,7 @@
  *
  * Usage:
  *   node scripts/publish-update.js --channel production
- *   node scripts/publish-update.js --channel rustore --dry-run
+ *   node scripts/publish-update.js --channel rustore --profile rustore --platform android --dry-run
  *   node scripts/publish-update.js --channel production --new-runtime
  *
  * Options:
@@ -21,25 +21,23 @@
  *   --profile <name>   eas.json build profile to take env from. Defaults to the
  *                      profile whose "channel" equals --channel.
  *   --platform <p>     all (default, = ios+android) | ios | android.
- *   --new-runtime      Allow publishing under a runtimeVersion the store has
+ *   --new-runtime      Allow a runtime/channel/platform target the store has
  *                      never seen. See THE GUARD below.
  *   --dry-run          Do everything except write into the store.
  *   --store <dir>      Override UPDATES_STORE_DIR for this run.
  *
  * ─── THE GUARD ──────────────────────────────────────────────────────────────
  *
- * The runtime version policy is `appVersion` (app.json — deliberately not
- * `fingerprint`, see the comment on resolveRuntimeVersion() below for why that
- * one could not converge). A runtimeVersion this script computes but that no
- * build has ever declared means the update you just published is addressed to
- * a runtime no installed binary will ever ask for. Nothing errors. The publish
- * "succeeds", every device keeps running the old bundle, and the only symptom
- * is that the fix never arrives.
+ * The runtime version is explicit in app.json (deliberately not `fingerprint`,
+ * see the comment on resolveRuntimeVersion() below for why that one could not
+ * converge). A runtime/channel/platform tuple the store has never seen can be a
+ * deliberate first publish for a new binary, or a typo that no installed
+ * binary will ever ask for. Nothing in the protocol distinguishes those cases.
  *
- * So a runtimeVersion that matches nothing already in the store aborts the
- * publish. `--new-runtime` is the acknowledgement that you know a new native
- * build — carrying the version bump appVersion requires — has to ship to the
- * stores before this update can reach anyone.
+ * So a target tuple that matches nothing already in the store aborts the
+ * publish. `--new-runtime` is the acknowledgement that you know a compatible
+ * new native build has to ship to the stores before this update can reach
+ * anyone.
  *
  * ─── WHY THE BUILD PROFILE'S ENV IS APPLIED ─────────────────────────────────
  *
@@ -50,11 +48,9 @@
  * air breaks the API for every install at once, with no way to fix it except
  * another OTA that the broken app may not be able to fetch.
  *
- * The same env also feeds app.config.js, and therefore the fingerprint. Computing
- * the fingerprint under different env than the build used would produce a
- * runtimeVersion that does not match the installed app — the exact silent
- * failure the guard above exists to catch. Both steps use the same env for that
- * reason.
+ * The same env also feeds app.config.js, so both config resolution and export
+ * use the exact values the build profile used. That keeps channel and endpoint
+ * selection aligned with the binary.
  *
  * ─── WHY THE WORKING TREE MUST BE CLEAN ─────────────────────────────────────
  *
@@ -128,7 +124,7 @@ function printUsageAndExit(code) {
       '  --channel <name>   REQUIRED. production | rustore | preview | huawei',
       '  --profile <name>   eas.json build profile to take env from',
       '  --platform <p>     all (default) | ios | android',
-      '  --new-runtime      allow a runtimeVersion the store has never seen',
+      '  --new-runtime      allow a runtime/channel/platform target the store has never seen',
       '  --dry-run          do everything except write into the store',
       '  --store <dir>      override UPDATES_STORE_DIR',
     ].join('\n'),
@@ -225,7 +221,62 @@ function resolveProfileEnv(channel, explicitProfile) {
     fail(`eas.json has no build profile named "${name}"`);
   }
 
+  if (profile.channel !== channel) {
+    fail(
+      `eas.json build profile "${name}" subscribes to channel ` +
+        `"${profile.channel ?? '(none)'}", not "${channel}"`,
+    );
+  }
+
+  const embeddedChannel = profile.env?.EXPO_UPDATES_CHANNEL;
+  if (embeddedChannel !== channel) {
+    fail(
+      `eas.json build profile "${name}" must set EXPO_UPDATES_CHANNEL="${channel}" ` +
+        `so local/prebuilt binaries request the same channel`,
+    );
+  }
+
   return { profileName: name, env: profile.env || {} };
+}
+
+/**
+ * Whether the store already contains an update for this exact
+ * runtime/channel/platform tuple.
+ *
+ * Looking only for a runtime directory is too weak: a RuStore Android publish
+ * creates `1.1.8/`, but that does not prove an iOS production build on runtime
+ * 1.1.8 exists. The guard is still an operator tripwire rather than proof that
+ * a store binary shipped, but keeping all three dimensions prevents one
+ * channel or platform from accidentally blessing another.
+ */
+function storeKnowsTarget(storeDir, runtimeVersion, channel, platform) {
+  const channelDir = path.join(storeDir, runtimeVersion, channel);
+  let entries;
+  try {
+    entries = fs.readdirSync(channelDir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      const record = JSON.parse(
+        fs.readFileSync(path.join(channelDir, entry.name, 'update.json'), 'utf8'),
+      );
+      if (
+        record.runtimeVersion === runtimeVersion &&
+        record.channel === channel &&
+        record.platforms?.[platform]?.launchAsset
+      ) {
+        return true;
+      }
+    } catch {
+      // Half-written or malformed publishes are intentionally invisible.
+    }
+  }
+
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -259,11 +310,10 @@ function runExpo(args, env, { capture = true } = {}) {
  * read like one, and it would fail this script's own guard on every single
  * invocation from this point on.
  *
- * policy is now "appVersion", which is deterministic, and
- * `runtimeversion:resolve` already applies whichever policy app.json
- * declares — it is the sole authority under any policy, fingerprint or
- * appVersion or otherwise. Trust it directly rather than re-deriving a second
- * opinion that cannot agree with itself.
+ * The runtime is now a deterministic explicit string, and
+ * `runtimeversion:resolve` already applies whichever value or policy app.json
+ * declares — it is the sole authority under either form. Trust it directly
+ * rather than re-deriving a second opinion that cannot agree with itself.
  */
 function resolveRuntimeVersion(platform, env) {
   let resolved;
@@ -405,17 +455,10 @@ function main() {
   }
 
   // ── THE GUARD ──────────────────────────────────────────────────────────────
-  let known = [];
-  try {
-    known = fs
-      .readdirSync(storeDir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name);
-  } catch {
-    known = [];
-  }
-
-  const unknown = platforms.filter((platform) => !known.includes(runtimeVersions[platform]));
+  const unknown = platforms.filter(
+    (platform) =>
+      !storeKnowsTarget(storeDir, runtimeVersions[platform], args.channel, platform),
+  );
   if (unknown.length > 0 && !args.newRuntime) {
     fail(
       [
@@ -423,15 +466,13 @@ function main() {
           .map((platform) => `${platform}=${runtimeVersions[platform]}`)
           .join(', ')}`,
         '',
-        'The native side of the app changed, so no installed build has this',
-        'fingerprint and none will ever request this update. Publishing anyway',
-        'looks like success and reaches nobody.',
+        'The update store has never seen these exact runtime/channel/platform',
+        'targets. Publishing anyway can look successful while reaching no build.',
         '',
         `Store: ${storeDir}`,
-        `Known runtime versions: ${known.length > 0 ? known.join(', ') : '(store is empty)'}`,
-        '',
-        'If a new native build is genuinely going to the stores, re-run with',
-        '--new-runtime.',
+        'If a compatible native build is genuinely being created for these',
+        'targets, re-run with --new-runtime. This flag is an acknowledgement;',
+        'it cannot prove the binary was uploaded or released.',
       ].join('\n'),
     );
   }
@@ -448,9 +489,9 @@ function main() {
   const updateId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
 
-  // Group platforms by runtimeVersion: iOS and Android fingerprints usually
-  // differ, so the same publish is written under each one, carrying only that
-  // platform's files. When they happen to be equal it is written once.
+  // Group platforms by runtimeVersion. Platform-specific runtime configuration
+  // may differ; when both platforms share the explicit runtime it is written
+  // once with one payload per platform.
   const byRuntimeVersion = new Map();
   for (const platform of platforms) {
     const runtimeVersion = runtimeVersions[platform];

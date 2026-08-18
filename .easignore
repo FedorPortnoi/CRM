@@ -17,6 +17,8 @@ node_modules/
 # .gitignore gained `.env.bak*` on 28 Jul, this file did not, and
 # .env.bak-20260727 (41 credentials) was uploaded on every build until 30 Jul.
 .env.bak*
+.env.*.bak
+*.env.backup
 .env.production
 *.p8
 *.jks
@@ -28,6 +30,10 @@ id_rsa*
 *.key
 backend-log.txt
 firebase-service-account.json
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.auth-state.json
 google-services.json
 
 # Build outputs
@@ -58,6 +64,15 @@ yarn-debug.log*
 /codex-*.md
 /tmp-*.txt
 /tmp-test-runs/
+/store-assets/
+/releases/
+/asc-screenshots.js
+/crm-now.md
+/distr-new.md
+/workers/openai-proxy/resp.json
+.claude/
+tools/splash-remotion/
+website/4kub.ru-audit/
 
 # OS / IDE
 .DS_Store

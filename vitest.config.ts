@@ -26,6 +26,11 @@ export default defineConfig({
     // baseline is pinned here rather than inherited from .env.
     env: {
       MODEL_PROVIDER: 'yandex_foundation_models',
+      // A developer's .env currently masks these required values locally, but
+      // a clean CI runner has neither and fails while importing route modules.
+      // Keep tests hermetic with obvious, distinct, non-production values.
+      JWT_SECRET: 'vitest-only-jwt-secret-aaaaaaaaaaaaaaaaaaaaaaaa',
+      TOKEN_ENCRYPTION_KEY: 'vitest-only-token-key-bbbbbbbbbbbbbbbbbbbbbbbbb',
     },
   },
 });

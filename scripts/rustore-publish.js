@@ -141,6 +141,7 @@ function parseArgs(rest) {
     else if (a === '--no-submit') args.submit = false;
     else if (a === '--dry-run') args.dryRun = true;
     else if (a === '--version-id') args.versionId = rest[++i];
+    else if (a === '--dir') args.dir = rest[++i];
   }
   return args;
 }
@@ -156,6 +157,55 @@ async function cmdModerate(args) {
   dump('POST submit for moderation', mod);
   if (!mod.ok) throw new Error('Moderation submit failed (see response above).');
   console.log(`\n✅ Version ${args.versionId} submitted to RuStore moderation.`);
+}
+
+async function cmdDelete(args) {
+  if (!args.versionId) throw new Error('--version-id <id> is required for delete');
+  const env = loadEnv();
+  const token = await auth(env);
+  console.log(`AUTH OK — token acquired (length ${token.length}).`);
+  // Only unpublished (draft/moderation/ready) versions can be deleted — RuStore
+  // rejects deleting anything already live. That is the whole point of this
+  // command: cleaning up an orphaned draft that is blocking a versionCode reuse,
+  // never a published one.
+  const r = await api(token, 'DELETE', `/public/v1/application/${PKG}/version/${args.versionId}`);
+  dump('DELETE version', r);
+  if (!r.ok) throw new Error('Delete failed (see response above).');
+  console.log(`\n✅ Version ${args.versionId} deleted.`);
+}
+
+// Screenshots aren't documented in this file's own header because nothing
+// here used to touch them — new versions silently inherited whatever was on
+// the last published one. Found and fixed 2026-08-17: those inherited shots
+// were stale (dated back to June, well before the curated set existed), so
+// every draft since then would have shipped the wrong images. Endpoint isn't
+// in RuStore's OpenAPI spec bundled with this repo; found via their docs site
+// (api-upload-publication-app/apk-screens-upload) — POST, multipart, one
+// `file` field per call, path-addressed by orientation + 0-based ordinal.
+async function cmdScreenshots(args) {
+  if (!args.versionId) throw new Error('--version-id <id> is required for screenshots');
+  if (!args.dir) throw new Error('--dir <path> is required for screenshots');
+  const env = loadEnv();
+  const token = await auth(env);
+  console.log(`AUTH OK — token acquired (length ${token.length}).`);
+  const files = fs.readdirSync(args.dir).filter((f) => f.endsWith('.png')).sort();
+  console.log(`uploading ${files.length} screenshots from ${args.dir}`);
+  for (let i = 0; i < files.length; i++) {
+    const filePath = path.join(args.dir, files[i]);
+    const url = `${BASE}/public/v1/application/${PKG}/version/${args.versionId}/image/screenshot/portrait/${i}`;
+    try {
+      const body = execFileSync('curl', [
+        '--silent', '--show-error', '--fail-with-body',
+        '-X', 'POST',
+        '-H', `Public-Token: ${token}`,
+        '-F', `file=@${filePath};type=image/png`,
+        url,
+      ], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+      console.log(`  [${i}] ${files[i]} ->`, body.trim());
+    } catch (e) {
+      console.log(`  [${i}] ${files[i]} FAILED ->`, `${e.stdout || ''}${e.stderr || ''}` || e.message);
+    }
+  }
 }
 
 async function cmdStatus(args) {
@@ -232,11 +282,15 @@ async function cmdPublish(args) {
     else if (cmd === 'publish') await cmdPublish(parseArgs(rest));
     else if (cmd === 'moderate') await cmdModerate(parseArgs(rest));
     else if (cmd === 'status') await cmdStatus(parseArgs(rest));
+    else if (cmd === 'delete') await cmdDelete(parseArgs(rest));
+    else if (cmd === 'screenshots') await cmdScreenshots(parseArgs(rest));
     else {
       console.error('Usage:\n  node scripts/rustore-publish.js info\n' +
         '  node scripts/rustore-publish.js publish --apk <path> [--whats-new "..."] [--publish-type INSTANTLY|MANUAL] [--no-submit] [--dry-run]\n' +
         '  node scripts/rustore-publish.js moderate --version-id <id>\n' +
-        '  node scripts/rustore-publish.js status --version-id <id>');
+        '  node scripts/rustore-publish.js status --version-id <id>\n' +
+        '  node scripts/rustore-publish.js delete --version-id <id>   (unpublished versions only)\n' +
+        '  node scripts/rustore-publish.js screenshots --version-id <id> --dir <path>');
       process.exit(2);
     }
   } catch (e) {

@@ -417,6 +417,19 @@ All production profiles point the app at the same backend:
 - REST: `https://4kub.ru/api/v1` (`EXPO_PUBLIC_API_URL`)
 - WebSocket: `wss://4kub.ru` (`EXPO_PUBLIC_WS_URL`)
 
+### Mobile OTA vs backend releases
+
+- Replacement 1.1.8 binaries use explicit Expo runtime `1.1.8-native2`; the old
+  runtime `1.1.8` must not receive bundles that use the new native modules.
+- Compatible JavaScript and bundled assets are served by the signed,
+  self-hosted Expo Updates endpoint on 4kub.ru. Build-profile channels are
+  embedded as `expo-channel-name`; use the `updates:*` package scripts.
+- Native dependencies/configuration require a new binary and a new explicit
+  runtime. Backend changes deploy independently but must remain compatible with
+  installed and embedded mobile clients.
+- Full operating procedure, rollback commands, and compatibility boundary:
+  `docs/ota-updates.md`.
+
 ### Backend environment variables
 
 `backend/config/env.ts` loads a local `.env` (skippable via `CRM_SKIP_LOCAL_ENV=true`) without overwriting already-set vars. `backend/config/security.ts` (`validateProductionConfig`) hard-validates the security-critical vars at boot when `NODE_ENV=production`.

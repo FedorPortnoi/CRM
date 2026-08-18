@@ -1,24 +1,45 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, StyleSheet } from 'react-native';
+import { SplashScreen } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
+
+// This has to run while the route module is being evaluated, before Expo
+// Router gets its first chance to auto-hide the native launch screen. If the
+// optional native module is unavailable (web/tests), Router's implementation
+// resolves harmlessly; the catch also keeps a native failure from becoming an
+// unhandled rejection during startup.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
+
+let nativeSplashHideStarted = false;
+
+/** Hide the native launch screen once, without letting a native failure break boot. */
+function hideNativeSplashOnce(): void {
+  if (nativeSplashHideStarted) return;
+  nativeSplashHideStarted = true;
+  void SplashScreen.hideAsync().catch(() => {});
+}
 
 /**
  * The animated loading screen.
  *
  * Frame 0 of assets/splash-intro.mp4 is pixel-matched to the static native
- * splash (android splashscreen_logo on #0A0A0A), and the 2.4 s clip is a
+ * splash (android splashscreen_logo on #0A0A0A), and the 5.7 s clip is a
  * seamless sine loop — so the sequence native splash → this overlay → app is
  * three states that look like one. The clip is authored in
  * tools/splash-remotion; regenerate the mp4 AND the static assets together or
  * the handoff seam becomes visible.
  *
  * Rules of the overlay:
- *  - it never ADDS waiting: `ready` (session restore finished) gates the exit,
- *    plus a short minimum so a fast boot doesn't strobe a half-played breath;
- *  - reduced motion: no video at all — the static-looking dark frame simply
+ *  - `ready` (session restore finished) gates the exit, together with a short
+ *    display minimum so a fast boot doesn't strobe a half-played breath;
+ *  - reduced motion: no animated VideoView is shown — the dark fallback simply
  *    fades when ready (the system splash already showed the same picture);
  *  - a video error is not a boot error: fall back to the plain dark frame and
  *    leave as scheduled.
+ *
+ * The native splash is held until the first video frame has actually rendered.
+ * On reduced motion or decoder failure, it is held until the dark fallback has
+ * laid out instead, so neither path exposes an unpainted React root.
  */
 const MIN_DISPLAY_MS = 1300;
 const FADE_MS = 450;
@@ -37,10 +58,10 @@ export default function AnimatedSplash({ ready, onFinish }: Props) {
     p.play();
   });
   const opacity = useRef(new Animated.Value(1)).current;
-  const mountedAt = useRef(Date.now());
   const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
   const [videoFailed, setVideoFailed] = useState(false);
   const [videoReadyAt, setVideoReadyAt] = useState<number | null>(null);
+  const [fallbackLaidOut, setFallbackLaidOut] = useState(false);
   const videoReadyRef = useRef<number | null>(null);
   const finishingRef = useRef(false);
 
@@ -72,13 +93,19 @@ export default function AnimatedSplash({ ready, onFinish }: Props) {
   }, []);
 
   useEffect(() => {
+    if (fallbackLaidOut && (reduceMotion === true || videoFailed)) {
+      hideNativeSplashOnce();
+    }
+  }, [fallbackLaidOut, reduceMotion, videoFailed]);
+
+  useEffect(() => {
     // reduceMotion === null means the AccessibilityInfo query hasn't resolved
     // yet — scheduling the exit now would misclassify the animated path as
     // reduced-motion (null !== false) and fade the overlay out instantly.
     if (!ready || reduceMotion === null || finishingRef.current) return;
     const animated = reduceMotion === false && !videoFailed;
     // The animated path counts its minimum from the first PAINTED video frame
-    // (onReadyForDisplay), not from mount — in dev the asset arrives late and
+    // (onFirstFrameRender), not from mount — in dev the asset arrives late and
     // a mount-based clock would expire before the animation was ever seen.
     if (animated && videoReadyAt === null) return; // wait for paint or the 4s safety
     const elapsed = animated ? Date.now() - (videoReadyAt as number) : Number.MAX_SAFE_INTEGER;
@@ -95,7 +122,11 @@ export default function AnimatedSplash({ ready, onFinish }: Props) {
   }, [ready, reduceMotion, videoFailed, videoReadyAt, opacity, onFinish]);
 
   return (
-    <Animated.View pointerEvents="none" style={[styles.fill, { opacity }]}>
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.fill, { opacity }]}
+      onLayout={() => setFallbackLaidOut(true)}
+    >
       {reduceMotion === false && !videoFailed ? (
         <VideoView
           player={player}
@@ -107,6 +138,7 @@ export default function AnimatedSplash({ ready, onFinish }: Props) {
               videoReadyRef.current = Date.now();
               setVideoReadyAt(videoReadyRef.current);
             }
+            hideNativeSplashOnce();
           }}
         />
       ) : null}

@@ -264,7 +264,7 @@ export function buildInviteUrl(baseUrl: string, token: string): string {
 
 /**
  * RuStore carries this through the install and hands it back via
- * getInstallReferrer(). It is a query parameter on somebody else's domain, which
+ * getInstallReferrerV2(). It is a query parameter on somebody else's domain, which
  * is exactly why it is the handoff token and not the link token.
  */
 export function buildRuStoreUrl(packageName: string, handoff: string): string {

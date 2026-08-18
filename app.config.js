@@ -1,5 +1,6 @@
 const APP_ENV = process.env.APP_ENV ?? 'development';
 const DEPLOYMENT_ENVS = new Set(['staging', 'production']);
+const UPDATE_CHANNEL_RE = /^[A-Za-z0-9._-]{1,64}$/;
 const RAILWAY_PLACEHOLDER_DOMAIN = ['railway', 'app'].join('.');
 const PLACEHOLDER_HOSTS = new Set([
   `api.${RAILWAY_PLACEHOLDER_DOMAIN}`,
@@ -55,6 +56,7 @@ module.exports = ({ config }) => {
   const envApiUrl = stringValue(process.env.EXPO_PUBLIC_API_URL);
   const fallbackApiUrl = stringValue(apiUrls[APP_ENV] ?? apiUrls['development']);
   const apiUrl = envApiUrl || (DEPLOYMENT_ENVS.has(APP_ENV) ? '' : fallbackApiUrl);
+  const updateChannel = stringValue(process.env.EXPO_UPDATES_CHANNEL);
 
   if (DEPLOYMENT_ENVS.has(APP_ENV) && process.env.EXPO_SKIP_API_URL_CHECK !== 'true') {
     const error = deploymentApiUrlError(apiUrl);
@@ -63,11 +65,40 @@ module.exports = ({ config }) => {
     }
   }
 
+  // EAS Build normally injects the profile's `channel` into the native project.
+  // Keep the same value in app config as well so local/prebuilt release binaries
+  // cannot silently omit expo-channel-name and receive no self-hosted updates.
+  // scripts/publish-update.js validates this against eas.json before exporting.
+  if (updateChannel && !UPDATE_CHANNEL_RE.test(updateChannel)) {
+    throw new Error('EXPO_UPDATES_CHANNEL must be a 1-64 character channel slug.');
+  }
+
+  if (
+    DEPLOYMENT_ENVS.has(APP_ENV) &&
+    !updateChannel &&
+    process.env.EXPO_SKIP_UPDATES_CHANNEL_CHECK !== 'true'
+  ) {
+    throw new Error(
+      `APP_ENV=${APP_ENV} requires EXPO_UPDATES_CHANNEL so the binary can request its OTA channel.`,
+    );
+  }
+
   return {
     ...config,
     android: {
       ...config.android,
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || config.android?.googleServicesFile || './google-services.json',
+    },
+    updates: {
+      ...config.updates,
+      ...(updateChannel
+        ? {
+            requestHeaders: {
+              ...config.updates?.requestHeaders,
+              'expo-channel-name': updateChannel,
+            },
+          }
+        : {}),
     },
     extra: {
       ...config.extra,

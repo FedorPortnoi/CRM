@@ -152,7 +152,14 @@ describe('mobile session hygiene', () => {
     vi.stubGlobal('fetch', mocks.fetch);
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     clearDroppedMutations();
-    useUserStore.setState({ user: null, token: null, error: null, isLoading: false });
+    useUserStore.setState({
+      user: null,
+      token: null,
+      pendingVerification: null,
+      pendingTotp: null,
+      error: null,
+      isLoading: false,
+    });
     useNotificationStore.setState({ notifications: [], unreadCount: 0, loading: false, page: 1, total: 0 });
     useChatStore.setState({ ws: null, connectingToken: null, channels: [], messages: {}, hasMore: {} });
   });
@@ -160,6 +167,124 @@ describe('mobile session hygiene', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  describe('credential-change session rotation', () => {
+    const credentialUser = {
+      id: 'user-a',
+      email: 'temporary@example.com',
+      name: 'Invitee',
+      role: 'member',
+      org_id: 'org-of-user-a',
+      must_change_password: true,
+      must_change_email: true,
+    };
+
+    function seedCredentialSession(): void {
+      mocks.secureStorage.set(TOKEN_KEY, 'revoked-caller-token');
+      mocks.secureStorage.set(USER_KEY, JSON.stringify(credentialUser));
+      useUserStore.setState({ user: credentialUser, token: 'revoked-caller-token' });
+    }
+
+    it('stores the replacement token returned after a password change', async () => {
+      seedCredentialSession();
+      mocks.fetch.mockResolvedValue(new Response(JSON.stringify({
+        data: { updated: true, token: 'fresh-password-session' },
+        meta: {},
+      }), { status: 200 }));
+
+      const outcome = await useUserStore.getState().changePassword('Brand-New-1!');
+
+      expect(outcome).toBe('authenticated');
+      expect(mocks.fetch).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/auth/me/password',
+        expect.objectContaining({
+          method: 'PATCH',
+          headers: expect.objectContaining({ Authorization: 'Bearer revoked-caller-token' }),
+        }),
+      );
+      expect(mocks.secureStorage.get(TOKEN_KEY)).toBe('fresh-password-session');
+      expect(useUserStore.getState().token).toBe('fresh-password-session');
+      expect(useUserStore.getState().user?.must_change_password).toBe(false);
+    });
+
+    it('fails safely against an older password endpoint with no replacement token', async () => {
+      seedCredentialSession();
+      mocks.fetch.mockResolvedValue(new Response(JSON.stringify({
+        data: { updated: true },
+        meta: {},
+      }), { status: 200 }));
+
+      const outcome = await useUserStore.getState().changePassword('Brand-New-1!');
+
+      expect(outcome).toBe('login-required');
+      expect(mocks.secureStorage.has(TOKEN_KEY)).toBe(false);
+      expect(useUserStore.getState().token).toBeNull();
+    });
+
+    it('stores a fail-open set-credentials replacement session', async () => {
+      seedCredentialSession();
+      const updatedUser = {
+        ...credentialUser,
+        email: 'invitee@example.com',
+        must_change_password: false,
+        must_change_email: false,
+      };
+      mocks.fetch.mockResolvedValue(new Response(JSON.stringify({
+        data: { user: updatedUser, token: 'fresh-credentials-session' },
+        meta: {},
+      }), { status: 200 }));
+
+      const outcome = await useUserStore
+        .getState()
+        .setCredentials('invitee@example.com', 'Brand-New-1!');
+
+      expect(outcome).toBe('authenticated');
+      expect(mocks.secureStorage.get(TOKEN_KEY)).toBe('fresh-credentials-session');
+      expect(useUserStore.getState()).toMatchObject({
+        token: 'fresh-credentials-session',
+        user: updatedUser,
+        pendingVerification: null,
+      });
+    });
+
+    it('keeps the verification branch sessionless until the OTP succeeds', async () => {
+      seedCredentialSession();
+      const updatedUser = {
+        ...credentialUser,
+        email: 'invitee@example.com',
+        must_change_password: false,
+        must_change_email: false,
+      };
+      mocks.fetch.mockResolvedValue(new Response(JSON.stringify({
+        data: {
+          user: updatedUser,
+          pending_verification: { user_id: 'user-a', email: 'invitee@example.com' },
+        },
+        meta: {},
+      }), { status: 200 }));
+
+      const outcome = await useUserStore
+        .getState()
+        .setCredentials('invitee@example.com', 'Brand-New-1!');
+
+      expect(outcome).toBe('verification-required');
+      expect(mocks.secureStorage.has(TOKEN_KEY)).toBe(false);
+      expect(useUserStore.getState()).toMatchObject({
+        token: null,
+        pendingVerification: { userId: 'user-a', email: 'invitee@example.com' },
+      });
+    });
+
+    it('routes the no-token compatibility outcome to login before authenticated screens', () => {
+      const source = sourceWithoutComments('src/app/set-password.tsx');
+      const fallbackIndex = source.indexOf("outcome === 'login-required'");
+      const authenticatedIndex = source.indexOf("'/onboarding' : '/(tabs)'");
+
+      expect(fallbackIndex).toBeGreaterThan(-1);
+      expect(source.slice(fallbackIndex, authenticatedIndex)).toContain("router.replace('/login'");
+      expect(fallbackIndex).toBeLessThan(authenticatedIndex);
+    });
   });
 
   describe('offline queue ownership', () => {

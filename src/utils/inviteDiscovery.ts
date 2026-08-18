@@ -137,9 +137,9 @@ export async function readClipboardHandoff(): Promise<string | null> {
  *
  * Loaded through an optional require so the app runs unchanged when the native
  * module is absent — Expo Go, an iOS build, a dev client without the config
- * plugin, or a device with no RuStore installed. The SDK also returns the value
- * exactly ONCE and then discards it, so this must not be called speculatively:
- * a call that succeeds and whose result is thrown away has burned the referrer.
+ * plugin, or a device with no RuStore installed. The V2 contract can return the
+ * same value again while RuStore still retains it, but callers should still
+ * avoid speculative lookups and unnecessary store IPC.
  */
 export async function readInstallReferrer(): Promise<string | null> {
   try {

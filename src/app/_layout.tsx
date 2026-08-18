@@ -27,6 +27,7 @@ import '../utils/network';
 import { initSentry } from '../utils/sentry';
 import Constants from 'expo-constants';
 import { API_URL } from '../utils/api';
+import { isUnauthenticatedRoute } from '../utils/authRoutes';
 
 initSentry();
 
@@ -106,17 +107,13 @@ export default function RootLayout() {
    * link the redirect has already run and its deps never change again, which is
    * why hand-testing a running app shows the invite screen working perfectly;
    * on a COLD start from the link, React runs child effects before parent ones,
-   * so InviteScreen mounts, consumes the RuStore install referrer (which the SDK
-   * hands over exactly once), fires a lookup that mints an accept token — and is
-   * then thrown away by this redirect. The referrer is gone, the accept token is
-   * stranded, and the invitee lands on a login screen for an account that does
-   * not exist.
+   * so InviteScreen mounts, starts a lookup that mints an accept token — and is
+   * then thrown away by this redirect. The accept token is stranded, and the
+   * invitee lands on a login screen for an account that does not exist.
    */
-  const UNAUTHENTICATED_ROUTES = ['/login', '/i', '/invite', '/language-select', '/verify-totp'];
-
   useEffect(() => {
     if (isRestoring || token !== null) return;
-    if (UNAUTHENTICATED_ROUTES.includes(pathname)) return;
+    if (isUnauthenticatedRoute(pathname)) return;
     router.replace('/login');
   }, [token, isRestoring, router, pathname]);
 
@@ -244,7 +241,14 @@ export default function RootLayout() {
         <OnboardingWalkthrough />
         <ConflictToast />
         {!splashDone && (
-          <AnimatedSplash key="animated-splash" ready onFinish={() => setSplashDone(true)} />
+          <AnimatedSplash
+            key="animated-splash"
+            // `/` still has asynchronous boot routing to do (language,
+            // SecureStore, and a bounded /auth/me refresh). Keep the animated
+            // layer over it until AppIndex has selected the real destination.
+            ready={pathname !== '/'}
+            onFinish={() => setSplashDone(true)}
+          />
         )}
       </GestureHandlerRootView>
     </PersistQueryClientProvider>

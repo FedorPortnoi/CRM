@@ -6,7 +6,7 @@
  *
  * WHY
  *
- * app.json declares `associatedDomains: ["applinks:4kub.ru", "applinks:www.4kub.ru"]`, but the
+ * app.json declares `associatedDomains: ["applinks:4kub.ru"]`, but the
  * App Store provisioning profile in use was minted 2026-06-04 without that capability, so every
  * iOS build died at code signing:
  *

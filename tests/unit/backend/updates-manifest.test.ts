@@ -42,6 +42,7 @@ import {
 
 const RV_KNOWN = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 const RV_ROLLBACK = 'ffffffffffffffffffffffffffffffff';
+const RV_IOS_ROLLBACK = '1.1.8-native2';
 const RV_UNKNOWN = '00000000000000000000000000000000';
 
 const UPDATE_PRODUCTION = '11111111-1111-4111-8111-111111111111';
@@ -130,11 +131,17 @@ beforeAll(async () => {
 
   writeUpdate(RV_KNOWN, 'production', UPDATE_PRODUCTION, 'production');
   writeUpdate(RV_KNOWN, 'rustore', UPDATE_RUSTORE, 'rustore');
+  writeUpdate(RV_IOS_ROLLBACK, 'production', UPDATE_PRODUCTION, 'native2');
 
   fs.mkdirSync(path.join(storeDir, RV_ROLLBACK, 'production'), { recursive: true });
   fs.writeFileSync(
     path.join(storeDir, RV_ROLLBACK, 'production', 'rollback.json'),
     JSON.stringify({ commitTime: '2026-07-30T09:15:00.000Z' }),
+    'utf8',
+  );
+  fs.writeFileSync(
+    path.join(storeDir, RV_IOS_ROLLBACK, 'production', 'rollback.ios.json'),
+    JSON.stringify({ commitTime: '2026-08-18T09:15:00.000Z' }),
     'utf8',
   );
 
@@ -380,6 +387,29 @@ describe('GET /api/v1/updates/manifest — no update available', () => {
       type: 'rollBackToEmbedded',
       parameters: { commitTime: '2026-07-30T09:15:00.000Z' },
     });
+  });
+
+  it('keeps rollback markers platform-specific', async () => {
+    const iosResponse = await manifestRequest({
+      'expo-platform': 'ios',
+      'expo-runtime-version': RV_IOS_ROLLBACK,
+    });
+    const iosParts = parseMultipart(String(iosResponse.headers['content-type']), iosResponse.body);
+    expect(JSON.parse(iosParts.find((part) => part.name === 'directive')!.body).type).toBe(
+      'rollBackToEmbedded',
+    );
+
+    const androidResponse = await manifestRequest({
+      'expo-platform': 'android',
+      'expo-runtime-version': RV_IOS_ROLLBACK,
+    });
+    const androidParts = parseMultipart(
+      String(androidResponse.headers['content-type']),
+      androidResponse.body,
+    );
+    expect(JSON.parse(androidParts.find((part) => part.name === 'manifest')!.body).runtimeVersion).toBe(
+      RV_IOS_ROLLBACK,
+    );
   });
 
   it('falls back to 404 for a protocol-0 client, which cannot read directives', async () => {

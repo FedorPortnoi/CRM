@@ -201,9 +201,9 @@ export default function InviteScreen() {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  // `discoverInvite` may consume the RuStore install referrer, which the SDK
-  // hands over exactly once. Running it twice would throw the second copy away,
-  // so it is fired from a ref-guarded effect rather than one keyed on the URL.
+  // Discovery can cross the native bridge, read the clipboard, and hit the
+  // lookup endpoint. Fire it once from a ref-guarded effect rather than repeating
+  // those side effects whenever the URL hook settles.
   const discoveryStartedRef = useRef(false);
   // Kept alongside the state so the late-URL effect below can read it without
   // re-subscribing every time the form changes.

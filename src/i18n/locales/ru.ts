@@ -15,6 +15,17 @@ const ru = {
     // Byte-identical to the server's message in PasswordSchema, so a shipped
     // client and an updated one say the same thing about the same password.
     passwordCommon: 'Этот пароль слишком простой — придумайте другой',
+    // Same five rules, same wording as PASSWORD_RULES in InviteScreen.tsx —
+    // shown live as a checklist instead of only surfacing as a rejection after
+    // the fact (see set-password.tsx).
+    passwordRulesTitle: 'Пароль должен содержать:',
+    passwordRuleLength: 'не короче 8 символов',
+    passwordRuleLower: 'строчная латинская буква (a–z)',
+    passwordRuleUpper: 'заглавная латинская буква (A–Z)',
+    passwordRuleDigit: 'цифра (0–9)',
+    passwordRuleSymbol: 'знак: ! ? # $ % и подобные',
+    passwordRuleMet: 'выполнено',
+    passwordRuleUnmet: 'не выполнено',
     signIn: 'Войти',
     loginSubtext: 'Контакты, сделки, задачи и встречи — всё в одном приложении.',
     orDivider: 'или',

@@ -33,18 +33,20 @@
  * `dist/` under the repo is already taken by the built backend that pm2 runs.
  *
  *   $UPDATES_STORE_DIR/                        default: %USERPROFILE%/crm-updates
- *     <runtimeVersion>/                        fingerprint hash, per PLATFORM
+ *     <runtimeVersion>/                        explicit native-compatibility id
  *       <channel>/                             "production" | "rustore"
- *         rollback.json                        optional: {"commitTime":"<ISO>"}
+ *         rollback.json                        optional legacy/all-platform marker
+ *         rollback.ios.json                    optional platform marker
+ *         rollback.android.json                optional platform marker
  *         <updateId>/                          a UUID, one directory per publish
  *           update.json                        metadata this module reads
  *           _expo/static/js/<platform>/<n>.hbc the launch asset (from expo export)
  *           assets/<md5>                       content-addressed assets
  *
- * `<runtimeVersion>` is per-platform on purpose. The policy in app.json is
- * `appVersion` (not `fingerprint` — that one could never converge here, see the
- * comment on resolveRuntimeVersion() in scripts/publish-update.js), but iOS and
- * Android can still ship at different versions across a release, so
+ * `<runtimeVersion>` is per-platform on purpose. app.json uses an explicit
+ * native-compatibility id (not `fingerprint` — that one could never converge
+ * here; see resolveRuntimeVersion() in scripts/publish-update.js). iOS and
+ * Android can still use different ids across a release, so
  * scripts/publish-update.js writes the same publish under each platform's own
  * runtimeVersion directory, carrying only that platform's bundle and assets. A
  * directory whose name no installed build's runtimeVersion matches is simply
@@ -189,7 +191,7 @@ export function getDefaultChannel(env: NodeJS.ProcessEnv = process.env): string 
 /**
  * Every path segment that reaches the filesystem is allowlisted, not
  * blocklisted. `runtimeVersion`, `channel` and the asset sub-path all arrive
- * from the network; a fingerprint is hex, a channel is a short slug and an
+ * from the network; a runtime is a short slug, a channel is a short slug and an
  * export path is `_expo/static/js/ios/entry-<hash>.hbc`, so nothing legitimate
  * needs a character outside this set.
  *
@@ -444,19 +446,28 @@ export function findLatestUpdate(
 export function findRollback(
   runtimeVersion: string,
   channel: string,
+  platform?: UpdatePlatform,
   env: NodeJS.ProcessEnv = process.env,
 ): RollbackDirectiveState | null {
   if (!isSafePathSegment(runtimeVersion) || !isSafePathSegment(channel)) {
     return null;
   }
 
-  const file = path.join(getUpdatesStoreDir(env), runtimeVersion, channel, 'rollback.json');
-  const parsed = readJsonFile<Partial<RollbackDirectiveState>>(file);
-  if (!parsed?.commitTime || !Number.isFinite(Date.parse(parsed.commitTime))) {
-    return null;
+  const channelDir = path.join(getUpdatesStoreDir(env), runtimeVersion, channel);
+  const markerNames = [
+    ...(platform ? [`rollback.${platform}.json`] : []),
+    // Backwards compatibility for the original all-platform marker.
+    'rollback.json',
+  ];
+
+  for (const markerName of markerNames) {
+    const parsed = readJsonFile<Partial<RollbackDirectiveState>>(path.join(channelDir, markerName));
+    if (parsed?.commitTime && Number.isFinite(Date.parse(parsed.commitTime))) {
+      return { commitTime: parsed.commitTime };
+    }
   }
 
-  return { commitTime: parsed.commitTime };
+  return null;
 }
 
 // ─── Manifest construction ───────────────────────────────────────────────────

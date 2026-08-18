@@ -19,9 +19,7 @@
         "alg": "rsa-v1_5-sha256"
       }
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.1.8-native2",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -43,8 +41,7 @@
         "ITSAppUsesNonExemptEncryption": false
       },
       "associatedDomains": [
-        "applinks:4kub.ru",
-        "applinks:www.4kub.ru"
+        "applinks:4kub.ru"
       ]
     },
     "android": {
@@ -55,7 +52,7 @@
       "edgeToEdgeEnabled": true,
       "allowBackup": false,
       "package": "com.fedorportnoi.crm",
-      "versionCode": 14,
+      "versionCode": 15,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED",
@@ -76,11 +73,6 @@
             {
               "scheme": "https",
               "host": "4kub.ru",
-              "pathPrefix": "/i"
-            },
-            {
-              "scheme": "https",
-              "host": "www.4kub.ru",
               "pathPrefix": "/i"
             }
           ],
@@ -112,6 +104,7 @@
       "expo-secure-store",
       "expo-notifications",
       "./plugins/withRuStorePush",
+      "./plugins/withRuStoreInstallReferrer",
       "expo-background-fetch",
       "expo-task-manager",
       "expo-location",

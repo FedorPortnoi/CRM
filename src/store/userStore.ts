@@ -85,6 +85,11 @@ type PendingTotp = {
   userId: string;
 };
 
+type CredentialUpdateResult =
+  | 'authenticated'
+  | 'verification-required'
+  | 'login-required';
+
 interface UserState {
   user: AuthUser | null;
   token: string | null;
@@ -101,8 +106,8 @@ interface UserState {
   enableTotp: (code: string) => Promise<{ backupCodes: string[] }>;
   disableTotp: (password: string) => Promise<void>;
   regenerateBackupCodes: (password: string) => Promise<{ backupCodes: string[] }>;
-  changePassword: (newPassword: string) => Promise<void>;
-  setCredentials: (email: string, newPassword: string) => Promise<void>;
+  changePassword: (newPassword: string) => Promise<CredentialUpdateResult>;
+  setCredentials: (email: string, newPassword: string) => Promise<CredentialUpdateResult>;
   setTimezone: (timezone: string) => Promise<void>;
   setStaySignedIn: (value: boolean) => Promise<void>;
   logout: () => Promise<void>;
@@ -462,7 +467,7 @@ export const useUserStore = create<UserState>()((set) => ({
     return { backupCodes: data.backup_codes };
   },
 
-  changePassword: async (newPassword: string): Promise<void> => {
+  changePassword: async (newPassword: string): Promise<CredentialUpdateResult> => {
     const token = await SecureStore.getItemAsync('crm_auth_token');
     const response = await fetch(`${API_URL}/auth/me/password`, {
       method: 'PATCH',
@@ -472,16 +477,32 @@ export const useUserStore = create<UserState>()((set) => ({
     const body: unknown = await response.json();
     if (!response.ok) throw new Error(extractErrorMessage(body, response.status));
 
+    const { data } = body as { data: { updated: boolean; token?: unknown } };
+
     const userJson = await SecureStore.getItemAsync('crm_auth_user');
+    let updated: AuthUser | null = null;
     if (userJson) {
       const user = JSON.parse(userJson) as AuthUser;
-      const updated = { ...user, must_change_password: false };
+      updated = { ...user, must_change_password: false };
       await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(updated));
-      set({ user: updated });
     }
+
+    if (typeof data.token === 'string' && data.token.length > 0) {
+      await SecureStore.setItemAsync('crm_auth_token', data.token);
+      set({ token: data.token, ...(updated ? { user: updated } : {}) });
+      return 'authenticated';
+    }
+
+    // Rollout compatibility: an older API revokes the current session but does
+    // not return its replacement. Do not route into authenticated screens with
+    // that dead JWT. A best-effort disk delete plus an unconditional in-memory
+    // clear makes login the explicit recovery path even if SecureStore rejects.
+    await bestEffort(() => SecureStore.deleteItemAsync('crm_auth_token'));
+    set({ token: null, ...(updated ? { user: updated } : {}) });
+    return 'login-required';
   },
 
-  setCredentials: async (email: string, newPassword: string): Promise<void> => {
+  setCredentials: async (email: string, newPassword: string): Promise<CredentialUpdateResult> => {
     const token = await SecureStore.getItemAsync('crm_auth_token');
     const response = await fetch(`${API_URL}/auth/me/credentials`, {
       method: 'PATCH',
@@ -492,7 +513,11 @@ export const useUserStore = create<UserState>()((set) => ({
     if (!response.ok) throw new Error(extractErrorMessage(body, response.status));
 
     const { data } = body as {
-      data: { user: AuthUser; pending_verification?: { user_id: string; email: string | null } };
+      data: {
+        user: AuthUser;
+        token?: unknown;
+        pending_verification?: { user_id: string; email: string | null };
+      };
     };
 
     // When the server asks for the address to be proven, the session it revoked
@@ -500,7 +525,7 @@ export const useUserStore = create<UserState>()((set) => ({
     // and hand the verify screen the same pendingVerification handle acceptInvite
     // produces. verifyOtp mints the real session one screen later.
     if (data.pending_verification) {
-      await SecureStore.deleteItemAsync('crm_auth_token');
+      await bestEffort(() => SecureStore.deleteItemAsync('crm_auth_token'));
       await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(data.user));
       set({
         user: data.user,
@@ -510,11 +535,22 @@ export const useUserStore = create<UserState>()((set) => ({
           email: data.pending_verification.email,
         },
       });
-      return;
+      return 'verification-required';
     }
 
     await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(data.user));
-    set({ user: data.user });
+    if (typeof data.token === 'string' && data.token.length > 0) {
+      await SecureStore.setItemAsync('crm_auth_token', data.token);
+      set({ user: data.user, token: data.token, pendingVerification: null });
+      return 'authenticated';
+    }
+
+    // See changePassword's compatibility branch above. The credentials did
+    // change successfully, so the user can immediately sign in with them; the
+    // only unsafe action is pretending the revoked caller token still works.
+    await bestEffort(() => SecureStore.deleteItemAsync('crm_auth_token'));
+    set({ user: data.user, token: null, pendingVerification: null });
+    return 'login-required';
   },
 
   setTimezone: async (timezone: string): Promise<void> => {

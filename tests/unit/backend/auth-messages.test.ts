@@ -272,6 +272,8 @@ describe('AuthController.setCredentials proves the address it is given', () => {
 
     const payload = reply.payload as { data: { pending_verification?: { user_id: string; email: string } } };
     expect(payload.data.pending_verification).toEqual({ user_id: 'user-1', email: 'novy@example.ru' });
+    expect(payload.data).not.toHaveProperty('token');
+    expect(reply.jwtSign).not.toHaveBeenCalled();
   });
 
   it('fails open with no mail provider: records the address unverified and skips the verification step', async () => {
@@ -307,8 +309,18 @@ describe('AuthController.setCredentials proves the address it is given', () => {
     expect(issueSpy).not.toHaveBeenCalled();
     expect(sendSpy).not.toHaveBeenCalled();
 
-    const payload = reply.payload as { data: { pending_verification?: unknown } };
+    const payload = reply.payload as { data: { pending_verification?: unknown; token?: string } };
     expect(payload.data.pending_verification).toBeUndefined();
+    expect(payload.data.token).toBe('signed-token');
+    expect(reply.jwtSign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: 'user-1',
+        org_id: orgId,
+        role: 'member',
+        sid: expect.any(String),
+      }),
+      { expiresIn: '7d' },
+    );
   });
 });
 

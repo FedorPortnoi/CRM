@@ -353,4 +353,23 @@ describe('invite screen copy and reachability', () => {
 
     expect(invite).toContain(`${CLAIM_TTL_MS / 60_000} минут`);
   });
+
+  it('keeps the install landing page claim-code lifetime aligned with the server', () => {
+    const landingPage = sourceOf('website/i.html');
+
+    expect(landingPage).toContain(`Код действует ${CLAIM_TTL_MS / 60_000} минут.`);
+  });
+
+  it('does not treat a dismissed share sheet as a saved invite link', () => {
+    const team = sourceOf('src/app/settings/team.tsx');
+    const share = team.slice(
+      team.indexOf('const shareLink'),
+      team.indexOf('const confirmRevokeInvite'),
+    );
+    const sharedAction = share.indexOf('result.action === Share.sharedAction');
+
+    expect(share).toContain('await Share.share');
+    expect(sharedAction).toBeGreaterThan(-1);
+    expect(share.indexOf('setLinkSaved(true)')).toBeGreaterThan(sharedAction);
+  });
 });

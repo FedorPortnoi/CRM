@@ -38,6 +38,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -48,6 +49,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -153,6 +155,11 @@ export default function AssistantScreen(): JSX.Element {
   // bar. Without padding the composer for that inset, the bar area shows the window
   // background instead of ours — a white strip under the input on gesture-nav devices.
   const insets = useSafeAreaInsets();
+  // The native header (Stack.Screen below) isn't part of this view's RN
+  // subtree, so KeyboardAvoidingView's own layout measurement doesn't know
+  // about it. Without subtracting it here, "padding" behavior overcompensates
+  // by the header's height — a dead gap between the composer and the keyboard.
+  const headerHeight = useHeaderHeight();
   const role = useUserStore((s) => s.user?.role);
   const canChat = role !== 'viewer';
 
@@ -165,6 +172,21 @@ export default function AssistantScreen(): JSX.Element {
   const [errorCode, setErrorCode] = useState<AssistantErrorCode | null>(null);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+
+  // The composer's bottom padding exists for the home-indicator safe area when
+  // the keyboard is closed. With the keyboard open, that same padding just
+  // shows up as dead space between the input row and the keyboard — the
+  // keyboard itself already covers that area, so drop the padding while it's
+  // up.
+  const [keyboardVisible, setKeyboardVisible] = useState<boolean>(false);
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const statusQuery = useAssistantStatus();
   const conversationsQuery = useAssistantConversations(historyOpen);
@@ -516,10 +538,16 @@ export default function AssistantScreen(): JSX.Element {
   return (
     // Root, not nested: behavior="height" measures against the window, so wrapping
     // this in another full-height View leaves the composer under the keyboard.
+    //
+    // Android gets no behavior at all: the manifest sets
+    // windowSoftInputMode="adjustResize", so the OS already shrinks the window
+    // by the keyboard's height. Adding behavior="height" here shrinks it a
+    // second time, which is the huge dead gap that used to sit between the
+    // composer and the keyboard.
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 96 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
     >
       <Stack.Screen
         options={{
@@ -592,7 +620,12 @@ export default function AssistantScreen(): JSX.Element {
         ) : null}
 
         {canChat ? (
-          <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+          <View
+            style={[
+              styles.composer,
+              { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 14) },
+            ]}
+          >
             {voiceErrorText !== null ? (
               <Text style={styles.errorText}>{voiceErrorText}</Text>
             ) : null}

@@ -31,7 +31,10 @@ export default function LanguageSelectScreen() {
       return;
     }
 
-    router.replace('/login');
+    // Invite entry is the unauthenticated front door. It discovers an install
+    // handoff when one exists and still offers an explicit route to login for
+    // existing users.
+    router.replace('/invite');
   };
 
   return (

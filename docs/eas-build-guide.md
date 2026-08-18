@@ -5,9 +5,10 @@
 - Node.js 18+
 - Install EAS CLI: npm install -g eas-cli --legacy-peer-deps
 - Log in: eas login (use Expo account: **fedorportnoi**)
-- Ensure eas.json is committed and app.json has owner: fedorportnoi
+- Ensure `eas.json` is committed and `app.json` has owner `flada`.
 - Set `EXPO_PUBLIC_API_URL` as an EAS environment variable for preview and production. It must be the real HTTPS API URL ending in `/api/v1`; `app.config.js` rejects missing or placeholder deployment URLs.
 - Set `EXPO_PUBLIC_RUSTORE_PROJECT_ID` in the EAS `rustore` environment. The config plugin fails the build when it is missing because a linked-but-uninitialized push SDK would silently lose reminders at runtime.
+- Do not reuse runtime `1.1.8` for the replacement binaries. `app.json` must resolve to the explicit native compatibility runtime `1.1.8-native2`.
 
 ## Build Commands
 
@@ -65,3 +66,4 @@ For the complete launch gate, use `docs/predeloyment-protocol.md`.
 - autoIncrement: true in the production profile lets EAS bump buildNumber / versionCode automatically.
 - Development build with a connected device: eas build --platform android --profile development
 - Target launch: Sep/Oct 2026 - plan Apple developer enrollment and Google Play registration early.
+- JavaScript/assets can ship without another store upload through the signed, self-hosted update service. Follow `docs/ota-updates.md`; native changes still require a new binary and runtime.

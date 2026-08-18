@@ -44,6 +44,7 @@ const auditMock = vi.hoisted(() => ({
 vi.mock('../../../backend/services/audit', () => auditMock);
 
 const sessionsMock = vi.hoisted(() => ({
+  createAuthSession: vi.fn(async () => 'fresh-session-id'),
   revokeAllUserSessions: vi.fn(async () => undefined),
 }));
 
@@ -60,6 +61,7 @@ type TestReply = {
   payload: unknown;
   code: ReturnType<typeof vi.fn>;
   send: ReturnType<typeof vi.fn>;
+  jwtSign: ReturnType<typeof vi.fn>;
 };
 
 function createReply(): TestReply {
@@ -74,6 +76,7 @@ function createReply(): TestReply {
       this.payload = payload;
       return this;
     }),
+    jwtSign: vi.fn(async () => 'fresh-session-token'),
   };
   return reply as unknown as TestReply;
 }
@@ -146,7 +149,12 @@ describe('GET /auth/me', () => {
 describe('PATCH /auth/me/password', () => {
   it('lets a forced reset through with no current_password at all — the regression this file exists for', async () => {
     dbMock.user.findFirst.mockResolvedValue({
-      password_hash: 'irrelevant-stale-hash', must_change_password: true,
+      id: USER,
+      organization_id: ORG,
+      role: 'member',
+      stay_signed_in: false,
+      password_hash: 'irrelevant-stale-hash',
+      must_change_password: true,
     });
     const reply = createReply();
 
@@ -161,11 +169,31 @@ describe('PATCH /auth/me/password', () => {
       data: expect.objectContaining({ must_change_password: false }),
     });
     expect(sessionsMock.revokeAllUserSessions).toHaveBeenCalledWith(USER, ORG, 'password_changed');
+    expect(sessionsMock.createAuthSession).toHaveBeenCalledWith(expect.objectContaining({
+      userId: USER,
+      organizationId: ORG,
+    }));
+    expect(sessionsMock.revokeAllUserSessions.mock.invocationCallOrder[0]).toBeLessThan(
+      sessionsMock.createAuthSession.mock.invocationCallOrder[0],
+    );
+    expect(reply.jwtSign).toHaveBeenCalledWith(
+      { sub: USER, org_id: ORG, role: 'member', sid: 'fresh-session-id' },
+      { expiresIn: '7d' },
+    );
+    expect(reply.payload).toEqual({
+      data: { updated: true, token: 'fresh-session-token' },
+      meta: {},
+    });
   });
 
   it('ignores an incorrect current_password during a forced reset rather than checking it', async () => {
     dbMock.user.findFirst.mockResolvedValue({
-      password_hash: await bcrypt.hash(CURRENT_PASSWORD, 4), must_change_password: true,
+      id: USER,
+      organization_id: ORG,
+      role: 'member',
+      stay_signed_in: false,
+      password_hash: await bcrypt.hash(CURRENT_PASSWORD, 4),
+      must_change_password: true,
     });
     const reply = createReply();
 
@@ -180,7 +208,12 @@ describe('PATCH /auth/me/password', () => {
 
   it('still requires the correct current_password for a normal, already-onboarded account', async () => {
     dbMock.user.findFirst.mockResolvedValue({
-      password_hash: await bcrypt.hash(CURRENT_PASSWORD, 4), must_change_password: false,
+      id: USER,
+      organization_id: ORG,
+      role: 'member',
+      stay_signed_in: true,
+      password_hash: await bcrypt.hash(CURRENT_PASSWORD, 4),
+      must_change_password: false,
     });
     const reply = createReply();
 
@@ -191,6 +224,7 @@ describe('PATCH /auth/me/password', () => {
 
     expect(reply.statusCode).toBe(200);
     expect(dbMock.user.update).toHaveBeenCalled();
+    expect(reply.jwtSign).toHaveBeenCalledWith(expect.any(Object), { expiresIn: '90d' });
   });
 
   it('refuses a normal account that sends no current_password — no regression from the optional schema field', async () => {

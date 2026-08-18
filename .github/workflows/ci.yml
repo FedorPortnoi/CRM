@@ -117,9 +117,24 @@ jobs:
       - name: No secret-shaped file may be tracked
         run: |
           set -euo pipefail
+          # expo-updates bakes this PUBLIC verification certificate into the
+          # app. The exception is one exact path and is content-checked so
+          # private-key material cannot hide behind the public cert's filename.
+          public_update_cert='certs/updates/certificate.pem'
+          if [ ! -f "$public_update_cert" ] \
+            || ! grep -qF -- '-----BEGIN CERTIFICATE-----' "$public_update_cert" \
+            || grep -qF -- 'PRIVATE KEY' "$public_update_cert"; then
+            echo "::error::$public_update_cert must contain only the tracked public update-signing certificate."
+            exit 1
+          fi
+
           # Tracked files only. Untracked local keys are the developer's
           # business; a tracked one is everybody's, permanently, in history.
-          matches=$(git ls-files | grep -iE '(^|/)\.env($|\.)|\.pem$|\.p8$|\.jks$|\.keystore$|service-account.*\.json$|^credentials\.json$|(^|/)id_rsa' | grep -v '\.env\.example$' || true)
+          matches=$(git ls-files \
+            | grep -iE '(^|/)\.env($|\.)|\.pem$|\.p8$|\.jks$|\.keystore$|service-account.*\.json$|^credentials\.json$|(^|/)id_rsa' \
+            | grep -vxF '.env.example' \
+            | grep -vxF "$public_update_cert" \
+            || true)
           if [ -n "$matches" ]; then
             echo "::error::Secret-shaped files are tracked in git:"
             echo "$matches"
@@ -134,10 +149,31 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for rule in '.env' '.env.bak*' '*.pem' '*.p8' '*.jks' '*.keystore' 'credentials.json'; do
+          for rule in \
+            '.env' '.env.bak*' '.env.*.bak' '*.env.backup' \
+            '.dev.vars' '.dev.vars.*' '.auth-state.json' \
+            '*.p8' '*.jks' '*.keystore' '*.key' 'id_rsa*' \
+            'credentials.json' '*service-account*.json' \
+            'google-play-service-account.json' 'firebase-service-account.json' \
+            'backend-log.txt'; do
             if grep -qxF "$rule" .gitignore 2>/dev/null && ! grep -qxF "$rule" .easignore 2>/dev/null; then
               echo "::error::.gitignore has '$rule' but .easignore does not — it would upload to EAS."
               missing=1
             fi
           done
+          # PEMs are deliberately asymmetric: EAS must receive the one public
+          # OTA verification certificate, while every locally-held private-key
+          # shape remains excluded. A blanket *.pem rule previously broke two
+          # iOS builds by swallowing the required certificate.
+          for rule in 'certs/**/private-key.pem' 'certs/**/public-key.pem' 'rustore-private-key.pem'; do
+            if ! grep -qxF "$rule" .easignore 2>/dev/null; then
+              echo "::error::.easignore is missing private PEM rule '$rule'."
+              missing=1
+            fi
+          done
+          if grep -qxF 'certs/updates/certificate.pem' .easignore 2>/dev/null; then
+            echo "::error::.easignore excludes the public OTA verification certificate required by EAS."
+            missing=1
+          fi
+
           [ "$missing" -eq 0 ] && echo ".easignore mirrors .gitignore's secret rules."

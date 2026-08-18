@@ -286,7 +286,7 @@ async function manifestHandler(request: FastifyRequest, reply: FastifyReply): Pr
   // A rollback outranks anything published beside it. It exists precisely for
   // the case where the newest publish is the broken thing, so it must not be
   // possible for that publish to win.
-  const rollback = findRollback(runtimeVersion, channel);
+  const rollback = findRollback(runtimeVersion, channel, platform);
   if (rollback) {
     if (normalizedProtocol < 1) {
       return reply.status(404).send({

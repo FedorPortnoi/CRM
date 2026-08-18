@@ -87,6 +87,9 @@ type RegisteredRoute = { method: string; url: string };
 
 let routes: RegisteredRoute[] = [];
 
+// Importing and registering the entire real route tree regularly approaches the
+// default 10 s hook limit on a busy CI runner; this is integration setup, not a
+// unit-sized hook.
 beforeAll(async () => {
   const app = Fastify();
   app.setValidatorCompiler(validatorCompiler);
@@ -124,7 +127,7 @@ beforeAll(async () => {
   await app.ready();
   routes = collected;
   await app.close();
-});
+}, 30_000);
 
 describe('every deal-reading route is declared', () => {
   it('boots the real route tree', () => {

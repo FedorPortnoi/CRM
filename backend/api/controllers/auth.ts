@@ -748,12 +748,22 @@ export const AuthController = {
       metadata: { email, verification_required: requireVerify },
     });
 
+    // Changing credentials invalidates every session, including the one that
+    // authorized this request. When email verification is not available and we
+    // deliberately fail open, replace that just-revoked session before sending
+    // the user onward. The verification branch must remain sessionless: only a
+    // successful OTP is allowed to mint its next token.
+    const token = requireVerify
+      ? undefined
+      : await signSessionToken(request, reply, user);
+
     return reply.send({
       data: {
         user: publicUser(user),
         // Present only when the client must now collect an OTP. Same shape the
         // invite-accept flow returns, so verify.tsx consumes it unchanged.
         ...(requireVerify ? { pending_verification: { user_id: request.user.sub, email } } : {}),
+        ...(token ? { token } : {}),
       },
       meta: {},
     });
@@ -1175,7 +1185,14 @@ export const AuthController = {
 
     const user = await db.user.findFirst({
       where: { id: request.user.sub, organization_id: request.user.org_id },
-      select: { password_hash: true, must_change_password: true },
+      select: {
+        id: true,
+        organization_id: true,
+        role: true,
+        stay_signed_in: true,
+        password_hash: true,
+        must_change_password: true,
+      },
     });
     if (!user) {
       return reply.code(401).send({
@@ -1214,7 +1231,13 @@ export const AuthController = {
       metadata: {},
     });
 
-    return reply.send({ data: { updated: true }, meta: {} });
+    // The password change revoked the request's own session along with every
+    // other device. Rotate this device onto a fresh, independently revocable
+    // session so the successful response never leaves the caller holding a JWT
+    // whose sid has already been revoked.
+    const token = await signSessionToken(request, reply, user);
+
+    return reply.send({ data: { updated: true, token }, meta: {} });
   },
 
   /**

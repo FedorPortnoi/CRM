@@ -13,6 +13,16 @@ const en = {
     passwordWeak: 'At least 8 characters, with an upper and lower case letter, a digit and a symbol',
     passwordTooLong: 'Password is too long (max 72 bytes; Cyrillic letters count as two)',
     passwordCommon: 'That password is too common — please choose another',
+    // Same five rules as PASSWORD_RULES in InviteScreen.tsx, shown live as a
+    // checklist instead of only surfacing as a rejection after the fact.
+    passwordRulesTitle: 'Your password needs:',
+    passwordRuleLength: 'at least 8 characters',
+    passwordRuleLower: 'a lowercase letter (a–z)',
+    passwordRuleUpper: 'an uppercase letter (A–Z)',
+    passwordRuleDigit: 'a digit (0–9)',
+    passwordRuleSymbol: 'a symbol: ! ? # $ % or similar',
+    passwordRuleMet: 'done',
+    passwordRuleUnmet: 'not done',
     signIn: 'Sign in',
     loginSubtext: 'Manage contacts, deals, tasks, and meetings in one simple workspace.',
     orDivider: 'or',

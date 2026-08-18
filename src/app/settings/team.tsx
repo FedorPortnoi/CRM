@@ -304,12 +304,20 @@ export default function TeamScreen(): JSX.Element {
     Alert.alert('Скопировано');
   }, [createdInvite]);
 
-  const shareLink = useCallback(() => {
+  const shareLink = useCallback(async () => {
     if (!createdInvite) return;
-    setLinkSaved(true);
-    void Share.share({
-      message: `Привет, ${createdInvite.name}! Тебя пригласили в 4КУБ.\n\nОткрой ссылку на телефоне — она сама приведёт к приложению и подставит приглашение:\n${createdInvite.url}\n\nСсылка действует 24 часа, потом перестанет работать.`,
-    });
+    try {
+      const result = await Share.share({
+        message: `Привет, ${createdInvite.name}! Тебя пригласили в 4КУБ.\n\nОткрой ссылку на телефоне — она сама приведёт к приложению и подставит приглашение:\n${createdInvite.url}\n\nСсылка действует 24 часа, потом перестанет работать.`,
+      });
+      // iOS reports an explicit dismissal. Keep the close warning armed in
+      // that case because this is the only screen that can ever show the URL.
+      if (result.action === Share.sharedAction) {
+        setLinkSaved(true);
+      }
+    } catch {
+      Alert.alert('Не удалось поделиться', 'Скопируйте ссылку и отправьте её вручную.');
+    }
   }, [createdInvite]);
 
   const confirmRevokeInvite = useCallback((invite: PendingInvite) => {

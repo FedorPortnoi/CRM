@@ -43,6 +43,11 @@ yarn-error.log*
 /codex-*.md
 /tmp-*.txt
 /tmp-test-runs/
+/store-assets/
+/asc-screenshots.js
+/crm-now.md
+/distr-new.md
+/workers/openai-proxy/resp.json
 
 # OS
 .DS_Store

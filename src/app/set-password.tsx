@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Lock, Mail, Eye, EyeOff, ShieldCheck } from 'lucide-react-native';
+import { Lock, Mail, Eye, EyeOff, ShieldCheck, CheckCircle2, Circle } from 'lucide-react-native';
 import { Stack } from 'expo-router';
 import { useUserStore } from '../store/userStore';
 import { checkPassword } from '../utils/password';
@@ -13,6 +13,20 @@ import { useTheme } from '../hooks/useTheme';
 import { ThemeColors } from '../theme';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * The same five checks checkPassword()/PasswordSchema enforce, decomposed so
+ * each can be shown live rather than only surfacing as one rejection message
+ * after a failed submit — mirrors PASSWORD_RULES in InviteScreen.tsx (same
+ * wording, same regexes) rather than inventing a second phrasing of the policy.
+ */
+const PASSWORD_RULES: { key: string; test: (value: string) => boolean }[] = [
+  { key: 'passwordRuleLength', test: (v) => v.length >= 8 },
+  { key: 'passwordRuleLower', test: (v) => /[a-z]/.test(v) },
+  { key: 'passwordRuleUpper', test: (v) => /[A-Z]/.test(v) },
+  { key: 'passwordRuleDigit', test: (v) => /[0-9]/.test(v) },
+  { key: 'passwordRuleSymbol', test: (v) => /[^A-Za-z0-9]/.test(v) },
+];
 
 export default function SetPasswordScreen() {
   const { t } = useTranslation();
@@ -60,19 +74,27 @@ export default function SetPasswordScreen() {
     }
     setIsLoading(true);
     try {
+      let outcome: 'authenticated' | 'verification-required' | 'login-required';
       if (needsEmail) {
-        await setCredentials(email.trim().toLowerCase(), newPassword);
+        outcome = await setCredentials(email.trim().toLowerCase(), newPassword);
         // The server may now require the new address to be proven by an emailed
         // code. When it does, setCredentials populates pendingVerification and the
         // old session is gone — the only next screen is /verify, which mints the
-        // real session on success. Read it back off the store rather than the
-        // closed-over `user`, which predates this call.
-        if (useUserStore.getState().pendingVerification !== null) {
+        // real session on success. The explicit outcome prevents the revoked
+        // caller token from being mistaken for an authenticated result.
+        if (outcome === 'verification-required') {
           router.replace('/verify' as never);
           return;
         }
       } else {
-        await changePassword(newPassword);
+        outcome = await changePassword(newPassword);
+      }
+      // Compatibility with an API version that already revokes all sessions but
+      // predates replacement-token responses: explicitly sign in again instead
+      // of entering the tabs with a JWT whose session id is dead.
+      if (outcome === 'login-required') {
+        router.replace('/login' as never);
+        return;
       }
       router.replace((user?.onboarding_completed === false ? '/onboarding' : '/(tabs)') as never);
     } catch (e: unknown) {
@@ -137,6 +159,27 @@ export default function SetPasswordScreen() {
             <TouchableOpacity onPress={() => setShowNew(p => !p)} style={styles.eyeButton} accessibilityRole="button">
               {showNew ? <EyeOff size={18} color={colors.textMuted} /> : <Eye size={18} color={colors.textMuted} />}
             </TouchableOpacity>
+          </View>
+
+          <View accessibilityRole="summary" style={styles.rules}>
+            <Text style={styles.rulesTitle}>{t('auth.passwordRulesTitle')}</Text>
+            {PASSWORD_RULES.map((rule) => {
+              const met = rule.test(newPassword);
+              const label = t(`auth.${rule.key}`);
+              return (
+                <View key={rule.key} style={styles.ruleRow}>
+                  {met
+                    ? <CheckCircle2 size={16} color={colors.green} />
+                    : <Circle size={16} color={colors.textMuted} />}
+                  <Text
+                    accessibilityLabel={`${label}: ${met ? t('auth.passwordRuleMet') : t('auth.passwordRuleUnmet')}`}
+                    style={[styles.ruleText, met && styles.ruleTextMet]}
+                  >
+                    {label}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
 
           <View style={styles.fieldWrapper}>
@@ -214,6 +257,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   input: { flex: 1, fontSize: 15, color: c.text1 },
   inputFlex: { flex: 1 },
   eyeButton: { padding: 4 },
+  rules: {
+    borderWidth: 1, borderColor: c.border, borderRadius: 12, backgroundColor: c.bg,
+    paddingVertical: 12, paddingHorizontal: 14, marginBottom: 14,
+  },
+  rulesTitle: { fontSize: 12.5, fontWeight: '700', color: c.text1, marginBottom: 8 },
+  ruleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 },
+  ruleText: { flex: 1, fontSize: 12.5, lineHeight: 17, color: c.textMuted },
+  ruleTextMet: { color: c.green, fontWeight: '700' },
   button: {
     height: 52, backgroundColor: c.orange, borderRadius: 12,
     justifyContent: 'center', alignItems: 'center', marginTop: 4,
