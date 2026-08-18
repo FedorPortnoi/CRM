@@ -31,7 +31,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.fedorportnoi.crm",
-      "buildNumber": "40",
+      "buildNumber": "41",
       "infoPlist": {
         "CFBundleDisplayName": "4КУБ",
         "NSLocationWhenInUseUsageDescription": "CRM uses your location for field visit tracking.",
