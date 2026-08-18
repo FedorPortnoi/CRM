@@ -86,7 +86,11 @@ export default function AppIndex() {
       if (mounted) {
         const cachedUser = parseStoredUser(userJson);
         if (!token || !cachedUser) {
-          router.replace('/login');
+          // The invite-code screen is the front door now, not the login form —
+          // it auto-discovers an install-time invite (referrer/clipboard/link)
+          // and falls back to its own manual-code entry with a "already have an
+          // account? log in" escape hatch, so an existing user is never stuck.
+          router.replace('/invite' as never);
           return;
         }
 

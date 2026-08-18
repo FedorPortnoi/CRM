@@ -46,7 +46,8 @@ import { isCommonPassword } from '../utils/password-blocklist';
  */
 
 type Phase = 'resolving' | 'found' | 'code';
-type FocusedField = 'phone' | 'email' | 'password' | 'confirm' | 'code' | null;
+type FoundStep = 'email' | 'password' | 'phone';
+type FocusedField = 'phone' | 'email' | 'password' | 'code' | null;
 
 const COLORS = {
   cream: '#E8DDD6',
@@ -180,13 +181,16 @@ export default function InviteScreen() {
   const { isLoading, error, acceptInvite } = useUserStore();
 
   const [phase, setPhase] = useState<Phase>('resolving');
+  // Three fields, three screens: entered one at a time rather than on one long
+  // form, so «Далее» always means «the field I am looking at is valid» instead
+  // of leaving all three errors to surface together at the very end.
+  const [foundStep, setFoundStep] = useState<FoundStep>('email');
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [focusedField, setFocusedField] = useState<FocusedField>(null);
 
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const [code, setCode] = useState('');
@@ -195,10 +199,6 @@ export default function InviteScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [submitAttempted, setSubmitAttempted] = useState(false);
-
-  const emailRef = useRef<TextInput>(null);
-  const passwordRef = useRef<TextInput>(null);
-  const confirmRef = useRef<TextInput>(null);
 
   // `discoverInvite` may consume the RuStore install referrer, which the SDK
   // hands over exactly once. Running it twice would throw the second copy away,
@@ -213,6 +213,7 @@ export default function InviteScreen() {
     previewRef.current = found;
     setPreview(found);
     setLookupError(null);
+    setFoundStep('email');
     setPhase('found');
   }, []);
 
@@ -285,19 +286,19 @@ export default function InviteScreen() {
   const trimmedPhone = useMemo(() => phone.trim(), [phone]);
   const phoneDigits = useMemo(() => trimmedPhone.replace(/\D/g, ''), [trimmedPhone]);
 
-  /** First unmet requirement, in reading order, or null when the form is good. */
-  const validate = useCallback((): string | null => {
-    if (trimmedPhone.length === 0) return 'Введите номер телефона';
-    if (phoneDigits.length < 10 || trimmedPhone.length < 10) {
-      return 'Номер телефона должен содержать не менее 10 цифр';
-    }
-    if (trimmedPhone.length > 20) return 'Номер телефона слишком длинный — не более 20 символов';
-
+  // One validator per step, so «Далее» can check only the field the invitee is
+  // looking at. handleAccept below runs all three again as a last defense —
+  // cheap, and it means a step can never be skipped past by anything (a stale
+  // ref, a fast double-tap) without the final submit still catching it.
+  const validateEmailStep = useCallback((): string | null => {
     if (normalizedEmail.length === 0) return 'Введите адрес электронной почты';
     if (!EMAIL_PATTERN.test(normalizedEmail)) {
       return 'Проверьте адрес электронной почты: он должен быть вида имя@компания.ру';
     }
+    return null;
+  }, [normalizedEmail]);
 
+  const validatePasswordStep = useCallback((): string | null => {
     if (password.length === 0) return 'Придумайте пароль';
     const failed = PASSWORD_RULES.find((rule) => !rule.test(password));
     if (failed !== undefined) return failed.message;
@@ -313,17 +314,52 @@ export default function InviteScreen() {
     if (isCommonPassword(password)) {
       return 'Этот пароль слишком простой — придумайте другой';
     }
-
-    if (confirmPassword.length === 0) return 'Повторите пароль ещё раз';
-    if (password !== confirmPassword) return 'Пароли не совпадают';
-
     return null;
-  }, [trimmedPhone, phoneDigits, normalizedEmail, password, confirmPassword]);
+  }, [password]);
+
+  const validatePhoneStep = useCallback((): string | null => {
+    if (trimmedPhone.length === 0) return 'Введите номер телефона';
+    if (phoneDigits.length < 10 || trimmedPhone.length < 10) {
+      return 'Номер телефона должен содержать не менее 10 цифр';
+    }
+    if (trimmedPhone.length > 20) return 'Номер телефона слишком длинный — не более 20 символов';
+    return null;
+  }, [trimmedPhone, phoneDigits]);
+
+  const goToPasswordStep = useCallback(() => {
+    const problem = validateEmailStep();
+    if (problem !== null) {
+      setFormError(problem);
+      return;
+    }
+    setFormError(null);
+    setFoundStep('password');
+  }, [validateEmailStep]);
+
+  const goToPhoneStep = useCallback(() => {
+    const problem = validatePasswordStep();
+    if (problem !== null) {
+      setFormError(problem);
+      return;
+    }
+    setFormError(null);
+    setFoundStep('phone');
+  }, [validatePasswordStep]);
+
+  const goBackToEmailStep = useCallback(() => {
+    setFormError(null);
+    setFoundStep('email');
+  }, []);
+
+  const goBackToPasswordStep = useCallback(() => {
+    setFormError(null);
+    setFoundStep('password');
+  }, []);
 
   const handleAccept = useCallback(async () => {
     if (preview === null || isLoading) return;
 
-    const problem = validate();
+    const problem = validateEmailStep() ?? validatePasswordStep() ?? validatePhoneStep();
     if (problem !== null) {
       setFormError(problem);
       return;
@@ -359,7 +395,10 @@ export default function InviteScreen() {
     if (state.user !== null && state.token !== null) {
       router.replace('/(tabs)' as never);
     }
-  }, [preview, isLoading, validate, acceptInvite, trimmedPhone, normalizedEmail, password, router]);
+  }, [
+    preview, isLoading, validateEmailStep, validatePasswordStep, validatePhoneStep,
+    acceptInvite, trimmedPhone, normalizedEmail, password, router,
+  ]);
 
   const handleCodeChange = useCallback((raw: string) => {
     setCode(raw.toUpperCase().replace(CLAIM_REJECT_PATTERN, '').slice(0, CLAIM_CODE_LENGTH));
@@ -386,6 +425,7 @@ export default function InviteScreen() {
     setFormError(null);
     setLookupError(null);
     setSubmitAttempted(false);
+    setFoundStep('email');
     setPhase('code');
   }, []);
 
@@ -473,237 +513,296 @@ export default function InviteScreen() {
                     </View>
                   </View>
 
-                  <Text style={styles.subtitle}>
-                    Осталось придумать, как вы будете входить. Аккаунт создаётся сразу после
-                    отправки.
+                  <Text style={styles.stepIndicator}>
+                    {foundStep === 'email' && 'Шаг 1 из 3 — почта'}
+                    {foundStep === 'password' && 'Шаг 2 из 3 — пароль'}
+                    {foundStep === 'phone' && 'Шаг 3 из 3 — телефон'}
                   </Text>
 
-                  {/* Phone */}
-                  <View
-                    style={[
-                      styles.inputWrapper,
-                      focusedField === 'phone' && styles.inputWrapperFocused,
-                    ]}
-                  >
-                    <Ionicons
-                      name="call-outline"
-                      size={25}
-                      color={COLORS.mutedTerracotta}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      accessibilityLabel="Номер телефона"
-                      autoComplete="tel"
-                      autoCorrect={false}
-                      keyboardType="phone-pad"
-                      maxLength={20}
-                      onBlur={() => setFocusedField(null)}
-                      onChangeText={setPhone}
-                      onFocus={() => setFocusedField('phone')}
-                      onSubmitEditing={() => emailRef.current?.focus()}
-                      placeholder="Телефон, например +7 999 123-45-67"
-                      placeholderTextColor={COLORS.dustyRose}
-                      returnKeyType="next"
-                      selectionColor={COLORS.burntOrange}
-                      style={styles.input}
-                      value={phone}
-                    />
-                  </View>
-                  <View style={styles.noticeRow}>
-                    <Ionicons
-                      name="information-circle-outline"
-                      size={17}
-                      color={COLORS.mutedTerracotta}
-                      style={styles.noticeIcon}
-                    />
-                    <Text style={styles.noticeText}>
-                      Код по СМС не придёт — приложение не отправляет СМС. Номер нужен только
-                      для того, чтобы коллеги могли с вами связаться.
-                    </Text>
-                  </View>
+                  {/* ------------------------------------------------------ */}
+                  {/* 2a. EMAIL                                               */}
+                  {/* ------------------------------------------------------ */}
+                  {foundStep === 'email' && (
+                    <>
+                      <Text style={styles.subtitle}>
+                        Укажите почту, на которую будете входить.
+                      </Text>
 
-                  {/* Email */}
-                  <View
-                    style={[
-                      styles.inputWrapper,
-                      focusedField === 'email' && styles.inputWrapperFocused,
-                    ]}
-                  >
-                    <Ionicons
-                      name="mail-outline"
-                      size={25}
-                      color={COLORS.mutedTerracotta}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      accessibilityLabel="Адрес электронной почты"
-                      autoCapitalize="none"
-                      autoComplete="email"
-                      autoCorrect={false}
-                      inputMode="email"
-                      keyboardType="email-address"
-                      onBlur={() => setFocusedField(null)}
-                      onChangeText={setEmail}
-                      onFocus={() => setFocusedField('email')}
-                      onSubmitEditing={() => passwordRef.current?.focus()}
-                      placeholder="Электронная почта"
-                      placeholderTextColor={COLORS.dustyRose}
-                      ref={emailRef}
-                      returnKeyType="next"
-                      selectionColor={COLORS.burntOrange}
-                      style={styles.input}
-                      value={email}
-                    />
-                  </View>
+                      <View
+                        style={[
+                          styles.inputWrapper,
+                          focusedField === 'email' && styles.inputWrapperFocused,
+                        ]}
+                      >
+                        <Ionicons
+                          name="mail-outline"
+                          size={25}
+                          color={COLORS.mutedTerracotta}
+                          style={styles.inputIcon}
+                        />
+                        <TextInput
+                          accessibilityLabel="Адрес электронной почты"
+                          autoCapitalize="none"
+                          autoComplete="email"
+                          autoCorrect={false}
+                          autoFocus
+                          inputMode="email"
+                          keyboardType="email-address"
+                          onBlur={() => setFocusedField(null)}
+                          onChangeText={setEmail}
+                          onFocus={() => setFocusedField('email')}
+                          onSubmitEditing={goToPasswordStep}
+                          placeholder="Электронная почта"
+                          placeholderTextColor={COLORS.dustyRose}
+                          returnKeyType="next"
+                          selectionColor={COLORS.burntOrange}
+                          style={styles.input}
+                          value={email}
+                        />
+                      </View>
 
-                  {/* Password */}
-                  <View
-                    style={[
-                      styles.inputWrapper,
-                      focusedField === 'password' && styles.inputWrapperFocused,
-                    ]}
-                  >
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={25}
-                      color={COLORS.mutedTerracotta}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      accessibilityLabel="Новый пароль"
-                      autoCapitalize="none"
-                      autoComplete="new-password"
-                      autoCorrect={false}
-                      onBlur={() => setFocusedField(null)}
-                      onChangeText={setPassword}
-                      onFocus={() => setFocusedField('password')}
-                      onSubmitEditing={() => confirmRef.current?.focus()}
-                      placeholder="Пароль"
-                      placeholderTextColor={COLORS.dustyRose}
-                      ref={passwordRef}
-                      returnKeyType="next"
-                      secureTextEntry={!showPassword}
-                      selectionColor={COLORS.burntOrange}
-                      style={styles.input}
-                      value={password}
-                    />
-                    <Pressable
-                      accessibilityLabel={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
-                      accessibilityRole="button"
-                      hitSlop={12}
-                      onPress={() => setShowPassword((v) => !v)}
-                      style={({ pressed }) => [styles.eyeButton, pressed && styles.pressed]}
-                    >
-                      <Ionicons
-                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                        size={26}
-                        color={COLORS.mutedTerracotta}
-                      />
-                    </Pressable>
-                  </View>
+                      {visibleError !== null && (
+                        <Text accessibilityLiveRegion="polite" style={styles.errorText}>
+                          {visibleError}
+                        </Text>
+                      )}
 
-                  {/* Live rule checklist — the same five rules the server enforces */}
-                  <View accessibilityRole="summary" style={styles.rules}>
-                    <Text style={styles.rulesTitle}>Пароль должен содержать:</Text>
-                    {PASSWORD_RULES.map((rule) => {
-                      const met = rule.test(password);
-                      return (
-                        <View key={rule.label} style={styles.ruleRow}>
-                          <Ionicons
-                            name={met ? 'checkmark-circle' : 'ellipse-outline'}
-                            size={16}
-                            color={met ? COLORS.green : COLORS.dustyRose}
-                          />
-                          <Text
-                            accessibilityLabel={`${rule.label}: ${met ? 'выполнено' : 'не выполнено'}`}
-                            style={[styles.ruleText, met && styles.ruleTextMet]}
-                          >
-                            {rule.label}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </View>
+                      <Pressable
+                        accessibilityLabel="Далее — придумать пароль"
+                        accessibilityRole="button"
+                        onPress={goToPasswordStep}
+                        style={({ pressed }) => [styles.primaryButtonShadow, pressed && styles.pressed]}
+                      >
+                        <LinearGradient
+                          colors={[COLORS.burntOrange, COLORS.darkBrown]}
+                          start={{ x: 0, y: 0.5 }}
+                          end={{ x: 1, y: 0.5 }}
+                          style={styles.primaryButton}
+                        >
+                          <Text style={styles.primaryButtonText}>Далее</Text>
+                        </LinearGradient>
+                      </Pressable>
 
-                  {/* Confirm password */}
-                  <View
-                    style={[
-                      styles.inputWrapper,
-                      focusedField === 'confirm' && styles.inputWrapperFocused,
-                    ]}
-                  >
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={25}
-                      color={COLORS.mutedTerracotta}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      accessibilityLabel="Повторите пароль"
-                      autoCapitalize="none"
-                      autoComplete="new-password"
-                      autoCorrect={false}
-                      onBlur={() => setFocusedField(null)}
-                      onChangeText={setConfirmPassword}
-                      onFocus={() => setFocusedField('confirm')}
-                      onSubmitEditing={() => {
-                        void handleAccept();
-                      }}
-                      placeholder="Повторите пароль"
-                      placeholderTextColor={COLORS.dustyRose}
-                      ref={confirmRef}
-                      returnKeyType="done"
-                      secureTextEntry={!showPassword}
-                      selectionColor={COLORS.burntOrange}
-                      style={styles.input}
-                      value={confirmPassword}
-                    />
-                  </View>
-
-                  {visibleError !== null && (
-                    <Text accessibilityLiveRegion="polite" style={styles.errorText}>
-                      {visibleError}
-                    </Text>
+                      {/* The accept token lives 30 minutes; the claim code outlives a
+                          failed submit, so retyping it is the way back in. */}
+                      <Pressable
+                        accessibilityRole="button"
+                        hitSlop={8}
+                        onPress={restartWithCode}
+                        style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
+                      >
+                        <Text style={styles.linkText}>Ввести код приглашения вручную</Text>
+                      </Pressable>
+                    </>
                   )}
 
-                  <Pressable
-                    accessibilityLabel="Принять приглашение и создать аккаунт"
-                    accessibilityRole="button"
-                    accessibilityState={{ disabled: isLoading }}
-                    disabled={isLoading}
-                    onPress={() => {
-                      void handleAccept();
-                    }}
-                    style={({ pressed }) => [
-                      styles.primaryButtonShadow,
-                      pressed && !isLoading && styles.pressed,
-                      isLoading && styles.disabled,
-                    ]}
-                  >
-                    <LinearGradient
-                      colors={[COLORS.burntOrange, COLORS.darkBrown]}
-                      start={{ x: 0, y: 0.5 }}
-                      end={{ x: 1, y: 0.5 }}
-                      style={styles.primaryButton}
-                    >
-                      {isLoading ? (
-                        <ActivityIndicator color={COLORS.white} />
-                      ) : (
-                        <Text style={styles.primaryButtonText}>Принять приглашение</Text>
-                      )}
-                    </LinearGradient>
-                  </Pressable>
+                  {/* ------------------------------------------------------ */}
+                  {/* 2b. PASSWORD                                            */}
+                  {/* ------------------------------------------------------ */}
+                  {foundStep === 'password' && (
+                    <>
+                      <Text style={styles.subtitle}>Придумайте пароль для входа.</Text>
 
-                  {/* The accept token lives 30 minutes; the claim code outlives a
-                      failed submit, so retyping it is the way back in. */}
-                  <Pressable
-                    accessibilityRole="button"
-                    hitSlop={8}
-                    onPress={restartWithCode}
-                    style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
-                  >
-                    <Text style={styles.linkText}>Ввести код приглашения вручную</Text>
-                  </Pressable>
+                      <View
+                        style={[
+                          styles.inputWrapper,
+                          focusedField === 'password' && styles.inputWrapperFocused,
+                        ]}
+                      >
+                        <Ionicons
+                          name="lock-closed-outline"
+                          size={25}
+                          color={COLORS.mutedTerracotta}
+                          style={styles.inputIcon}
+                        />
+                        <TextInput
+                          accessibilityLabel="Новый пароль"
+                          autoCapitalize="none"
+                          autoComplete="new-password"
+                          autoCorrect={false}
+                          autoFocus
+                          onBlur={() => setFocusedField(null)}
+                          onChangeText={setPassword}
+                          onFocus={() => setFocusedField('password')}
+                          onSubmitEditing={goToPhoneStep}
+                          placeholder="Пароль"
+                          placeholderTextColor={COLORS.dustyRose}
+                          returnKeyType="next"
+                          secureTextEntry={!showPassword}
+                          selectionColor={COLORS.burntOrange}
+                          style={styles.input}
+                          value={password}
+                        />
+                        <Pressable
+                          accessibilityLabel={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                          accessibilityRole="button"
+                          hitSlop={12}
+                          onPress={() => setShowPassword((v) => !v)}
+                          style={({ pressed }) => [styles.eyeButton, pressed && styles.pressed]}
+                        >
+                          <Ionicons
+                            name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                            size={26}
+                            color={COLORS.mutedTerracotta}
+                          />
+                        </Pressable>
+                      </View>
+
+                      {/* Live rule checklist — the same five rules the server enforces */}
+                      <View accessibilityRole="summary" style={styles.rules}>
+                        <Text style={styles.rulesTitle}>Пароль должен содержать:</Text>
+                        {PASSWORD_RULES.map((rule) => {
+                          const met = rule.test(password);
+                          return (
+                            <View key={rule.label} style={styles.ruleRow}>
+                              <Ionicons
+                                name={met ? 'checkmark-circle' : 'ellipse-outline'}
+                                size={16}
+                                color={met ? COLORS.green : COLORS.dustyRose}
+                              />
+                              <Text
+                                accessibilityLabel={`${rule.label}: ${met ? 'выполнено' : 'не выполнено'}`}
+                                style={[styles.ruleText, met && styles.ruleTextMet]}
+                              >
+                                {rule.label}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+
+                      {visibleError !== null && (
+                        <Text accessibilityLiveRegion="polite" style={styles.errorText}>
+                          {visibleError}
+                        </Text>
+                      )}
+
+                      <Pressable
+                        accessibilityLabel="Далее — указать телефон"
+                        accessibilityRole="button"
+                        onPress={goToPhoneStep}
+                        style={({ pressed }) => [styles.primaryButtonShadow, pressed && styles.pressed]}
+                      >
+                        <LinearGradient
+                          colors={[COLORS.burntOrange, COLORS.darkBrown]}
+                          start={{ x: 0, y: 0.5 }}
+                          end={{ x: 1, y: 0.5 }}
+                          style={styles.primaryButton}
+                        >
+                          <Text style={styles.primaryButtonText}>Далее</Text>
+                        </LinearGradient>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        hitSlop={8}
+                        onPress={goBackToEmailStep}
+                        style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
+                      >
+                        <Text style={styles.linkText}>‹ Назад</Text>
+                      </Pressable>
+                    </>
+                  )}
+
+                  {/* ------------------------------------------------------ */}
+                  {/* 2c. PHONE — final step, submits                        */}
+                  {/* ------------------------------------------------------ */}
+                  {foundStep === 'phone' && (
+                    <>
+                      <Text style={styles.subtitle}>
+                        Остался номер телефона — чтобы коллеги могли с вами связаться.
+                      </Text>
+
+                      <View
+                        style={[
+                          styles.inputWrapper,
+                          focusedField === 'phone' && styles.inputWrapperFocused,
+                        ]}
+                      >
+                        <Ionicons
+                          name="call-outline"
+                          size={25}
+                          color={COLORS.mutedTerracotta}
+                          style={styles.inputIcon}
+                        />
+                        <TextInput
+                          accessibilityLabel="Номер телефона"
+                          autoComplete="tel"
+                          autoCorrect={false}
+                          autoFocus
+                          keyboardType="phone-pad"
+                          maxLength={20}
+                          onBlur={() => setFocusedField(null)}
+                          onChangeText={setPhone}
+                          onFocus={() => setFocusedField('phone')}
+                          onSubmitEditing={() => {
+                            void handleAccept();
+                          }}
+                          placeholder="Телефон, например +7 999 123-45-67"
+                          placeholderTextColor={COLORS.dustyRose}
+                          returnKeyType="done"
+                          selectionColor={COLORS.burntOrange}
+                          style={styles.input}
+                          value={phone}
+                        />
+                      </View>
+                      <View style={styles.noticeRow}>
+                        <Ionicons
+                          name="information-circle-outline"
+                          size={17}
+                          color={COLORS.mutedTerracotta}
+                          style={styles.noticeIcon}
+                        />
+                        <Text style={styles.noticeText}>
+                          Код по СМС не придёт — приложение не отправляет СМС. Номер нужен только
+                          для того, чтобы коллеги могли с вами связаться.
+                        </Text>
+                      </View>
+
+                      {visibleError !== null && (
+                        <Text accessibilityLiveRegion="polite" style={styles.errorText}>
+                          {visibleError}
+                        </Text>
+                      )}
+
+                      <Pressable
+                        accessibilityLabel="Принять приглашение и создать аккаунт"
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: isLoading }}
+                        disabled={isLoading}
+                        onPress={() => {
+                          void handleAccept();
+                        }}
+                        style={({ pressed }) => [
+                          styles.primaryButtonShadow,
+                          pressed && !isLoading && styles.pressed,
+                          isLoading && styles.disabled,
+                        ]}
+                      >
+                        <LinearGradient
+                          colors={[COLORS.burntOrange, COLORS.darkBrown]}
+                          start={{ x: 0, y: 0.5 }}
+                          end={{ x: 1, y: 0.5 }}
+                          style={styles.primaryButton}
+                        >
+                          {isLoading ? (
+                            <ActivityIndicator color={COLORS.white} />
+                          ) : (
+                            <Text style={styles.primaryButtonText}>Принять приглашение</Text>
+                          )}
+                        </LinearGradient>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        hitSlop={8}
+                        onPress={goBackToPasswordStep}
+                        style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
+                      >
+                        <Text style={styles.linkText}>‹ Назад</Text>
+                      </Pressable>
+                    </>
+                  )}
                 </>
               )}
 
@@ -924,6 +1023,15 @@ const styles = StyleSheet.create({
     color: COLORS.mutedTerracotta,
     fontSize: 13,
     lineHeight: 18,
+    textAlign: 'center',
+  },
+  stepIndicator: {
+    marginTop: 14,
+    color: COLORS.mutedTerracotta,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
     textAlign: 'center',
   },
 

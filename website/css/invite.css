@@ -56,6 +56,14 @@
   gap: 0.9rem;
 }
 
+/* `display: flex` above has the same specificity as the browser's built-in
+   `[hidden] { display: none }` rule, and author styles win ties over the
+   user-agent stylesheet — so the `.hidden = true/false` toggle in the inline
+   script had no visual effect at all. All three states (loading, invite,
+   dead-link) rendered stacked on top of each other on every load, meaning
+   every invitee saw "Ссылка недействительна" under their own real invite. */
+.iv-body[hidden] { display: none; }
+
 .iv-eyebrow {
   font-size: var(--t-label);
   letter-spacing: 0.16em;
