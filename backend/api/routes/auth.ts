@@ -40,10 +40,9 @@ export const PasswordSchema = z.string()
    * refusing it. The list is offline and in this repo: no HaveIBeenPwned, no
    * network call on the account-creation path. See services/password-blocklist.ts.
    *
-   * Deliberately NOT applied to LoginSchema or JoinSchema below. Those read an
-   * already-stored credential; putting the policy there would lock out every
-   * existing user whose password is on the list, and this product has no
-   * password-reset flow and no SMS to rescue them with.
+   * Deliberately NOT applied to LoginSchema below. That reads an already-stored
+   * credential; putting the policy there would lock out every existing user
+   * whose password is on the list.
    */
   .superRefine((v, ctx) => {
     if (Buffer.byteLength(v, 'utf8') > 72) {
@@ -154,18 +153,6 @@ const AcceptInviteSchema = z.object({
   phone: z.string().trim().min(10).max(20),
   email: z.string().trim().toLowerCase().email(),
   password: PasswordSchema,
-});
-
-const JoinSchema = z.object({
-  company_code: z.string().trim().min(1).max(64),
-  username: z.string().trim().min(1).max(201),
-  password: z.string().min(1),
-});
-
-const InviteSchema = z.object({
-  first_name: z.string().trim().min(1).max(100),
-  last_name: z.string().trim().min(1).max(100),
-  role: z.enum(ASSIGNABLE_ROLE_VALUES),
 });
 
 const SetCredentialsSchema = z.object({
@@ -337,11 +324,6 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     onRequest: enforceAuthIpFloor,
     schema: { body: LoginSchema },
   }, AuthController.login);
-  fastify.post('/join', {
-    config: { rateLimit: authRateLimit(5, '15 minutes') },
-    onRequest: enforceAuthIpFloor,
-    schema: { body: JoinSchema },
-  }, AuthController.join);
   /**
    * Password recovery. Both public — the person using them cannot sign in, which
    * is the whole point — and both carrying the same two layers of limiting as
@@ -370,9 +352,6 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: { querystring: AuditQuerySchema },
   }, AuthController.listAuditEvents);
   fastify.get('/users', AuthController.listUsers);
-  fastify.post('/users/invite', {
-    schema: { body: InviteSchema },
-  }, AuthController.inviteUser);
   fastify.patch('/users/:id/deactivate', AuthController.deactivateUser);
   fastify.patch('/users/:id/role', {
     schema: { body: z.object({ role: z.enum(ASSIGNABLE_ROLE_VALUES) }) },
@@ -409,8 +388,6 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: { body: AcceptInviteSchema },
   }, InviteController.accept);
 
-  fastify.get('/company-code', AuthController.getCompanyCode);
-  fastify.post('/company-code/rotate', AuthController.rotateCompanyCode);
   // Lets the client reconcile its cached user snapshot against the server on
   // app boot instead of trusting SecureStore indefinitely — see AuthController.getMe.
   fastify.get('/me', AuthController.getMe);

@@ -148,7 +148,6 @@ function isPublicApiRoute(request: FastifyRequest): boolean {
     (
       path === '/api/v1/auth' ||
       path === '/api/v1/auth/login' ||
-      path === '/api/v1/auth/join' ||
       path === '/api/v1/auth/verify' ||
       path === '/api/v1/auth/verify/resend' ||
       // Step two of login/join after either returns 403 TOTP_REQUIRED. No
@@ -365,10 +364,6 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
     return { action: 'team.read_members', reason: 'listing members requires team.read' };
   }
 
-  if (method === 'POST' && path === '/api/v1/auth/users/invite') {
-    return { action: 'team.admin', reason: 'Only owners and admins can invite members' };
-  }
-
   if (/^\/api\/v1\/auth\/users\/[^/]+\/deactivate$/.test(path)) {
     return { action: 'team.admin', reason: 'Only owners and admins can deactivate members' };
   }
@@ -379,14 +374,6 @@ function adminRoutePolicy(request: FastifyRequest): AdminRoutePolicy | null {
 
   if (/^\/api\/v1\/auth\/users\/[^/]+\/role$/.test(path)) {
     return { action: 'team.role_change', reason: 'Only owners can change user roles' };
-  }
-
-  if (isReadOnlyMethod(method) && path === '/api/v1/auth/company-code') {
-    return { action: 'team.admin', reason: 'Only owners and admins can view the company code' };
-  }
-
-  if (method === 'POST' && path === '/api/v1/auth/company-code/rotate') {
-    return { action: 'team.admin', reason: 'Only owners and admins can rotate the company code' };
   }
 
   // Invite links. The three public redemption routes below (/invites/open,
@@ -588,9 +575,9 @@ export async function enforceAuthenticatedApiRequest(
    * sessions for addresses nobody had proven. A session that outlives the fact
    * it was issued on is the same defect in both cases.
    *
-   * It asks `is_verified`, not `email_verified`, so this door, /auth/login
-   * (auth.ts) and /auth/join all ask the identical question of the identical
-   * column — email_verified has never gated anything and was, until this change,
+   * It asks `is_verified`, not `email_verified`, so this door and /auth/login
+   * (auth.ts) ask the identical question of the identical column —
+   * email_verified has never gated anything and was, until this change,
    * written `true` for addresses that had proven nothing.
    *
    * 403 rather than 401: the account is real and the token is valid, so the

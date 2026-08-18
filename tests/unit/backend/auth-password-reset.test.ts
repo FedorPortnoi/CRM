@@ -4,8 +4,7 @@
  * docs/architecture/api-design.md listed `POST /auth/forgot-password` and
  * `POST /auth/reset-password` as shipped for two years while neither was ever
  * registered. `PATCH /auth/me/password` and `/auth/me/credentials` both sit
- * behind jwtVerify, so they are useless to someone locked out;
- * `POST /auth/users/invite` CREATES an account rather than resetting one; and
+ * behind jwtVerify, so they are useless to someone locked out, and
  * `/auth/invites/accept` answers 409 EMAIL_TAKEN at the victim's own address.
  * The remedy was a hand-written UPDATE against the production User table — psql
  * against live customer data as the standard support procedure, which is a

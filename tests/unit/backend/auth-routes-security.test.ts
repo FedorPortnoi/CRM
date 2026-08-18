@@ -228,9 +228,9 @@ describe('auth routes security validation', () => {
  *
  * These two routes are the only way back in for a user who forgets their
  * password: /auth/me/password and /auth/me/credentials both sit behind
- * jwtVerify, /auth/users/invite CREATES an account rather than resetting one,
- * and /auth/invites/accept answers 409 EMAIL_TAKEN at the victim's own address.
- * The remedy used to be a hand-written UPDATE against the production database.
+ * jwtVerify, and /auth/invites/accept answers 409 EMAIL_TAKEN at the victim's
+ * own address. The remedy used to be a hand-written UPDATE against the
+ * production database.
  */
 describe('password recovery routes', () => {
   let app: ReturnType<typeof Fastify>;

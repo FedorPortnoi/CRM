@@ -46,8 +46,8 @@ import { isCommonPassword } from '../utils/password-blocklist';
  */
 
 type Phase = 'resolving' | 'found' | 'code';
-type FoundStep = 'email' | 'password' | 'phone';
-type FocusedField = 'phone' | 'email' | 'password' | 'code' | null;
+type FoundStep = 'email' | 'password' | 'confirmPassword' | 'phone';
+type FocusedField = 'phone' | 'email' | 'password' | 'confirm' | 'code' | null;
 
 const COLORS = {
   cream: '#E8DDD6',
@@ -181,9 +181,9 @@ export default function InviteScreen() {
   const { isLoading, error, acceptInvite } = useUserStore();
 
   const [phase, setPhase] = useState<Phase>('resolving');
-  // Three fields, three screens: entered one at a time rather than on one long
+  // Four fields, four screens: entered one at a time rather than on one long
   // form, so «Далее» always means «the field I am looking at is valid» instead
-  // of leaving all three errors to surface together at the very end.
+  // of leaving all four errors to surface together at the very end.
   const [foundStep, setFoundStep] = useState<FoundStep>('email');
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [focusedField, setFocusedField] = useState<FocusedField>(null);
@@ -191,6 +191,7 @@ export default function InviteScreen() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const [code, setCode] = useState('');
@@ -317,6 +318,12 @@ export default function InviteScreen() {
     return null;
   }, [password]);
 
+  const validateConfirmPasswordStep = useCallback((): string | null => {
+    if (confirmPassword.length === 0) return 'Повторите пароль ещё раз';
+    if (password !== confirmPassword) return 'Пароли не совпадают';
+    return null;
+  }, [password, confirmPassword]);
+
   const validatePhoneStep = useCallback((): string | null => {
     if (trimmedPhone.length === 0) return 'Введите номер телефона';
     if (phoneDigits.length < 10 || trimmedPhone.length < 10) {
@@ -336,15 +343,25 @@ export default function InviteScreen() {
     setFoundStep('password');
   }, [validateEmailStep]);
 
-  const goToPhoneStep = useCallback(() => {
+  const goToConfirmPasswordStep = useCallback(() => {
     const problem = validatePasswordStep();
     if (problem !== null) {
       setFormError(problem);
       return;
     }
     setFormError(null);
-    setFoundStep('phone');
+    setFoundStep('confirmPassword');
   }, [validatePasswordStep]);
+
+  const goToPhoneStep = useCallback(() => {
+    const problem = validateConfirmPasswordStep();
+    if (problem !== null) {
+      setFormError(problem);
+      return;
+    }
+    setFormError(null);
+    setFoundStep('phone');
+  }, [validateConfirmPasswordStep]);
 
   const goBackToEmailStep = useCallback(() => {
     setFormError(null);
@@ -356,10 +373,16 @@ export default function InviteScreen() {
     setFoundStep('password');
   }, []);
 
+  const goBackToConfirmPasswordStep = useCallback(() => {
+    setFormError(null);
+    setFoundStep('confirmPassword');
+  }, []);
+
   const handleAccept = useCallback(async () => {
     if (preview === null || isLoading) return;
 
-    const problem = validateEmailStep() ?? validatePasswordStep() ?? validatePhoneStep();
+    const problem =
+      validateEmailStep() ?? validatePasswordStep() ?? validateConfirmPasswordStep() ?? validatePhoneStep();
     if (problem !== null) {
       setFormError(problem);
       return;
@@ -396,8 +419,8 @@ export default function InviteScreen() {
       router.replace('/(tabs)' as never);
     }
   }, [
-    preview, isLoading, validateEmailStep, validatePasswordStep, validatePhoneStep,
-    acceptInvite, trimmedPhone, normalizedEmail, password, router,
+    preview, isLoading, validateEmailStep, validatePasswordStep, validateConfirmPasswordStep,
+    validatePhoneStep, acceptInvite, trimmedPhone, normalizedEmail, password, router,
   ]);
 
   const handleCodeChange = useCallback((raw: string) => {
@@ -514,9 +537,10 @@ export default function InviteScreen() {
                   </View>
 
                   <Text style={styles.stepIndicator}>
-                    {foundStep === 'email' && 'Шаг 1 из 3 — почта'}
-                    {foundStep === 'password' && 'Шаг 2 из 3 — пароль'}
-                    {foundStep === 'phone' && 'Шаг 3 из 3 — телефон'}
+                    {foundStep === 'email' && 'Шаг 1 из 4 — почта'}
+                    {foundStep === 'password' && 'Шаг 2 из 4 — пароль'}
+                    {foundStep === 'confirmPassword' && 'Шаг 3 из 4 — подтверждение пароля'}
+                    {foundStep === 'phone' && 'Шаг 4 из 4 — телефон'}
                   </Text>
 
                   {/* ------------------------------------------------------ */}
@@ -624,7 +648,7 @@ export default function InviteScreen() {
                           onBlur={() => setFocusedField(null)}
                           onChangeText={setPassword}
                           onFocus={() => setFocusedField('password')}
-                          onSubmitEditing={goToPhoneStep}
+                          onSubmitEditing={goToConfirmPasswordStep}
                           placeholder="Пароль"
                           placeholderTextColor={COLORS.dustyRose}
                           returnKeyType="next"
@@ -678,9 +702,9 @@ export default function InviteScreen() {
                       )}
 
                       <Pressable
-                        accessibilityLabel="Далее — указать телефон"
+                        accessibilityLabel="Далее — подтвердить пароль"
                         accessibilityRole="button"
-                        onPress={goToPhoneStep}
+                        onPress={goToConfirmPasswordStep}
                         style={({ pressed }) => [styles.primaryButtonShadow, pressed && styles.pressed]}
                       >
                         <LinearGradient
@@ -705,7 +729,92 @@ export default function InviteScreen() {
                   )}
 
                   {/* ------------------------------------------------------ */}
-                  {/* 2c. PHONE — final step, submits                        */}
+                  {/* 2c. CONFIRM PASSWORD                                    */}
+                  {/* ------------------------------------------------------ */}
+                  {foundStep === 'confirmPassword' && (
+                    <>
+                      <Text style={styles.subtitle}>Повторите пароль ещё раз.</Text>
+
+                      <View
+                        style={[
+                          styles.inputWrapper,
+                          focusedField === 'confirm' && styles.inputWrapperFocused,
+                        ]}
+                      >
+                        <Ionicons
+                          name="lock-closed-outline"
+                          size={25}
+                          color={COLORS.mutedTerracotta}
+                          style={styles.inputIcon}
+                        />
+                        <TextInput
+                          accessibilityLabel="Повторите пароль"
+                          autoCapitalize="none"
+                          autoComplete="new-password"
+                          autoCorrect={false}
+                          autoFocus
+                          onBlur={() => setFocusedField(null)}
+                          onChangeText={setConfirmPassword}
+                          onFocus={() => setFocusedField('confirm')}
+                          onSubmitEditing={goToPhoneStep}
+                          placeholder="Повторите пароль"
+                          placeholderTextColor={COLORS.dustyRose}
+                          returnKeyType="next"
+                          secureTextEntry={!showPassword}
+                          selectionColor={COLORS.burntOrange}
+                          style={styles.input}
+                          value={confirmPassword}
+                        />
+                        <Pressable
+                          accessibilityLabel={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                          accessibilityRole="button"
+                          hitSlop={12}
+                          onPress={() => setShowPassword((v) => !v)}
+                          style={({ pressed }) => [styles.eyeButton, pressed && styles.pressed]}
+                        >
+                          <Ionicons
+                            name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                            size={26}
+                            color={COLORS.mutedTerracotta}
+                          />
+                        </Pressable>
+                      </View>
+
+                      {visibleError !== null && (
+                        <Text accessibilityLiveRegion="polite" style={styles.errorText}>
+                          {visibleError}
+                        </Text>
+                      )}
+
+                      <Pressable
+                        accessibilityLabel="Далее — указать телефон"
+                        accessibilityRole="button"
+                        onPress={goToPhoneStep}
+                        style={({ pressed }) => [styles.primaryButtonShadow, pressed && styles.pressed]}
+                      >
+                        <LinearGradient
+                          colors={[COLORS.burntOrange, COLORS.darkBrown]}
+                          start={{ x: 0, y: 0.5 }}
+                          end={{ x: 1, y: 0.5 }}
+                          style={styles.primaryButton}
+                        >
+                          <Text style={styles.primaryButtonText}>Далее</Text>
+                        </LinearGradient>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        hitSlop={8}
+                        onPress={goBackToPasswordStep}
+                        style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
+                      >
+                        <Text style={styles.linkText}>‹ Назад</Text>
+                      </Pressable>
+                    </>
+                  )}
+
+                  {/* ------------------------------------------------------ */}
+                  {/* 2d. PHONE — final step, submits                        */}
                   {/* ------------------------------------------------------ */}
                   {foundStep === 'phone' && (
                     <>
@@ -796,7 +905,7 @@ export default function InviteScreen() {
                       <Pressable
                         accessibilityRole="button"
                         hitSlop={8}
-                        onPress={goBackToPasswordStep}
+                        onPress={goBackToConfirmPasswordStep}
                         style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
                       >
                         <Text style={styles.linkText}>‹ Назад</Text>

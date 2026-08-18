@@ -2,9 +2,9 @@
  * Opt-in TOTP two-factor authentication.
  *
  * Three properties matter more than the rest and get their own describe block:
- *   • login AND join both refuse to mint a session for a totp_enabled account
- *     until POST /auth/2fa/verify completes the second factor — join is not an
- *     alternate door that skips it (see requiresTotpChallenge in controllers/auth.ts);
+ *   • login refuses to mint a session for a totp_enabled account until
+ *     POST /auth/2fa/verify completes the second factor (see
+ *     requiresTotpChallenge in controllers/auth.ts);
  *   • a backup code is SINGLE-USE. The second attempt with the identical code
  *     must fail even though the first one just succeeded — this is the one
  *     test in the file that would silently let an intercepted backup code be
@@ -167,7 +167,7 @@ async function baseUser(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe('login and join both gate on totp_enabled', () => {
+describe('login gates on totp_enabled', () => {
   it('login returns 403 TOTP_REQUIRED when totp_enabled is true', async () => {
     dbMock.user.findUnique.mockResolvedValue(await baseUser({ totp_enabled: true }));
     const reply = createReply();
@@ -195,40 +195,6 @@ describe('login and join both gate on totp_enabled', () => {
     expect(reply.jwtSign).toHaveBeenCalled();
   });
 
-  async function callJoin(user: Record<string, unknown>): Promise<TestReply> {
-    dbMock.org.findFirst.mockResolvedValue({
-      id: ORG,
-      join_code_expires_at: new Date(Date.now() + 86_400_000),
-    });
-    dbMock.user.findFirst.mockResolvedValue(user);
-    const reply = createReply();
-    await AuthController.join(
-      request({ company_code: 'ROMASHKA-7F3Q', username: 'petr', password: PASSWORD }),
-      reply as never,
-    );
-    return reply;
-  }
-
-  it('join has the same gate: refuses a totp_enabled account before minting a session', async () => {
-    const reply = await callJoin(await baseUser({ totp_enabled: true }));
-
-    expect(reply.statusCode).toBe(403);
-    expect(reply.payload).toEqual({
-      error: {
-        code: 'TOTP_REQUIRED',
-        message: 'Enter your two-factor authentication code.',
-        user_id: USER_ID,
-      },
-    });
-    expect(reply.jwtSign).not.toHaveBeenCalled();
-  });
-
-  it('join admits a totp-disabled account normally', async () => {
-    const reply = await callJoin(await baseUser({ totp_enabled: false }));
-
-    expect(reply.statusCode).toBe(200);
-    expect(reply.jwtSign).toHaveBeenCalled();
-  });
 });
 
 describe('AuthController.enableTotp', () => {

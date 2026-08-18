@@ -144,7 +144,6 @@ All paths below are relative to the `/api/v1` prefix. `(admin)` marks routes gat
 |--------|------|---------|
 | POST | `/auth` | Register: create org + owner user, sign JWT (rate limit 5/15min) — (public) |
 | POST | `/auth/login` | Login by email/password (rate limit 5/15min, keyed by ip+email) — (public) |
-| POST | `/auth/join` | Join an existing org via company code (rate limit 5/15min) — (public) |
 | POST | `/auth/verify` | Verify the email OTP (rate limit 10/15min) — (public) |
 | POST | `/auth/verify/resend` | Resend OTP (rate limit 3/5min) — (public) |
 | POST | `/auth/logout` | Revoke the current session |
@@ -152,12 +151,9 @@ All paths below are relative to the `/api/v1` prefix. `(admin)` marks routes gat
 | GET | `/auth/sessions` | List the user's active sessions |
 | GET | `/auth/audit` | List org audit events, filterable/paginated — (admin) |
 | GET | `/auth/users` | List users in the org |
-| POST | `/auth/users/invite` | Create/invite a user (first/last name + role) |
 | PATCH | `/auth/users/:id/deactivate` | Deactivate a user |
 | PATCH | `/auth/users/:id/role` | Change a user's role |
 | PATCH | `/auth/users/:id/manager` | Set/clear a user's manager (role hierarchy) |
-| GET | `/auth/company-code` | Get the org's join code |
-| POST | `/auth/company-code/rotate` | Rotate the join code |
 | PATCH | `/auth/me/password` | Change own password (current + new) |
 | PATCH | `/auth/me/credentials` | Set own email + password (invited-user activation) |
 
@@ -319,10 +315,10 @@ All paths below are relative to the `/api/v1` prefix. `(admin)` marks routes gat
 
 ### Auth model
 - **Global JWT preHandler.** A single `preHandler` hook (`enforceAuthenticatedApiRequest`) runs on every `/api/v1/*` request. It calls `request.jwtVerify()`, confirms the token carries `sub`/`org_id`/`sid`, re-checks the user is still active in the org (DB lookup), and validates the session is not revoked/expired. Individual route files also attach a per-route `authenticate` preHandler, but it short-circuits once the global hook has populated `request.user`.
-- **Public allowlist.** Only these are exempt from JWT verification: `POST /auth`, `POST /auth/login`, `POST /auth/join`, `POST /auth/verify`, `POST /auth/verify/resend`; `GET /ws`; `GET /calendar/sync/yandex/callback` (OAuth redirect); and `POST /calendar/webhooks/yandex` (CalDAV poll webhook). Everything else requires a valid token.
+- **Public allowlist.** Only these are exempt from JWT verification: `POST /auth`, `POST /auth/login`, `POST /auth/verify`, `POST /auth/verify/resend`; `GET /ws`; `GET /calendar/sync/yandex/callback` (OAuth redirect); and `POST /calendar/webhooks/yandex` (CalDAV poll webhook). Everything else requires a valid token.
 - **adminRoutePolicy (owner/admin only).** After authentication, `adminRoutePolicy` gates sensitive paths to `owner`/`admin` roles (403 + audit-log `denied` otherwise): audit read (`GET /auth/audit`), all exports (`/export/*` and analytics export), all imports (`/import/*`), bulk/CSV contact operations (`/contacts/import-csv`, `/contacts/bulk-assign`, `/contacts/bulk-archive`, and `.../merge`), pipeline/stage administration (mutating `/deals/pipelines*`, `/deals/stages*`), workflow administration (mutating `/workflows*`), example-data clearing (`DELETE /onboarding/example-data`), and org settings (`PATCH /org/settings`).
 - **Viewer role.** Users with role `viewer` are read-only — any non-`GET`/`HEAD`/`OPTIONS` request is rejected with 403.
-- **Rate limits.** A global limiter applies (default 100/min, configurable), with tighter per-route limits on auth (register/login/join 5/15min, verify 10/15min, resend 3/5min, keyed by IP and, for login, IP+email), imports (3–10 per 10min/hour), exports (5/hour), and the Yandex webhook (20/min).
+- **Rate limits.** A global limiter applies (default 100/min, configurable), with tighter per-route limits on auth (register/login 5/15min, verify 10/15min, resend 3/5min, keyed by IP and, for login, IP+email), imports (3–10 per 10min/hour), exports (5/hour), and the Yandex webhook (20/min).
 
 ## Data Model (Prisma / PostgreSQL)
 

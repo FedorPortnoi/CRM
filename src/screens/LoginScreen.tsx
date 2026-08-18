@@ -21,8 +21,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../store/userStore';
 
-type ActiveTab = 'login' | 'join';
-type FocusedField = 'email' | 'password' | 'companyCode' | 'username' | null;
+type FocusedField = 'email' | 'password' | null;
 
 const COLORS = {
   cream: '#E8DDD6',
@@ -39,14 +38,11 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function LoginScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { user, isLoading, error, pendingVerification, pendingTotp, login, join } = useUserStore();
+  const { user, isLoading, error, pendingVerification, pendingTotp, login } = useUserStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [companyCode, setCompanyCode] = useState('');
-  const [username, setUsername] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('login');
   const [focusedField, setFocusedField] = useState<FocusedField>(null);
 
   const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
@@ -63,42 +59,28 @@ export default function LoginScreen() {
     }
   }, [user, isLoading, error, router]);
 
-  // login() and join() both land here — instead of an error banner — when the
-  // password was right but the address on file still needs its code. Same
-  // pendingVerification handle acceptInvite() produces, so /verify needs no
-  // changes to serve either origin.
+  // login() lands here — instead of an error banner — when the password was
+  // right but the address on file still needs its code. Same pendingVerification
+  // handle acceptInvite() produces, so /verify needs no changes to serve either
+  // origin. join() (still in userStore.ts, no UI reaches it from this screen
+  // any more — see the tab switcher below) produces the same shape and would
+  // land here too if anything ever called it again.
   useEffect(() => {
     if (!isLoading && pendingVerification !== null) {
       router.replace('/verify' as never);
     }
   }, [pendingVerification, isLoading, router]);
 
-  // Same shape, different challenge: login()/join() land here — instead of an
-  // error banner — when the password was right and the account has 2FA turned
-  // on. verifyTotp mints the real session one screen later.
+  // Same shape, different challenge: login() lands here — instead of an error
+  // banner — when the password was right and the account has 2FA turned on.
+  // verifyTotp mints the real session one screen later.
   useEffect(() => {
     if (!isLoading && pendingTotp !== null) {
       router.replace('/verify-totp' as never);
     }
   }, [pendingTotp, isLoading, router]);
 
-  const isJoin = activeTab === 'join';
-
-  const handleTabPress = (tab: ActiveTab) => {
-    setActiveTab(tab);
-    setPassword('');
-    setShowPassword(false);
-  };
-
   const handleLogin = async () => {
-    if (isJoin) {
-      if (!companyCode.trim() || !username.trim() || !password) {
-        Alert.alert(t('auth.fillFields'), t('auth.joinFillHint'));
-        return;
-      }
-      await join(companyCode.trim(), username.trim(), password);
-      return;
-    }
     if (!normalizedEmail || !password) {
       Alert.alert('Заполните поля', 'Введите email и пароль, чтобы продолжить.');
       return;
@@ -151,148 +133,73 @@ export default function LoginScreen() {
               <Text style={styles.title}>4КУБ</Text>
               <Text style={styles.subtitle}>{t('auth.loginSubtext')}</Text>
 
-              {/* Tab switcher */}
+              {/* Tab switcher. The second tab is not a tab in the usual sense —
+                  it never becomes the active pane, it navigates straight to
+                  /invite. It used to toggle in place to a company-code +
+                  manager-password form (`/auth/join`, still in userStore.ts,
+                  now unreachable from here on purpose): a real new hire read
+                  "Я новый сотрудник" and typed in the invite claim code they
+                  were holding, not a manager's shared password they never
+                  had — the two forms just happened to sit one tap apart. */}
               <View style={styles.tabs}>
                 <Pressable
                   accessibilityRole="tab"
-                  accessibilityState={{ selected: activeTab === 'login' }}
-                  onPress={() => handleTabPress('login')}
-                  style={({ pressed }) => [
-                    styles.tab,
-                    styles.loginTab,
-                    activeTab === 'login' ? styles.tabActive : styles.tabInactive,
-                    pressed && styles.pressed,
-                  ]}
+                  accessibilityState={{ selected: true }}
+                  style={[styles.tab, styles.loginTab, styles.tabActive]}
                 >
-                  <Text
-                    style={[
-                      styles.tabText,
-                      activeTab === 'login' ? styles.tabTextActive : styles.tabTextInactive,
-                    ]}
-                  >
+                  <Text style={[styles.tabText, styles.tabTextActive]}>
                     {t('auth.tabLogin')}
                   </Text>
                 </Pressable>
 
                 <Pressable
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected: activeTab === 'join' }}
-                  onPress={() => handleTabPress('join')}
+                  accessibilityLabel="Перейти к вводу кода приглашения"
+                  accessibilityRole="button"
+                  onPress={() => router.push('/invite' as never)}
                   style={({ pressed }) => [
                     styles.tab,
                     styles.registerTab,
-                    activeTab === 'join' ? styles.tabActive : styles.tabInactive,
+                    styles.tabInactive,
                     pressed && styles.pressed,
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.tabText,
-                      activeTab === 'join' ? styles.tabTextActive : styles.tabTextInactive,
-                    ]}
-                  >
+                  <Text style={[styles.tabText, styles.tabTextInactive]}>
                     {t('auth.tabJoin')}
                   </Text>
                 </Pressable>
               </View>
 
-              {isJoin && (
-                <Text style={styles.joinHint}>{t('auth.joinHint')}</Text>
-              )}
-
-              {isJoin ? (
-                <>
-                  {/* Company code input */}
-                  <View
-                    style={[
-                      styles.inputWrapper,
-                      focusedField === 'companyCode' && styles.inputWrapperFocused,
-                    ]}
-                  >
-                    <Ionicons
-                      name="business-outline"
-                      size={25}
-                      color={COLORS.mutedTerracotta}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      autoCapitalize="characters"
-                      autoCorrect={false}
-                      onBlur={() => setFocusedField(null)}
-                      onChangeText={setCompanyCode}
-                      onFocus={() => setFocusedField('companyCode')}
-                      onSubmitEditing={() => setFocusedField('username')}
-                      placeholder={t('auth.companyCode')}
-                      placeholderTextColor={COLORS.dustyRose}
-                      returnKeyType="next"
-                      selectionColor={COLORS.burntOrange}
-                      style={styles.input}
-                      value={companyCode}
-                    />
-                  </View>
-
-                  {/* Username input */}
-                  <View
-                    style={[
-                      styles.inputWrapper,
-                      focusedField === 'username' && styles.inputWrapperFocused,
-                    ]}
-                  >
-                    <Ionicons
-                      name="person-outline"
-                      size={25}
-                      color={COLORS.mutedTerracotta}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      autoCapitalize="words"
-                      autoCorrect={false}
-                      onBlur={() => setFocusedField(null)}
-                      onChangeText={setUsername}
-                      onFocus={() => setFocusedField('username')}
-                      onSubmitEditing={() => setFocusedField('password')}
-                      placeholder={t('auth.username')}
-                      placeholderTextColor={COLORS.dustyRose}
-                      returnKeyType="next"
-                      selectionColor={COLORS.burntOrange}
-                      style={styles.input}
-                      value={username}
-                    />
-                  </View>
-                </>
-              ) : (
-                /* Email input */
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    focusedField === 'email' && styles.inputWrapperFocused,
-                  ]}
-                >
-                  <Ionicons
-                    name="mail-outline"
-                    size={25}
-                    color={COLORS.mutedTerracotta}
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    autoCorrect={false}
-                    inputMode="email"
-                    keyboardType="email-address"
-                    onBlur={() => setFocusedField(null)}
-                    onChangeText={setEmail}
-                    onFocus={() => setFocusedField('email')}
-                    onSubmitEditing={() => setFocusedField('password')}
-                    placeholder={t('auth.email')}
-                    placeholderTextColor={COLORS.dustyRose}
-                    returnKeyType="next"
-                    selectionColor={COLORS.burntOrange}
-                    style={styles.input}
-                    value={email}
-                  />
-                </View>
-              )}
+              {/* Email input */}
+              <View
+                style={[
+                  styles.inputWrapper,
+                  focusedField === 'email' && styles.inputWrapperFocused,
+                ]}
+              >
+                <Ionicons
+                  name="mail-outline"
+                  size={25}
+                  color={COLORS.mutedTerracotta}
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  autoCorrect={false}
+                  inputMode="email"
+                  keyboardType="email-address"
+                  onBlur={() => setFocusedField(null)}
+                  onChangeText={setEmail}
+                  onFocus={() => setFocusedField('email')}
+                  onSubmitEditing={() => setFocusedField('password')}
+                  placeholder={t('auth.email')}
+                  placeholderTextColor={COLORS.dustyRose}
+                  returnKeyType="next"
+                  selectionColor={COLORS.burntOrange}
+                  style={styles.input}
+                  value={email}
+                />
+              </View>
 
               {/* Password input */}
               <View
@@ -315,7 +222,7 @@ export default function LoginScreen() {
                   onChangeText={setPassword}
                   onFocus={() => setFocusedField('password')}
                   onSubmitEditing={() => { void handleLogin(); }}
-                  placeholder={isJoin ? t('auth.managerPassword') : t('auth.password')}
+                  placeholder={t('auth.password')}
                   placeholderTextColor={COLORS.dustyRose}
                   returnKeyType="done"
                   secureTextEntry={!showPassword}
@@ -363,50 +270,28 @@ export default function LoginScreen() {
                 >
                   {isLoading
                     ? <ActivityIndicator color={COLORS.white} />
-                    : <Text style={styles.loginButtonText}>
-                        {isJoin ? t('auth.joinButton') : t('auth.signIn')}
-                      </Text>
+                    : <Text style={styles.loginButtonText}>{t('auth.signIn')}</Text>
                   }
                 </LinearGradient>
               </Pressable>
 
-              {/* The manual-code path's only door.
-                  `/invite` is reachable from a verified link, from the RuStore
-                  install referrer and from the iOS clipboard — all three of which
-                  are automatic and all three of which can fail. Somebody left
-                  holding the six characters off the invite web page and nothing
-                  else had no way in at all until this link existed. */}
-              <Pressable
-                accessibilityLabel="Перейти к вводу кода приглашения"
-                accessibilityRole="button"
-                hitSlop={8}
-                onPress={() => router.push('/invite' as never)}
-                style={({ pressed }) => [styles.inviteLinkButton, pressed && styles.pressed]}
-              >
-                <Text style={styles.inviteLinkText}>Меня пригласили — ввести код приглашения</Text>
-              </Pressable>
-
-              {/* Shown only on the sign-in tab. /auth/join authenticates with a
-                  company code plus a username, and reset-by-email is keyed on
-                  User.email — invited members whose address is still NULL have no
-                  self-service path at all, so offering them this link would be a
-                  dead end rather than a recovery.
+              {/* Reset-by-email is keyed on User.email, and reaching this screen
+                  at all already means the account has one — nothing left that
+                  would make this a dead end.
 
                   Until this existed there was no password recovery anywhere in
                   the product: both /auth/me routes need a session the locked-out
                   user does not have, and the remedy was a hand-written UPDATE
                   against the production database. */}
-              {!isJoin && (
-                <Pressable
-                  accessibilityLabel="Восстановить пароль"
-                  accessibilityRole="button"
-                  hitSlop={8}
-                  onPress={() => router.push('/forgot-password' as never)}
-                  style={({ pressed }) => [styles.inviteLinkButton, pressed && styles.pressed]}
-                >
-                  <Text style={styles.inviteLinkText}>{t('auth.forgotPassword')}</Text>
-                </Pressable>
-              )}
+              <Pressable
+                accessibilityLabel="Восстановить пароль"
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={() => router.push('/forgot-password' as never)}
+                style={({ pressed }) => [styles.inviteLinkButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.inviteLinkText}>{t('auth.forgotPassword')}</Text>
+              </Pressable>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -493,13 +378,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '600',
-    textAlign: 'center',
-  },
-  joinHint: {
-    fontSize: 13,
-    color: COLORS.mutedTerracotta,
-    lineHeight: 18,
-    marginTop: 12,
     textAlign: 'center',
   },
 

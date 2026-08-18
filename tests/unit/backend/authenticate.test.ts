@@ -589,9 +589,8 @@ describe('isPublicApiRoute exemptions', () => {
  * an engineer or agent reconciling THIS file against that sentence would "fix" the
  * disagreement in the wrong direction — widening isPublicApiRoute() to a
  * `path.startsWith('/api/v1/auth')` match — and in one edit unauthenticate the whole
- * organization audit log, the member roster with roles, the join code that /auth/join
- * accepts, and the role-change route. Nothing has done it; the document is what would have
- * justified it in review.
+ * organization audit log, the member roster with roles, and the role-change route.
+ * Nothing has done it; the document is what would have justified it in review.
  *
  * The document now names this file as the authority and lists the eight exceptions as a
  * summary of it. That prose can drift again the moment a public route is added, so the
@@ -610,16 +609,15 @@ describe('the /auth prefix is not blanket-public', () => {
     });
   });
 
-  // Exactly the nine in isPublicApiRoute() — eight plus /auth/2fa/verify, added
-  // for the same reason /auth/verify is here: it is step two of a login/join
-  // that has not minted a session yet, so it cannot require one.
+  // Exactly the eight in isPublicApiRoute() — seven plus /auth/2fa/verify, added
+  // for the same reason /auth/verify is here: it is step two of a login that
+  // has not minted a session yet, so it cannot require one.
   // Registration is reachable without a token by a second route as well — the hook's own
   // guard is `startsWith('/api/v1/')` WITH the trailing slash, and '/api/v1/auth' has
   // none — but it is on the allowlist regardless, so the entry is not load-bearing twice.
   const publicAuthRoutes: [string, string][] = [
     ['POST', '/api/v1/auth'],
     ['POST', '/api/v1/auth/login'],
-    ['POST', '/api/v1/auth/join'],
     ['POST', '/api/v1/auth/verify'],
     ['POST', '/api/v1/auth/verify/resend'],
     ['POST', '/api/v1/auth/invites/open'],
@@ -643,8 +641,6 @@ describe('the /auth prefix is not blanket-public', () => {
     ['PATCH', '/api/v1/auth/users/00000000-0000-4000-a000-000000000002/role'],
     ['GET', '/api/v1/auth/audit'],
     ['GET', '/api/v1/auth/users'],
-    ['GET', '/api/v1/auth/company-code'],
-    ['POST', '/api/v1/auth/company-code/rotate'],
     ['PATCH', '/api/v1/auth/users/00000000-0000-4000-a000-000000000002/deactivate'],
     ['PATCH', '/api/v1/auth/me/password'],
     ['PATCH', '/api/v1/auth/me/credentials'],
@@ -654,7 +650,6 @@ describe('the /auth prefix is not blanket-public', () => {
     // The allowlist is keyed on method too: the public entries above are POST-only.
     ['GET', '/api/v1/auth/login'],
     ['GET', '/api/v1/auth/invites/open'],
-    ['PATCH', '/api/v1/auth/join'],
     // A path that merely begins with a public one is not that route.
     ['POST', '/api/v1/auth/verify/resend/again'],
     ['POST', '/api/v1/auth/logins'],

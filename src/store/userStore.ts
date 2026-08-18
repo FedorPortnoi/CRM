@@ -73,8 +73,8 @@ type PendingVerification = {
 };
 
 /**
- * A login/join that got the password right but needs a second factor before a
- * session is minted. Set when either endpoint answers 403 TOTP_REQUIRED — see
+ * A login that got the password right but needs a second factor before a
+ * session is minted. Set when the endpoint answers 403 TOTP_REQUIRED — see
  * `extractTotpChallenge` below and the backend contract on
  * POST /auth/2fa/verify. Kept SEPARATE from `pendingVerification`: an unproven
  * email address and a missing TOTP code are different challenges with
@@ -93,7 +93,6 @@ interface UserState {
   isLoading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
-  join: (companyCode: string, username: string, password: string) => Promise<void>;
   acceptInvite: (input: { acceptToken: string; phone: string; email: string; password: string }) => Promise<void>;
   verifyOtp: (userId: string, code: string, channel: 'email') => Promise<void>;
   resendVerification: (userId: string, channel: 'email') => Promise<void>;
@@ -132,8 +131,8 @@ function extractErrorMessage(body: unknown, status: number): string {
 }
 
 /**
- * Recognizes the 403 ACCOUNT_NOT_VERIFIED shape login() and join() now share
- * with acceptInvite(): a real account, a correct password, and an address that
+ * Recognizes the 403 ACCOUNT_NOT_VERIFIED shape login() now shares with
+ * acceptInvite(): a real account, a correct password, and an address that
  * has not been proven yet. `user_id` is what turns "dead end, ask an admin to
  * re-invite you" into "reattach to /auth/verify and finish the code" — see the
  * comment on this branch in backend/api/controllers/auth.ts for why sending it
@@ -149,8 +148,8 @@ function extractPendingVerification(body: unknown): PendingVerification | null {
 }
 
 /**
- * Recognizes the 403 TOTP_REQUIRED shape login() and join() answer with when
- * the password was right and the account has 2FA enabled. `user_id` is what
+ * Recognizes the 403 TOTP_REQUIRED shape login() answers with when the
+ * password was right and the account has 2FA enabled. `user_id` is what
  * lets /verify-totp complete the SAME login via POST /auth/2fa/verify — see
  * the backend contract's `loginChallengeShape`.
  */
@@ -213,9 +212,10 @@ export const useUserStore = create<UserState>()((set) => ({
    * Redeem an invite: the invitee supplies their own phone, email and password,
    * and the account is created at the role the owner bound at mint time.
    *
-   * Deliberately shaped like `join` rather than like `login`: no account exists
-   * until this call succeeds, so there is nothing to authenticate against
-   * beforehand. The role is NEVER sent — it lives on the server's invite row,
+   * Deliberately shaped like account creation rather than like `login`: no
+   * account exists until this call succeeds, so there is nothing to
+   * authenticate against beforehand. The role is NEVER sent — it lives on the
+   * server's invite row,
    * and accepting a client-supplied role would make a forwarded link an
    * escalation primitive.
    *
@@ -300,40 +300,6 @@ export const useUserStore = create<UserState>()((set) => ({
     }
   },
 
-  join: async (companyCode: string, username: string, password: string): Promise<void> => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await fetch(`${API_URL}/auth/join`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_code: companyCode, username, password }),
-      });
-      const body: unknown = await response.json();
-      if (!response.ok) {
-        // Same resumable state as login() above — see the comment there.
-        const pending = extractPendingVerification(body);
-        if (pending) {
-          set({ pendingVerification: pending, user: null, token: null, isLoading: false });
-          return;
-        }
-        const totpChallenge = extractTotpChallenge(body);
-        if (totpChallenge) {
-          set({ pendingTotp: totpChallenge, user: null, token: null, isLoading: false });
-          return;
-        }
-        throw new Error(extractErrorMessage(body, response.status));
-      }
-      const { data } = body as { data: { user: AuthUser; token: string } };
-      const { user, token } = data;
-      await SecureStore.setItemAsync('crm_auth_token', token);
-      await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(user));
-      set({ user, token, isLoading: false });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      set({ error: msg, isLoading: false });
-    }
-  },
-
   verifyOtp: async (userId: string, code: string, channel: 'email'): Promise<void> => {
     set({ isLoading: true, error: null });
     try {
@@ -372,8 +338,8 @@ export const useUserStore = create<UserState>()((set) => ({
   },
 
   /**
-   * Step two of a login/join that answered 403 TOTP_REQUIRED — completes the
-   * SAME login POST /auth/2fa/verify was called for. `code` is either a live
+   * Step two of a login that answered 403 TOTP_REQUIRED — completes the SAME
+   * login POST /auth/2fa/verify was called for. `code` is either a live
    * 6-digit TOTP or an XXXX-XXXX backup code; the server tries TOTP first.
    * Shaped exactly like verifyOtp above: no JWT exists yet, so this is public,
    * and failure is reported by setting `error` on the store rather than

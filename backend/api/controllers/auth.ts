@@ -18,7 +18,7 @@ import {
   DEFAULT_PIPELINE_STAGE_NAMES,
   DEFAULT_TIME_ZONE,
 } from '../../config/market';
-import { requiresEmailVerification, isEmailVerificationEnforced } from '../../config/security';
+import { isEmailVerificationEnforced } from '../../config/security';
 import { consumeScopedBudget } from '../../services/rate-limit-store';
 import {
   generateTotpSecret,
@@ -56,12 +56,9 @@ type AuthRole = string;
  * somewhere the path table does not describe.
  */
 export const TEAM_DENIAL_MESSAGES = {
-  invite: 'Only owners and admins can invite members',
   deactivate: 'Only owners and admins can deactivate members',
   setManager: 'Only owners and admins can assign managers',
   changeRole: 'Only owners can change user roles',
-  readCompanyCode: 'Only owners and admins can view the company code',
-  rotateCompanyCode: 'Only owners and admins can rotate the company code',
 } as const;
 
 /**
@@ -135,15 +132,14 @@ function onboardingCompleted(state: Prisma.JsonValue | null): boolean {
 
 function publicUser(user: { id: string; email: string | null; username?: string | null; name: string; role: string; organization_id: string; timezone?: string; onboarding_state?: Prisma.JsonValue | null; must_change_password?: boolean; must_change_email?: boolean; manager_id?: string | null; stay_signed_in?: boolean }) {
   // Owners are never invited — register() is the only path that mints one
-  // (hardcoded 'owner'::"UserRole"; inviteUser's targets are always the other
-  // three roles), so an owner account has nothing a first-run screen needs to
-  // collect, by construction. Enforced HERE, on the way out, rather than
-  // trusted from the row: an owner's must_change_password went wrong in the
-  // data at least once already (an unexplained stray `true` on a real
-  // account, root cause never confirmed) with no back button on the screen it
-  // forced. Every caller of publicUser — login, join, getMe, setCredentials,
-  // verifyTotp — gets the guarantee for free here instead of relying on each
-  // one to separately remember the rule.
+  // (hardcoded 'owner'::"UserRole"), so an owner account has nothing a
+  // first-run screen needs to collect, by construction. Enforced HERE, on the
+  // way out, rather than trusted from the row: an owner's must_change_password
+  // went wrong in the data at least once already (an unexplained stray `true`
+  // on a real account, root cause never confirmed) with no back button on the
+  // screen it forced. Every caller of publicUser — login, getMe,
+  // setCredentials, verifyTotp — gets the guarantee for free here instead of
+  // relying on each one to separately remember the rule.
   const isOwner = user.role === 'owner';
   return {
     id: user.id,
@@ -180,23 +176,6 @@ function generateJoinCode(orgName: string): string {
     .slice(0, 16) || 'TEAM';
   const suffix = crypto.randomBytes(3).toString('hex').toUpperCase(); // 6 hex chars
   return `${prefix}-${suffix}`;
-}
-
-// Returns the org's current code, regenerating it first if missing or past its TTL.
-async function ensureFreshJoinCode(org: {
-  id: string;
-  name: string;
-  join_code: string | null;
-  join_code_expires_at: Date | null;
-}): Promise<{ join_code: string; join_code_expires_at: Date }> {
-  const expired = !org.join_code || !org.join_code_expires_at || org.join_code_expires_at <= new Date();
-  if (!expired) {
-    return { join_code: org.join_code!, join_code_expires_at: org.join_code_expires_at! };
-  }
-  const join_code = generateJoinCode(org.name);
-  const join_code_expires_at = new Date(Date.now() + JOIN_CODE_TTL_MS);
-  await db.org.update({ where: { id: org.id }, data: { join_code, join_code_expires_at } });
-  return { join_code, join_code_expires_at };
 }
 
 // Build a unique-within-org username from a person's name (e.g. "Ivan Petrov", "Ivan Petrov 2").
@@ -680,210 +659,6 @@ export const AuthController = {
     return reply.send(response);
   },
 
-  inviteUser: async (request: FastifyRequest, reply: FastifyReply) => {
-    const callerRole = request.user.role as AuthRole;
-    if (!can(callerRole, 'team.manage')) {
-      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: TEAM_DENIAL_MESSAGES.invite } });
-    }
-
-    const { first_name, last_name, role } = request.body as { first_name: string; last_name: string; role: AuthRole };
-
-    // assignableRoles() already excludes `admin` unless the caller holds
-    // team.manage_admins, so the "admins cannot mint admins" rule is expressed
-    // once in the capability map rather than as a second, separate check that
-    // could drift away from it.
-    const validRoles = assignableRoles(callerRole);
-    if (!isRole(role) || !validRoles.includes(role)) {
-      return reply.status(400).send({
-        error: { code: 'INVALID_ROLE', message: `Role must be one of: ${validRoles.join(', ')}` },
-      });
-    }
-
-    const firstName = (first_name ?? '').trim();
-    const lastName = (last_name ?? '').trim();
-    if (firstName === '' || lastName === '') {
-      return reply.status(400).send({ error: { code: 'INVALID_NAME', message: 'First and last name are required' } });
-    }
-
-    const fullName = `${firstName} ${lastName}`;
-    const username = await uniqueUsernameForOrg(request.user.org_id, fullName);
-
-    const tempPassword = crypto.randomBytes(16).toString('base64url');
-    const hashedPassword = await bcrypt.hash(tempPassword, saltRounds);
-
-    const user = await db.user.create({
-      data: {
-        username,
-        name: fullName,
-        password_hash: hashedPassword,
-        role,
-        organization_id: request.user.org_id,
-        is_active: true,
-        is_verified: true,
-        must_change_password: true,
-        must_change_email: true,
-      },
-      select: { id: true, username: true, name: true, role: true },
-    });
-
-    // Surface the (possibly freshly-rotated) company code so the owner can hand everything over at once.
-    const org = await db.org.findUnique({
-      where: { id: request.user.org_id },
-      select: { id: true, name: true, join_code: true, join_code_expires_at: true },
-    });
-    const code = org ? await ensureFreshJoinCode(org) : null;
-
-    await auditLog({
-      action: 'team.invite_member',
-      outcome: 'success',
-      request,
-      organizationId: request.user.org_id,
-      userId: request.user.sub,
-      targetType: 'user',
-      targetId: user.id,
-      metadata: { role },
-    });
-
-    return reply.status(201).send({
-      data: {
-        ...user,
-        temp_password: tempPassword,
-        company_code: code?.join_code ?? null,
-      },
-      meta: {},
-    });
-  },
-
-  // Resolve org by a valid (non-expired) company code, then the employee by username within it.
-  join: async (request: FastifyRequest, reply: FastifyReply) => {
-    const { company_code, username, password } = request.body as { company_code: string; username: string; password: string };
-
-    const org = await db.org.findFirst({
-      where: { join_code: company_code.trim() },
-      select: { id: true, join_code_expires_at: true },
-    });
-
-    if (!org || !org.join_code_expires_at || org.join_code_expires_at <= new Date()) {
-      await auditLog({ action: 'auth.join', outcome: 'failure', request, metadata: { reason: 'invalid_or_expired_code' } });
-      return reply.code(401).send({ error: { code: 'INVALID_JOIN', message: 'Invalid company code, username, or password' } });
-    }
-
-    const user = await db.user.findFirst({
-      where: { organization_id: org.id, username: username.trim() },
-    });
-
-    const credentialStatus = await verifyPasswordWithLockout(user, password, (candidate, passwordMatches) => (
-      candidate.is_active && passwordMatches ? 'success' : 'failure'
-    ));
-
-    if (credentialStatus === 'locked') {
-      await auditLog({ action: 'auth.join', outcome: 'failure', request, organizationId: org.id, userId: user?.id, metadata: { reason: 'account_locked' } });
-      return reply.code(401).send({ error: { code: 'INVALID_JOIN', message: 'Invalid company code, username, or password' } });
-    }
-
-    if (credentialStatus !== 'success' || !user) {
-      await auditLog({ action: 'auth.join', outcome: 'failure', request, organizationId: org.id, userId: user?.id, metadata: { reason: 'invalid_credentials' } });
-      return reply.code(401).send({ error: { code: 'INVALID_JOIN', message: 'Invalid company code, username, or password' } });
-    }
-
-    /**
-     * THE SAME QUESTION /auth/login ASKS, asked here too.
-     *
-     * This door drifted from that one: login requires is_verified, join simply
-     * omitted it. So an account created by invite acceptance — permanently
-     * is_verified = false, because that flow never issued an OTP — could re-mint
-     * a fresh seven-day session here, forever, having proven nothing.
-     *
-     * It sits AFTER the password check, not inside the classifier, for two
-     * reasons. Only a caller who already holds the credentials learns the account
-     * exists but is unproven; and the classifier's 'failure' branch increments
-     * failed_login_count and eventually locks the account, which is the wrong
-     * answer to someone typing the right password. That mirrors login's
-     * 'non_counted_failure' branch, down to the status, the code and the message.
-     *
-     * ACCOUNTS CREATED BY AuthController.inviteUser ARE UNAFFECTED: that path
-     * writes is_verified: true. This narrows exactly the accounts the invite
-     * accept flow created, and only those of them minted after the cutover — see
-     * VERIFICATION_ENFORCED_SINCE for why the older ones keep this door.
-     */
-    if (requiresEmailVerification(user)) {
-      await auditLog({ action: 'auth.join', outcome: 'failure', request, organizationId: org.id, userId: user.id, metadata: { reason: 'email_not_verified' } });
-      // user_id and email travel with the refusal for the same reason as
-      // login's identical branch: this door is unreachable without the correct
-      // password, so it discloses nothing new, and it is what lets the client
-      // reattach a killed-and-reopened app to /auth/verify instead of dead-ending.
-      return reply.code(403).send({
-        error: {
-          code: 'ACCOUNT_NOT_VERIFIED',
-          message: 'Please verify your account via the code sent to your phone and email.',
-          user_id: user.id,
-          email: user.email,
-        },
-      });
-    }
-
-    /**
-     * THE SAME GATE /auth/login ASKS, asked here too — and it is not optional.
-     *
-     * Without it, /auth/join is a complete bypass of 2FA for any user who is
-     * also an org member able to join via company code: they would set up TOTP,
-     * have /auth/login refuse them, and simply authenticate through this door
-     * instead, which asks for nothing this account does not already satisfy.
-     * Same reasoning as the block above it, down to placement — after the
-     * password and verification checks, before any session is minted.
-     */
-    if (requiresTotpChallenge(user)) {
-      await auditLog({ action: 'auth.join', outcome: 'denied', request, organizationId: org.id, userId: user.id, metadata: { reason: 'totp_required' } });
-      return reply.code(403).send({
-        error: {
-          code: 'TOTP_REQUIRED',
-          message: 'Enter your two-factor authentication code.',
-          user_id: user.id,
-        },
-      });
-    }
-
-    const token = await signSessionToken(request, reply, { ...user, role: user.role as AuthRole });
-
-    await auditLog({ action: 'auth.join', outcome: 'success', request, organizationId: org.id, userId: user.id });
-
-    return reply.send({ data: { user: publicUser(user), token }, meta: {} });
-  },
-
-  // Owner/admin view of the current rotating company code (regenerates lazily if expired).
-  getCompanyCode: async (request: FastifyRequest, reply: FastifyReply) => {
-    const callerRole = request.user.role as AuthRole;
-    if (!can(callerRole, 'team.manage')) {
-      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: TEAM_DENIAL_MESSAGES.readCompanyCode } });
-    }
-    const org = await db.org.findUnique({
-      where: { id: request.user.org_id },
-      select: { id: true, name: true, join_code: true, join_code_expires_at: true },
-    });
-    if (!org) {
-      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Organization not found' } });
-    }
-    const code = await ensureFreshJoinCode(org);
-    return reply.send({ data: { company_code: code.join_code, expires_at: code.join_code_expires_at }, meta: {} });
-  },
-
-  // Owner-triggered early rotation.
-  rotateCompanyCode: async (request: FastifyRequest, reply: FastifyReply) => {
-    const callerRole = request.user.role as AuthRole;
-    if (!can(callerRole, 'team.manage')) {
-      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: TEAM_DENIAL_MESSAGES.rotateCompanyCode } });
-    }
-    const org = await db.org.findUnique({ where: { id: request.user.org_id }, select: { name: true } });
-    if (!org) {
-      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Organization not found' } });
-    }
-    const join_code = generateJoinCode(org.name);
-    const join_code_expires_at = new Date(Date.now() + JOIN_CODE_TTL_MS);
-    await db.org.update({ where: { id: request.user.org_id }, data: { join_code, join_code_expires_at } });
-    await auditLog({ action: 'auth.rotate_company_code', outcome: 'success', request, organizationId: request.user.org_id, userId: request.user.sub });
-    return reply.send({ data: { company_code: join_code, expires_at: join_code_expires_at }, meta: {} });
-  },
-
   // First-login setup: employee sets their own email + new password, clearing both flags.
   setCredentials: async (request: FastifyRequest, reply: FastifyReply) => {
     const { email: rawEmail, new_password } = request.body as { email: string; new_password: string };
@@ -907,9 +682,11 @@ export const AuthController = {
     /**
      * PROVE THE ADDRESS, do not merely record it.
      *
-     * AuthController.inviteUser mints these accounts is_verified: true so the
-     * employee can /auth/join before they own an email at all — a bootstrap, not
-     * a proof. This screen is where they name their real address, so it is where
+     * The now-removed AuthController.inviteUser minted these accounts
+     * is_verified: true so the employee could sign in before they owned an
+     * email at all — a bootstrap, not a proof. Any account it created before
+     * removal still carries that shape. This screen is where they name their
+     * real address, so it is where
      * the proof begins: is_verified flips back to false and an OTP goes to the
      * address just typed. POST /auth/verify then flips is_verified AND
      * email_verified true against a code that only the real mailbox receives, and
@@ -1777,8 +1554,8 @@ export const AuthController = {
   // ── Two-factor authentication (TOTP, RFC 6238) ──────────────────────────
   //
   // Opt-in, per user. See backend/services/totp.ts for the primitives and
-  // requiresTotpChallenge above for the login/join gate these five routes
-  // exist to satisfy.
+  // requiresTotpChallenge above for the login gate these five routes exist to
+  // satisfy.
 
   /**
    * POST /auth/2fa/setup — mint a PENDING secret.

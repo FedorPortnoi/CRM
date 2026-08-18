@@ -22,8 +22,7 @@ const RESEND_COOLDOWN_S = 60;
  * THE ONLY WAY BACK IN, AND UNTIL NOW IT DID NOT EXIST.
  *
  * `PATCH /auth/me/password` and `/auth/me/credentials` both need a session the
- * locked-out person does not have; `POST /auth/users/invite` creates a NEW
- * account rather than resetting one; and `/auth/invites/accept` answers 409
+ * locked-out person does not have, and `/auth/invites/accept` answers 409
  * EMAIL_TAKEN at their own address. Recovery meant a hand-written UPDATE against
  * the production database, or a second account that stranded every contact, deal
  * and task the first one owned.
@@ -40,11 +39,13 @@ const RESEND_COOLDOWN_S = 60;
  * token: a six-digit code should not be a login primitive. On success the user
  * is returned to the sign-in screen with their new password.
  *
- * NOTE FOR INVITED MEMBERS: this is keyed on the account's email. Employees
- * created by `POST /auth/users/invite` have a username and NO address until they
- * complete first-run setup, so this route cannot reach them and they still have
- * no self-service recovery — see the Known Gaps entry in
- * docs/architecture/api-design.md.
+ * NOTE FOR LEGACY ACCOUNTS: this is keyed on the account's email. Employees
+ * created by the now-removed `POST /auth/users/invite` (company-code +
+ * manager-password onboarding — see the Known Gaps entry in
+ * docs/architecture/api-design.md) have a username and NO address, so this
+ * route cannot reach them. New accounts all go through `/auth/invites/accept`,
+ * which requires an email up front, so this gap does not grow — it only
+ * affects whatever accounts of the old shape already existed.
  */
 export default function ForgotPasswordScreen() {
   const { t } = useTranslation();

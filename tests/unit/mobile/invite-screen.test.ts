@@ -321,10 +321,17 @@ describe('link token guard', () => {
 
 describe('invite screen copy and reachability', () => {
   it('gives the manual-code screen a door on the login screen', () => {
+    // The door is the "Я новый сотрудник" tab itself (auth.tabJoin) — it used
+    // to toggle in place to a company-code + manager-password form, which a
+    // real invitee read as "I'm a new employee" and walked straight into,
+    // typing the invite claim code into fields meant for something else
+    // entirely. It now navigates to /invite directly instead.
     const login = sourceWithoutComments('src/screens/LoginScreen.tsx');
 
     expect(login).toContain("router.push('/invite'");
-    expect(login).toContain('ввести код приглашения');
+    expect(login).toContain("t('auth.tabJoin')");
+    expect(login).not.toContain('managerPassword');
+    expect(login).not.toContain('companyCode');
   });
 
   it('does not promise a claim-code lifetime from a clock that started earlier', () => {

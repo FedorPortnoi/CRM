@@ -332,16 +332,6 @@ describe('who may reach each team-admin handler', () => {
     // refactor, and the reason the two capabilities are separate at all.
     expect(reply.statusCode).toBe(role === 'owner' ? 200 : 403);
   });
-
-  it.each(ALL_ROLES)('getCompanyCode: %s', async (role) => {
-    dbMock.org.findUnique.mockResolvedValue({
-      id: ORG, name: 'Ромашка', join_code: 'X-1', join_code_expires_at: new Date(Date.now() + 86_400_000),
-    });
-    const reply = createReply();
-    await AuthController.getCompanyCode(createRequest(role, ADMIN_A), reply as never);
-
-    expect(reply.statusCode).toBe(role === 'owner' || role === 'admin' ? 200 : 403);
-  });
 });
 
 /**
@@ -379,9 +369,6 @@ describe('the central preHandler now gates these routes too', () => {
     ['PATCH', `/api/v1/auth/users/${MEMBER}/deactivate`],
     ['PATCH', `/api/v1/auth/users/${MEMBER}/manager`],
     ['PATCH', `/api/v1/auth/users/${MEMBER}/role`],
-    ['POST', '/api/v1/auth/users/invite'],
-    ['GET', '/api/v1/auth/company-code'],
-    ['POST', '/api/v1/auth/company-code/rotate'],
   ])('refuses %s %s for a support user', async (method, url) => {
     const reply = createReply();
     const request = hookRequest(method, url, 'support');
@@ -433,9 +420,6 @@ describe('the preHandler and the controller say the same thing', () => {
     ['PATCH', `/api/v1/auth/users/${MEMBER}/deactivate`, TEAM_DENIAL_MESSAGES.deactivate],
     ['PATCH', `/api/v1/auth/users/${MEMBER}/manager`, TEAM_DENIAL_MESSAGES.setManager],
     ['PATCH', `/api/v1/auth/users/${MEMBER}/role`, TEAM_DENIAL_MESSAGES.changeRole],
-    ['POST', '/api/v1/auth/users/invite', TEAM_DENIAL_MESSAGES.invite],
-    ['GET', '/api/v1/auth/company-code', TEAM_DENIAL_MESSAGES.readCompanyCode],
-    ['POST', '/api/v1/auth/company-code/rotate', TEAM_DENIAL_MESSAGES.rotateCompanyCode],
   ])('%s %s', async (method, url, message) => {
     dbMock.user.findFirst.mockResolvedValue({
       id: MEMBER,

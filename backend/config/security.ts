@@ -79,8 +79,8 @@ export const VERIFICATION_ENFORCED_SINCE = new Date('2026-08-07T00:00:00.000Z');
  * The revert switch for the three gates that depend on the constant above.
  *
  * Default ON. Set REQUIRE_EMAIL_VERIFICATION=false to put the server back to its
- * pre-fix behaviour — invite acceptance mints a session again, /auth/join and
- * the API preHandler stop asking — without a code change or a rebuild. It exists
+ * pre-fix behaviour — invite acceptance mints a session again and the API
+ * preHandler stops asking — without a code change or a rebuild. It exists
  * because the OTP leg of invite acceptance needs a client that knows how to
  * enter a code: a backend that ships ahead of that client strands invitees on
  * already-installed binaries, and ten seconds is the right amount of time for
@@ -93,8 +93,8 @@ export function isEmailVerificationEnforced(env: NodeJS.ProcessEnv = process.env
 /**
  * Does this account still owe proof of its email address?
  *
- * The one place the two rules above are combined, so the API preHandler,
- * /auth/join and anything added later cannot drift apart on either of them.
+ * The one place the two rules above are combined, so the API preHandler and
+ * anything added later cannot drift apart on either of them.
  *
  * A row with no created_at — which Prisma never produces, the column is NOT NULL
  * with a default — is treated as grandfathered rather than blocked. Failing open

@@ -37,11 +37,6 @@ interface OrgMember {
   manager_id: string | null;
 }
 
-interface CompanyCode {
-  company_code: string;
-  expires_at: string;
-}
-
 /** A minted, unredeemed invite. The link itself is NOT part of this shape — the
  *  backend never stores it in plaintext, so the list can show everything about
  *  an invite except the one thing that would let the owner resend it. */
@@ -173,17 +168,6 @@ export default function TeamScreen(): JSX.Element {
     enabled: !!token,
   });
 
-  const { data: companyCode } = useQuery<CompanyCode | null>({
-    queryKey: ['company-code', token],
-    queryFn: async () => {
-      const res = await fetch(`${API_URL}/auth/company-code`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) return null;
-      const json = (await res.json()) as { data: CompanyCode };
-      return json.data;
-    },
-    enabled: !!token,
-  });
-
   // Endpoint is gated on team.manage, so asking as a member would only earn a
   // 403 and a spurious error card.
   const { data: invites = [], error: invitesError } = useQuery<PendingInvite[]>({
@@ -195,21 +179,6 @@ export default function TeamScreen(): JSX.Element {
       return json.data;
     },
     enabled: !!token && canManage,
-  });
-
-  const rotateMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${API_URL}/auth/company-code/rotate`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        const json = (await res.json()) as { error?: { message: string } };
-        throw new Error(json.error?.message ?? 'Не удалось обновить код');
-      }
-    },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['company-code'] }),
-    onError: (e: Error) => Alert.alert('Ошибка', e.message),
   });
 
   const inviteMutation = useMutation({
@@ -427,31 +396,6 @@ export default function TeamScreen(): JSX.Element {
           contentContainerStyle={styles.list}
           ListHeaderComponent={
             <View>
-              {canManage && companyCode && (
-                <View style={styles.codeCard}>
-                  <Text style={styles.codeLabel}>Код компании</Text>
-                  <Text style={styles.codeValue} selectable>{companyCode.company_code}</Text>
-                  <Text style={styles.codeHint}>
-                    Сотрудники вводят его при первом входе. Действует до {new Date(companyCode.expires_at).toLocaleDateString('ru-RU')}.
-                  </Text>
-                  <View style={styles.codeActions}>
-                    <TouchableOpacity onPress={() => { Clipboard.setString(companyCode.company_code); Alert.alert('Скопировано'); }}>
-                      <Text style={styles.codeCopy}>Копировать</Text>
-                    </TouchableOpacity>
-                    {isOwner && (
-                      <TouchableOpacity
-                        onPress={() => Alert.alert('Новый код', 'Старый код перестанет работать. Продолжить?', [
-                          { text: 'Отмена', style: 'cancel' },
-                          { text: 'Создать', onPress: () => rotateMutation.mutate() },
-                        ])}
-                        disabled={rotateMutation.isPending}
-                      >
-                        <Text style={styles.codeRotate}>{rotateMutation.isPending ? 'Обновление…' : 'Сгенерировать новый'}</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              )}
               {/* Only what is still redeemable: the backend filters out consumed,
                   revoked and expired invites, so an empty list means nothing is
                   outstanding and the card can disappear entirely. */}
@@ -614,13 +558,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   list: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 80 },
   count: { fontSize: 13, color: c.amber, marginBottom: 12 },
-  codeCard: { backgroundColor: c.bgPanel, borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: c.border },
   codeLabel: { fontSize: 12, fontWeight: '600', color: c.amber, textTransform: 'uppercase', letterSpacing: 0.5 },
-  codeValue: { fontSize: 22, fontWeight: '700', color: c.text1, marginTop: 6, letterSpacing: 1 },
   codeHint: { fontSize: 12, color: c.amber, marginTop: 8, lineHeight: 17 },
-  codeActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14 },
-  codeCopy: { fontSize: 14, color: c.orange, fontWeight: '600' },
-  codeRotate: { fontSize: 14, color: c.orange, fontWeight: '600' },
   pendingCard: { backgroundColor: c.bgPanel, borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: c.border },
   pendingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
   pendingMeta: { fontSize: 12, color: c.amber, marginTop: 2 },

@@ -14,14 +14,14 @@
 All endpoints:
 - Return JSON with a consistent envelope: `{ data, meta, error }`
 - Require `Authorization: Bearer <access_token>` — the exception is **not** the whole
-  `/auth/*` prefix. Only ten auth routes are public (`POST /auth`, `/auth/login`,
-  `/auth/join`, `/auth/verify`, `/auth/verify/resend`, `/auth/forgot-password`,
+  `/auth/*` prefix. Only nine auth routes are public (`POST /auth`, `/auth/login`,
+  `/auth/verify`, `/auth/verify/resend`, `/auth/forgot-password`,
   `/auth/reset-password`, `/auth/invites/open`,
   `/auth/invites/lookup`, `/auth/invites/accept`), plus a handful outside it: `GET /ws`,
   the Yandex Calendar OAuth callback and webhook, the amoCRM callback and webhook, the
   open-tracking pixel, the consent unsubscribe pair, and the expo-updates manifest and
-  assets. Every other `/auth/*` route — including `GET /auth/audit`, `GET /auth/users`
-  and `GET /auth/company-code` — requires a token like anything else.
+  assets. Every other `/auth/*` route — including `GET /auth/audit` and
+  `GET /auth/users` — requires a token like anything else.
   **`isPublicApiRoute()` in `backend/api/authenticate.ts` is the authority; this list is a
   summary of it.** Do not widen the check to a `/api/v1/auth` prefix match to agree with
   any list, including this one.
@@ -61,13 +61,12 @@ URI versioning (`/api/v1`). Breaking changes increment the version. Non-breaking
 
 ## Authentication Endpoints
 
-Prefix `/api/v1/auth`. `(public)` marks the ten routes that need no bearer token —
-the same ten listed under Conventions, and the same ten in `isPublicApiRoute()`.
+Prefix `/api/v1/auth`. `(public)` marks the nine routes that need no bearer token —
+the same nine listed under Conventions, and the same nine in `isPublicApiRoute()`.
 
 ```
 POST   /auth                          Create organization + owner account (public)
 POST   /auth/login                    Authenticate, get an access token (public)
-POST   /auth/join                     Join an existing org with its company code (public)
 POST   /auth/verify                   Confirm an email with the emailed OTP (public)
 POST   /auth/verify/resend            Re-send the verification OTP (public)
 POST   /auth/forgot-password          Mail a password-reset code (public)
@@ -88,7 +87,6 @@ PATCH  /auth/me/timezone              Set the timezone reminders are interpreted
 
 GET    /auth/audit                    Org audit log (owner/admin — audit.read)
 GET    /auth/users                    List org members
-POST   /auth/users/invite             Create a member account with a temp password
 PATCH  /auth/users/:id/deactivate     Deactivate a member
 PATCH  /auth/users/:id/role           Change a member's role
 PATCH  /auth/users/:id/manager        Reassign a member's manager
@@ -99,9 +97,6 @@ DELETE /auth/invites/:id              Revoke an invite
 POST   /auth/invites/open             Open an invite link by token (public)
 POST   /auth/invites/lookup           Look up an invite by claim code (public)
 POST   /auth/invites/accept           Redeem an invite into an account (public)
-
-GET    /auth/company-code             Read the org's join code
-POST   /auth/company-code/rotate      Rotate the join code
 ```
 
 There is no `POST /auth/register` — registration is a POST to the root of the prefix.
@@ -268,7 +263,6 @@ Member administration is not a top-level resource — it lives under `/auth`
 
 ```
 GET    /auth/users                  List org members
-POST   /auth/users/invite           Invite a new team member
 PATCH  /auth/users/:id/deactivate   Deactivate user
 PATCH  /auth/users/:id/role         Change a user's role
 PATCH  /auth/users/:id/manager      Reassign a user's manager
@@ -330,13 +324,22 @@ still be refused by `/auth/login`.
 
 **Still no path back for:**
 
-1. **Invited members whose `User.email` is NULL.** `POST /auth/users/invite` creates
-   username-only accounts (`must_change_email: true`) and `User.email` is nullable, so
-   `findUnique({ where: { email } })` can never match them. They sign in via `/auth/join`
-   with the company code and their username, and if they forget that password there is
-   still nothing. The complement is admin-initiated reset — a new authenticated route
-   gated on `team.manage`, reusing the `must_change_password` flag already on `User` —
-   which has not been built. That is a product decision, not a queued task.
+1. **Legacy members whose `User.email` is NULL.** `POST /auth/users/invite` and
+   `POST /auth/join` — the company-code + manager-password onboarding pair — were
+   removed (owner-side onboarding is `/auth/invites` + `/auth/invites/accept` now,
+   which requires an email up front). Any account `/auth/users/invite` created while it
+   existed is username-only (`must_change_email: true`), and `User.email` is nullable, so
+   `findUnique({ where: { email } })` can never match them — this gap does not grow, but
+   it does not shrink either for whatever accounts of that shape already exist. The
+   complement is admin-initiated reset — a new authenticated route gated on
+   `team.manage`, reusing the `must_change_password` flag already on `User` — which has
+   not been built. That is a product decision, not a queued task.
+
+   Removing the routes did not touch `Org.join_code`/`join_code_expires_at`: `register()`
+   still mints one for every new org, and `services/scheduler.ts` still rotates it weekly
+   in the background. Neither reads nor writes anything a human can reach any more — the
+   column is inert, not deleted, because dropping it is a migration and this removal was
+   scoped to the reachable surface (routes, controllers, the Settings → Team screen).
 2. **An organisation whose owner account is abandoned.** Only the owner may deactivate or
    reparent an admin (see `team.manage_admins`), and there is no owner-transfer endpoint:
    `ASSIGNABLE_ROLE_VALUES` deliberately excludes `owner`, the owner cannot self-deactivate,
@@ -423,7 +426,7 @@ generic ones. Most handlers send a per-domain code instead — `DEAL_NOT_FOUND`,
 - Default: **100 requests / 60 s keyed by client IP** (not per user). Both numbers are
   overridable via `RATE_LIMIT_MAX_REQUESTS` and `RATE_LIMIT_WINDOW_MS`
   (`backend/index.ts`).
-- Auth: register / login / join 5 per 15 min — login is additionally keyed by IP+email;
+- Auth: register / login 5 per 15 min — login is additionally keyed by IP+email;
   `verify` 10 per 15 min; `verify/resend` 3 per 5 min; `invites/open` and `invites/lookup`
   20 per 15 min; `invites/accept` 10 per 15 min.
 - Import endpoints (`/api/v1/import/*`): 3–20 requests per 10 minutes to 1 hour depending
