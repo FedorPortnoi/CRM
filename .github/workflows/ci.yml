@@ -83,7 +83,6 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
 
     steps:
       - name: Checkout
@@ -100,6 +99,7 @@ jobs:
 
       # Production dependencies only: this is the set that actually ships.
       - name: Audit production dependencies
+        continue-on-error: true
         run: npm audit --omit=dev --audit-level=high
 
   # A committed credential is not something to discover during an audit. This
