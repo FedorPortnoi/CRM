@@ -18,9 +18,11 @@
  * APPLE_ASC_KEY_PATH). The key must have Admin or App Manager rights.
  *
  * Usage:
- *   node scripts/asc-release.js                    report build + version state
- *   node scripts/asc-release.js --submit           create/attach/submit 1.1.6 for review
- *   node scripts/asc-release.js --submit --manual  same, but release manually after approval
+ *   node scripts/asc-release.js                        report build + version state
+ *   node scripts/asc-release.js --submit               create/attach/submit app.json's version
+ *   node scripts/asc-release.js --submit --manual      same, but release manually after approval
+ *   node scripts/asc-release.js --submit --force-notes overwrite release notes Apple copied
+ *                                                      forward from the previous version
  */
 
 const fs = require('fs');
@@ -33,22 +35,30 @@ const API = 'https://api.appstoreconnect.apple.com/v1';
 const VERSION = require('../app.json').expo.version;
 const SUBMIT = process.argv.includes('--submit');
 const RELEASE_TYPE = process.argv.includes('--manual') ? 'MANUAL' : 'AFTER_APPROVAL';
+// Apple seeds a new version's localizations by COPYING the previous version's, whatsNew
+// included — so "only fill it when empty" silently ships the last release's notes under the
+// new version number. Caught on 1.1.9, which would have gone to review carrying 1.1.8's 2FA
+// text. The empty-check is still the default so a hand-written note in App Store Connect is
+// never clobbered by a stale constant in this file; pass --force-notes when the constants
+// above are the intended copy.
+const FORCE_NOTES = process.argv.includes('--force-notes');
 
 const WHATS_NEW_RU = [
-  'Двухфакторная аутентификация (2FA): включите в Настройках → Безопасность —',
-  'дополнительный код из приложения-аутентификатора при входе, плюс 10',
-  'резервных кодов на случай потери телефона. Отключена по умолчанию —',
-  'решаете сами, включать или нет.',
+  'Экран создания пароля теперь показывает все требования списком и отмечает их',
+  'прямо во время ввода — больше не нужно угадывать, почему пароль не подошёл.',
   '',
-  'Мелкие исправления стабильности.',
+  'Более плавный запуск: экран загрузки не мигает и плавно переходит в приложение.',
+  '',
+  'Исправления в приглашении сотрудников по ссылке и мелкие улучшения стабильности.',
 ].join('\n');
 
 const WHATS_NEW_EN = [
-  'Two-factor authentication (2FA): turn it on in Settings -> Security for an',
-  'extra code from an authenticator app at login, plus 10 backup codes in case',
-  'you lose your phone. Off by default -- opt in whenever you want it.',
+  'The password screen now lists every requirement and ticks them off as you',
+  'type, instead of rejecting the password after you submit it.',
   '',
-  'Minor stability fixes.',
+  'Smoother loading screen at startup.',
+  '',
+  'Fixes to the invite-by-link flow, plus minor stability improvements.',
 ].join('\n');
 
 function envValue(key) {
@@ -150,7 +160,7 @@ async function api(jwt, method, endpoint, body) {
   // and the rejection arrives hours later as a metadata issue rather than immediately.
   const locs = await api(jwt, 'GET', `/appStoreVersions/${version.id}/appStoreVersionLocalizations`);
   for (const loc of locs.data) {
-    if (loc.attributes.whatsNew && loc.attributes.whatsNew.trim()) continue;
+    if (!FORCE_NOTES && loc.attributes.whatsNew && loc.attributes.whatsNew.trim()) continue;
     const ru = loc.attributes.locale.startsWith('ru');
     await api(jwt, 'PATCH', `/appStoreVersionLocalizations/${loc.id}`, {
       data: {
