@@ -52,7 +52,7 @@
       "edgeToEdgeEnabled": true,
       "allowBackup": false,
       "package": "com.fedorportnoi.crm",
-      "versionCode": 15,
+      "versionCode": 16,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED",
