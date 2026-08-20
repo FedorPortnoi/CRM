@@ -41,7 +41,7 @@ function hideNativeSplashOnce(): void {
  * On reduced motion or decoder failure, it is held until the dark fallback has
  * laid out instead, so neither path exposes an unpainted React root.
  */
-const MIN_DISPLAY_MS = 1300;
+const MIN_DISPLAY_MS = 3600;
 const FADE_MS = 450;
 
 type Props = {

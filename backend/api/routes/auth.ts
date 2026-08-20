@@ -169,6 +169,12 @@ const ChangePasswordSchema = z.object({
   new_password: PasswordSchema,
 });
 
+// Same "prove you still are this account" shape as DisableTotpSchema — its own
+// object so the two sensitive flows cannot silently share a future change.
+const DeleteAccountSchema = z.object({
+  password: z.string().min(1),
+});
+
 const SetManagerSchema = z.object({
   manager_id: z.string().uuid().nullable(),
 });
@@ -394,6 +400,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.patch('/me/password', {
     schema: { body: ChangePasswordSchema },
   }, AuthController.changePassword);
+  // POST rather than DELETE /me: the password re-auth lives in the body, and a
+  // DELETE with a body is exactly the kind of request intermediaries drop.
+  fastify.post('/me/delete', {
+    schema: { body: DeleteAccountSchema },
+  }, AuthController.deleteAccount);
   fastify.patch('/me/credentials', {
     schema: { body: SetCredentialsSchema },
   }, AuthController.setCredentials);

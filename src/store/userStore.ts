@@ -106,6 +106,7 @@ interface UserState {
   enableTotp: (code: string) => Promise<{ backupCodes: string[] }>;
   disableTotp: (password: string) => Promise<void>;
   regenerateBackupCodes: (password: string) => Promise<{ backupCodes: string[] }>;
+  deleteAccount: (password: string) => Promise<void>;
   changePassword: (newPassword: string) => Promise<CredentialUpdateResult>;
   setCredentials: (email: string, newPassword: string) => Promise<CredentialUpdateResult>;
   setTimezone: (timezone: string) => Promise<void>;
@@ -445,6 +446,35 @@ export const useUserStore = create<UserState>()((set) => ({
     const updated = { ...user, totp_enabled: false };
     await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(updated));
     set({ user: updated });
+  },
+
+  /**
+   * POST /auth/me/delete — scrubs the account server-side after password
+   * re-auth. The server has already revoked every session when this resolves;
+   * the caller still runs logout() for the LOCAL teardown (queue, cache,
+   * SecureStore) and the navigation. Failures rethrow with the server's error
+   * `code` attached so the screen can localise OWNER_HAS_ACTIVE_MEMBERS and
+   * INVALID_PASSWORD instead of echoing the English server message verbatim.
+   */
+  deleteAccount: async (password: string): Promise<void> => {
+    const token = await SecureStore.getItemAsync('crm_auth_token');
+    const response = await fetch(`${API_URL}/auth/me/delete`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token ?? ''}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    const body: unknown = await response.json();
+    if (!response.ok) {
+      const error = new Error(extractErrorMessage(body, response.status)) as Error & { code?: string };
+      if (
+        body !== null && typeof body === 'object' && 'error' in body &&
+        body.error !== null && typeof body.error === 'object' &&
+        'code' in body.error && typeof (body.error as Record<string, unknown>).code === 'string'
+      ) {
+        error.code = (body.error as Record<string, unknown>).code as string;
+      }
+      throw error;
+    }
   },
 
   /**

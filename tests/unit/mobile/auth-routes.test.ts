@@ -43,3 +43,30 @@ describe('unauthenticated navigation policy', () => {
     expect(source).toContain('isUnauthenticatedRoute(pathname)');
   });
 });
+
+/**
+ * The boot gate must tell "the server says this account is gone" (401) apart
+ * from "the server could not be asked" (offline/timeout/5xx). When both
+ * collapsed into one null, a device that never logged out of a since-deleted
+ * account kept booting into /(tabs) as that ghost off the SecureStore snapshot,
+ * with every API call inside answering 401 forever.
+ */
+describe('boot-gate dead-session sweep', () => {
+  const source = readFileSync(resolve(process.cwd(), 'src/app/index.tsx'), 'utf8');
+
+  it('treats only 401 as a definitive rejection', () => {
+    expect(source).toContain("if (response.status === 401)");
+    expect(source).toContain("{ kind: 'unauthenticated' }");
+    // Anything else non-ok stays a soft failure that falls back to the cache.
+    expect(source).toContain("{ kind: 'unknown' }");
+  });
+
+  it('sweeps a dead session through the shared logout teardown to /login', () => {
+    const branchStart = source.indexOf("fresh.kind === 'unauthenticated'");
+    expect(branchStart).toBeGreaterThan(-1);
+    const branch = source.slice(branchStart, source.indexOf('return;', branchStart));
+
+    expect(branch).toContain('useUserStore.getState().logout()');
+    expect(branch).toContain("router.replace('/login'");
+  });
+});

@@ -41,6 +41,7 @@ export default function SettingsScreen(): JSX.Element {
   const setStaySignedIn = useUserStore((s) => s.setStaySignedIn);
   const disableTotp = useUserStore((s) => s.disableTotp);
   const regenerateBackupCodes = useUserStore((s) => s.regenerateBackupCodes);
+  const deleteAccount = useUserStore((s) => s.deleteAccount);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const toggleTheme = useThemeStore((s) => s.toggle);
   const { colors } = useTheme();
@@ -61,6 +62,10 @@ export default function SettingsScreen(): JSX.Element {
   const [isTwoFactorSaving, setIsTwoFactorSaving] = useState(false);
   const [twoFactorError, setTwoFactorError] = useState<string | null>(null);
   const [newBackupCodes, setNewBackupCodes] = useState<string[] | null>(null);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const [monthlyTarget, setMonthlyTarget] = useState<string>('');
   const [isSavingTarget, setIsSavingTarget] = useState(false);
   const [targetSaved, setTargetSaved] = useState(false);
@@ -279,6 +284,35 @@ export default function SettingsScreen(): JSX.Element {
     } finally {
       setIsTwoFactorSaving(false);
     }
+  };
+
+  const submitDeleteAccount = async (): Promise<void> => {
+    if (!deleteAccountPassword) return;
+    setIsDeletingAccount(true);
+    setDeleteAccountError(null);
+    try {
+      await deleteAccount(deleteAccountPassword);
+      // The server has revoked every session already; logout() is only the
+      // LOCAL half — queue, cache, SecureStore — and must run even though its
+      // own /auth/logout call will bounce off the dead token (it is wrapped).
+      try {
+        await logout();
+      } finally {
+        router.replace('/login');
+      }
+    } catch (e: unknown) {
+      const code = (e as { code?: string }).code;
+      if (code === 'OWNER_HAS_ACTIVE_MEMBERS') {
+        setDeleteAccountError(t('settings.deleteAccountOwnerBlocked'));
+      } else if (code === 'INVALID_PASSWORD') {
+        setDeleteAccountError(t('settings.deleteAccountWrongPassword'));
+      } else {
+        setDeleteAccountError(e instanceof Error ? e.message : t('settings.deleteAccountFailed'));
+      }
+      setIsDeletingAccount(false);
+    }
+    // Deliberately no `finally` reset on the success path: the screen is being
+    // torn down by the navigation and a state write there is a leak warning.
   };
 
   const languageLabel = currentLanguage === 'ru' ? 'RU' : 'EN';
@@ -742,6 +776,72 @@ export default function SettingsScreen(): JSX.Element {
         ) : null}
       </View>
 
+      <Text style={styles.sectionHeader}>{t('settings.deleteAccountSection')}</Text>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View style={styles.rowMain}>
+            <Text style={styles.rowLabel}>{t('settings.deleteAccount')}</Text>
+            <Text style={styles.helperText}>{t('settings.deleteAccountDesc')}</Text>
+          </View>
+          {!deleteAccountOpen ? (
+            <TouchableOpacity
+              style={styles.deleteAccountButton}
+              onPress={() => {
+                setDeleteAccountOpen(true);
+                setDeleteAccountPassword('');
+                setDeleteAccountError(null);
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={styles.deleteAccountButtonText}>{t('settings.deleteAccount')}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        {deleteAccountOpen ? (
+          <View style={styles.twoFactorPanel}>
+            <Text style={styles.deleteAccountWarning}>{t('settings.deleteAccountWarning')}</Text>
+            <TextInput
+              style={styles.twoFactorPasswordInput}
+              secureTextEntry
+              value={deleteAccountPassword}
+              onChangeText={(v) => { setDeleteAccountPassword(v); setDeleteAccountError(null); }}
+              placeholder={t('settings.twoFactorPasswordPlaceholder')}
+              placeholderTextColor={colors.placeholder}
+              autoCapitalize="none"
+              autoComplete="current-password"
+              accessibilityLabel={t('settings.twoFactorPasswordPlaceholder')}
+            />
+            <View style={styles.twoFactorPanelActions}>
+              <TouchableOpacity
+                style={styles.twoFactorCancelButton}
+                onPress={() => {
+                  setDeleteAccountOpen(false);
+                  setDeleteAccountPassword('');
+                  setDeleteAccountError(null);
+                }}
+                accessibilityRole="button"
+              >
+                <Text style={styles.twoFactorCancelButtonText}>{t('settings.twoFactorCancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.deleteAccountConfirmButton, (isDeletingAccount || !deleteAccountPassword) && styles.buttonDisabled]}
+                onPress={() => { void submitDeleteAccount(); }}
+                disabled={isDeletingAccount || !deleteAccountPassword}
+                accessibilityRole="button"
+              >
+                {isDeletingAccount ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.deleteAccountConfirmButtonText}>{t('settings.deleteAccountConfirm')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+            {deleteAccountError !== null ? <Text style={styles.errorText}>{deleteAccountError}</Text> : null}
+          </View>
+        ) : null}
+      </View>
+
       <TouchableOpacity style={styles.logoutButton} onPress={() => { void handleLogout(); }} accessibilityRole='button'>
         <Text style={styles.logoutText}>{t('settings.logout')}</Text>
       </TouchableOpacity>
@@ -1153,6 +1253,37 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.orange,
   },
   twoFactorConfirmButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  deleteAccountButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: c.red,
+    minHeight: 36,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+  },
+  deleteAccountButtonText: {
+    color: c.red,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  deleteAccountWarning: {
+    fontSize: 13,
+    color: c.red,
+    lineHeight: 18,
+  },
+  deleteAccountConfirmButton: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.red,
+  },
+  deleteAccountConfirmButtonText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',

@@ -1241,6 +1241,132 @@ export const AuthController = {
   },
 
   /**
+   * POST /auth/me/delete — self-service account deletion, password re-auth.
+   *
+   * "Delete" here is scrub-and-close, not DELETE FROM "User": some thirty FK
+   * columns (contacts, deals, tasks, chat, audit) reference this row, and those
+   * are the ORGANISATION'S records — a departing member must not be able to
+   * take the org's pipeline history with them. So the row stays as an inert
+   * tombstone with every personal field cleared, and everything that is purely
+   * theirs — sessions, devices, calendar OAuth tokens, TOTP material,
+   * verification codes, notifications, reminders — is deleted outright.
+   * email goes to NULL, which both removes the PII and frees the address for
+   * a fresh registration (the unique index ignores NULLs).
+   *
+   * The owner is refused while any OTHER active account exists in the org:
+   * deleting the only holder of team.manage_admins would leave the remaining
+   * members permanently unadministered. A sole owner (the org's last account)
+   * may always delete — that path is what App Store 5.1.1(v) requires — and
+   * simply leaves the org dormant.
+   *
+   * Password re-auth, same DUMMY_HASH discipline as disableTotp: a stolen
+   * session token alone must not be able to destroy the account it rode in on.
+   */
+  deleteAccount: async (request: FastifyRequest, reply: FastifyReply) => {
+    const { password } = request.body as { password: string };
+
+    const user = await db.user.findFirst({
+      where: { id: request.user.sub, organization_id: request.user.org_id },
+      select: { id: true, organization_id: true, role: true, password_hash: true },
+    });
+
+    const passwordMatches = await bcrypt.compare(password, user?.password_hash ?? DUMMY_HASH);
+    if (!user || !passwordMatches) {
+      return reply.code(401).send({
+        error: { code: 'INVALID_PASSWORD', message: 'Password is incorrect' },
+      });
+    }
+
+    if (user.role === 'owner') {
+      const otherActive = await db.user.count({
+        where: { organization_id: user.organization_id, is_active: true, id: { not: user.id } },
+      });
+      if (otherActive > 0) {
+        await auditLog({
+          action: 'auth.delete_account',
+          outcome: 'denied',
+          request,
+          organizationId: user.organization_id,
+          userId: user.id,
+          metadata: { reason: 'owner_has_active_members', other_active: otherActive },
+        });
+        return reply.status(409).send({
+          error: {
+            code: 'OWNER_HAS_ACTIVE_MEMBERS',
+            message: 'Deactivate the other team members before deleting the owner account',
+          },
+        });
+      }
+    }
+
+    // Random and thrown away — after this no password authenticates the account,
+    // by construction rather than by flag alone.
+    const unreachableHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), saltRounds);
+
+    await db.$transaction([
+      db.user.update({
+        where: { id: user.id },
+        data: {
+          name: 'Удалённый пользователь',
+          email: null,
+          username: null,
+          phone: null,
+          avatar_url: null,
+          push_token: null,
+          password_hash: unreachableHash,
+          is_active: false,
+          is_verified: false,
+          email_verified: false,
+          phone_verified: false,
+          stay_signed_in: false,
+          totp_secret: null,
+          totp_enabled: false,
+          totp_confirmed_at: null,
+          must_change_password: false,
+          must_change_email: false,
+          manager_id: null,
+        },
+      }),
+      // Subordinates are detached rather than left reporting to a tombstone —
+      // an inactive manager_id would still shape the visibility cone.
+      db.user.updateMany({
+        where: { organization_id: user.organization_id, manager_id: user.id },
+        data: { manager_id: null },
+      }),
+      db.totpBackupCode.deleteMany({ where: { user_id: user.id } }),
+      db.pushDevice.deleteMany({ where: { user_id: user.id } }),
+      db.userCalendarSync.deleteMany({ where: { user_id: user.id } }),
+      db.verificationCode.deleteMany({ where: { user_id: user.id } }),
+      db.notification.deleteMany({ where: { recipient_id: user.id } }),
+      db.taskReminder.deleteMany({ where: { recipient_id: user.id } }),
+      // The invite that minted the account carries the name the owner typed in.
+      db.invite.updateMany({
+        where: { user_id: user.id },
+        data: { name: 'Удалённый пользователь' },
+      }),
+      // Same closing-every-door reasoning as deactivateUser above: an API key
+      // outlives its creator's login unless it is revoked here.
+      db.apiKey.updateMany({
+        where: { organization_id: user.organization_id, created_by: user.id, revoked_at: null },
+        data: { revoked_at: new Date() },
+      }),
+    ]);
+
+    await revokeAllUserSessions(user.id, user.organization_id, 'account_deleted');
+
+    await auditLog({
+      action: 'auth.delete_account',
+      outcome: 'success',
+      request,
+      organizationId: user.organization_id,
+      userId: user.id,
+      metadata: { role: user.role },
+    });
+
+    return reply.send({ data: { deleted: true }, meta: {} });
+  },
+
+  /**
    * POST /auth/verify/resend — ONE ANSWER, WHATEVER IS ON THE OTHER END.
    *
    * This route is public (isPublicApiRoute, authenticate.ts) and it must be: the
