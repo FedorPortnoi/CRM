@@ -85,6 +85,7 @@ export default function AppIndex() {
     let mounted = true;
 
     async function routeInitialScreen() {
+      try {
       const selected = await hasSelectedLanguage();
       if (!mounted) {
         return;
@@ -138,7 +139,9 @@ export default function AppIndex() {
           user = { ...cachedUser, ...fresh.user };
           // Persist the reconciled copy so restoreSession() (src/store/userStore.ts)
           // and every other screen see it too, not just this one routing decision.
-          await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(user));
+          // Best-effort: a failed cache write must not derail the routing the
+          // reconciliation already decided.
+          await SecureStore.setItemAsync('crm_auth_user', JSON.stringify(user)).catch(() => undefined);
         }
 
         if (user.must_change_password || user.must_change_email) {
@@ -148,9 +151,21 @@ export default function AppIndex() {
 
         router.replace((user.onboarding_completed === false ? '/onboarding' : '/(tabs)') as never);
       }
+      } catch {
+        // One rejected step above (a SecureStore read with the keychain still
+        // locked, an i18n init failure, ...) must not strand the app: without
+        // a navigation, pathname stays '/', the splash's `ready` prop stays
+        // false and the overlay never exits — a brick with no telemetry.
+        // /login is the safe harbour: with a session already restored into the
+        // store it bounces straight into the app, and without one it is the
+        // ordinary front door with the invite-code link.
+        if (mounted) {
+          router.replace('/login' as never);
+        }
+      }
     }
 
-    routeInitialScreen();
+    void routeInitialScreen();
 
     return () => {
       mounted = false;

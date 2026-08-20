@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, StyleSheet } from 'react-native';
+import { AccessibilityInfo, Animated, AppState, StyleSheet } from 'react-native';
 import { SplashScreen } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 
@@ -62,25 +62,53 @@ export default function AnimatedSplash({ ready, onFinish }: Props) {
   const [videoFailed, setVideoFailed] = useState(false);
   const [videoReadyAt, setVideoReadyAt] = useState<number | null>(null);
   const [fallbackLaidOut, setFallbackLaidOut] = useState(false);
+  // State, not only the ref: pointerEvents below must flip on this transition,
+  // and a ref write does not re-render.
+  const [finishing, setFinishing] = useState(false);
   const videoReadyRef = useRef<number | null>(null);
   const finishingRef = useRef(false);
 
-  // A decoder that never paints must not hold the app hostage: if the first
-  // frame hasn't landed 4 s after mount, treat the video as failed and let
-  // the plain dark frame exit on the ready gate alone.
   useEffect(() => {
+    // The subscription starts a commit after the player was created, so an
+    // error that fired in that gap would be missed — ask once before listening.
+    if (player.status === 'error') {
+      setVideoFailed(true);
+      return;
+    }
     const sub = player.addListener('statusChange', ({ status }) => {
       if (status === 'error') setVideoFailed(true);
     });
     return () => sub.remove();
   }, [player]);
 
+  // A decoder that never paints must not hold the app hostage: if the first
+  // frame hasn't landed 4 s after the VideoView could actually mount, treat
+  // the video as failed and let the plain dark frame exit on the ready gate
+  // alone. Gated on reduceMotion === false, not on component mount: the
+  // VideoView itself only mounts once the AccessibilityInfo query resolves,
+  // so a mount-based clock would quietly bill that wait to the decoder.
   useEffect(() => {
+    if (reduceMotion !== false) return;
     const t = setTimeout(() => {
       if (videoReadyRef.current === null) setVideoFailed(true);
     }, 4000);
     return () => clearTimeout(t);
-  }, []);
+  }, [reduceMotion]);
+
+  // expo-video pauses playback when the app backgrounds and stays paused on
+  // return — without this, switching away mid-splash comes back to a frozen
+  // frame for the rest of the display minimum.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      try {
+        player.play();
+      } catch {
+        // Player already released — the splash is on its way out.
+      }
+    });
+    return () => sub.remove();
+  }, [player]);
 
   useEffect(() => {
     let active = true;
@@ -112,6 +140,7 @@ export default function AnimatedSplash({ ready, onFinish }: Props) {
     const wait = Math.max(0, (animated ? MIN_DISPLAY_MS : 0) - elapsed);
     const t = setTimeout(() => {
       finishingRef.current = true;
+      setFinishing(true);
       Animated.timing(opacity, {
         toValue: 0,
         duration: FADE_MS,
@@ -122,8 +151,13 @@ export default function AnimatedSplash({ ready, onFinish }: Props) {
   }, [ready, reduceMotion, videoFailed, videoReadyAt, opacity, onFinish]);
 
   return (
+    // Touches are BLOCKED while the splash is opaque: the boot routing lands
+    // on a real, interactive screen well inside the display minimum, and a
+    // pass-through overlay let impatient taps press invisible controls
+    // underneath. Only once the fade starts does the overlay get out of the
+    // way, so the app becomes usable the moment it becomes visible.
     <Animated.View
-      pointerEvents="none"
+      pointerEvents={finishing ? 'none' : 'auto'}
       style={[styles.fill, { opacity }]}
       onLayout={() => setFallbackLaidOut(true)}
     >
