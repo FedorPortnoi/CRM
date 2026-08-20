@@ -123,6 +123,50 @@ export default function RootLayout() {
     }
   }, [token, user?.onboarding_completed, isRestoring, router]);
 
+  /**
+   * Dead-session sweep, and it must live HERE — the root layout is the one
+   * component navigation can never unmount. AppIndex has its own /auth/me
+   * check, but the onboarding redirect above fires synchronously off the
+   * SecureStore snapshot and unmounts AppIndex before that network round trip
+   * answers, so on any account with onboarding_completed=false the check was
+   * abandoned on every single launch (server logs: zero /auth/me calls). A
+   * device that never logged out of a since-deleted account was therefore
+   * marooned on /onboarding forever, every button 401ing.
+   *
+   * Only 401 is definitive — authenticate.ts answers it for a revoked session,
+   * a deactivated account and a deleted one, and re-checks on every request.
+   * Offline or 5xx must never destroy stored credentials. Keyed per token so
+   * each restored/minted session is verified exactly once.
+   */
+  const sessionSweepRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isRestoring || token === null) return;
+    if (sessionSweepRef.current === token) return;
+    sessionSweepRef.current = token;
+    void (async () => {
+      try {
+        const response = await fetch(`${API_URL}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.status === 401) {
+          // logout() is the shared teardown every exit path uses; its own
+          // /auth/logout call bouncing off the dead token is handled inside.
+          try {
+            await useUserStore.getState().logout();
+          } finally {
+            router.replace('/login');
+          }
+        }
+      } catch {
+        // Unreachable server says nothing about the account. Clear the marker
+        // so the next effect run (or next launch) can try again.
+        if (sessionSweepRef.current === token) {
+          sessionSweepRef.current = null;
+        }
+      }
+    })();
+  }, [token, isRestoring, router]);
+
   useEffect(() => {
     if (token === null) {
       pushRegistrationAttemptRef.current = null;

@@ -69,4 +69,21 @@ describe('boot-gate dead-session sweep', () => {
     expect(branch).toContain('useUserStore.getState().logout()');
     expect(branch).toContain("router.replace('/login'");
   });
+
+  /**
+   * AppIndex's check alone is NOT enough: the root layout's onboarding
+   * redirect fires synchronously off the cached snapshot and unmounts
+   * AppIndex before its network check answers, so the sweep must also run
+   * from the layout — the one component navigation can never unmount.
+   */
+  it('runs the sweep from the root layout too, where no redirect can kill it', () => {
+    const layout = readFileSync(resolve(process.cwd(), 'src/app/_layout.tsx'), 'utf8');
+    const sweepStart = layout.indexOf('sessionSweepRef');
+    expect(sweepStart).toBeGreaterThan(-1);
+    const sweep = layout.slice(sweepStart);
+
+    expect(sweep).toContain('response.status === 401');
+    expect(sweep).toContain('useUserStore.getState().logout()');
+    expect(sweep).toContain("router.replace('/login')");
+  });
 });
