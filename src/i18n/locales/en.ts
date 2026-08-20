@@ -451,6 +451,7 @@ const en = {
     pendingCapturesNotificationBody: 'Pending captures to review: {{count}}',
     greeting: 'Hi, {{name}}',
     workspaceToday: "Here's your workspace today",
+    voiceTask: 'Dictate a task to the assistant',
     quickActions: 'Quick actions',
     todayFocus: "Today's focus",
     viewAll: 'View all',

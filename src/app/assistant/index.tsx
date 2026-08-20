@@ -50,7 +50,7 @@ import {
   View,
 } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
-import { Stack } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, History, Mic, Plus, Send, ServerCog, Sparkles, X } from 'lucide-react-native';
@@ -390,6 +390,24 @@ export default function AssistantScreen(): JSX.Element {
       void finishRecording();
     }
   }, [voiceState, recorderState.durationMillis, finishRecording]);
+
+  // ── Voice hot button on the dashboard: /assistant?voice=1 ─────────────────
+  // Arriving through it means the user is already mid-thought, so the recorder
+  // starts as soon as the server confirms voice is available — one tap on the
+  // dashboard, speak, review the transcript, send. Guarded by a ref so a
+  // re-render (or a later manual cancel) never restarts recording, and once
+  // the status resolves WITHOUT voice the attempt is marked spent rather than
+  // retried forever. Everything after the start is the ordinary voice flow.
+  const { voice: voiceParam } = useLocalSearchParams<{ voice?: string }>();
+  const autoVoiceRef = useRef(false);
+  useEffect(() => {
+    if (autoVoiceRef.current || voiceParam !== '1' || !canChat) return;
+    if (statusQuery.data === undefined) return; // status still loading — wait
+    autoVoiceRef.current = true;
+    if (statusQuery.data.voice_input !== true || notConfigured) return;
+    if (voiceState !== 'idle') return;
+    void startRecording();
+  }, [voiceParam, canChat, statusQuery.data, notConfigured, voiceState, startRecording]);
 
   const startNewConversation = useCallback((): void => {
     setConversationId(null);

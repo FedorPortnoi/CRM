@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { TrendingUp, CheckSquare, AlertCircle, AlertTriangle, MessageCircle, Calendar, Zap, UserPlus, PlusCircle, ListChecks, ChevronRight } from 'lucide-react-native';
+import { TrendingUp, CheckSquare, AlertCircle, AlertTriangle, MessageCircle, Calendar, Zap, UserPlus, PlusCircle, ListChecks, ChevronRight, Mic } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { notifyPendingCaptureCount } from '../../utils/notifications';
@@ -308,6 +308,20 @@ export default function DashboardScreen(): JSX.Element {
           <Text style={styles.greetingText}>{t('dashboard.greeting', { name: firstName })}</Text>
           <Text style={styles.greetingSub}>{t('dashboard.workspaceToday')}</Text>
         </View>
+        {/* Voice hot line to the assistant: opens /assistant with the recorder
+            already running (?voice=1), so one tap + speech = an assigned task.
+            Viewers can't chat with the assistant at all, so they get no button. */}
+        {user?.role !== 'viewer' ? (
+          <TouchableOpacity
+            style={styles.voiceTaskButton}
+            onPress={() => router.push('/assistant?voice=1' as never)}
+            accessibilityRole="button"
+            accessibilityLabel={t('dashboard.voiceTask')}
+            hitSlop={6}
+          >
+            <Mic size={20} color="#FFFFFF" strokeWidth={2.2} />
+          </TouchableOpacity>
+        ) : null}
         <View style={styles.avatarCircle}>
           <Text style={styles.avatarInitials}>{initials}</Text>
         </View>
@@ -682,6 +696,20 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     fontSize: 14,
     color: c.amber,
     marginTop: 2,
+  },
+  voiceTaskButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: c.orange,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+    shadowColor: c.orange,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   avatarCircle: {
     width: 44,

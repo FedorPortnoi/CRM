@@ -454,6 +454,7 @@ const ru = {
     pendingCapturesNotificationBody: 'Ожидают проверки: {{count}}',
     greeting: 'Привет, {{name}}',
     workspaceToday: 'Ваше рабочее пространство сегодня',
+    voiceTask: 'Надиктовать задачу ассистенту',
     quickActions: 'Быстрые действия',
     todayFocus: 'Фокус на сегодня',
     viewAll: 'Смотреть все',
