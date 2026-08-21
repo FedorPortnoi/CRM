@@ -1,0 +1,495 @@
+/* ============================================================================
+   4КУБ — guide / spoke page island
+   ----------------------------------------------------------------------------
+   Loaded by the five topic pages that hang off the homepage hub:
+   /offline-crm, /perehod-s-bitrix24, /ai-assistent, /bezopasnost-fz152,
+   /dlya-vyezdnyh-komand.
+
+   WHY A SECOND ISLAND AND NOT sections.css. sections.css is 2 897 lines built
+   around one scroll-choreographed homepage — pinned tracks, a rotating cube, a
+   hero that flies apart. None of it applies to a page whose whole job is to be
+   read and quoted, and loading it would cost ~130 KB to use a dozen selectors.
+   These pages load base.css (tokens, type, buttons) plus this file, and no
+   JavaScript at all: no reveal states to gate, so nothing can flash.
+
+   It borrows doc.css's discipline — one column, generous measure, porcelain
+   ground — and adds the six components a topic page needs that a legal document
+   does not: an answer block, a fact table, a candour note, an accordion, a
+   sibling rail and a closing call.
+
+   THE ANSWER BLOCK IS THE POINT. `.g-answer` holds the one self-contained
+   paragraph an assistant can lift without the surrounding page. It is styled to
+   look quotable — indented, ruled, set in the serif — because it is meant to be
+   read as the page's thesis by a human too. Never put a claim in it that is not
+   also defended in the prose below.
+   ========================================================================== */
+
+.guide-page {
+  background: var(--room-bg);
+  color: var(--room-ink);
+  min-height: 100dvh;
+}
+
+/* ---- bar ---------------------------------------------------------------- */
+
+.g-bar {
+  border-bottom: 1px solid var(--room-line);
+  background: var(--room-panel);
+}
+.g-bar-inner {
+  max-width: 62rem;
+  margin-inline: auto;
+  padding: 0 clamp(1.25rem, 4vw, 2rem);
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.g-mark {
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  min-height: 44px;
+  color: var(--room-muted);
+  transition: color 0.2s var(--ease-out);
+}
+.g-mark:hover { color: var(--room-ink); }
+.g-mark svg { width: 22px; height: 22px; }
+.g-mark span { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; color: var(--room-ink); }
+
+.g-bar-cta {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--room-accent);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.g-bar-cta:hover { color: var(--accent-deep); }
+
+/* ---- shell -------------------------------------------------------------- */
+
+.g-body {
+  max-width: 62rem;
+  margin-inline: auto;
+  padding: clamp(1.6rem, 4vw, 2.4rem) clamp(1.25rem, 4vw, 2rem) 5rem;
+}
+
+/* Breadcrumbs are real navigation here, not decoration: these pages are two
+   clicks deep and a visitor arriving from a search result has no other way up. */
+.g-crumbs {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ash);
+  margin: 0 0 clamp(1.8rem, 4vw, 2.6rem);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.g-crumbs a { color: var(--room-accent); text-decoration: underline; text-underline-offset: 3px; }
+.g-crumbs a:hover { color: var(--accent-deep); }
+.g-crumbs i { font-style: normal; opacity: 0.5; }
+
+/* ---- head --------------------------------------------------------------- */
+
+.g-head { margin: 0 0 clamp(2.2rem, 5vw, 3.2rem); }
+.g-head h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.95rem, 1.35rem + 2.4vw, 3.1rem);
+  line-height: 1.08;
+  letter-spacing: 0.005em;
+  text-transform: uppercase;
+  font-weight: 250;
+  margin: 0;
+  color: var(--room-ink);
+  text-wrap: balance;
+}
+.g-head .lede { max-width: 62ch; }
+
+/* Facts under the title. Mono labels, so they read as a specification strip
+   rather than as more prose — and each one is a term a search engine or an
+   assistant can attach to the page. */
+.g-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 2.2rem;
+  margin: 1.9rem 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--room-line);
+}
+.g-facts > div { min-width: 0; }
+.g-facts dt {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ash);
+  margin: 0 0 0.3rem;
+}
+.g-facts dd {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.94rem;
+  font-weight: 500;
+  color: var(--room-ink);
+}
+.g-facts dd a { color: var(--room-accent); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---- the quotable answer ------------------------------------------------ */
+
+.g-answer {
+  margin: 0 0 clamp(2.4rem, 5vw, 3.4rem);
+  padding: clamp(1.4rem, 3vw, 1.9rem) clamp(1.3rem, 3vw, 2rem);
+  background: var(--room-panel);
+  border: 1px solid var(--room-line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+}
+.g-answer p {
+  font-family: var(--font-serif);
+  font-size: clamp(1.02rem, 0.98rem + 0.3vw, 1.14rem);
+  line-height: 1.72;
+  color: var(--ink-soft);
+  max-width: 72ch;
+  margin: 0;
+}
+.g-answer p + p { margin-top: 0.9rem; }
+.g-answer strong { color: var(--room-ink); font-weight: 600; }
+
+/* ---- prose -------------------------------------------------------------- */
+
+.g-prose h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 1.15rem + 0.9vw, 1.8rem);
+  line-height: 1.16;
+  letter-spacing: 0.005em;
+  text-transform: uppercase;
+  font-weight: 250;
+  color: var(--room-ink);
+  margin: clamp(2.8rem, 6vw, 3.8rem) 0 1rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid var(--room-line);
+  text-wrap: balance;
+}
+.g-prose h3 {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--room-ink);
+  margin: 2rem 0 0.6rem;
+}
+.g-prose p,
+.g-prose li {
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  line-height: 1.78;
+  color: var(--ink-soft);
+  max-width: 72ch;
+}
+.g-prose p { margin: 0 0 1.1rem; }
+.g-prose ul, .g-prose ol { margin: 0 0 1.4rem; padding-left: 1.35rem; }
+.g-prose li { margin-bottom: 0.55rem; }
+.g-prose strong { color: var(--room-ink); font-weight: 600; }
+.g-prose a { color: var(--room-accent); text-decoration: underline; text-underline-offset: 3px; }
+.g-prose a:hover { color: var(--accent-deep); }
+.g-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--paper-deep);
+  padding: 0.1em 0.35em;
+  border-radius: 2px;
+}
+
+/* ---- candour note ------------------------------------------------------- */
+
+/* Used where the honest answer is worse than the marketing one — the hosting
+   location, most of all. It is set apart so a reader skimming cannot miss it
+   and an assistant summarising the page cannot drop it as an aside. */
+.g-note {
+  margin: 2rem 0;
+  padding: 1.15rem 1.3rem;
+  background: var(--accent-wash);
+  border: 1px solid rgba(204, 120, 92, 0.35);
+  border-radius: var(--radius);
+}
+.g-note p {
+  font-family: var(--font-serif);
+  font-size: 0.97rem;
+  line-height: 1.7;
+  color: var(--ink-soft);
+  max-width: 70ch;
+  margin: 0;
+}
+.g-note p + p { margin-top: 0.7rem; }
+.g-note strong { color: var(--accent-deep); font-weight: 600; }
+.g-note-label {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--accent-deep);
+  margin: 0 0 0.55rem !important;
+}
+
+/* ---- comparison / spec table -------------------------------------------- */
+
+.g-table-wrap { overflow-x: auto; margin: 1.6rem 0 2rem; }
+.g-table {
+  width: 100%;
+  min-width: 30rem;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 0.93rem;
+}
+.g-table caption {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ash);
+  text-align: left;
+  padding-bottom: 0.7rem;
+}
+.g-table th,
+.g-table td {
+  text-align: left;
+  padding: 0.72rem 0.9rem;
+  border-bottom: 1px solid var(--room-line);
+  vertical-align: top;
+  line-height: 1.55;
+}
+.g-table thead th {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ash);
+  background: var(--paper-deep);
+}
+.g-table tbody th {
+  font-weight: 600;
+  color: var(--room-ink);
+  width: 34%;
+}
+.g-table td { color: var(--ink-soft); }
+
+/* ---- steps -------------------------------------------------------------- */
+
+.g-steps { list-style: none; margin: 1.6rem 0 2rem; padding: 0; counter-reset: g-step; }
+.g-steps li {
+  counter-increment: g-step;
+  position: relative;
+  padding-left: 3.1rem;
+  margin-bottom: 1.5rem;
+  max-width: 70ch;
+}
+.g-steps li::before {
+  content: counter(g-step, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0.15rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--accent-ink);
+  border: 1px solid var(--room-line);
+  border-radius: var(--radius);
+  padding: 0.2rem 0.4rem;
+  background: var(--room-panel);
+}
+.g-steps b {
+  display: block;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--room-ink);
+  margin-bottom: 0.2rem;
+}
+
+/* ---- faq ---------------------------------------------------------------- */
+
+/* <details>, so every answer is in the DOM whether open or shut. A crawler and
+   a reader without JavaScript get the same words; there is no script on these
+   pages to open anything. */
+.g-faq { margin: 1.6rem 0 0; border-top: 1px solid var(--room-line); }
+.g-faq-item { border-bottom: 1px solid var(--room-line); }
+.g-faq-item summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 1.15rem 2.4rem 1.15rem 0;
+  position: relative;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.g-faq-item summary::-webkit-details-marker { display: none; }
+.g-faq-item summary h3 {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--room-ink);
+  margin: 0;
+}
+.g-faq-item summary::after {
+  content: '';
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  margin-top: -5px;
+  border-right: 1.5px solid var(--accent-ink);
+  border-bottom: 1.5px solid var(--accent-ink);
+  transform: rotate(45deg);
+  transform-origin: center;
+  transition: transform 0.25s var(--ease-out);
+}
+.g-faq-item[open] summary::after { transform: rotate(-135deg); }
+.g-faq-item summary:hover h3 { color: var(--accent-deep); }
+.g-faq-a { padding: 0 0 1.3rem; }
+.g-faq-a p {
+  font-family: var(--font-serif);
+  font-size: 0.99rem;
+  line-height: 1.75;
+  color: var(--ink-soft);
+  max-width: 72ch;
+  margin: 0;
+}
+.g-faq-a p + p { margin-top: 0.85rem; }
+.g-faq-a a { color: var(--room-accent); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---- cta ---------------------------------------------------------------- */
+
+.g-cta {
+  margin: clamp(3rem, 7vw, 4.5rem) 0 0;
+  padding: clamp(1.8rem, 4vw, 2.6rem);
+  background: var(--room-panel);
+  border: 1px solid var(--room-line);
+  border-radius: var(--radius);
+  text-align: center;
+}
+.g-cta h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.3rem, 1.1rem + 0.9vw, 1.7rem);
+  text-transform: uppercase;
+  font-weight: 250;
+  letter-spacing: 0.01em;
+  margin: 0 0 0.8rem;
+  color: var(--room-ink);
+  border: 0;
+  padding: 0;
+}
+.g-cta p {
+  font-family: var(--font-serif);
+  color: var(--ink-soft);
+  max-width: 48ch;
+  margin: 0 auto 1.6rem;
+  line-height: 1.7;
+}
+.g-cta-stores {
+  margin-top: 1.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+.g-cta-stores a { color: var(--room-accent); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---- sibling rail ------------------------------------------------------- */
+
+/* The hub-and-spoke wiring, made visible. Every spoke links to every other
+   spoke and to the hub, so a visitor who landed on the wrong one of the five
+   is one click from the right one — and so no page is a dead end for a crawler
+   following links rather than the sitemap. */
+.g-related { margin: clamp(3rem, 7vw, 4.5rem) 0 0; }
+.g-related h2 {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ash);
+  margin: 0 0 1.2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--room-line);
+}
+.g-related ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.9rem; }
+@media (min-width: 700px) { .g-related ul { grid-template-columns: 1fr 1fr; gap: 0.9rem 1.6rem; } }
+.g-related li { margin: 0; }
+.g-related a {
+  display: block;
+  padding: 0.95rem 1.1rem;
+  border: 1px solid var(--room-line);
+  border-radius: var(--radius);
+  background: var(--room-panel);
+  transition: border-color 0.2s var(--ease-out), transform 0.2s var(--ease-out);
+}
+.g-related a:hover { border-color: var(--accent); transform: translateY(-2px); }
+.g-related b {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.97rem;
+  font-weight: 600;
+  color: var(--room-ink);
+  margin-bottom: 0.2rem;
+}
+.g-related span {
+  font-family: var(--font-serif);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--ash);
+}
+
+/* ---- foot --------------------------------------------------------------- */
+
+.g-foot {
+  max-width: 62rem;
+  margin-inline: auto;
+  padding: 1.6rem clamp(1.25rem, 4vw, 2rem) 3rem;
+  border-top: 1px solid var(--room-line);
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  color: var(--room-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.4rem;
+  justify-content: space-between;
+}
+.g-foot a { color: var(--room-muted); text-decoration: underline; text-underline-offset: 3px; }
+.g-foot a:hover { color: var(--room-ink); }
+
+/* A dated marker beside a claim that is scheduled to stop being true — the
+   hosting migration, above all. Both the reader and anything quoting the page
+   can see how fresh the sentence is. */
+.g-stamp {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ash);
+  border: 1px solid var(--room-line);
+  border-radius: 2px;
+  padding: 0.15rem 0.45rem;
+  vertical-align: 0.15em;
+}
+
+@media print {
+  .g-bar, .g-foot, .g-cta, .g-related { display: none; }
+  .guide-page { background: #fff; }
+  .g-faq-a { display: block !important; }
+}

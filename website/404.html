@@ -32,6 +32,17 @@
   }
   .nf-actions { display: flex; flex-wrap: wrap; gap: 0.9rem; justify-content: center; margin-top: 2.2rem; }
   .nf-cube { width: 64px; height: 64px; margin: 0 auto 2rem; color: var(--line-strong); }
+  /* The page is `noindex, follow` — «follow» is the operative half, and until
+     now there was nothing here to follow but the homepage. These five give a
+     mistyped URL somewhere to land and a crawler a path onward. */
+  .nf-more { margin-top: 2.6rem; padding-top: 1.6rem; border-top: 1px solid var(--line-soft); }
+  .nf-more p { font-family: var(--font-mono); font-size: var(--t-label); letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--ash); margin: 0 0 1rem; }
+  .nf-more ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap;
+    gap: 0.6rem 1.4rem; justify-content: center; }
+  .nf-more a { color: var(--accent-ink); font-size: 0.94rem; text-decoration: underline;
+    text-underline-offset: 3px; }
+  .nf-more a:hover { color: var(--accent-deep); }
 </style>
 </head>
 <body>
@@ -56,6 +67,17 @@
       </a>
       <a class="btn btn-ghost btn-lg" href="/register">Создать аккаунт</a>
     </div>
+
+    <nav class="nf-more" aria-label="Разделы сайта">
+      <p>Разделы</p>
+      <ul>
+        <li><a href="/offline-crm">Работа без интернета</a></li>
+        <li><a href="/perehod-s-bitrix24">Перенос из Битрикс24</a></li>
+        <li><a href="/ai-assistent">ИИ-ассистент</a></li>
+        <li><a href="/bezopasnost-fz152">Безопасность и ФЗ-152</a></li>
+        <li><a href="/dlya-vyezdnyh-komand">Для выездных команд</a></li>
+      </ul>
+    </nav>
   </div>
 </main>
 

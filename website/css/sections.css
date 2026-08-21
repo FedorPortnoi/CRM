@@ -2787,6 +2787,27 @@
 .faq-founder-text a { color: var(--accent-ink); transition: color 0.2s var(--ease-out); }
 .faq-founder-text a:hover { color: var(--accent-deep); }
 
+/* ---- in-prose links to the topic pages ---------------------------------- */
+
+/* The site's convention for an inline link is accent colour and no underline
+   (see .faq-founder-text above, and the global `a` in base.css). These four get
+   an underline anyway, and the exception is deliberate: they are the only links
+   in body prose that LEAVE this page, and a colour shift alone is not a reliable
+   affordance on cream — the accent-ink/ink contrast is 2.1:1 against each other.
+   Underlining them is what makes the hub readable as a hub.
+   `.lede a` is safe to style globally: before the topic pages existed, no .lede
+   on this site contained a link. */
+.lede a,
+.caps-import-lead a {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: color 0.2s var(--ease-out);
+}
+.lede a:hover,
+.caps-import-lead a:hover { color: var(--accent-deep); }
+
 /* Phones: the folio leaves and the answer takes the full measure. */
 @media (max-width: 640px) {
   .faq-item summary { grid-template-columns: minmax(0, 1fr) auto; }
@@ -2864,6 +2885,11 @@
 }
 .foot-top { display: grid; gap: 2.4rem; }
 @media (min-width: 820px) { .foot-top { grid-template-columns: 1.4fr 1fr 1fr; } }
+/* A fourth column arrived with the topic pages. It gets its own breakpoint
+   rather than joining the 820px rule: four columns at 820px squeezes «Политика
+   конфиденциальности» onto three lines. Between 820 and 1080 the fourth simply
+   wraps to a second grid row, which the existing `gap` already spaces. */
+@media (min-width: 1080px) { .foot-top { grid-template-columns: 1.4fr 1fr 1fr 1fr; } }
 .foot-mark {
   display: flex; align-items: center; gap: 0.65rem;
   font-family: var(--font-mono);

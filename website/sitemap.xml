@@ -1,11 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Only the two indexable pages. /register and /verify are noindex by intent,
-     and /i carries X-Robots-Tag: noindex from the server, so listing any of
-     them here would ask crawlers to fetch what they are then told to drop. -->
+<!-- Seven indexable pages: the hub, its five topic pages, and the privacy
+     policy. /register and /verify are noindex by intent, and /i carries
+     X-Robots-Tag: noindex from the server, so listing any of them here would ask
+     crawlers to fetch what they are then told to drop.
+
+     The topic URLs are listed WITHOUT the .html extension because that is what
+     each page's own <link rel="canonical"> declares. The static server resolves
+     both forms (try_files $uri $uri.html), so /offline-crm.html answers 200 as
+     well — the canonical tag is what keeps the pair from being indexed twice,
+     and the two must not be allowed to disagree. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://4kub.ru/</loc>
-    <lastmod>2026-08-15</lastmod>
+    <lastmod>2026-08-21</lastmod>
+  </url>
+  <url>
+    <loc>https://4kub.ru/offline-crm</loc>
+    <lastmod>2026-08-21</lastmod>
+  </url>
+  <url>
+    <loc>https://4kub.ru/perehod-s-bitrix24</loc>
+    <lastmod>2026-08-21</lastmod>
+  </url>
+  <url>
+    <loc>https://4kub.ru/ai-assistent</loc>
+    <lastmod>2026-08-21</lastmod>
+  </url>
+  <url>
+    <loc>https://4kub.ru/bezopasnost-fz152</loc>
+    <lastmod>2026-08-21</lastmod>
+  </url>
+  <url>
+    <loc>https://4kub.ru/dlya-vyezdnyh-komand</loc>
+    <lastmod>2026-08-21</lastmod>
   </url>
   <url>
     <loc>https://4kub.ru/privacy.html</loc>
