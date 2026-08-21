@@ -26,7 +26,13 @@ describe('animated splash native handoff', () => {
   });
 
   it('keeps the overlay up while the index route is still deciding where to go', () => {
-    expect(sourceOf('src/app/_layout.tsx')).toContain("ready={pathname !== '/'}");
+    // Segments, not pathname: usePathname() strips route groups, so the
+    // dashboard at /(tabs)/index also reads as '/' and a pathname !== '/'
+    // gate never opens after a successful login — the splash loops forever
+    // over a fully working app.
+    const source = sourceOf('src/app/_layout.tsx');
+    expect(source).toContain('ready={segments.length > 0}');
+    expect(source).not.toContain("ready={pathname !== '/'}");
   });
 
   it('blocks ghost taps while opaque and releases them only for the fade', () => {

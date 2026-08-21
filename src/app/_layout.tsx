@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Stack, useRouter, usePathname } from 'expo-router';
+import { Stack, useRouter, usePathname, useSegments } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
@@ -44,6 +44,7 @@ Notifications.setNotificationHandler({
 export default function RootLayout() {
   const router = useRouter();
   const pathname = usePathname();
+  const segments = useSegments();
   const { token, user, restoreSession } = useUserStore();
   const fetchOnboarding = useOnboardingStore((s) => s.fetch);
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
@@ -287,10 +288,17 @@ export default function RootLayout() {
         {!splashDone && (
           <AnimatedSplash
             key="animated-splash"
-            // `/` still has asynchronous boot routing to do (language,
-            // SecureStore, and a bounded /auth/me refresh). Keep the animated
-            // layer over it until AppIndex has selected the real destination.
-            ready={pathname !== '/'}
+            // The root index route still has asynchronous boot routing to do
+            // (language, SecureStore, and a bounded /auth/me refresh) — keep
+            // the animated layer over it until AppIndex has selected the real
+            // destination. Segments, NOT pathname: usePathname() strips route
+            // groups, so the dashboard at /(tabs)/index ALSO reads as '/',
+            // and a pathname gate never opened on the one route every
+            // successful login lands on — the splash looped forever over a
+            // fully working app. useSegments() is [] only on the root index
+            // and ['(tabs)'] on the dashboard, which is the distinction this
+            // gate actually needs.
+            ready={segments.length > 0}
             onFinish={() => setSplashDone(true)}
           />
         )}
