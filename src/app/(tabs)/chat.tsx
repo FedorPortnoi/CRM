@@ -1,7 +1,7 @@
 import React, { useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, ListRenderItemInfo,
+  ListRenderItemInfo,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -9,7 +9,8 @@ import { MessageSquare, Users } from 'lucide-react-native';
 import { useChatStore, Channel } from '../../store/chatStore';
 import { useUserStore } from '../../store/userStore';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type, control } from '../../theme';
+import { Badge, Button, EmptyState, Skeleton } from '../../components/ui';
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -19,6 +20,19 @@ function timeAgo(iso: string): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs} ч`;
   return `${Math.floor(hrs / 24)} д`;
+}
+
+/** Loading placeholder shaped like a real channel row. */
+function SkeletonRow({ styles }: { styles: ReturnType<typeof makeStyles> }): JSX.Element {
+  return (
+    <View style={styles.row}>
+      <Skeleton width={46} height={46} rounded={radius.xl} />
+      <View style={styles.info}>
+        <Skeleton width="45%" height={15} />
+        <Skeleton width="75%" height={13} style={styles.skeletonPreview} />
+      </View>
+    </View>
+  );
 }
 
 export default function ChatListScreen() {
@@ -67,18 +81,14 @@ export default function ChatListScreen() {
       <TouchableOpacity style={styles.row} onPress={() => handleOpen(item)} activeOpacity={0.7}>
         <View style={[styles.avatar, isGeneral ? styles.avatarGeneral : styles.avatarDm]}>
           {isGeneral
-            ? <Users size={20} color="#fff" strokeWidth={2} />
+            ? <Users size={20} color={colors.onAccent} strokeWidth={2} />
             : <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>}
         </View>
         <View style={styles.info}>
           <View style={styles.infoTop}>
             <View style={styles.nameLine}>
               <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-              {!isGeneral && (
-                <View style={styles.dmPill}>
-                  <Text style={styles.dmPillText}>{t('chat.privatePill')}</Text>
-                </View>
-              )}
+              {!isGeneral && <Badge label={t('chat.privatePill')} />}
             </View>
             {lastTime ? <Text style={styles.time}>{lastTime}</Text> : null}
           </View>
@@ -96,12 +106,14 @@ export default function ChatListScreen() {
         )}
       </TouchableOpacity>
     );
-  }, [t, handleOpen, styles]);
+  }, [t, handleOpen, styles, colors.onAccent]);
 
   if (loadingChannels && channels.length === 0) {
     return (
-      <View style={styles.loadingWrap}>
-        <ActivityIndicator color={colors.orange} />
+      <View style={styles.container}>
+        <View style={styles.list}>
+          {Array.from({ length: 7 }, (_, i) => <SkeletonRow key={i} styles={styles} />)}
+        </View>
       </View>
     );
   }
@@ -112,27 +124,36 @@ export default function ChatListScreen() {
         data={channels}
         keyExtractor={(item) => item.channel}
         renderItem={renderItem}
-        contentContainerStyle={[styles.list, { paddingBottom: 96 }]}
+        contentContainerStyle={[styles.list, styles.listPad]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <MessageSquare size={48} color={colors.skeleton} strokeWidth={1.5} />
-            <Text style={styles.emptyTitle}>{t('chat.emptyTitle')}</Text>
-            <Text style={styles.emptySub}>{t('chat.emptySub')}</Text>
-          </View>
+          <EmptyState
+            icon={<MessageSquare size={48} color={colors.skeleton} strokeWidth={1.5} />}
+            title={t('chat.emptyTitle')}
+            description={t('chat.emptySub')}
+          />
         }
       />
 
-      {/* Bottom action bar: two clear buttons */}
+      {/* Bottom action bar: one primary action, one secondary. */}
       <View style={styles.actionBar}>
-        <TouchableOpacity style={[styles.actionBtn, styles.actionBtnGeneral]} onPress={openGeneral} activeOpacity={0.85}>
-          <Users size={16} color="#fff" strokeWidth={2.5} />
-          <Text style={styles.actionBtnText}>{t('chat.openGeneral')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtn, styles.actionBtnDm]} onPress={openNewDm} activeOpacity={0.85}>
-          <MessageSquare size={16} color={colors.orange} strokeWidth={2.5} />
-          <Text style={[styles.actionBtnText, styles.actionBtnDmText]}>{t('chat.newDm')}</Text>
-        </TouchableOpacity>
+        <View style={styles.actionSlot}>
+          <Button
+            title={t('chat.openGeneral')}
+            onPress={openGeneral}
+            block
+            icon={<Users size={16} color={colors.onAccent} strokeWidth={2.5} />}
+          />
+        </View>
+        <View style={styles.actionSlot}>
+          <Button
+            title={t('chat.newDm')}
+            onPress={openNewDm}
+            variant="secondary"
+            block
+            icon={<MessageSquare size={16} color={colors.text1} strokeWidth={2.5} />}
+          />
+        </View>
       </View>
     </View>
   );
@@ -140,53 +161,39 @@ export default function ChatListScreen() {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { paddingVertical: 8 },
+  list: { paddingVertical: spacing.sm },
+  listPad: { paddingBottom: control.md * 2 },
   row: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: c.bgPanel, paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: c.border, gap: 12,
+    backgroundColor: c.surface, paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: c.border, gap: spacing.md,
   },
   avatar: {
-    width: 46, height: 46, borderRadius: 23,
+    width: 46, height: 46, borderRadius: radius.xl,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarGeneral: { backgroundColor: c.orange },
+  avatarGeneral: { backgroundColor: c.accent },
   avatarDm: { backgroundColor: c.amber },
-  avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  avatarText: { ...type.subtitle, color: c.onAccent },
   info: { flex: 1 },
-  infoTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 },
-  nameLine: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6 },
-  name: { fontSize: 15, fontWeight: '600', color: c.text1 },
-  dmPill: {
-    backgroundColor: c.wheat, borderRadius: 4,
-    paddingHorizontal: 5, paddingVertical: 1,
-  },
-  dmPillText: { fontSize: 10, color: c.amber, fontWeight: '600' },
-  time: { fontSize: 12, color: c.textMuted, marginLeft: 8 },
-  preview: { fontSize: 13, color: c.amber, lineHeight: 18 },
+  skeletonPreview: { marginTop: spacing.sm },
+  infoTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  nameLine: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: spacing.sm },
+  name: { ...type.heading, fontWeight: '600', color: c.text1 },
+  time: { ...type.caption, color: c.textMuted, marginLeft: spacing.sm, fontVariant: ['tabular-nums'] },
+  preview: { ...type.label, fontWeight: '500', color: c.amber },
   previewHint: { color: c.textMuted, fontStyle: 'italic' },
   badge: {
-    backgroundColor: c.orange, borderRadius: 10,
-    minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5,
+    backgroundColor: c.accent, borderRadius: radius.pill,
+    minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs,
   },
-  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12, marginTop: 80 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: c.text1 },
-  emptySub: { fontSize: 14, color: c.amber, textAlign: 'center', lineHeight: 20 },
+  badgeText: { ...type.micro, color: c.onAccent, fontWeight: '700', fontVariant: ['tabular-nums'] },
   actionBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    flexDirection: 'row', gap: 10,
-    backgroundColor: c.bgPanel, paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: 'row', gap: spacing.md,
+    backgroundColor: c.surface, paddingHorizontal: spacing.lg, paddingTop: spacing.md,
     borderTopWidth: 1, borderTopColor: c.border,
-    paddingBottom: 24,
+    paddingBottom: spacing.xl,
   },
-  actionBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, height: 44, borderRadius: 10,
-  },
-  actionBtnGeneral: { backgroundColor: c.orange },
-  actionBtnDm: { backgroundColor: c.bg, borderWidth: 1, borderColor: c.border },
-  actionBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  actionBtnDmText: { color: c.orange },
+  actionSlot: { flex: 1 },
 });

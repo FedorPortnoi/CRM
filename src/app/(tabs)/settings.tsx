@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { useThemeStore } from '../../store/themeStore';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, radius } from '../../theme';
 import { getStoredLanguage } from '../../i18n/storage';
 import { API_URL } from '../../utils/api';
 import { downloadAuthenticatedPdf } from '../../utils/exportFile';
@@ -328,9 +328,6 @@ export default function SettingsScreen(): JSX.Element {
 
   return (
     <View style={styles.wrapper}>
-      <View style={styles.circle1} pointerEvents="none" />
-      <View style={styles.circle2} pointerEvents="none" />
-      <View style={styles.circle3} pointerEvents="none" />
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <Text style={styles.pageTitle}>{t('settings.title')}</Text>
 
@@ -341,8 +338,8 @@ export default function SettingsScreen(): JSX.Element {
           <Switch
             value={isDark}
             onValueChange={toggleTheme}
-            trackColor={{ false: '#E8DDD6', true: '#CC785C' }}
-            thumbColor={isDark ? '#EBDBBC' : '#FFFFFF'}
+            trackColor={{ false: colors.border, true: colors.accent }}
+            thumbColor={isDark ? colors.wheat : colors.onAccent}
           />
         </View>
       </View>
@@ -365,7 +362,7 @@ export default function SettingsScreen(): JSX.Element {
         style={styles.card}
         onPress={() => router.push('/settings/timezone' as never)}
         accessibilityRole="button"
-      >
+        activeOpacity={0.7}>
         <View style={styles.row}>
           <View style={styles.rowMain}>
             <Text style={styles.rowLabel}>{t('settings.timezone')}</Text>
@@ -392,7 +389,8 @@ export default function SettingsScreen(): JSX.Element {
             read as an org-chart viewer, so nobody found the screen that actually
             hands out logins.
           */}
-          <TouchableOpacity style={styles.card} onPress={() => router.push('/settings/team' as never)} accessibilityRole="button">
+          <TouchableOpacity style={styles.card} onPress={() => router.push('/settings/team' as never)} accessibilityRole="button"
+            activeOpacity={0.7}>
             <View style={styles.row}>
               <View style={styles.rowMain}>
                 <Text style={styles.rowLabel}>
@@ -419,7 +417,7 @@ export default function SettingsScreen(): JSX.Element {
             style={styles.card}
             onPress={() => router.push('/settings/pipelines' as never)}
             accessibilityRole="button"
-          >
+            activeOpacity={0.7}>
             <View style={styles.row}>
               <View style={styles.rowMain}>
                 <Text style={styles.rowLabel}>{t('pipelines.settingsEntry')}</Text>
@@ -454,7 +452,7 @@ export default function SettingsScreen(): JSX.Element {
                 onPress={() => { void handleSaveTarget(); }}
                 disabled={isSavingTarget}
                 accessibilityRole="button"
-              >
+                activeOpacity={0.7}>
                 {isSavingTarget ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
@@ -473,7 +471,7 @@ export default function SettingsScreen(): JSX.Element {
             <TouchableOpacity
               onPress={() => router.push('/sequences' as never)}
               accessibilityRole="button"
-            >
+              activeOpacity={0.7}>
               <View style={styles.row}>
                 <View style={styles.rowMain}>
                   <Text style={styles.rowLabel}>{t('sequences.title')}</Text>
@@ -486,7 +484,7 @@ export default function SettingsScreen(): JSX.Element {
             <TouchableOpacity
               onPress={() => router.push('/templates' as never)}
               accessibilityRole="button"
-            >
+              activeOpacity={0.7}>
               <View style={styles.row}>
                 <View style={styles.rowMain}>
                   <Text style={styles.rowLabel}>{t('templates.title')}</Text>
@@ -506,7 +504,7 @@ export default function SettingsScreen(): JSX.Element {
             <TouchableOpacity
               onPress={() => router.push('/settings/amocrm' as never)}
               accessibilityRole="button"
-            >
+              activeOpacity={0.7}>
               <View style={styles.row}>
                 <View style={styles.rowMain}>
                   <Text style={styles.rowLabel}>{t('settings.amocrm')}</Text>
@@ -519,7 +517,7 @@ export default function SettingsScreen(): JSX.Element {
             <TouchableOpacity
               onPress={() => router.push('/settings/lead-inbox' as never)}
               accessibilityRole="button"
-            >
+              activeOpacity={0.7}>
               <View style={styles.row}>
                 <View style={styles.rowMain}>
                   <Text style={styles.rowLabel}>{t('settings.leadInbox')}</Text>
@@ -532,7 +530,7 @@ export default function SettingsScreen(): JSX.Element {
             <TouchableOpacity
               onPress={() => router.push('/settings/api-keys' as never)}
               accessibilityRole="button"
-            >
+              activeOpacity={0.7}>
               <View style={styles.row}>
                 <View style={styles.rowMain}>
                   <Text style={styles.rowLabel}>{t('settings.apiKeys')}</Text>
@@ -545,7 +543,7 @@ export default function SettingsScreen(): JSX.Element {
             <TouchableOpacity
               onPress={() => router.push('/settings/webhooks' as never)}
               accessibilityRole="button"
-            >
+              activeOpacity={0.7}>
               <View style={styles.row}>
                 <View style={styles.rowMain}>
                   <Text style={styles.rowLabel}>{t('settings.webhooks')}</Text>
@@ -563,7 +561,7 @@ export default function SettingsScreen(): JSX.Element {
         style={styles.card}
         onPress={() => router.push('/language-select' as never)}
         accessibilityRole='button'
-      >
+        activeOpacity={0.7}>
         <View style={styles.row}>
           <Text style={styles.rowLabel}>{t('settings.language')}</Text>
           <View style={styles.rowRight}>
@@ -588,8 +586,8 @@ export default function SettingsScreen(): JSX.Element {
             value={notificationsEnabled}
             onValueChange={(value) => { void handleNotificationsToggle(value); }}
             disabled={notificationsDisabled}
-            trackColor={{ false: 'rgba(232,224,212,0.08)', true: '#CC785C' }}
-            thumbColor='#FFFFFF'
+            trackColor={{ false: colors.border, true: colors.accent }}
+            thumbColor={colors.onAccent}
           />
         </View>
         {!canAskNotifications ? (
@@ -597,7 +595,7 @@ export default function SettingsScreen(): JSX.Element {
             style={styles.notificationSettingsButton}
             onPress={() => { void Linking.openSettings(); }}
             accessibilityRole="button"
-          >
+            activeOpacity={0.7}>
             <Text style={styles.notificationSettingsText}>{t('settings.notifOpenSettings')}</Text>
           </TouchableOpacity>
         ) : null}
@@ -616,7 +614,7 @@ export default function SettingsScreen(): JSX.Element {
             onPress={() => { void handleExport('contacts'); }}
             disabled={exporting !== null}
             accessibilityRole="button"
-          >
+            activeOpacity={0.7}>
             {exporting === 'contacts' ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
@@ -628,7 +626,7 @@ export default function SettingsScreen(): JSX.Element {
             onPress={() => { void handleExport('deals'); }}
             disabled={exporting !== null}
             accessibilityRole="button"
-          >
+            activeOpacity={0.7}>
             {exporting === 'deals' ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
@@ -651,7 +649,7 @@ export default function SettingsScreen(): JSX.Element {
               style={styles.openButton}
               onPress={() => { void handleOpenExport(); }}
               accessibilityRole="button"
-            >
+              activeOpacity={0.7}>
               <Text style={styles.openButtonText}>{t('settings.exportOpen')}</Text>
             </TouchableOpacity>
           </View>
@@ -670,8 +668,8 @@ export default function SettingsScreen(): JSX.Element {
             value={user?.stay_signed_in ?? false}
             onValueChange={(value) => { void handleStaySignedInToggle(value); }}
             disabled={isSavingStaySignedIn}
-            trackColor={{ false: 'rgba(232,224,212,0.08)', true: '#CC785C' }}
-            thumbColor='#FFFFFF'
+            trackColor={{ false: colors.border, true: colors.accent }}
+            thumbColor={colors.onAccent}
           />
         </View>
         {staySignedInError !== null ? <Text style={styles.errorText}>{staySignedInError}</Text> : null}
@@ -693,7 +691,7 @@ export default function SettingsScreen(): JSX.Element {
               style={styles.twoFactorSetupButton}
               onPress={() => router.push('/2fa-setup' as never)}
               accessibilityRole="button"
-            >
+              activeOpacity={0.7}>
               <Text style={styles.twoFactorSetupButtonText}>{t('settings.twoFactorSetup')}</Text>
             </TouchableOpacity>
           )}
@@ -705,14 +703,14 @@ export default function SettingsScreen(): JSX.Element {
               style={styles.twoFactorActionButton}
               onPress={() => openTwoFactorAction('disable')}
               accessibilityRole="button"
-            >
+              activeOpacity={0.7}>
               <Text style={styles.twoFactorActionButtonText}>{t('settings.twoFactorDisable')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.twoFactorActionButtonSecondary}
               onPress={() => openTwoFactorAction('regenerate')}
               accessibilityRole="button"
-            >
+              activeOpacity={0.7}>
               <Text style={styles.twoFactorActionButtonSecondaryText}>{t('settings.twoFactorRegenerate')}</Text>
             </TouchableOpacity>
           </View>
@@ -736,7 +734,7 @@ export default function SettingsScreen(): JSX.Element {
                 style={styles.twoFactorCancelButton}
                 onPress={cancelTwoFactorAction}
                 accessibilityRole="button"
-              >
+                activeOpacity={0.7}>
                 <Text style={styles.twoFactorCancelButtonText}>{t('settings.twoFactorCancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -744,7 +742,7 @@ export default function SettingsScreen(): JSX.Element {
                 onPress={() => { void submitTwoFactorAction(); }}
                 disabled={isTwoFactorSaving || !twoFactorPassword}
                 accessibilityRole="button"
-              >
+                activeOpacity={0.7}>
                 {isTwoFactorSaving ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
@@ -769,7 +767,7 @@ export default function SettingsScreen(): JSX.Element {
               style={styles.twoFactorConfirmButton}
               onPress={() => setNewBackupCodes(null)}
               accessibilityRole="button"
-            >
+              activeOpacity={0.7}>
               <Text style={styles.twoFactorConfirmButtonText}>{t('settings.twoFactorSavedButton')}</Text>
             </TouchableOpacity>
           </View>
@@ -792,7 +790,7 @@ export default function SettingsScreen(): JSX.Element {
                 setDeleteAccountError(null);
               }}
               accessibilityRole="button"
-            >
+              activeOpacity={0.7}>
               <Text style={styles.deleteAccountButtonText}>{t('settings.deleteAccount')}</Text>
             </TouchableOpacity>
           ) : null}
@@ -821,7 +819,7 @@ export default function SettingsScreen(): JSX.Element {
                   setDeleteAccountError(null);
                 }}
                 accessibilityRole="button"
-              >
+                activeOpacity={0.7}>
                 <Text style={styles.twoFactorCancelButtonText}>{t('settings.twoFactorCancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -829,7 +827,7 @@ export default function SettingsScreen(): JSX.Element {
                 onPress={() => { void submitDeleteAccount(); }}
                 disabled={isDeletingAccount || !deleteAccountPassword}
                 accessibilityRole="button"
-              >
+                activeOpacity={0.7}>
                 {isDeletingAccount ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
@@ -842,7 +840,8 @@ export default function SettingsScreen(): JSX.Element {
         ) : null}
       </View>
 
-      <TouchableOpacity style={styles.logoutButton} onPress={() => { void handleLogout(); }} accessibilityRole='button'>
+      <TouchableOpacity style={styles.logoutButton} onPress={() => { void handleLogout(); }} accessibilityRole='button'
+        activeOpacity={0.7}>
         <Text style={styles.logoutText}>{t('settings.logout')}</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -855,33 +854,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flex: 1,
     backgroundColor: c.bg,
   },
-  circle1: {
-    position: 'absolute',
-    width: 350,
-    height: 350,
-    borderRadius: 175,
-    backgroundColor: c.skeleton,
-    top: -80,
-    right: -100,
-  },
-  circle2: {
-    position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: c.skeleton,
-    bottom: 100,
-    left: -80,
-  },
-  circle3: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: c.skeleton,
-    top: '40%',
-    right: -60,
-  },
   container: {
     flex: 1,
     backgroundColor: 'transparent',
@@ -890,7 +862,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingBottom: 40,
   },
   pageTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
     color: c.text1,
     paddingHorizontal: 16,
@@ -908,9 +880,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     letterSpacing: 0.5,
   },
   card: {
-    backgroundColor: c.bgPanel,
+    backgroundColor: c.surface,
     marginHorizontal: 12,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: c.border,
     overflow: 'hidden',
@@ -935,8 +907,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     marginTop: 2,
   },
   roleBadge: {
-    backgroundColor: 'rgba(204,120,92,0.08)',
-    borderRadius: 6,
+    backgroundColor: c.accentSoft,
+    borderRadius: radius.sm,
     paddingHorizontal: 10,
     paddingVertical: 4,
     marginLeft: 8,
@@ -944,7 +916,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   roleBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: c.orange,
+    color: c.accent,
     textTransform: 'capitalize',
   },
   row: {
@@ -958,7 +930,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flex: 1,
   },
   rowLabel: {
-    fontSize: 15,
+    fontSize: 14,
     color: c.text1,
     fontWeight: '500',
   },
@@ -975,15 +947,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     gap: 8,
   },
   languageChip: {
-    backgroundColor: 'rgba(204,120,92,0.08)',
-    borderRadius: 6,
+    backgroundColor: c.accentSoft,
+    borderRadius: radius.sm,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   languageChipText: {
     fontSize: 13,
     fontWeight: '700',
-    color: c.orange,
+    color: c.accent,
   },
   chevron: {
     fontSize: 20,
@@ -1003,7 +975,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
   },
   notificationSettingsText: {
-    color: c.orange,
+    color: c.accent,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1031,15 +1003,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   exportButton: {
     flex: 1,
-    backgroundColor: c.orange,
-    borderRadius: 10,
+    backgroundColor: c.accent,
+    borderRadius: radius.md,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 10,
   },
   exportButtonText: {
-    color: '#FFFFFF',
+    color: c.onAccent,
     fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
@@ -1060,12 +1032,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     marginHorizontal: 14,
     marginBottom: 12,
     padding: 10,
-    borderRadius: 10,
-    backgroundColor: 'rgba(204,120,92,0.08)',
+    borderRadius: radius.md,
+    backgroundColor: c.accentSoft,
   },
   successText: {
     fontSize: 13,
-    color: c.orange,
+    color: c.accent,
     fontWeight: '700',
   },
   savedPath: {
@@ -1074,28 +1046,28 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     marginTop: 2,
   },
   openButton: {
-    borderRadius: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: c.orange,
+    borderColor: c.accent,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
   openButtonText: {
-    color: c.orange,
+    color: c.accent,
     fontSize: 12,
     fontWeight: '700',
   },
   errorText: {
     fontSize: 12,
-    color: c.red,
+    color: c.danger,
     paddingHorizontal: 14,
     paddingBottom: 12,
   },
   logoutButton: {
     marginHorizontal: 12,
     marginTop: 28,
-    backgroundColor: c.red,
-    borderRadius: 12,
+    backgroundColor: c.danger,
+    borderRadius: radius.lg,
     minHeight: 50,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1103,7 +1075,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   logoutText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: c.onAccent,
   },
   targetRow: {
     flexDirection: 'row',
@@ -1129,16 +1101,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flex: 1,
     borderWidth: 1.5,
     borderColor: c.inputBorder,
-    borderRadius: 10,
+    borderRadius: radius.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 15,
+    fontSize: 14,
     color: c.text1,
     backgroundColor: c.inputBg,
   },
   targetSaveButton: {
-    backgroundColor: c.orange,
-    borderRadius: 10,
+    backgroundColor: c.accent,
+    borderRadius: radius.md,
     minHeight: 44,
     minWidth: 80,
     alignItems: 'center',
@@ -1146,30 +1118,30 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 14,
   },
   targetSaveText: {
-    color: '#FFFFFF',
+    color: c.onAccent,
     fontSize: 14,
     fontWeight: '700',
   },
   twoFactorBadge: {
-    backgroundColor: 'rgba(204,120,92,0.08)',
-    borderRadius: 6,
+    backgroundColor: c.accentSoft,
+    borderRadius: radius.sm,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   twoFactorBadgeText: {
     fontSize: 12,
     fontWeight: '700',
-    color: c.orange,
+    color: c.accent,
   },
   twoFactorSetupButton: {
-    backgroundColor: c.orange,
-    borderRadius: 8,
+    backgroundColor: c.accent,
+    borderRadius: radius.md,
     minHeight: 36,
     paddingHorizontal: 14,
     justifyContent: 'center',
   },
   twoFactorSetupButtonText: {
-    color: '#FFFFFF',
+    color: c.onAccent,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1182,27 +1154,27 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   twoFactorActionButton: {
     flex: 1,
     minHeight: 40,
-    borderRadius: 10,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: c.red,
+    backgroundColor: c.danger,
   },
   twoFactorActionButtonText: {
-    color: '#FFFFFF',
+    color: c.onAccent,
     fontSize: 13,
     fontWeight: '700',
   },
   twoFactorActionButtonSecondary: {
     flex: 1,
     minHeight: 40,
-    borderRadius: 10,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: c.orange,
+    borderColor: c.accent,
   },
   twoFactorActionButtonSecondaryText: {
-    color: c.orange,
+    color: c.accent,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1210,7 +1182,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     marginHorizontal: 14,
     marginBottom: 14,
     padding: 12,
-    borderRadius: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: c.border,
     backgroundColor: c.inputBg,
@@ -1219,10 +1191,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   twoFactorPasswordInput: {
     borderWidth: 1.5,
     borderColor: c.inputBorder,
-    borderRadius: 10,
+    borderRadius: radius.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 15,
+    fontSize: 14,
     color: c.text1,
     backgroundColor: c.bg,
   },
@@ -1233,7 +1205,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   twoFactorCancelButton: {
     flex: 1,
     minHeight: 40,
-    borderRadius: 10,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1247,44 +1219,44 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   twoFactorConfirmButton: {
     flex: 1,
     minHeight: 40,
-    borderRadius: 10,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: c.orange,
+    backgroundColor: c.accent,
   },
   twoFactorConfirmButtonText: {
-    color: '#FFFFFF',
+    color: c.onAccent,
     fontSize: 13,
     fontWeight: '700',
   },
   deleteAccountButton: {
-    borderRadius: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: c.red,
+    borderColor: c.danger,
     minHeight: 36,
     paddingHorizontal: 14,
     justifyContent: 'center',
   },
   deleteAccountButtonText: {
-    color: c.red,
+    color: c.danger,
     fontSize: 13,
     fontWeight: '700',
   },
   deleteAccountWarning: {
     fontSize: 13,
-    color: c.red,
+    color: c.danger,
     lineHeight: 18,
   },
   deleteAccountConfirmButton: {
     flex: 1,
     minHeight: 40,
-    borderRadius: 10,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: c.red,
+    backgroundColor: c.danger,
   },
   deleteAccountConfirmButtonText: {
-    color: '#FFFFFF',
+    color: c.onAccent,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1303,7 +1275,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.bg,
     borderWidth: 1,
     borderColor: c.border,
-    borderRadius: 6,
+    borderRadius: radius.sm,
     paddingVertical: 8,
   },
 });

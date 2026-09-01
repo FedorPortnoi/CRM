@@ -1,22 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  ActivityIndicator,
-  Linking,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Linking, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { AlertCircle, Calendar as CalendarIcon } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { formatMarketDate, formatMarketTime } from '../../market/profile';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, type } from '../../theme';
+import { Screen, Card, Button, Badge, EmptyState, Skeleton, SkeletonText } from '../../components/ui';
+import type { BadgeVariant } from '../../components/ui';
 
 type CalendarEventStatus = 'scheduled' | 'completed' | 'cancelled';
 
@@ -116,10 +111,10 @@ function contactName(contact: CalendarContact): string {
   return [contact.first_name, contact.last_name].filter(Boolean).join(' ');
 }
 
-function statusColor(status: CalendarEventStatus, c: ThemeColors): string {
-  if (status === 'completed') return c.orange;
-  if (status === 'cancelled') return c.textMuted;
-  return '#6366f1';
+function statusBadgeVariant(status: CalendarEventStatus): BadgeVariant {
+  if (status === 'completed') return 'success';
+  if (status === 'cancelled') return 'neutral';
+  return 'accent';
 }
 
 async function readApiError(response: Response, fallback: string): Promise<string> {
@@ -147,33 +142,21 @@ function buildSections(events: CalendarEvent[]): AgendaSection[] {
   }));
 }
 
-function SkeletonRows(): JSX.Element {
+function AgendaSkeleton(): JSX.Element {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   return (
     <View style={styles.loadingWrap}>
-      {Array.from({ length: 6 }).map((_, index) => (
-        <View key={index} style={styles.skeletonRow} />
+      {Array.from({ length: 4 }).map((_, index) => (
+        <View key={index} style={styles.eventRow}>
+          <View style={styles.timeColumn}>
+            <Skeleton width={36} height={14} />
+          </View>
+          <Card style={styles.eventCard}>
+            <SkeletonText lines={2} lastLineWidth="70%" />
+          </Card>
+        </View>
       ))}
-    </View>
-  );
-}
-
-interface ErrorStateProps {
-  message: string;
-  onRetry: () => void;
-  retryLabel: string;
-}
-
-function ErrorState({ message, onRetry, retryLabel }: ErrorStateProps): JSX.Element {
-  const { colors } = useTheme();
-  const styles = makeStyles(colors);
-  return (
-    <View style={styles.centerState}>
-      <Text style={styles.errorText}>{message}</Text>
-      <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
-        <Text style={styles.retryText}>{retryLabel}</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -312,32 +295,20 @@ export default function CalendarAgendaScreen(): JSX.Element {
           headerShown: true,
         }}
       />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.orange}
-          />
-        }
-      >
+      <Screen refreshing={isRefreshing} onRefresh={handleRefresh}>
         <View style={styles.pageHeader}>
-          <View>
+          <View style={styles.rowMain}>
             <Text style={styles.pageTitle}>{t('calendar.agenda')}</Text>
             <Text style={styles.pageSubtitle}>{t('calendar.next90Days')}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.newButton}
+          <Button
+            title={t('calendar.newEvent')}
+            size="sm"
             onPress={() => router.push('/calendar/new')}
-            accessibilityRole="button"
-          >
-            <Text style={styles.newButtonText}>{t('calendar.newEvent')}</Text>
-          </TouchableOpacity>
+          />
         </View>
 
-        <View style={styles.syncCard}>
+        <Card style={styles.syncCard}>
           <View style={styles.syncHeader}>
             <View style={styles.rowMain}>
               <Text style={styles.syncTitle}>{t('calendar.yandexCalendar')}</Text>
@@ -347,27 +318,14 @@ export default function CalendarAgendaScreen(): JSX.Element {
                   : t('calendar.yandexConnectDesc')}
               </Text>
             </View>
-            <View
-              style={[
-                styles.syncBadge,
-                syncStatus?.connected ? styles.syncBadgeConnected : styles.syncBadgeDisconnected,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.syncBadgeText,
-                  syncStatus?.connected
-                    ? styles.syncBadgeTextConnected
-                    : styles.syncBadgeTextDisconnected,
-                ]}
-              >
-                {syncStatus?.connected ? t('calendar.connected') : t('calendar.off')}
-              </Text>
-            </View>
+            <Badge
+              label={syncStatus?.connected ? t('calendar.connected') : t('calendar.off')}
+              variant={syncStatus?.connected ? 'success' : 'neutral'}
+            />
           </View>
           {isSyncLoading ? (
             <View style={styles.syncInline}>
-              <ActivityIndicator color={colors.orange} size="small" />
+              <ActivityIndicator color={colors.accent} size="small" />
               <Text style={styles.syncInlineText}>{t('calendar.checkingSync')}</Text>
             </View>
           ) : (
@@ -379,90 +337,80 @@ export default function CalendarAgendaScreen(): JSX.Element {
               {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
               <View style={styles.syncActions}>
                 {syncStatus?.connected ? (
-                  <TouchableOpacity
-                    style={[styles.syncSecondaryButton, syncAction !== null && styles.syncButtonDisabled]}
+                  <Button
+                    title={t('calendar.disconnect')}
+                    variant="secondary"
+                    size="sm"
+                    style={styles.flexButton}
                     onPress={() => { void handleDisconnectYandex(); }}
+                    loading={syncAction === 'disconnect'}
                     disabled={syncAction !== null}
-                    accessibilityRole="button"
-                  >
-                    {syncAction === 'disconnect' ? (
-                      <ActivityIndicator color={colors.orange} size="small" />
-                    ) : (
-                      <Text style={styles.syncSecondaryText}>{t('calendar.disconnect')}</Text>
-                    )}
-                  </TouchableOpacity>
+                  />
                 ) : (
-                  <TouchableOpacity
-                    style={[styles.syncPrimaryButton, syncAction !== null && styles.syncButtonDisabled]}
+                  <Button
+                    title={t('calendar.connect')}
+                    variant="primary"
+                    size="sm"
+                    style={styles.flexButton}
                     onPress={() => { void handleConnectYandex(); }}
+                    loading={syncAction === 'connect'}
                     disabled={syncAction !== null}
-                    accessibilityRole="button"
-                  >
-                    {syncAction === 'connect' ? (
-                      <ActivityIndicator color="#FFFFFF" size="small" />
-                    ) : (
-                      <Text style={styles.syncPrimaryText}>{t('calendar.connect')}</Text>
-                    )}
-                  </TouchableOpacity>
+                  />
                 )}
-                <TouchableOpacity
-                  style={styles.syncGhostButton}
+                <Button
+                  title={t('calendar.refresh')}
+                  variant="ghost"
+                  size="sm"
                   onPress={() => { void fetchSyncStatus(); }}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.syncGhostText}>{t('calendar.refresh')}</Text>
-                </TouchableOpacity>
+                  disabled={syncAction !== null}
+                />
               </View>
             </>
           )}
-        </View>
+        </Card>
 
         {isLoading ? (
-          <SkeletonRows />
+          <AgendaSkeleton />
         ) : error ? (
-          <ErrorState message={error} onRetry={handleRetry} retryLabel={t('common.retry')} />
+          <EmptyState
+            icon={<AlertCircle size={32} color={colors.danger} />}
+            title={error}
+            actionLabel={t('common.retry')}
+            onAction={handleRetry}
+          />
         ) : sections.length === 0 ? (
-          <View style={styles.centerState}>
-            <Text style={styles.emptyTitle}>{t('calendar.noUpcoming')}</Text>
-            <Text style={styles.emptyText}>{t('calendar.createPrompt')}</Text>
-            <TouchableOpacity
-              style={styles.emptyButton}
-              onPress={() => router.push('/calendar/new')}
-              accessibilityRole="button"
-            >
-              <Text style={styles.emptyButtonText}>{t('calendar.createEvent')}</Text>
-            </TouchableOpacity>
-          </View>
+          <EmptyState
+            icon={<CalendarIcon size={32} color={colors.textMuted} />}
+            title={t('calendar.noUpcoming')}
+            description={t('calendar.createPrompt')}
+            actionLabel={t('calendar.createEvent')}
+            onAction={() => router.push('/calendar/new')}
+          />
         ) : (
           sections.map((section) => (
             <View key={section.dateKey} style={styles.section}>
               <Text style={styles.sectionTitle}>{section.label}</Text>
               {section.events.map((event) => (
-                <TouchableOpacity
-                  key={event.id}
-                  style={styles.eventRow}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/calendar/[id]',
-                      params: { id: event.id },
-                    })
-                  }
-                  accessibilityRole="button"
-                >
+                <View key={event.id} style={styles.eventRow}>
                   <View style={styles.timeColumn}>
                     <Text style={styles.timeText}>{formatTime(event.start_time)}</Text>
                     <View style={styles.timeLine} />
                   </View>
-                  <View style={styles.eventBody}>
+                  <Card
+                    style={styles.eventCard}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/calendar/[id]',
+                        params: { id: event.id },
+                      })
+                    }
+                    accessibilityLabel={event.title}
+                  >
                     <View style={styles.eventTitleRow}>
                       <Text style={styles.eventTitle} numberOfLines={2}>
                         {event.title}
                       </Text>
-                      <View
-                        style={[styles.statusBadge, { backgroundColor: statusColor(event.status, colors) }]}
-                      >
-                        <Text style={styles.statusText}>{t(`calendar.${event.status}`)}</Text>
-                      </View>
+                      <Badge label={t(`calendar.${event.status}`)} variant={statusBadgeVariant(event.status)} />
                     </View>
                     <Text style={styles.eventMeta}>{formatTimeRange(event)}</Text>
                     {event.location ? (
@@ -478,322 +426,147 @@ export default function CalendarAgendaScreen(): JSX.Element {
                     {event.status === 'completed' && !event.notes ? (
                       <Text style={styles.notesPrompt}>{t('calendar.notesNeeded')}</Text>
                     ) : null}
-                  </View>
-                </TouchableOpacity>
+                  </Card>
+                </View>
               ))}
             </View>
           ))
         )}
-
-        {isRefreshing ? (
-          <View style={styles.refreshIndicator}>
-            <ActivityIndicator color={colors.orange} />
-          </View>
-        ) : null}
-      </ScrollView>
+      </Screen>
     </>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: c.bg,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  headerButton: {
-    marginRight: 16,
-    padding: 4,
-  },
   pageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 18,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
   },
   pageTitle: {
-    fontSize: 24,
-    fontWeight: '700',
+    ...type.title,
     color: c.text1,
   },
   pageSubtitle: {
-    fontSize: 13,
-    color: c.amber,
-    marginTop: 2,
-  },
-  newButton: {
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minHeight: 40,
-    justifyContent: 'center',
-  },
-  newButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    ...type.label,
+    color: c.textMuted,
+    marginTop: spacing.xs,
   },
   rowMain: {
     flex: 1,
   },
+  flexButton: {
+    flex: 1,
+  },
   syncCard: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 14,
-    marginBottom: 18,
+    marginBottom: spacing.lg,
   },
   syncHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
+    gap: spacing.sm,
   },
   syncTitle: {
-    fontSize: 15,
+    ...type.heading,
     color: c.text1,
-    fontWeight: '700',
   },
   syncSubtitle: {
-    fontSize: 12,
-    color: c.amber,
-    lineHeight: 17,
-    marginTop: 3,
-  },
-  syncBadge: {
-    borderRadius: 6,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  syncBadgeConnected: {
-    backgroundColor: '#f0fdf4',
-  },
-  syncBadgeDisconnected: {
-    backgroundColor: c.bg,
-  },
-  syncBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  syncBadgeTextConnected: {
-    color: c.orange,
-  },
-  syncBadgeTextDisconnected: {
-    color: c.amber,
+    ...type.caption,
+    color: c.textMuted,
+    marginTop: spacing.xs,
   },
   syncInline: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 12,
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
   syncInlineText: {
-    color: c.amber,
-    fontSize: 12,
+    ...type.caption,
+    color: c.textMuted,
   },
   syncMeta: {
-    fontSize: 12,
-    color: c.amber,
-    marginTop: 10,
+    ...type.caption,
+    color: c.textMuted,
+    marginTop: spacing.sm,
   },
   syncSuccess: {
-    fontSize: 12,
-    color: c.orange,
-    marginTop: 10,
+    ...type.caption,
+    color: c.success,
+    marginTop: spacing.sm,
   },
   syncError: {
-    fontSize: 12,
-    color: c.red,
-    marginTop: 10,
+    ...type.caption,
+    color: c.danger,
+    marginTop: spacing.sm,
   },
   syncActions: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 12,
-  },
-  syncPrimaryButton: {
-    flex: 1,
-    backgroundColor: c.orange,
-    borderRadius: 10,
-    minHeight: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  syncPrimaryText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  syncSecondaryButton: {
-    flex: 1,
-    backgroundColor: c.bgPanel,
-    borderRadius: 10,
-    minHeight: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: c.orange,
-  },
-  syncSecondaryText: {
-    color: c.orange,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  syncGhostButton: {
-    minHeight: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-  },
-  syncGhostText: {
-    color: c.orange,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  syncButtonDisabled: {
-    opacity: 0.65,
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
   loadingWrap: {
-    gap: 10,
-  },
-  skeletonRow: {
-    height: 88,
-    borderRadius: 12,
-    backgroundColor: c.bg,
-  },
-  centerState: {
-    minHeight: 360,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: c.text1,
-    marginBottom: 6,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: c.amber,
-    textAlign: 'center',
-  },
-  emptyButton: {
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginTop: 18,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  emptyButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  errorText: {
-    color: c.red,
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 14,
-  },
-  retryButton: {
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  retryText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    gap: spacing.sm,
   },
   section: {
-    marginBottom: 22,
+    marginBottom: spacing.xl,
   },
   sectionTitle: {
-    fontSize: 13,
-    color: c.amber,
-    fontWeight: '700',
+    ...type.label,
+    color: c.textMuted,
     textTransform: 'uppercase',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   eventRow: {
     flexDirection: 'row',
-    marginBottom: 10,
+    marginBottom: spacing.sm,
   },
   timeColumn: {
     width: 58,
     alignItems: 'center',
-    paddingTop: 14,
+    paddingTop: spacing.md,
   },
   timeText: {
-    fontSize: 12,
-    color: c.amber,
-    fontWeight: '600',
+    ...type.caption,
+    color: c.textMuted,
+    fontVariant: ['tabular-nums'],
   },
   timeLine: {
     width: 1,
     flex: 1,
-    backgroundColor: c.bg,
-    marginTop: 8,
+    backgroundColor: c.border,
+    marginTop: spacing.sm,
   },
-  eventBody: {
+  eventCard: {
     flex: 1,
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 12,
     minHeight: 92,
   },
   eventTitleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
+    gap: spacing.sm,
   },
   eventTitle: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: '700',
+    ...type.heading,
     color: c.text1,
-    lineHeight: 20,
   },
   eventMeta: {
-    fontSize: 12,
-    color: c.amber,
-    marginTop: 4,
+    ...type.caption,
+    color: c.textMuted,
+    marginTop: spacing.xs,
+    fontVariant: ['tabular-nums'],
   },
   eventSub: {
-    fontSize: 12,
-    color: c.amber,
-    marginTop: 4,
-  },
-  statusBadge: {
-    borderRadius: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'capitalize',
+    ...type.caption,
+    color: c.textMuted,
+    marginTop: spacing.xs,
   },
   notesPrompt: {
-    color: c.red,
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  refreshIndicator: {
-    paddingTop: 8,
+    color: c.danger,
+    ...type.caption,
+    marginTop: spacing.sm,
   },
 });

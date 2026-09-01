@@ -48,16 +48,17 @@ const COLORS = {
   cardBorder: '#EEE5DF',
   green: '#2F9B61',
   greenSoft: '#EEF7F0',
-  blue: '#2D8CDE',
-  blueSoft: '#EFF6FD',
   neutral: '#8A7D76',
   neutralSoft: '#F1EBE6',
 } as const;
 
+// "lead" reuses the theme's warning token (a warm gold) rather than a hand-picked
+// hue — the fourth contact type otherwise had no home in the palette, and a cool
+// blue was the one hardcoded color in this file that fought the warm brand.
 const getTypeColors = (c: ThemeColors): Record<ContactCardType, { main: string; soft: string }> => ({
   customer: { main: c.orange, soft: 'rgba(204, 120, 92, 0.10)' },
   partner: { main: COLORS.green, soft: COLORS.greenSoft },
-  lead: { main: COLORS.blue, soft: COLORS.blueSoft },
+  lead: { main: c.warning, soft: c.warningSoft },
   other: { main: COLORS.neutral, soft: COLORS.neutralSoft },
 });
 
@@ -167,6 +168,7 @@ function ContactCardComponent({
             <TouchableOpacity
               style={styles.messengerPhoneBtn}
               hitSlop={6}
+              activeOpacity={0.7}
               onPress={() => Linking.openURL('tel:' + contact.phone)}
             >
               <Phone size={14} color={colors.text1} />
@@ -175,6 +177,7 @@ function ContactCardComponent({
             <TouchableOpacity
               style={styles.messengerWaBtn}
               hitSlop={6}
+              activeOpacity={0.7}
               onPress={() =>
                 Linking.openURL('https://wa.me/' + (contact.phone as string).replace(/\D/g, ''))
               }
@@ -185,6 +188,7 @@ function ContactCardComponent({
             <TouchableOpacity
               style={styles.messengerTgBtn}
               hitSlop={6}
+              activeOpacity={0.7}
               onPress={() =>
                 Linking.openURL(
                   'https://t.me/+' + (contact.phone as string).replace(/\D/g, ''),

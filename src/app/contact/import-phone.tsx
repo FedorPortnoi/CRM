@@ -17,7 +17,8 @@ import { Check } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors, spacing, radius, type } from '../../theme';
+import { ThemeColors, spacing, radius, type, tabular } from '../../theme';
+import { Button, EmptyState } from '../../components/ui';
 
 type Phase = 'permission' | 'loading' | 'list' | 'importing';
 
@@ -265,6 +266,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
           onPress={() => {
             toggleSelection(item.id);
           }}
+          activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityState={{ selected: isSelected }}
         >
@@ -295,8 +297,8 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
     return (
       <View style={styles.centeredContainer}>
         <Text style={styles.errorText}>Для импорта контактов необходим доступ к телефонной книге.</Text>
-        <TouchableOpacity
-          style={styles.settingsButton}
+        <Button
+          title={canAskContactsPermissionAgain ? 'Повторить' : 'Открыть настройки'}
           onPress={() => {
             if (canAskContactsPermissionAgain) {
               void requestContactsPermission();
@@ -304,12 +306,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
               void Linking.openSettings();
             }
           }}
-          accessibilityRole="button"
-        >
-          <Text style={styles.settingsButtonText}>
-            {canAskContactsPermissionAgain ? 'Повторить' : 'Открыть настройки'}
-          </Text>
-        </TouchableOpacity>
+        />
       </View>
     );
   }
@@ -327,7 +324,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
       <View style={styles.centeredContainer}>
         <ActivityIndicator size="large" color={colors.accent} />
         <Text style={styles.progressText}>
-          Импортируем {progress.done} из {progress.total}...
+          Импортируем <Text style={tabular}>{progress.done}</Text> из <Text style={tabular}>{progress.total}</Text>...
         </Text>
       </View>
     );
@@ -355,34 +352,28 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
           filteredContacts.length === 0 ? styles.emptyListContent : styles.listContent
         }
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>Контакты не найдены</Text>
-          </View>
+          <EmptyState style={styles.emptyState} title="Контакты не найдены" />
         }
       />
       <View style={styles.actionBar}>
-        <TouchableOpacity
-          style={styles.cancelButton}
+        <Button
+          title="Отмена"
+          variant="secondary"
           onPress={() => {
             router.back();
           }}
-          accessibilityRole="button"
-        >
-          <Text style={styles.cancelButtonText}>Отмена</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.importButton,
-            selectedIds.length === 0 ? styles.importButtonDisabled : null,
-          ]}
+          block
+          style={styles.actionButton}
+        />
+        <Button
+          title={`Импортировать (${selectedIds.length})`}
           onPress={() => {
             void importSelectedContacts();
           }}
           disabled={selectedIds.length === 0}
-          accessibilityRole="button"
-        >
-          <Text style={styles.importButtonText}>Импортировать ({selectedIds.length})</Text>
-        </TouchableOpacity>
+          block
+          style={styles.actionButton}
+        />
       </View>
     </View>
   );
@@ -391,48 +382,34 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: c.accentSoft,
+    backgroundColor: c.bg,
   },
   centeredContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.xl,
-    backgroundColor: c.accentSoft,
+    backgroundColor: c.bg,
   },
   errorText: {
+    ...type.heading,
     color: c.danger,
-    fontSize: type.heading.fontSize,
-    lineHeight: 22,
     marginBottom: spacing.lg,
     textAlign: 'center',
   },
-  settingsButton: {
-    minHeight: 44,
-    paddingHorizontal: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.lg,
-    backgroundColor: c.accent,
-  },
-  settingsButtonText: {
-    color: c.onAccent,
-    fontSize: type.heading.fontSize,
-    fontWeight: '600',
-  },
   progressText: {
+    ...type.heading,
     marginTop: spacing.lg,
     color: c.text1,
-    fontSize: type.heading.fontSize,
-    fontWeight: '600',
+    textAlign: 'center',
   },
   searchContainer: {
     padding: spacing.lg,
-    backgroundColor: c.accentSoft,
+    backgroundColor: c.bg,
   },
   searchInput: {
     minHeight: 44,
-    paddingHorizontal: 14,
+    paddingHorizontal: spacing.md,
     borderWidth: 1,
     borderColor: c.inputBorder,
     borderRadius: radius.lg,
@@ -451,18 +428,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   emptyState: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyStateText: {
-    color: c.amber,
-    fontSize: type.heading.fontSize,
   },
   contactRow: {
     minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
     borderWidth: 1,
@@ -482,7 +453,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: c.accent,
-    borderRadius: 4,
+    borderRadius: radius.sm,
     backgroundColor: c.surface,
   },
   checkboxSelected: {
@@ -492,14 +463,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flex: 1,
   },
   contactName: {
+    ...type.heading,
     color: c.text1,
-    fontSize: type.heading.fontSize,
-    fontWeight: '700',
   },
   contactSubtitle: {
+    ...type.body,
     marginTop: 2,
     color: c.amber,
-    fontSize: type.body.fontSize,
   },
   actionBar: {
     flexDirection: 'row',
@@ -509,35 +479,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderTopColor: c.border,
     backgroundColor: c.surface,
   },
-  cancelButton: {
-    minHeight: 44,
+  actionButton: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: radius.lg,
-    backgroundColor: c.surface,
-  },
-  cancelButtonText: {
-    color: c.text1,
-    fontSize: type.heading.fontSize,
-    fontWeight: '600',
-  },
-  importButton: {
-    minHeight: 44,
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.lg,
-    backgroundColor: c.accent,
-  },
-  importButtonDisabled: {
-    opacity: 0.5,
-  },
-  importButtonText: {
-    color: c.onAccent,
-    fontSize: type.heading.fontSize,
-    fontWeight: '600',
   },
 });

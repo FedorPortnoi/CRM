@@ -18,13 +18,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Check } from 'lucide-react-native';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
 import {
   MAX_STAGE_NAME_LENGTH,
   MAX_STALE_AFTER_DAYS,
   PipelineStage,
   STAGE_COLOR_PRESETS,
 } from '../../hooks/usePipelines';
+import { Button } from '../ui';
 
 export type StageFormValues = {
   name: string;
@@ -161,6 +162,7 @@ export function StageEditorModal({
             <TouchableOpacity
               onPress={onClose}
               style={styles.backBtn}
+              activeOpacity={0.7}
               accessibilityRole="button"
               accessibilityLabel={t('common.back')}
               hitSlop={8}
@@ -197,16 +199,17 @@ export function StageEditorModal({
                   color === preset && styles.swatchSelected,
                 ]}
                 onPress={() => setColor(preset)}
+                activeOpacity={0.7}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: color === preset }}
                 accessibilityLabel={t('pipelines.colorSwatchA11y', { color: preset })}
               >
-                {color === preset ? <Check size={16} color="#FFFFFF" strokeWidth={3} /> : null}
+                {color === preset ? <Check size={16} color={colors.onAccent} strokeWidth={3} /> : null}
               </TouchableOpacity>
             ))}
           </View>
           {color !== null ? (
-            <TouchableOpacity onPress={() => setColor(null)} accessibilityRole="button">
+            <TouchableOpacity onPress={() => setColor(null)} activeOpacity={0.7} accessibilityRole="button">
               <Text style={styles.linkBtn}>{t('pipelines.colorClear')}</Text>
             </TouchableOpacity>
           ) : null}
@@ -253,8 +256,8 @@ export function StageEditorModal({
               <Switch
                 value={isWon}
                 onValueChange={toggleWon}
-                trackColor={{ false: colors.skeleton, true: colors.orange }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: colors.skeleton, true: colors.accent }}
+                thumbColor={colors.onAccent}
               />
             </View>
             <View style={styles.divider} />
@@ -270,8 +273,8 @@ export function StageEditorModal({
               <Switch
                 value={isLost}
                 onValueChange={toggleLost}
-                trackColor={{ false: colors.skeleton, true: colors.red }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: colors.skeleton, true: colors.danger }}
+                thumbColor={colors.onAccent}
               />
             </View>
             {/* Archiving is PATCH-only on the server, and archiving a stage at the moment of
@@ -288,7 +291,7 @@ export function StageEditorModal({
                     value={isArchived}
                     onValueChange={setIsArchived}
                     trackColor={{ false: colors.skeleton, true: colors.amber }}
-                    thumbColor="#FFFFFF"
+                    thumbColor={colors.onAccent}
                   />
                 </View>
               </>
@@ -297,19 +300,15 @@ export function StageEditorModal({
 
           {errorText !== null ? <Text style={styles.errorBanner}>{errorText}</Text> : null}
 
-          <TouchableOpacity
-            style={[styles.primaryBtn, !canSubmit && styles.primaryBtnDisabled]}
+          <Button
+            title={t('common.save')}
             onPress={handleSubmit}
             disabled={!canSubmit}
-            accessibilityRole="button"
-          >
-            <Text style={styles.primaryBtnText}>
-              {submitting ? t('pipelines.saving') : t('common.save')}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cancelBtn} onPress={onClose} accessibilityRole="button">
-            <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
-          </TouchableOpacity>
+            loading={submitting}
+            block
+            style={styles.primaryBtn}
+          />
+          <Button title={t('common.cancel')} onPress={onClose} variant="ghost" block style={styles.cancelBtn} />
         </ScrollView>
       </View>
     </Modal>
@@ -319,38 +318,40 @@ export function StageEditorModal({
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   modal: { flex: 1, backgroundColor: c.bg },
   header: { backgroundColor: c.bgDark, borderBottomWidth: 1, borderBottomColor: c.border },
-  headerRow: { height: 52, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 },
-  backBtn: { padding: 8 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: c.text1, marginLeft: 4, flex: 1 },
-  body: { padding: 24, paddingBottom: 48 },
-  label: { fontSize: 13, fontWeight: '600', color: c.text1, marginBottom: 6, marginTop: 16 },
+  // 52pt row / 26px arrow / 18px bold title deliberately repeats NavHeader's geometry — see
+  // file header comment. type.subtitle is 18/bold, so it stays the exact match.
+  headerRow: { height: 52, flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm },
+  backBtn: { padding: spacing.sm },
+  headerTitle: { ...type.subtitle, color: c.text1, marginLeft: spacing.xs, flex: 1 },
+  body: { padding: spacing.xl, paddingBottom: spacing.xxl + spacing.xl },
+  label: { ...type.label, color: c.text1, marginBottom: spacing.sm, marginTop: spacing.lg },
   input: {
     backgroundColor: c.inputBg,
-    borderRadius: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    padding: 12,
-    fontSize: 15,
+    padding: spacing.md,
+    fontSize: 16,
     color: c.text1,
   },
-  inputInvalid: { borderColor: c.red },
-  hint: { fontSize: 12, color: c.textMuted, marginTop: 6, lineHeight: 16 },
-  errorHint: { fontSize: 12, color: c.red, marginTop: 6, lineHeight: 16 },
-  palette: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  inputInvalid: { borderColor: c.danger },
+  hint: { fontSize: 12, color: c.textMuted, marginTop: spacing.sm, lineHeight: 16 },
+  errorHint: { fontSize: 12, color: c.danger, marginTop: spacing.sm, lineHeight: 16 },
+  palette: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   swatch: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: radius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'transparent',
   },
   swatchSelected: { borderColor: c.text1 },
-  linkBtn: { fontSize: 13, color: c.orange, fontWeight: '600', marginTop: 10 },
+  linkBtn: { fontSize: 13, color: c.accent, fontWeight: '600', marginTop: spacing.sm },
   toggleCard: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
+    backgroundColor: c.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: c.border,
     overflow: 'hidden',
@@ -358,24 +359,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   toggleText: { flex: 1 },
-  toggleTitle: { fontSize: 15, color: c.text1, fontWeight: '500' },
-  toggleHint: { fontSize: 12, color: c.textMuted, marginTop: 2, lineHeight: 16 },
+  toggleTitle: { fontSize: 14, color: c.text1, fontWeight: '500' },
+  toggleHint: { fontSize: 12, color: c.textMuted, marginTop: spacing.xs, lineHeight: 16 },
   divider: { height: 1, backgroundColor: c.border },
-  errorBanner: { fontSize: 13, color: c.red, marginTop: 20, lineHeight: 18 },
-  primaryBtn: {
-    marginTop: 24,
-    backgroundColor: c.orange,
-    borderRadius: 10,
-    padding: 14,
-    alignItems: 'center',
-  },
-  primaryBtnDisabled: { opacity: 0.5 },
-  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  cancelBtn: { marginTop: 12, alignItems: 'center', padding: 12 },
-  cancelBtnText: { color: c.amber, fontSize: 15 },
+  errorBanner: { fontSize: 13, color: c.danger, marginTop: spacing.xl, lineHeight: 18 },
+  primaryBtn: { marginTop: spacing.xl },
+  cancelBtn: { marginTop: spacing.md },
 });

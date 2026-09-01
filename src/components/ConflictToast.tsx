@@ -46,7 +46,7 @@ export function ConflictToast(): JSX.Element | null {
     <Animated.View style={[styles.container, { opacity }]}>
       <View style={styles.row}>
         <Text style={styles.text}>{label}</Text>
-        <TouchableOpacity onPress={clearConflicts} style={styles.dismiss}>
+        <TouchableOpacity onPress={clearConflicts} style={styles.dismiss} activeOpacity={0.7}>
           <Text style={styles.dismissText}>Закрыть</Text>
         </TouchableOpacity>
       </View>

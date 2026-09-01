@@ -17,7 +17,8 @@ import { useDealsStore } from '../store/dealsStore';
 import { usePipelinesStore } from '../store/pipelinesStore';
 import { formatMoney } from '../market/profile';
 import { useTheme } from '../hooks/useTheme';
-import { ThemeColors } from '../theme';
+import { ThemeColors, spacing, radius, type, tabular } from '../theme';
+import { EmptyState } from '../components/ui';
 
 type DealStatus = 'open' | 'won' | 'lost' | 'archived';
 
@@ -143,6 +144,7 @@ function DealCard({
         onLongPress={() => onLongPress(deal)}
         disabled={isDragging}
         style={styles.dealCard}
+        activeOpacity={0.7}
         accessibilityRole="button"
       >
         <Text style={styles.dealTitle}>
@@ -260,27 +262,23 @@ const KanbanBoard: React.FC = () => {
 
   if (dealsLoading || pipelinesLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color={colors.orange} />
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   if (dealsError || pipelinesError) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: colors.text1 }}>{dealsError ?? pipelinesError}</Text>
+      <View style={styles.centered}>
+        <Text style={styles.stateText}>{dealsError ?? pipelinesError}</Text>
       </View>
     );
   }
 
   if (stagesWithDeals.length === 0) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
-        <Text style={{ fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 22 }}>
-          {t('deals.noPipeline')}
-        </Text>
-      </View>
+      <EmptyState title={t('deals.noPipeline')} />
     );
   }
 
@@ -331,40 +329,41 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flex: 1,
   },
   boardContent: {
-    padding: 8,
+    padding: spacing.sm,
   },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  stateText: { ...type.body, color: c.text1 },
   stageColumn: {
     width: STAGE_WIDTH,
-    margin: 8,
-    backgroundColor: 'rgba(204,120,92,0.08)',
-    borderRadius: 12,
-    padding: 8,
+    margin: spacing.sm,
+    backgroundColor: c.accentSoft,
+    borderRadius: radius.lg,
+    padding: spacing.sm,
   },
   stageHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-    paddingHorizontal: 4,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
   stageName: {
     flex: 1,
-    fontWeight: '700',
-    fontSize: 15,
+    ...type.heading,
     color: c.text1,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   stageCount: {
+    ...type.label,
+    ...tabular,
     color: c.textMuted,
-    fontSize: 13,
-    fontWeight: '600',
   },
   stageDeals: {
-    paddingBottom: 12,
+    paddingBottom: spacing.md,
   },
   dealCardDragWrapper: {
-    marginVertical: 6,
-    marginHorizontal: 4,
+    marginVertical: spacing.sm,
+    marginHorizontal: spacing.xs,
   },
   dealCardDragging: {
     zIndex: 10,
@@ -372,58 +371,57 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   dealCard: {
     backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: radius.lg,
+    padding: spacing.md,
     borderWidth: 1,
     borderColor: c.border,
-    shadowColor: '#000000',
+    shadowColor: c.bgDark,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
   dealTitle: {
-    fontWeight: '600',
-    fontSize: 14,
-    marginBottom: 4,
+    ...type.body,
+    marginBottom: spacing.xs,
     color: c.text1,
   },
   warningBadge: {
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginTop: 4,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    marginTop: spacing.xs,
     alignSelf: 'flex-start',
   },
   overdueBadge: {
-    backgroundColor: 'rgba(204,82,71,0.12)',
+    backgroundColor: c.dangerSoft,
   },
   todayBadge: {
-    backgroundColor: 'rgba(204,120,92,0.08)',
+    backgroundColor: c.accentSoft,
   },
   warningBadgeText: {
-    fontSize: 10,
+    ...type.micro,
   },
   overdueText: {
-    color: c.red,
+    color: c.danger,
   },
   todayText: {
-    color: c.amber,
+    color: c.warning,
   },
   dealValue: {
-    marginBottom: 4,
-    color: c.orange,
-    fontWeight: '600',
-    fontSize: 13,
+    ...type.label,
+    ...tabular,
+    marginBottom: spacing.xs,
+    color: c.accent,
   },
   dealContact: {
-    color: c.amber,
-    fontSize: 12,
+    ...type.caption,
+    color: c.textMuted,
   },
   nextActionText: {
+    ...type.caption,
     color: c.text1,
-    fontSize: 12,
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
 });
 

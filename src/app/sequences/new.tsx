@@ -9,15 +9,8 @@
 //
 // It is created as a draft on purpose: nothing is mailed until someone presses «Запустить».
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
@@ -27,7 +20,8 @@ import {
   useEmailTemplateOptions,
 } from '../../hooks/useSequences';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Screen, Card, Button } from '../../components/ui';
 
 export default function NewSequenceScreen(): JSX.Element {
   const { t } = useTranslation();
@@ -93,21 +87,21 @@ export default function NewSequenceScreen(): JSX.Element {
 
   if (!canManage) {
     return (
-      <View style={styles.screen}>
+      <>
         <Stack.Screen options={{ title: t('sequences.newTitle') }} />
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.notice}>
+        <Screen>
+          <Card>
             <Text style={styles.noticeText}>{t('sequences.adminOnly')}</Text>
-          </View>
-        </ScrollView>
-      </View>
+          </Card>
+        </Screen>
+      </>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <>
       <Stack.Screen options={{ title: t('sequences.newTitle') }} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <Screen>
         <Text style={styles.subtitle}>{t('sequences.createdAsDraft')}</Text>
         <Text style={styles.legalNote}>{t('sequences.consentNote')}</Text>
 
@@ -152,6 +146,7 @@ export default function NewSequenceScreen(): JSX.Element {
             onPress={() => setMode('inline')}
             accessibilityRole="button"
             accessibilityState={{ selected: mode === 'inline' }}
+            activeOpacity={0.7}
           >
             <Text style={[styles.modePillText, mode === 'inline' && styles.modePillTextActive]}>
               {t('sequences.stepWriteInline')}
@@ -162,6 +157,7 @@ export default function NewSequenceScreen(): JSX.Element {
             onPress={() => setMode('template')}
             accessibilityRole="button"
             accessibilityState={{ selected: mode === 'template' }}
+            activeOpacity={0.7}
           >
             <Text style={[styles.modePillText, mode === 'template' && styles.modePillTextActive]}>
               {t('sequences.stepUseTemplate')}
@@ -171,24 +167,23 @@ export default function NewSequenceScreen(): JSX.Element {
 
         {mode === 'template' ? (
           templatesQuery.isPending ? (
-            <ActivityIndicator color={colors.orange} style={styles.inlineLoader} />
+            <ActivityIndicator color={colors.accent} style={styles.inlineLoader} />
           ) : templates.length === 0 ? (
             <Text style={styles.fieldHint}>{t('sequences.noTemplates')}</Text>
           ) : (
             templates.map((template) => (
-              <TouchableOpacity
+              <Card
                 key={template.id}
                 style={[styles.templateRow, templateId === template.id && styles.templateRowSelected]}
                 onPress={() => {
                   setTemplateId(template.id);
                   setError(null);
                 }}
-                accessibilityRole="button"
-                accessibilityState={{ selected: templateId === template.id }}
+                accessibilityLabel={template.name}
               >
                 <Text style={styles.templateName}>{template.name}</Text>
                 <Text style={styles.templateSubject} numberOfLines={1}>{template.subject}</Text>
-              </TouchableOpacity>
+              </Card>
             ))
           )
         ) : (
@@ -223,80 +218,57 @@ export default function NewSequenceScreen(): JSX.Element {
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <TouchableOpacity
-          style={styles.submitButton}
+        <Button
+          title={t('sequences.createAction')}
           onPress={submit}
-          disabled={createSequence.isPending}
-          accessibilityRole="button"
-        >
-          {createSequence.isPending ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.submitButtonText}>{t('sequences.createAction')}</Text>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
-    </View>
+          loading={createSequence.isPending}
+          block
+          style={styles.submitButton}
+        />
+      </Screen>
+    </>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
-  content: { padding: 16, paddingBottom: 48 },
-  subtitle: { fontSize: 14, color: c.amber, lineHeight: 20 },
-  legalNote: { fontSize: 12, color: c.textMuted, lineHeight: 17, marginTop: 6 },
-  notice: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.bgPanel,
-    padding: 14,
-  },
-  noticeText: { color: c.amber, fontSize: 14, lineHeight: 20 },
-  label: { fontSize: 14, fontWeight: '600', color: c.text1, marginTop: 16, marginBottom: 6 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: c.text1, marginTop: 26 },
-  fieldHint: { fontSize: 12, color: c.textMuted, marginTop: 6, lineHeight: 17 },
+  subtitle: { ...type.body, color: c.textMuted, lineHeight: 20 },
+  legalNote: { ...type.caption, color: c.textMuted, lineHeight: 17, marginTop: spacing.sm },
+  noticeText: { color: c.textMuted, ...type.body, lineHeight: 20 },
+  label: { ...type.body, fontWeight: '600', color: c.text1, marginTop: spacing.lg, marginBottom: spacing.sm },
+  sectionTitle: { ...type.heading, color: c.text1, marginTop: spacing.xl },
+  fieldHint: { ...type.caption, color: c.textMuted, marginTop: spacing.sm, lineHeight: 17 },
   input: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    ...type.body,
     color: c.text1,
   },
   textArea: { minHeight: 140 },
-  inlineLoader: { marginVertical: 12 },
-  modeRow: { flexDirection: 'row', gap: 8, marginTop: 18 },
+  inlineLoader: { marginVertical: spacing.md },
+  modeRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   modePill: {
     flex: 1,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: c.border,
-    paddingVertical: 9,
+    paddingVertical: spacing.sm,
     alignItems: 'center',
   },
-  modePillActive: { backgroundColor: c.orange, borderColor: c.orange },
-  modePillText: { fontSize: 13, color: c.text1 },
-  modePillTextActive: { color: '#FFFFFF', fontWeight: '700' },
+  modePillActive: { backgroundColor: c.accent, borderColor: c.accent },
+  modePillText: { ...type.label, color: c.text1 },
+  modePillTextActive: { color: c.onAccent, fontWeight: '700' },
   templateRow: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 12,
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
-  templateRowSelected: { borderColor: c.orange, backgroundColor: 'rgba(204,120,92,0.08)' },
-  templateName: { fontSize: 14, fontWeight: '600', color: c.text1 },
-  templateSubject: { fontSize: 12, color: c.amber, marginTop: 2 },
-  errorText: { color: c.red, fontSize: 13, marginTop: 14, lineHeight: 18 },
+  templateRowSelected: { borderColor: c.accent, backgroundColor: c.accentSoft },
+  templateName: { ...type.body, fontWeight: '600', color: c.text1 },
+  templateSubject: { ...type.caption, color: c.textMuted, marginTop: spacing.xs },
+  errorText: { color: c.danger, ...type.label, marginTop: spacing.lg, lineHeight: 18 },
   submitButton: {
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 28,
+    marginTop: spacing.xl,
   },
-  submitButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 });

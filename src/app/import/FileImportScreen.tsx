@@ -6,11 +6,12 @@ import {
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
-import { Upload } from 'lucide-react-native';
+import { Upload, CheckCircle2 } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, tabular, control } from '../../theme';
+import { Card, Button, EmptyState } from '../../components/ui';
 
 // ─── Config contract ─────────────────────────────────────────────────────────
 
@@ -156,14 +157,13 @@ export default function FileImportScreen<T>({
   if (phase === 'done') {
     return (
       <View style={styles.center}>
-        <Text style={[styles.doneEmoji, { color: accentColor }]}>✓</Text>
-        <Text style={styles.doneTitle}>{imported} контактов добавлено</Text>
-        <TouchableOpacity
-          style={[styles.btn, { backgroundColor: accentColor }]}
+        <CheckCircle2 size={52} color={accentColor} strokeWidth={2} />
+        <Text style={[styles.doneTitle, tabular]}>{imported} контактов добавлено</Text>
+        <Button
+          title="Перейти к контактам"
           onPress={() => router.push('/(tabs)/contacts' as never)}
-        >
-          <Text style={styles.btnText}>Перейти к контактам</Text>
-        </TouchableOpacity>
+          style={{ backgroundColor: accentColor }}
+        />
       </View>
     );
   }
@@ -178,13 +178,12 @@ export default function FileImportScreen<T>({
           <Text style={styles.sub}>{pickInstructions}</Text>
         ) : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <TouchableOpacity
-          style={[styles.btn, { backgroundColor: accentColor, flexDirection: 'row', gap: 8 }]}
+        <Button
+          title={pickButtonLabel}
           onPress={() => void pickFile()}
-        >
-          <Upload size={18} color={colors.onAccent} strokeWidth={2.5} />
-          <Text style={styles.btnText}>{pickButtonLabel}</Text>
-        </TouchableOpacity>
+          icon={<Upload size={18} color={colors.onAccent} strokeWidth={2.5} />}
+          style={{ backgroundColor: accentColor }}
+        />
       </View>
     );
   }
@@ -197,8 +196,8 @@ export default function FileImportScreen<T>({
     <View style={styles.container}>
       {/* Bar */}
       <View style={styles.bar}>
-        <Text style={styles.barTitle}>{items.length} {barUnit}</Text>
-        <TouchableOpacity onPress={toggleAll}>
+        <Text style={[styles.barTitle, tabular]}>{items.length} {barUnit}</Text>
+        <TouchableOpacity onPress={toggleAll} activeOpacity={0.7}>
           <Text style={[styles.selAll, { color: accentColor }]}>
             {selCount === items.length ? 'Снять всё' : 'Выбрать всё'}
           </Text>
@@ -213,9 +212,9 @@ export default function FileImportScreen<T>({
           const key = getKey(item, index);
           const on = selected.has(key);
           return (
-            <TouchableOpacity
-              style={[styles.row, on && { borderColor: accentColor }]}
+            <Card
               onPress={() => toggle(key)}
+              style={[styles.row, on && { borderColor: accentColor }]}
             >
               <View
                 style={[
@@ -229,10 +228,11 @@ export default function FileImportScreen<T>({
               <View style={{ flex: 1 }}>
                 {renderItem(item, on)}
               </View>
-            </TouchableOpacity>
+            </Card>
           );
         }}
-        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={<EmptyState title={emptyError} />}
       />
 
       {/* Preview-phase error (shown below list, above footer — mirrors whatsapp.tsx) */}
@@ -242,17 +242,13 @@ export default function FileImportScreen<T>({
 
       {/* Footer */}
       <View style={styles.footer}>
-        <TouchableOpacity
-          style={[
-            styles.btn,
-            { backgroundColor: accentColor, flex: 1 },
-            !selCount && styles.btnOff,
-          ]}
+        <Button
+          title={`Импортировать (${selCount})`}
           onPress={() => void doImport()}
           disabled={!selCount}
-        >
-          <Text style={styles.btnText}>Импортировать ({selCount})</Text>
-        </TouchableOpacity>
+          block
+          style={{ backgroundColor: accentColor }}
+        />
       </View>
     </View>
   );
@@ -262,24 +258,21 @@ export default function FileImportScreen<T>({
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container:  { flex: 1, backgroundColor: c.bg },
-  center:     { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: c.bg, gap: 14 },
+  center:     { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, backgroundColor: c.bg, gap: spacing.md },
   title:      { fontSize: 26, fontWeight: '800', color: c.text1 },
   sub:        { fontSize: 14, color: c.amber, lineHeight: 21, textAlign: 'center' },
-  btn:        { height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  btnOff:     { opacity: 0.45 },
-  btnText:    { color: c.onAccent, fontSize: 16, fontWeight: '700' },
   error:      { color: c.danger, fontSize: 13 },
-  doneEmoji:  { fontSize: 52, fontWeight: '700' },
   doneTitle:  { fontSize: 20, fontWeight: '800', color: c.text1 },
-  bar:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.borderStrong },
+  bar:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.lg, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.borderStrong },
   barTitle:   { fontSize: 14, fontWeight: '600', color: c.text1 },
   selAll:     { fontSize: 13, fontWeight: '600' },
-  row:        { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, borderRadius: 10, padding: 12, marginBottom: 8, gap: 12, borderWidth: 1, borderColor: c.borderStrong },
-  check:      { width: 22, height: 22, borderRadius: 4, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  listContent: { padding: spacing.lg, paddingBottom: control.md + spacing.xxl + spacing.lg },
+  row:        { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm, gap: spacing.md, borderColor: c.borderStrong },
+  check:      { width: 22, height: 22, borderRadius: radius.sm, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   checkMark:  { color: c.onAccent, fontSize: 13, fontWeight: '700' },
-  rowName:    { fontSize: 15, fontWeight: '600', color: c.text1 },
-  rowSub:     { fontSize: 12, color: c.amber, marginTop: 2 },
-  footer:     { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: 32, backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.borderStrong },
+  rowName:    { fontSize: 16, fontWeight: '600', color: c.text1 },
+  rowSub:     { fontSize: 12, color: c.amber, marginTop: spacing.xs },
+  footer:     { position: 'absolute', bottom: 0, left: 0, right: 0, padding: spacing.lg, paddingBottom: spacing.xxl, backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.borderStrong },
 });
 
 // ─── Re-export row text styles so callers can match the design system ─────────

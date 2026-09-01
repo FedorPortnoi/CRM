@@ -1,17 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 }  from 'react-native';
-import type { DimensionValue } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { AlertCircle } from 'lucide-react-native';
 import { API_URL } from '../../utils/api';
 import { useUserStore } from '../../store/userStore';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
@@ -19,7 +16,9 @@ import { formatMarketDate, formatMoney } from '../../market/profile';
 import AttachmentsSection from '../../components/AttachmentsSection';
 import { useAuditLog } from '../../hooks/useAuditLog';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Screen, Card, Button, Badge, EmptyState, Skeleton, SkeletonText } from '../../components/ui';
+import type { BadgeVariant } from '../../components/ui';
 
 interface Deal {
   id: string;
@@ -34,13 +33,6 @@ interface Deal {
   stage: { id: string; name: string; position: number } | null;
   next_action: string | null;
   next_action_due: string | null;
-}
-
-interface SkeletonBoxProps {
-  width: DimensionValue;
-  height: number;
-  borderRadius?: number;
-  marginBottom?: number;
 }
 
 interface DealApiResponse {
@@ -64,26 +56,22 @@ function dealActionLabel(action: string): string {
   return map[action] ?? action;
 }
 
-function dealActionColor(action: string, c: ThemeColors): { bg: string; text: string } {
-  if (action === 'created') return { bg: 'rgba(204,120,92,0.08)', text: c.orange };
-  if (action === 'won') return { bg: '#dcfce7', text: c.wheat };
-  if (action === 'lost') return { bg: '#fee2e2', text: c.red };
-  if (action === 'stage_changed') return { bg: '#dbeafe', text: '#1d4ed8' };
-  return { bg: c.bg, text: c.text1 };
-}
-
-function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: 'rgba(204,120,92,0.08)', borderRadius, marginBottom }} />;
+function dealActionVariant(action: string): BadgeVariant {
+  if (action === 'created') return 'accent';
+  if (action === 'won') return 'success';
+  if (action === 'lost') return 'danger';
+  return 'neutral';
 }
 
 function formatValue(value: number | null, _currency: string | null): string {
   return formatMoney(value, _currency, { empty: '—' });
 }
 
-function getStatusColor(status: Deal['status'], c: ThemeColors): string {
-  if (status === 'lost') return c.red;
-  if (status === 'archived') return c.textMuted;
-  return c.orange;
+function statusVariant(status: Deal['status']): BadgeVariant {
+  if (status === 'won') return 'success';
+  if (status === 'lost') return 'danger';
+  if (status === 'archived') return 'neutral';
+  return 'accent';
 }
 
 export default function DealDetailScreen(): JSX.Element {
@@ -222,23 +210,23 @@ export default function DealDetailScreen(): JSX.Element {
 
   if (isLoading) {
     return (
-      <ScrollView style={styles.container} contentContainerStyle={{ paddingTop: 16 }}>
+      <Screen contentContainerStyle={styles.contentPad}>
         <Stack.Screen options={{ title: t('deals.deal') }} />
-        <View style={styles.skeletonCard}>
-          <SkeletonBox width={'60%'} height={22} marginBottom={12} />
-          <SkeletonBox width={'40%'} height={18} marginBottom={12} />
-          <SkeletonBox width={'80%'} height={14} />
-        </View>
-        <View style={styles.skeletonCard}>
-          <SkeletonBox width={'30%'} height={12} marginBottom={10} />
-          <SkeletonBox width={'50%'} height={16} />
-        </View>
-        <View style={styles.skeletonCard}>
-          <SkeletonBox width={'30%'} height={12} marginBottom={10} />
-          <SkeletonBox width={'70%'} height={14} marginBottom={8} />
-          <SkeletonBox width={'60%'} height={14} />
-        </View>
-      </ScrollView>
+        <Card style={styles.cardSpacing}>
+          <Skeleton width="60%" height={26} style={styles.skeletonGapMd} />
+          <Skeleton width="40%" height={22} style={styles.skeletonGapLg} />
+          <View style={styles.badgeRow}>
+            <Skeleton width={72} height={24} rounded={radius.pill} />
+            <Skeleton width={64} height={24} rounded={radius.pill} />
+          </View>
+        </Card>
+        <Card style={styles.cardSpacing}>
+          <SkeletonText lines={2} lastLineWidth="70%" />
+        </Card>
+        <Card>
+          <SkeletonText lines={3} lastLineWidth="50%" />
+        </Card>
+      </Screen>
     );
   }
 
@@ -246,19 +234,21 @@ export default function DealDetailScreen(): JSX.Element {
     return (
       <View style={styles.errorContainer}>
         <Stack.Screen options={{ title: t('deals.deal') }} />
-        <Text style={styles.errorText}>{error ?? t('deals.notFound')}</Text>
-        <TouchableOpacity onPress={() => fetchDeal(false)}>
-          <Text style={styles.retryText}>{t('common.retry')}</Text>
-        </TouchableOpacity>
+        <EmptyState
+          icon={<AlertCircle size={32} color={colors.danger} strokeWidth={2} />}
+          title={error ?? t('deals.notFound')}
+          actionLabel={t('common.retry')}
+          onAction={() => fetchDeal(false)}
+        />
       </View>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={{ paddingTop: 16, paddingBottom: 32 }}
-      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.orange} />}
+    <Screen
+      refreshing={isRefreshing}
+      onRefresh={onRefresh}
+      contentContainerStyle={styles.contentPad}
     >
       <Stack.Screen
         options={{
@@ -276,39 +266,36 @@ export default function DealDetailScreen(): JSX.Element {
       />
 
       {/* Header card */}
-      <View style={styles.card}>
+      <Card style={styles.cardSpacing}>
         <Text style={styles.title}>{deal.title}</Text>
-        <Text style={styles.value}>{formatValue(deal.value, deal.currency)}</Text>
+        <Text style={[styles.value, styles.tabular]}>{formatValue(deal.value, deal.currency)}</Text>
         <View style={styles.badgeRow}>
           {deal.stage !== null && (
-            <View style={[styles.badge, { backgroundColor: colors.orange }]}>
-              <Text style={styles.badgeText}>{deal.stage.name}</Text>
-            </View>
+            <Badge label={deal.stage.name} variant="neutral" />
           )}
-          <View style={[styles.badge, { backgroundColor: getStatusColor(deal.status, colors) }]}>
-            <Text style={styles.badgeText}>
-              {{ open: t('deals.statusOpen'), won: t('deals.statusWon'), lost: t('deals.statusLost'), archived: t('deals.statusArchived') }[deal.status] ?? deal.status}
-            </Text>
-          </View>
+          <Badge
+            variant={statusVariant(deal.status)}
+            label={{ open: t('deals.statusOpen'), won: t('deals.statusWon'), lost: t('deals.statusLost'), archived: t('deals.statusArchived') }[deal.status] ?? deal.status}
+          />
         </View>
         {deal.pipeline !== null && (
           <Text style={styles.mutedText}>{deal.pipeline.name}</Text>
         )}
-      </View>
+      </Card>
 
       {deal.next_action && (
-        <View style={styles.card}>
+        <Card style={styles.cardSpacing}>
           <Text style={styles.nextActionLabel}>{t('deals.nextAction')}</Text>
           <Text style={styles.nextActionText}>{deal.next_action}</Text>
           {deal.next_action_due && (
-            <Text style={styles.nextActionDue}>{formatMarketDate(deal.next_action_due)}</Text>
+            <Text style={[styles.nextActionDue, styles.tabular]}>{formatMarketDate(deal.next_action_due)}</Text>
           )}
-        </View>
+        </Card>
       )}
 
       {/* Contact card */}
       {deal.contact != null && (
-        <View style={styles.card}>
+        <Card style={styles.cardSpacing}>
           <Text style={styles.sectionLabel}>{t('deals.contact')}</Text>
           <TouchableOpacity
             activeOpacity={0.7}
@@ -321,11 +308,11 @@ export default function DealDetailScreen(): JSX.Element {
                 (deal.contact.last_name !== null ? ' ' + deal.contact.last_name : '')}
             </Text>
           </TouchableOpacity>
-        </View>
+        </Card>
       )}
 
       {/* Details card */}
-      <View style={styles.card}>
+      <Card style={styles.cardSpacing}>
         <Text style={styles.sectionLabel}>{t('deals.details')}</Text>
         {deal.source !== null && (
           <View style={styles.detailRow}>
@@ -342,262 +329,168 @@ export default function DealDetailScreen(): JSX.Element {
         {deal.source === null && deal.lost_reason === null && (
           <Text style={styles.mutedText}>{t('deals.noDetails')}</Text>
         )}
-      </View>
+      </Card>
 
       {/* Actions card - only when open */}
       {deal.status === 'open' && (
-        <View style={styles.card}>
+        <Card style={styles.cardSpacing}>
           {actionError !== null && (
             <Text style={styles.actionError}>{actionError}</Text>
           )}
-          <TouchableOpacity
-            style={[
-              styles.button,
-              styles.buttonPrimary,
-              isActionLoading ? styles.buttonDisabled : null,
-            ]}
-            onPress={handleWon}
-            disabled={isActionLoading}
-          >
-            {isActionLoading ? (
-              <ActivityIndicator color={'#fff'} />
-            ) : (
-              <Text style={styles.buttonText}>{t('deals.markWon')}</Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.button,
-              styles.buttonDestructive,
-              isActionLoading ? styles.buttonDisabled : null,
-            ]}
-            onPress={handleLost}
-            disabled={isActionLoading}
-          >
-            {isActionLoading ? (
-              <ActivityIndicator color={'#fff'} />
-            ) : (
-              <Text style={styles.buttonText}>{t('deals.markLost')}</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+          <View style={styles.actionStack}>
+            <Button
+              title={t('deals.markWon')}
+              onPress={handleWon}
+              loading={isActionLoading}
+              disabled={isActionLoading}
+              block
+            />
+            <Button
+              title={t('deals.markLost')}
+              onPress={handleLost}
+              loading={isActionLoading}
+              disabled={isActionLoading}
+              variant="danger"
+              block
+            />
+          </View>
+        </Card>
       )}
 
       {/* Activity log */}
-      <View style={styles.auditSection}>
-        <Text style={styles.auditSectionTitle}>{t('contacts.activityLog')}</Text>
+      <Card>
+        <Text style={styles.sectionLabel}>{t('contacts.activityLog')}</Text>
         {auditLog.length === 0 ? (
-          <Text style={styles.auditEmpty}>{t('contacts.noActivity')}</Text>
+          <EmptyState title={t('contacts.noActivity')} style={styles.auditEmpty} />
         ) : (
-          auditLog.map((entry) => {
-            const actionColors = dealActionColor(entry.action, colors);
-            return (
-              <View key={entry.id} style={styles.auditRow}>
-                <View style={[styles.auditBadge, { backgroundColor: actionColors.bg }]}>
-                  <Text style={[styles.auditBadgeText, { color: actionColors.text }]}>{dealActionLabel(entry.action)}</Text>
-                </View>
-                <Text style={styles.auditDate}>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</Text>
-              </View>
-            );
-          })
+          auditLog.map((entry) => (
+            <View key={entry.id} style={styles.auditRow}>
+              <Badge label={dealActionLabel(entry.action)} variant={dealActionVariant(entry.action)} />
+              <Text style={[styles.auditDate, styles.tabular]}>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</Text>
+            </View>
+          ))
         )}
-      </View>
+      </Card>
 
       <AttachmentsSection entityType="deal" entityId={id as string} />
-    </ScrollView>
+    </Screen>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'rgba(204,120,92,0.08)',
+  contentPad: {
+    paddingTop: spacing.lg,
   },
-  card: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+  cardSpacing: {
+    marginBottom: spacing.lg,
   },
-  skeletonCard: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    height: 120,
+  skeletonGapMd: {
+    marginBottom: spacing.sm,
+  },
+  skeletonGapLg: {
+    marginBottom: spacing.md,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '700',
+    ...type.title,
     color: c.text1,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   value: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...type.subtitle,
     color: c.text1,
-    marginBottom: 12,
+    marginBottom: spacing.md,
+  },
+  tabular: {
+    fontVariant: ['tabular-nums'],
   },
   badgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8,
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   mutedText: {
-    fontSize: 13,
-    color: c.amber,
+    ...type.body,
+    color: c.textMuted,
   },
   nextActionLabel: {
-    color: c.orange,
-    fontWeight: '600',
-    fontSize: 13,
-    marginBottom: 6,
+    ...type.label,
+    color: c.accent,
+    marginBottom: spacing.sm,
   },
   nextActionText: {
+    ...type.body,
     color: c.text1,
-    fontSize: 15,
-    fontWeight: '500',
   },
   nextActionDue: {
-    color: c.amber,
-    fontSize: 13,
-    marginTop: 6,
+    ...type.caption,
+    color: c.textMuted,
+    marginTop: spacing.sm,
   },
   sectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: c.amber,
+    ...type.micro,
+    color: c.textMuted,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
-    marginBottom: 8,
+    marginBottom: spacing.md,
   },
   linkText: {
-    fontSize: 15,
-    color: c.orange,
-    fontWeight: '500',
+    ...type.body,
+    color: c.accent,
+    fontWeight: '600',
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   detailLabel: {
-    fontSize: 14,
-    color: c.amber,
+    ...type.body,
+    color: c.textMuted,
   },
   detailValue: {
-    fontSize: 14,
+    ...type.body,
     color: c.text1,
-    fontWeight: '500',
+    fontWeight: '600',
     flexShrink: 1,
     textAlign: 'right',
   },
-  button: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  buttonPrimary: {
-    backgroundColor: c.orange,
-  },
-  buttonDestructive: {
-    backgroundColor: c.red,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+  actionStack: {
+    gap: spacing.sm,
   },
   actionError: {
-    color: c.red,
-    fontSize: 13,
-    marginBottom: 10,
+    ...type.caption,
+    color: c.danger,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(204,120,92,0.08)',
-    padding: 24,
-  },
-  errorText: {
-    fontSize: 15,
-    color: c.red,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  retryText: {
-    fontSize: 15,
-    color: c.orange,
-    fontWeight: '600',
-  },
-  auditSection: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-  },
-  auditSectionTitle: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: c.amber,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    marginBottom: 8,
+    backgroundColor: c.bg,
   },
   auditEmpty: {
-    fontSize: 13,
-    color: c.textMuted,
+    paddingVertical: spacing.md,
+    paddingHorizontal: 0,
   },
   auditRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: c.bg,
-  },
-  auditBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  auditBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
+    borderBottomColor: c.border,
   },
   auditDate: {
-    fontSize: 12,
+    ...type.caption,
     color: c.textMuted,
   },
   headerEditButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   headerEditText: {
-    color: c.orange,
-    fontSize: 16,
-    fontWeight: '600',
+    color: c.accent,
+    ...type.heading,
   },
 });

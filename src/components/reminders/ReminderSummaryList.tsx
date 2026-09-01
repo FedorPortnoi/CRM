@@ -33,7 +33,7 @@ export default function ReminderSummaryList({ taskId }: Props): JSX.Element {
       ) : isError ? (
         <View>
           <Text style={styles.errorText}>{t('reminders.loadFailed')}</Text>
-          <TouchableOpacity onPress={() => void refetch()}>
+          <TouchableOpacity onPress={() => void refetch()} activeOpacity={0.7}>
             <Text style={styles.retryText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>

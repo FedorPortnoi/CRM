@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
 import FileImportScreen, { makeRowStyles } from './FileImportScreen';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, tabular } from '../../theme';
 
 interface WaContact { name: string; phone?: string; message_count: number }
 
@@ -48,7 +48,7 @@ export default function WhatsAppImportScreen() {
             <Text style={rowStyles.rowName}>{item.name}</Text>
             {item.phone ? <Text style={rowStyles.rowSub}>{item.phone}</Text> : null}
           </View>
-          <Text style={styles.count}>{item.message_count} сообщ.</Text>
+          <Text style={[styles.count, tabular]}>{item.message_count} сообщ.</Text>
         </View>
       )}
     />

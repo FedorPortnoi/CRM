@@ -9,7 +9,6 @@
 // entry the detail screen reads, so opening a row is instant.
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   RefreshControl,
   ScrollView,
@@ -21,7 +20,7 @@ import {
 import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Mail, Plus } from 'lucide-react-native';
+import { AlertCircle, ChevronRight, Mail, Plus } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import {
   useSequenceList,
@@ -30,7 +29,9 @@ import {
   type SequenceStatus,
 } from '../../hooks/useSequences';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Screen, Card, Button, Badge, EmptyState, SkeletonText } from '../../components/ui';
+import type { BadgeVariant } from '../../components/ui';
 
 const STATUS_FILTERS: (SequenceStatus | 'all')[] = ['all', 'active', 'draft', 'paused', 'archived'];
 
@@ -42,11 +43,24 @@ const STATUS_LABEL_KEYS: Record<SequenceStatus, string> = {
 };
 
 /** Only a running sequence gets the accent colour — everything else reads as parked. */
-function statusColor(status: SequenceStatus, c: ThemeColors): string {
-  if (status === 'active') return c.orange;
-  if (status === 'paused') return c.amber;
-  if (status === 'draft') return c.textMuted;
-  return c.textFaint;
+function statusBadgeVariant(status: SequenceStatus): BadgeVariant {
+  if (status === 'active') return 'accent';
+  if (status === 'paused') return 'warning';
+  return 'neutral';
+}
+
+function ListSkeleton(): JSX.Element {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
+  return (
+    <View style={styles.list}>
+      {Array.from({ length: 4 }).map((_, index) => (
+        <Card key={index} style={styles.card}>
+          <SkeletonText lines={2} lastLineWidth="55%" />
+        </Card>
+      ))}
+    </View>
+  );
 }
 
 export default function SequencesScreen(): JSX.Element {
@@ -73,16 +87,16 @@ export default function SequencesScreen(): JSX.Element {
 
   if (!canManage) {
     return (
-      <View style={styles.screen}>
+      <>
         <Stack.Screen options={{ title: t('sequences.title') }} />
-        <ScrollView contentContainerStyle={styles.gate}>
+        <Screen>
           <Text style={styles.pageTitle}>{t('sequences.title')}</Text>
           <Text style={styles.pageSubtitle}>{t('sequences.subtitle')}</Text>
-          <View style={styles.notice}>
+          <Card style={styles.notice}>
             <Text style={styles.noticeText}>{t('sequences.adminOnly')}</Text>
-          </View>
-        </ScrollView>
-      </View>
+          </Card>
+        </Screen>
+      </>
     );
   }
 
@@ -97,6 +111,7 @@ export default function SequencesScreen(): JSX.Element {
           style={styles.linkRow}
           onPress={() => router.push('/templates' as never)}
           accessibilityRole="button"
+          activeOpacity={0.7}
         >
           <Text style={styles.linkText}>{t('sequences.openTemplates')}</Text>
         </TouchableOpacity>
@@ -117,6 +132,7 @@ export default function SequencesScreen(): JSX.Element {
               onPress={() => setFilter(value)}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
+              activeOpacity={0.7}
             >
               <Text style={[styles.chipText, active && styles.chipTextActive]}>
                 {value === 'all' ? t('sequences.filterAll') : t(STATUS_LABEL_KEYS[value])}
@@ -127,18 +143,14 @@ export default function SequencesScreen(): JSX.Element {
       </ScrollView>
 
       {listQuery.isPending ? (
-        <ActivityIndicator style={styles.loader} color={colors.orange} />
+        <ListSkeleton />
       ) : listQuery.isError ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{t('sequences.failedToLoad')}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => { void listQuery.refetch(); }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.retryText}>{t('sequences.retry')}</Text>
-          </TouchableOpacity>
-        </View>
+        <EmptyState
+          icon={<AlertCircle size={32} color={colors.danger} />}
+          title={t('sequences.failedToLoad')}
+          actionLabel={t('sequences.retry')}
+          onAction={() => { void listQuery.refetch(); }}
+        />
       ) : (
         <FlatList
           data={items}
@@ -149,41 +161,29 @@ export default function SequencesScreen(): JSX.Element {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={onRefresh}
-              tintColor={colors.orange}
+              tintColor={colors.accent}
             />
           }
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Mail size={28} color={colors.orange} strokeWidth={2} />
-              <Text style={styles.emptyTitle}>{t('sequences.empty')}</Text>
-              <Text style={styles.emptyHint}>{t('sequences.emptyHint')}</Text>
-              <Text style={styles.emptyHint}>{t('sequences.editHint')}</Text>
-              <TouchableOpacity
-                style={styles.emptyButton}
-                onPress={() => router.push('/sequences/new' as never)}
-                accessibilityRole="button"
-              >
-                <Text style={styles.emptyButtonText}>{t('sequences.createFirst')}</Text>
-              </TouchableOpacity>
-            </View>
+            <EmptyState
+              icon={<Mail size={32} color={colors.textMuted} />}
+              title={t('sequences.empty')}
+              description={`${t('sequences.emptyHint')}\n${t('sequences.editHint')}`}
+              actionLabel={t('sequences.createFirst')}
+              onAction={() => router.push('/sequences/new' as never)}
+            />
           }
           renderItem={({ item }) => {
             const summary = summaries[item.id];
-            const color = statusColor(item.status, colors);
             return (
-              <TouchableOpacity
+              <Card
                 style={styles.card}
                 onPress={() => router.push(`/sequences/${item.id}` as never)}
-                accessibilityRole="button"
-                activeOpacity={0.7}
+                accessibilityLabel={item.name}
               >
                 <View style={styles.cardHeader}>
                   <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: color + '22' }]}>
-                    <Text style={[styles.statusBadgeText, { color }]}>
-                      {t(STATUS_LABEL_KEYS[item.status])}
-                    </Text>
-                  </View>
+                  <Badge label={t(STATUS_LABEL_KEYS[item.status])} variant={statusBadgeVariant(item.status)} />
                   <ChevronRight size={18} color={colors.textMuted} strokeWidth={2} />
                 </View>
 
@@ -196,107 +196,61 @@ export default function SequencesScreen(): JSX.Element {
                     ? `${t('sequences.stepCount', { count: summary.steps.length })} · ${t('sequences.activeEnrollments', { count: summary.active_enrollments })}`
                     : t('sequences.countsLoading')}
                 </Text>
-              </TouchableOpacity>
+              </Card>
             );
           }}
         />
       )}
 
-      <TouchableOpacity
-        style={styles.createButton}
+      <Button
+        title={t('sequences.create')}
+        icon={<Plus size={18} color={colors.onAccent} strokeWidth={2.5} />}
         onPress={() => router.push('/sequences/new' as never)}
-        accessibilityRole="button"
-      >
-        <Plus size={18} color="#FFFFFF" strokeWidth={2.5} />
-        <Text style={styles.createButtonText}>{t('sequences.create')}</Text>
-      </TouchableOpacity>
+        block
+        style={styles.createButton}
+      />
     </View>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: c.bg },
-  gate: { padding: 20, gap: 10 },
-  pageTitle: { fontSize: 22, fontWeight: '700', color: c.text1 },
-  pageSubtitle: { fontSize: 14, color: c.amber, lineHeight: 20 },
-  legalNote: { fontSize: 12, color: c.textMuted, lineHeight: 17 },
-  intro: { paddingHorizontal: 16, paddingTop: 14, gap: 6 },
-  linkRow: { alignSelf: 'flex-start', paddingVertical: 6 },
-  linkText: { color: c.orange, fontSize: 14, fontWeight: '700' },
-  notice: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.bgPanel,
-    padding: 14,
-  },
-  noticeText: { color: c.amber, fontSize: 14, lineHeight: 20 },
+  pageTitle: { ...type.title, color: c.text1 },
+  pageSubtitle: { ...type.body, color: c.textMuted, lineHeight: 20, marginTop: spacing.xs },
+  legalNote: { ...type.caption, color: c.textMuted, lineHeight: 17 },
+  intro: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.sm },
+  linkRow: { alignSelf: 'flex-start', paddingVertical: spacing.xs },
+  linkText: { color: c.accent, ...type.body, fontWeight: '700' },
+  notice: { marginTop: spacing.lg },
+  noticeText: { color: c.textMuted, ...type.body, lineHeight: 20 },
   // flexGrow:0 is load-bearing. This ScrollView is a direct child of `screen`
   // (flex:1) and sits above the list, so without it the horizontal ScrollView
   // claims the leftover vertical space and stretches every chip to ~400px tall.
   // nearby.tsx does not need this only because its chip row is wrapped in a
   // content-sized View. alignItems keeps the chips their natural height.
   filterBar: { flexGrow: 0, flexShrink: 0 },
-  filters: { paddingHorizontal: 16, paddingVertical: 12, gap: 8, alignItems: 'center' },
+  filters: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.sm, alignItems: 'center' },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: c.border,
     backgroundColor: c.bgPanel,
   },
-  chipActive: { backgroundColor: c.orange, borderColor: c.orange },
-  chipText: { color: c.amber, fontSize: 13, fontWeight: '600' },
-  chipTextActive: { color: '#FFFFFF' },
-  loader: { marginTop: 32 },
-  list: { paddingHorizontal: 16, paddingBottom: 24 },
-  emptyList: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  empty: { alignItems: 'center', gap: 8 },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: c.text1 },
-  emptyHint: { fontSize: 13, color: c.amber, textAlign: 'center', lineHeight: 19 },
-  emptyButton: {
-    marginTop: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.orange,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  emptyButtonText: { color: c.orange, fontSize: 14, fontWeight: '700' },
+  chipActive: { backgroundColor: c.accent, borderColor: c.accent },
+  chipText: { color: c.textMuted, ...type.label },
+  chipTextActive: { color: c.onAccent },
+  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+  emptyList: { flexGrow: 1, justifyContent: 'center', padding: spacing.xl },
   card: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 14,
-    marginBottom: 10,
+    marginBottom: spacing.sm,
   },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cardTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: c.text1 },
-  cardDescription: { marginTop: 6, fontSize: 13, color: c.amber, lineHeight: 18 },
-  cardMeta: { marginTop: 8, fontSize: 12, color: c.textMuted },
-  statusBadge: { borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
-  statusBadgeText: { fontSize: 12, fontWeight: '700' },
-  errorBox: { padding: 24, alignItems: 'center', gap: 12 },
-  errorText: { color: c.red, fontSize: 14, textAlign: 'center' },
-  retryButton: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.border,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  retryText: { color: c.text1, fontSize: 14, fontWeight: '600' },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  cardTitle: { flex: 1, ...type.heading, color: c.text1 },
+  cardDescription: { marginTop: spacing.sm, ...type.label, color: c.textMuted, lineHeight: 18 },
+  cardMeta: { marginTop: spacing.sm, ...type.caption, color: c.textMuted, fontVariant: ['tabular-nums'] },
   createButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    margin: 16,
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    paddingVertical: 14,
+    margin: spacing.lg,
   },
-  createButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
 });

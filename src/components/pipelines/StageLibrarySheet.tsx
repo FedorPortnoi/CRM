@@ -17,8 +17,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus } from 'lucide-react-native';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
 import { StageLibraryItem } from '../../hooks/usePipelines';
+import { Card, Button, Skeleton } from '../ui';
 
 type Props = {
   visible: boolean;
@@ -64,35 +65,35 @@ export function StageLibrarySheet({
     const busy = pendingKey === item.key;
     const disabled = item.already_added || pendingKey !== null;
     return (
-      <TouchableOpacity
+      <Card
         key={item.key}
+        onPress={disabled ? undefined : () => onPick(item)}
         style={[styles.card, item.already_added && styles.cardDisabled]}
-        onPress={() => onPick(item)}
-        disabled={disabled}
-        accessibilityRole="button"
-        accessibilityState={{ disabled }}
+        accessibilityLabel={item.name}
       >
-        <View style={[styles.swatch, { backgroundColor: item.color ?? colors.borderStrong }]} />
-        <View style={styles.cardText}>
-          <View style={styles.cardTitleRow}>
-            <Text style={styles.cardTitle}>{item.name}</Text>
-            {item.probability !== null ? (
-              <Text style={styles.cardProbability}>
-                {t('pipelines.probabilityShort', { value: item.probability })}
-              </Text>
+        <View style={styles.cardRow}>
+          <View style={[styles.swatch, { backgroundColor: item.color ?? colors.borderStrong }]} />
+          <View style={styles.cardText}>
+            <View style={styles.cardTitleRow}>
+              <Text style={styles.cardTitle}>{item.name}</Text>
+              {item.probability !== null ? (
+                <Text style={styles.cardProbability}>
+                  {t('pipelines.probabilityShort', { value: item.probability })}
+                </Text>
+              ) : null}
+            </View>
+            <Text style={styles.cardRationale}>{item.rationale}</Text>
+            {item.already_added ? (
+              <Text style={styles.cardAdded}>{t('pipelines.alreadyAdded')}</Text>
             ) : null}
           </View>
-          <Text style={styles.cardRationale}>{item.rationale}</Text>
-          {item.already_added ? (
-            <Text style={styles.cardAdded}>{t('pipelines.alreadyAdded')}</Text>
-          ) : null}
+          {busy ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : item.already_added ? null : (
+            <Plus size={18} color={colors.accent} />
+          )}
         </View>
-        {busy ? (
-          <ActivityIndicator size="small" color={colors.orange} />
-        ) : item.already_added ? null : (
-          <Plus size={18} color={colors.orange} />
-        )}
-      </TouchableOpacity>
+      </Card>
     );
   };
 
@@ -104,6 +105,7 @@ export function StageLibrarySheet({
             <TouchableOpacity
               onPress={onClose}
               style={styles.backBtn}
+              activeOpacity={0.7}
               accessibilityRole="button"
               accessibilityLabel={t('common.back')}
               hitSlop={8}
@@ -118,7 +120,11 @@ export function StageLibrarySheet({
           <Text style={styles.intro}>{t('pipelines.addStageIntro')}</Text>
 
           {isLoading ? (
-            <ActivityIndicator style={{ marginTop: 32 }} color={colors.orange} />
+            <View style={styles.loadingList}>
+              <Skeleton height={68} rounded={radius.lg} />
+              <Skeleton height={68} rounded={radius.lg} />
+              <Skeleton height={68} rounded={radius.lg} />
+            </View>
           ) : errorText !== null ? (
             <Text style={styles.error}>{errorText}</Text>
           ) : (
@@ -140,6 +146,7 @@ export function StageLibrarySheet({
                   <TouchableOpacity
                     style={styles.showAllBtn}
                     onPress={() => setShowAll(true)}
+                    activeOpacity={0.7}
                     accessibilityRole="button"
                   >
                     <Text style={styles.showAllText}>
@@ -158,14 +165,13 @@ export function StageLibrarySheet({
           )}
 
           <View style={styles.divider} />
-          <TouchableOpacity
-            style={styles.customBtn}
+          <Button
+            title={t('pipelines.customStageButton')}
             onPress={onCustom}
             disabled={pendingKey !== null}
-            accessibilityRole="button"
-          >
-            <Text style={styles.customBtnText}>{t('pipelines.customStageButton')}</Text>
-          </TouchableOpacity>
+            variant="secondary"
+            block
+          />
           <Text style={styles.hint}>{t('pipelines.customStageHint')}</Text>
         </ScrollView>
       </View>
@@ -176,52 +182,37 @@ export function StageLibrarySheet({
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   modal: { flex: 1, backgroundColor: c.bg },
   header: { backgroundColor: c.bgDark, borderBottomWidth: 1, borderBottomColor: c.border },
-  headerRow: { height: 52, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 },
-  backBtn: { padding: 8 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: c.text1, marginLeft: 4, flex: 1 },
-  body: { padding: 20, paddingBottom: 48 },
-  intro: { fontSize: 13, color: c.amber, lineHeight: 19, marginBottom: 8 },
+  // 52pt row / 26px arrow / 18px bold title deliberately repeats NavHeader's geometry
+  // (matches StageEditorModal). type.subtitle is 18/bold, so it stays the exact match.
+  headerRow: { height: 52, flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm },
+  backBtn: { padding: spacing.sm },
+  headerTitle: { ...type.subtitle, color: c.text1, marginLeft: spacing.xs, flex: 1 },
+  body: { padding: spacing.lg, paddingBottom: spacing.xxl + spacing.xl },
+  intro: { fontSize: 13, color: c.amber, lineHeight: 19, marginBottom: spacing.sm },
+  loadingList: { gap: spacing.sm },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '600',
     color: c.amber,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginTop: 18,
-    marginBottom: 8,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 8,
-  },
+  card: { marginBottom: spacing.sm },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   cardDisabled: { opacity: 0.5 },
-  swatch: { width: 12, height: 12, borderRadius: 6 },
+  swatch: { width: 12, height: 12, borderRadius: radius.sm },
   cardText: { flex: 1 },
-  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cardTitle: { fontSize: 15, fontWeight: '600', color: c.text1 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  cardTitle: { fontSize: 14, fontWeight: '600', color: c.text1 },
   cardProbability: { fontSize: 12, color: c.amber, fontWeight: '600' },
-  cardRationale: { fontSize: 12, color: c.textMuted, marginTop: 3, lineHeight: 17 },
-  cardAdded: { fontSize: 11, color: c.orange, marginTop: 4, fontWeight: '600' },
-  showAllBtn: { alignItems: 'center', paddingVertical: 14, marginTop: 6 },
-  showAllText: { fontSize: 14, color: c.orange, fontWeight: '600' },
-  empty: { fontSize: 13, color: c.textMuted, marginTop: 20, lineHeight: 19 },
-  error: { fontSize: 13, color: c.red, marginTop: 20, lineHeight: 19 },
-  divider: { height: 1, backgroundColor: c.border, marginVertical: 20 },
-  customBtn: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.borderStrong,
-    padding: 14,
-    alignItems: 'center',
-  },
-  customBtnText: { color: c.text1, fontWeight: '600', fontSize: 15 },
-  hint: { fontSize: 12, color: c.textMuted, marginTop: 8, lineHeight: 16, textAlign: 'center' },
+  cardRationale: { fontSize: 12, color: c.textMuted, marginTop: spacing.xs, lineHeight: 17 },
+  cardAdded: { fontSize: 11, color: c.accent, marginTop: spacing.xs, fontWeight: '600' },
+  showAllBtn: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.xs },
+  showAllText: { fontSize: 14, color: c.accent, fontWeight: '600' },
+  empty: { fontSize: 13, color: c.textMuted, marginTop: spacing.xl, lineHeight: 19 },
+  error: { fontSize: 13, color: c.danger, marginTop: spacing.xl, lineHeight: 19 },
+  divider: { height: 1, backgroundColor: c.border, marginVertical: spacing.xl },
+  hint: { fontSize: 12, color: c.textMuted, marginTop: spacing.sm, lineHeight: 16, textAlign: 'center' },
 });

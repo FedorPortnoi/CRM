@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Text,
   View,
-  ActivityIndicator,
   FlatList,
   StyleSheet,
   ListRenderItemInfo,
@@ -17,6 +16,7 @@ import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
 import { useTheme } from '../../../hooks/useTheme';
 import { ThemeColors, spacing, radius, type } from '../../../theme';
+import { Button, SkeletonText, EmptyState } from '../../../components/ui';
 
 type TriggerValue =
   | 'contact_created'
@@ -234,6 +234,7 @@ export default function EditWorkflowScreen(): JSX.Element {
       key={item}
       style={[styles.triggerRow, trigger === item && styles.triggerRowSelected]}
       onPress={() => setTrigger(item)}
+      activeOpacity={0.7}
     >
       <Text style={styles.triggerText}>{t('workflows.' + TRIGGER_KEY_MAP[item])}</Text>
     </TouchableOpacity>
@@ -242,7 +243,7 @@ export default function EditWorkflowScreen(): JSX.Element {
   const renderCondition = ({ item, index }: ListRenderItemInfo<ConditionItem>): JSX.Element => (
     <View style={styles.itemRow}>
       <Text style={styles.itemText}>{item.field} {item.operator} {item.value}</Text>
-      <TouchableOpacity onPress={() => removeCondition(index)}>
+      <TouchableOpacity onPress={() => removeCondition(index)} activeOpacity={0.7}>
         <Text style={styles.deleteBtn}>X</Text>
       </TouchableOpacity>
     </View>
@@ -258,7 +259,7 @@ export default function EditWorkflowScreen(): JSX.Element {
   const renderAction = ({ item, index }: ListRenderItemInfo<ActionItem>): JSX.Element => (
     <View style={styles.itemRow}>
       <Text style={styles.itemText}>{item.type} {actionPrimaryValue(item)}</Text>
-      <TouchableOpacity onPress={() => removeAction(index)}>
+      <TouchableOpacity onPress={() => removeAction(index)} activeOpacity={0.7}>
         <Text style={styles.deleteBtn}>X</Text>
       </TouchableOpacity>
     </View>
@@ -268,8 +269,8 @@ export default function EditWorkflowScreen(): JSX.Element {
     return (
       <>
         <Stack.Screen options={{ title: t('workflows.edit') }} />
-        <View style={styles.centered}>
-          <ActivityIndicator size='large' color={colors.accent} />
+        <View style={styles.content}>
+          <SkeletonText lines={4} />
         </View>
       </>
     );
@@ -281,9 +282,7 @@ export default function EditWorkflowScreen(): JSX.Element {
         <Stack.Screen options={{ title: t('workflows.edit') }} />
         <View style={styles.centered}>
           <Text style={styles.error}>{loadError}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={fetchWorkflow}>
-            <Text style={styles.primaryBtnText}>{t('common.retry')}</Text>
-          </TouchableOpacity>
+          <Button title={t('common.retry')} onPress={fetchWorkflow} style={styles.retryBtn} />
         </View>
       </>
     );
@@ -311,9 +310,7 @@ export default function EditWorkflowScreen(): JSX.Element {
               keyExtractor={(item) => item}
               scrollEnabled={false}
             />
-            <TouchableOpacity style={styles.primaryBtn} onPress={goToStep2}>
-              <Text style={styles.primaryBtnText}>{t('workflows.next')}</Text>
-            </TouchableOpacity>
+            <Button title={t('workflows.next')} onPress={goToStep2} block style={styles.primaryBtn} />
           </View>
         )}
         {step === 2 && (
@@ -325,17 +322,18 @@ export default function EditWorkflowScreen(): JSX.Element {
               renderItem={renderCondition}
               keyExtractor={(_, i) => String(i)}
               scrollEnabled={false}
+              ListEmptyComponent={<EmptyState title={t('workflows.noConditions')} style={styles.listEmpty} />}
             />
-            <TouchableOpacity style={styles.secondaryBtn} onPress={() => setCondModal(true)}>
-              <Text style={styles.secondaryBtnText}>{t('workflows.addCondition')}</Text>
-            </TouchableOpacity>
+            <Button
+              title={t('workflows.addCondition')}
+              onPress={() => setCondModal(true)}
+              variant="secondary"
+              block
+              style={styles.secondaryBtn}
+            />
             <View style={styles.rowBtns}>
-              <TouchableOpacity style={styles.skipBtn} onPress={() => setStep(3)}>
-                <Text style={styles.skipBtnText}>{t('workflows.skip')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={() => setStep(3)}>
-                <Text style={styles.primaryBtnText}>{t('workflows.next')}</Text>
-              </TouchableOpacity>
+              <Button title={t('workflows.skip')} onPress={() => setStep(3)} variant="secondary" style={styles.rowBtn} />
+              <Button title={t('workflows.next')} onPress={() => setStep(3)} style={styles.rowBtn} />
             </View>
           </View>
         )}
@@ -348,20 +346,24 @@ export default function EditWorkflowScreen(): JSX.Element {
               renderItem={renderAction}
               keyExtractor={(_, i) => String(i)}
               scrollEnabled={false}
+              ListEmptyComponent={<EmptyState title={t('workflows.noActions')} style={styles.listEmpty} />}
             />
-            <TouchableOpacity style={styles.secondaryBtn} onPress={() => setActModal(true)}>
-              <Text style={styles.secondaryBtnText}>{t('workflows.addAction')}</Text>
-            </TouchableOpacity>
+            <Button
+              title={t('workflows.addAction')}
+              onPress={() => setActModal(true)}
+              variant="secondary"
+              block
+              style={styles.secondaryBtn}
+            />
             {apiError ? <Text style={styles.error}>{apiError}</Text> : null}
-            <TouchableOpacity
-              style={[styles.primaryBtn, (actions.length === 0 || isSaving) && styles.btnDisabled]}
-              disabled={actions.length === 0 || isSaving}
+            <Button
+              title={t('workflows.save')}
               onPress={saveWorkflow}
-            >
-              {isSaving
-                ? <ActivityIndicator color={colors.onAccent} />
-                : <Text style={styles.primaryBtnText}>{t('workflows.save')}</Text>}
-            </TouchableOpacity>
+              disabled={actions.length === 0 || isSaving}
+              loading={isSaving}
+              block
+              style={styles.primaryBtn}
+            />
           </View>
         )}
       </ScrollView>
@@ -385,6 +387,7 @@ export default function EditWorkflowScreen(): JSX.Element {
                 <TouchableOpacity
                   style={[styles.pickerRow, condOperator === item && styles.pickerRowSelected]}
                   onPress={() => setCondOperator(item)}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.pickerText}>{item}</Text>
                 </TouchableOpacity>
@@ -401,12 +404,8 @@ export default function EditWorkflowScreen(): JSX.Element {
               placeholderTextColor={colors.placeholder}
             />
             <View style={styles.rowBtns}>
-              <TouchableOpacity style={styles.skipBtn} onPress={() => setCondModal(false)}>
-                <Text style={styles.skipBtnText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={addCondition}>
-                <Text style={styles.primaryBtnText}>{t('workflows.addCondition')}</Text>
-              </TouchableOpacity>
+              <Button title={t('common.cancel')} onPress={() => setCondModal(false)} variant="secondary" style={styles.rowBtn} />
+              <Button title={t('workflows.addCondition')} onPress={addCondition} style={styles.rowBtn} />
             </View>
           </View>
         </View>
@@ -423,6 +422,7 @@ export default function EditWorkflowScreen(): JSX.Element {
                 <TouchableOpacity
                   style={[styles.pickerRow, actType === item && styles.pickerRowSelected]}
                   onPress={() => setActType(item)}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.pickerText}>{item}</Text>
                 </TouchableOpacity>
@@ -451,12 +451,8 @@ export default function EditWorkflowScreen(): JSX.Element {
               </View>
             )}
             <View style={styles.rowBtns}>
-              <TouchableOpacity style={styles.skipBtn} onPress={() => setActModal(false)}>
-                <Text style={styles.skipBtnText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={addAction}>
-                <Text style={styles.primaryBtnText}>{t('workflows.addAction')}</Text>
-              </TouchableOpacity>
+              <Button title={t('common.cancel')} onPress={() => setActModal(false)} variant="secondary" style={styles.rowBtn} />
+              <Button title={t('workflows.addAction')} onPress={addAction} style={styles.rowBtn} />
             </View>
           </View>
         </View>
@@ -469,29 +465,26 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   container: { flex: 1, backgroundColor: c.bg },
   content: { padding: spacing.lg },
-  label: { marginTop: spacing.md, marginBottom: 6, color: c.text1, fontWeight: '700' },
-  input: { height: 48, borderRadius: radius.lg, borderWidth: 1, borderColor: c.inputBorder, backgroundColor: c.surface, paddingHorizontal: spacing.md, color: c.text1 },
+  label: { ...type.label, marginTop: spacing.md, marginBottom: spacing.xs, color: c.text1 },
+  input: { height: 48, borderRadius: radius.lg, borderWidth: 1, borderColor: c.inputBorder, backgroundColor: c.surface, paddingHorizontal: spacing.md, color: c.text1, ...type.body },
   error: { color: c.danger, marginTop: spacing.xs },
-  stepIndicator: { fontSize: type.body.fontSize, color: c.amber, marginBottom: spacing.xs },
+  stepIndicator: { ...type.body, color: c.amber, marginBottom: spacing.xs },
   triggerRow: { minHeight: 48, borderRadius: radius.lg, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, justifyContent: 'center', paddingHorizontal: spacing.md, marginBottom: spacing.sm },
   triggerRowSelected: { borderColor: c.accent, backgroundColor: c.accentSoft },
-  triggerText: { color: c.text1 },
+  triggerText: { ...type.body, color: c.text1 },
   itemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, borderBottomWidth: 1, borderBottomColor: c.border },
-  itemText: { flex: 1, color: c.text1 },
+  itemText: { flex: 1, ...type.body, color: c.text1 },
   deleteBtn: { color: c.danger, paddingHorizontal: spacing.sm },
-  retryBtn: { height: 48, borderRadius: radius.lg, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginTop: spacing.lg, paddingHorizontal: 32 },
-  primaryBtn: { flex: 1, height: 48, borderRadius: radius.lg, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginTop: spacing.lg },
-  primaryBtnText: { color: c.onAccent, fontWeight: '700', fontSize: type.heading.fontSize },
-  btnDisabled: { opacity: 0.5 },
-  secondaryBtn: { height: 48, borderRadius: radius.lg, borderWidth: 1, borderColor: c.accent, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
-  secondaryBtnText: { color: c.accent, fontWeight: '700' },
-  skipBtn: { flex: 1, height: 48, borderRadius: radius.lg, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center', marginTop: spacing.lg, marginRight: spacing.sm },
-  skipBtnText: { color: c.text1, fontWeight: '600' },
-  rowBtns: { flexDirection: 'row', gap: 8 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalBox: { backgroundColor: c.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: 20, maxHeight: '80%' },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: c.text1, marginBottom: spacing.sm },
-  pickerRow: { height: 44, borderRadius: radius.lg, borderWidth: 1, borderColor: c.border, justifyContent: 'center', paddingHorizontal: spacing.md, marginBottom: 6 },
+  retryBtn: { marginTop: spacing.lg, alignSelf: 'center' },
+  primaryBtn: { marginTop: spacing.lg },
+  secondaryBtn: { marginTop: spacing.md },
+  rowBtns: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+  rowBtn: { flex: 1 },
+  modalOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
+  listEmpty: { paddingVertical: spacing.lg },
+  modalBox: { backgroundColor: c.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, maxHeight: '80%' },
+  modalTitle: { ...type.subtitle, color: c.text1, marginBottom: spacing.sm },
+  pickerRow: { height: 44, borderRadius: radius.lg, borderWidth: 1, borderColor: c.border, justifyContent: 'center', paddingHorizontal: spacing.md, marginBottom: spacing.xs },
   pickerRowSelected: { borderColor: c.accent, backgroundColor: c.accentSoft },
-  pickerText: { color: c.text1 },
+  pickerText: { ...type.body, color: c.text1 },
 });

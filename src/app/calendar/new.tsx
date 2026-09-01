@@ -1,13 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
@@ -15,7 +7,8 @@ import { API_URL } from '../../utils/api';
 import { useCreateMutation } from '../../hooks/useCreateMutation';
 import { formatMarketDateTime } from '../../market/profile';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type, control } from '../../theme';
+import { Screen, Button } from '../../components/ui';
 
 type FieldErrors = {
   title?: string;
@@ -174,11 +167,7 @@ export default function NewCalendarEventScreen(): JSX.Element {
   return (
     <>
       <Stack.Screen options={{ title: t('calendar.new'), headerShown: true, headerBackTitle: '' }} />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
+      <Screen>
         {apiError ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorBannerText}>{apiError}</Text>
@@ -297,77 +286,63 @@ export default function NewCalendarEventScreen(): JSX.Element {
           />
         </View>
 
-        <TouchableOpacity
-          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+        <Button
+          title={t('calendar.createEvent')}
           onPress={() => { void submit(); }}
-          disabled={isSubmitting}
-          accessibilityRole="button"
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.submitButtonText}>{t('calendar.createEvent')}</Text>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
+          loading={isSubmitting}
+          block
+          style={styles.submitButton}
+        />
+      </Screen>
     </>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: c.bg,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 32,
-  },
   errorBanner: {
-    backgroundColor: 'rgba(204,82,71,0.12)',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    backgroundColor: c.dangerSoft,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
   },
   errorBannerText: {
-    color: c.red,
-    fontSize: 14,
+    color: c.danger,
+    ...type.body,
   },
   fieldGroup: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...type.label,
     color: c.text1,
-    marginBottom: 5,
+    marginBottom: spacing.xs,
   },
   input: {
     backgroundColor: c.inputBg,
     borderColor: c.inputBorder,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
     color: c.text1,
-    fontSize: 15,
-    minHeight: 44,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    ...type.body,
+    minHeight: control.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   notesInput: {
     backgroundColor: c.inputBg,
     borderColor: c.inputBorder,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
     color: c.text1,
-    fontSize: 15,
+    ...type.body,
     height: 112,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   row: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 6,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   rowField: {
     flex: 1,
@@ -376,43 +351,29 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     width: 108,
   },
   fieldError: {
-    color: c.red,
-    fontSize: 12,
-    marginBottom: 10,
+    color: c.danger,
+    ...type.caption,
+    marginBottom: spacing.sm,
     marginTop: -2,
   },
   previewBox: {
-    backgroundColor: 'rgba(204,120,92,0.08)',
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 4,
-    marginBottom: 16,
+    backgroundColor: c.accentSoft,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginTop: spacing.xs,
+    marginBottom: spacing.lg,
   },
   previewLabel: {
-    color: c.orange,
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 4,
+    color: c.accent,
+    ...type.caption,
+    marginBottom: spacing.xs,
     textTransform: 'uppercase',
   },
   previewText: {
     color: c.text1,
-    fontSize: 14,
+    ...type.body,
   },
   submitButton: {
-    alignItems: 'center',
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    justifyContent: 'center',
-    marginTop: 12,
-    minHeight: 48,
-  },
-  submitButtonDisabled: {
-    opacity: 0.7,
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    marginTop: spacing.sm,
   },
 });

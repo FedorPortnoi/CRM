@@ -41,8 +41,50 @@ function walkDir(dir, callback) {
   }
 }
 
+/**
+ * A borderRadius equal to half the element's width or height is a circle, not
+ * an off-scale value — `borderRadius: 30` on a 60px avatar is the only correct
+ * way to draw one. Scan the enclosing style block for a matching dimension.
+ */
+/**
+ * Walks each <TouchableOpacity ...> opening tag to its real closing '>',
+ * tracking brace depth so props spanning many lines are counted correctly.
+ * The previous single-line regex missed nearly every multi-line tag.
+ */
+function scanTouchables(content) {
+  let total = 0;
+  let withProp = 0;
+  const re = /<TouchableOpacity[\s>]/g;
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    total++;
+    let depth = 0;
+    let i = m.index + '<TouchableOpacity'.length;
+    for (; i < content.length; i++) {
+      const ch = content[i];
+      if (ch === '{') depth++;
+      else if (ch === '}') depth--;
+      else if (ch === '>' && depth === 0) break;
+    }
+    if (content.slice(m.index, i).includes('activeOpacity')) withProp++;
+  }
+  return { total, withProp };
+}
+
+function isCircleRadius(content, lineIdx, size) {
+  const lines = content.split(String.fromCharCode(10));
+  const start = Math.max(0, lineIdx - 12);
+  const end = Math.min(lines.length, lineIdx + 12);
+  const block = lines.slice(start, end).join(String.fromCharCode(10));
+  const dims = [...block.matchAll(/(?:width|height):\s*(\d+)/g)].map((m) => Number(m[1]));
+  return dims.some((d) => d === size * 2);
+}
+
 function analyzeFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf-8');
+  const touch = scanTouchables(content);
+  stats.touchableOpacityCount += touch.total;
+  stats.touchableOpacityWithActiveOpacity += touch.withProp;
   const lines = content.split('\n');
   const relPath = path.relative(projectRoot, filePath);
   let hasTabularNums = false;
@@ -80,7 +122,7 @@ function analyzeFile(filePath) {
     const radiusMatches = line.matchAll(/borderRadius:\s*(\d+)/g);
     for (const match of radiusMatches) {
       const size = parseInt(match[1], 10);
-      if (!ALLOWED_RADII.has(size) && size <= 100) {
+      if (!ALLOWED_RADII.has(size) && size <= 100 && !isCircleRadius(content, idx, size)) {
         stats.badRadii++;
         console.log(`  ${relPath}:${lineNum} borderRadius: ${size}`);
       }
@@ -127,8 +169,8 @@ function analyzeFile(filePath) {
       hasEmptyStateImport = true;
     }
 
-    // Check for TouchableOpacity and activeOpacity (approximate)
-    const touchableMatches = line.match(/<TouchableOpacity[^>]*/g);
+    // Superseded by the whole-file brace-aware scan below; see scanTouchables().
+    const touchableMatches = null && line.match(/<TouchableOpacity[^>]*/g);
     if (touchableMatches) {
       touchableMatches.forEach((match) => {
         stats.touchableOpacityCount++;
@@ -161,6 +203,7 @@ function analyzeFile(filePath) {
 // Scan both directories
 walkDir(path.join(projectRoot, 'src/app'), analyzeFile);
 walkDir(path.join(projectRoot, 'src/components'), analyzeFile);
+walkDir(path.join(projectRoot, 'src/screens'), analyzeFile);
 
 // Print color literals summary
 if (stats.colorLiterals > 0) {
@@ -215,7 +258,7 @@ if (stats.activityIndicators > 0) {
 if (stats.touchableOpacityCount > 0) {
   const percentage = Math.round((stats.touchableOpacityWithActiveOpacity / stats.touchableOpacityCount) * 100);
   console.log(`\n✓ activeOpacity coverage: ${stats.touchableOpacityWithActiveOpacity} of ${stats.touchableOpacityCount} touchables set activeOpacity (${percentage}%)`);
-  console.log('  Note: approximate—scans <TouchableOpacity tag text for activeOpacity prop');
+  console.log('  Note: brace-aware scan of each opening tag, multi-line props included');
 }
 
 // Print tabular figures status

@@ -5,16 +5,15 @@ import {
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Stack, useRouter } from 'expo-router';
 import { getInitialURL, useURL } from 'expo-linking';
@@ -28,6 +27,9 @@ import {
 } from '../utils/inviteDiscovery';
 import { PASSWORD_MAX_BYTES, utf8ByteLength } from '../utils/password';
 import { isCommonPassword } from '../utils/password-blocklist';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeColors, spacing, radius, type, control, tabular } from '../theme';
+import { Button, Card } from '../components/ui';
 
 /**
  * The invitee's half of the invite flow — the first screen a person who has no
@@ -48,18 +50,6 @@ import { isCommonPassword } from '../utils/password-blocklist';
 type Phase = 'resolving' | 'found' | 'code';
 type FoundStep = 'email' | 'password' | 'confirmPassword' | 'phone';
 type FocusedField = 'phone' | 'email' | 'password' | 'confirm' | 'code' | null;
-
-const COLORS = {
-  cream: '#E8DDD6',
-  dustyRose: '#C9A99A',
-  mutedTerracotta: '#B07868',
-  darkBrown: '#8B3A00',
-  burntOrange: '#C45A10',
-  charcoal: '#333333',
-  white: '#FFFFFF',
-  green: '#3F8F5B',
-  red: '#ef4444',
-} as const;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -178,6 +168,8 @@ const PASSWORD_RULES: { label: string; message: string; test: (value: string) =>
 export default function InviteScreen() {
   const router = useRouter();
   const url = useURL();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { isLoading, error, acceptInvite } = useUserStore();
 
   const [phase, setPhase] = useState<Phase>('resolving');
@@ -476,11 +468,11 @@ export default function InviteScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.card}>
+            <Card padded={false} style={styles.card}>
               {/* Frosted-glass backdrop, same as the login screen */}
               <BlurView
                 intensity={55}
-                tint="light"
+                tint={isDark ? 'dark' : 'light'}
                 experimentalBlurMethod="dimezisBlurView"
                 style={styles.cardGlass}
               />
@@ -504,7 +496,7 @@ export default function InviteScreen() {
                   <Text style={styles.title}>4КУБ</Text>
                   <ActivityIndicator
                     accessibilityLabel="Идёт поиск приглашения"
-                    color={COLORS.burntOrange}
+                    color={colors.accent}
                     size="large"
                     style={styles.resolvingSpinner}
                   />
@@ -530,7 +522,7 @@ export default function InviteScreen() {
                       <Ionicons
                         name="shield-checkmark-outline"
                         size={15}
-                        color={COLORS.darkBrown}
+                        color={colors.accent}
                       />
                       <Text style={styles.roleBadgeText}>{roleLabel(preview.role)}</Text>
                     </View>
@@ -561,7 +553,7 @@ export default function InviteScreen() {
                         <Ionicons
                           name="mail-outline"
                           size={25}
-                          color={COLORS.mutedTerracotta}
+                          color={colors.textMuted}
                           style={styles.inputIcon}
                         />
                         <TextInput
@@ -577,9 +569,9 @@ export default function InviteScreen() {
                           onFocus={() => setFocusedField('email')}
                           onSubmitEditing={goToPasswordStep}
                           placeholder="Электронная почта"
-                          placeholderTextColor={COLORS.dustyRose}
+                          placeholderTextColor={colors.placeholder}
                           returnKeyType="next"
-                          selectionColor={COLORS.burntOrange}
+                          selectionColor={colors.accent}
                           style={styles.input}
                           value={email}
                         />
@@ -591,32 +583,25 @@ export default function InviteScreen() {
                         </Text>
                       )}
 
-                      <Pressable
+                      <Button
+                        title="Далее"
                         accessibilityLabel="Далее — придумать пароль"
-                        accessibilityRole="button"
                         onPress={goToPasswordStep}
-                        style={({ pressed }) => [styles.primaryButtonShadow, pressed && styles.pressed]}
-                      >
-                        <LinearGradient
-                          colors={[COLORS.burntOrange, COLORS.darkBrown]}
-                          start={{ x: 0, y: 0.5 }}
-                          end={{ x: 1, y: 0.5 }}
-                          style={styles.primaryButton}
-                        >
-                          <Text style={styles.primaryButtonText}>Далее</Text>
-                        </LinearGradient>
-                      </Pressable>
+                        block
+                        style={styles.primaryButton}
+                      />
 
                       {/* The accept token lives 30 minutes; the claim code outlives a
                           failed submit, so retyping it is the way back in. */}
-                      <Pressable
+                      <TouchableOpacity
                         accessibilityRole="button"
+                        activeOpacity={0.7}
                         hitSlop={8}
                         onPress={restartWithCode}
-                        style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
+                        style={styles.linkButton}
                       >
                         <Text style={styles.linkText}>Ввести код приглашения вручную</Text>
-                      </Pressable>
+                      </TouchableOpacity>
                     </>
                   )}
 
@@ -636,7 +621,7 @@ export default function InviteScreen() {
                         <Ionicons
                           name="lock-closed-outline"
                           size={25}
-                          color={COLORS.mutedTerracotta}
+                          color={colors.textMuted}
                           style={styles.inputIcon}
                         />
                         <TextInput
@@ -650,31 +635,34 @@ export default function InviteScreen() {
                           onFocus={() => setFocusedField('password')}
                           onSubmitEditing={goToConfirmPasswordStep}
                           placeholder="Пароль"
-                          placeholderTextColor={COLORS.dustyRose}
+                          placeholderTextColor={colors.placeholder}
                           returnKeyType="next"
                           secureTextEntry={!showPassword}
-                          selectionColor={COLORS.burntOrange}
+                          selectionColor={colors.accent}
                           style={styles.input}
                           value={password}
                         />
-                        <Pressable
+                        <TouchableOpacity
                           accessibilityLabel={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
                           accessibilityRole="button"
+                          activeOpacity={0.7}
                           hitSlop={12}
                           onPress={() => setShowPassword((v) => !v)}
-                          style={({ pressed }) => [styles.eyeButton, pressed && styles.pressed]}
+                          style={styles.eyeButton}
                         >
                           <Ionicons
                             name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                             size={26}
-                            color={COLORS.mutedTerracotta}
+                            color={colors.textMuted}
                           />
-                        </Pressable>
+                        </TouchableOpacity>
                       </View>
 
                       {/* Live rule checklist — the same five rules the server enforces */}
                       <View accessibilityRole="summary" style={styles.rules}>
-                        <Text style={styles.rulesTitle}>Пароль должен содержать:</Text>
+                        <Text style={styles.rulesTitle}>
+                          Пароль должен содержать:
+                        </Text>
                         {PASSWORD_RULES.map((rule) => {
                           const met = rule.test(password);
                           return (
@@ -682,7 +670,7 @@ export default function InviteScreen() {
                               <Ionicons
                                 name={met ? 'checkmark-circle' : 'ellipse-outline'}
                                 size={16}
-                                color={met ? COLORS.green : COLORS.dustyRose}
+                                color={met ? colors.success : colors.placeholder}
                               />
                               <Text
                                 accessibilityLabel={`${rule.label}: ${met ? 'выполнено' : 'не выполнено'}`}
@@ -701,30 +689,23 @@ export default function InviteScreen() {
                         </Text>
                       )}
 
-                      <Pressable
+                      <Button
+                        title="Далее"
                         accessibilityLabel="Далее — подтвердить пароль"
-                        accessibilityRole="button"
                         onPress={goToConfirmPasswordStep}
-                        style={({ pressed }) => [styles.primaryButtonShadow, pressed && styles.pressed]}
-                      >
-                        <LinearGradient
-                          colors={[COLORS.burntOrange, COLORS.darkBrown]}
-                          start={{ x: 0, y: 0.5 }}
-                          end={{ x: 1, y: 0.5 }}
-                          style={styles.primaryButton}
-                        >
-                          <Text style={styles.primaryButtonText}>Далее</Text>
-                        </LinearGradient>
-                      </Pressable>
+                        block
+                        style={styles.primaryButton}
+                      />
 
-                      <Pressable
+                      <TouchableOpacity
                         accessibilityRole="button"
+                        activeOpacity={0.7}
                         hitSlop={8}
                         onPress={goBackToEmailStep}
-                        style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
+                        style={styles.linkButton}
                       >
                         <Text style={styles.linkText}>‹ Назад</Text>
-                      </Pressable>
+                      </TouchableOpacity>
                     </>
                   )}
 
@@ -744,7 +725,7 @@ export default function InviteScreen() {
                         <Ionicons
                           name="lock-closed-outline"
                           size={25}
-                          color={COLORS.mutedTerracotta}
+                          color={colors.textMuted}
                           style={styles.inputIcon}
                         />
                         <TextInput
@@ -758,26 +739,27 @@ export default function InviteScreen() {
                           onFocus={() => setFocusedField('confirm')}
                           onSubmitEditing={goToPhoneStep}
                           placeholder="Повторите пароль"
-                          placeholderTextColor={COLORS.dustyRose}
+                          placeholderTextColor={colors.placeholder}
                           returnKeyType="next"
                           secureTextEntry={!showPassword}
-                          selectionColor={COLORS.burntOrange}
+                          selectionColor={colors.accent}
                           style={styles.input}
                           value={confirmPassword}
                         />
-                        <Pressable
+                        <TouchableOpacity
                           accessibilityLabel={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
                           accessibilityRole="button"
+                          activeOpacity={0.7}
                           hitSlop={12}
                           onPress={() => setShowPassword((v) => !v)}
-                          style={({ pressed }) => [styles.eyeButton, pressed && styles.pressed]}
+                          style={styles.eyeButton}
                         >
                           <Ionicons
                             name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                             size={26}
-                            color={COLORS.mutedTerracotta}
+                            color={colors.textMuted}
                           />
-                        </Pressable>
+                        </TouchableOpacity>
                       </View>
 
                       {visibleError !== null && (
@@ -786,30 +768,23 @@ export default function InviteScreen() {
                         </Text>
                       )}
 
-                      <Pressable
+                      <Button
+                        title="Далее"
                         accessibilityLabel="Далее — указать телефон"
-                        accessibilityRole="button"
                         onPress={goToPhoneStep}
-                        style={({ pressed }) => [styles.primaryButtonShadow, pressed && styles.pressed]}
-                      >
-                        <LinearGradient
-                          colors={[COLORS.burntOrange, COLORS.darkBrown]}
-                          start={{ x: 0, y: 0.5 }}
-                          end={{ x: 1, y: 0.5 }}
-                          style={styles.primaryButton}
-                        >
-                          <Text style={styles.primaryButtonText}>Далее</Text>
-                        </LinearGradient>
-                      </Pressable>
+                        block
+                        style={styles.primaryButton}
+                      />
 
-                      <Pressable
+                      <TouchableOpacity
                         accessibilityRole="button"
+                        activeOpacity={0.7}
                         hitSlop={8}
                         onPress={goBackToPasswordStep}
-                        style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
+                        style={styles.linkButton}
                       >
                         <Text style={styles.linkText}>‹ Назад</Text>
-                      </Pressable>
+                      </TouchableOpacity>
                     </>
                   )}
 
@@ -831,7 +806,7 @@ export default function InviteScreen() {
                         <Ionicons
                           name="call-outline"
                           size={25}
-                          color={COLORS.mutedTerracotta}
+                          color={colors.textMuted}
                           style={styles.inputIcon}
                         />
                         <TextInput
@@ -848,9 +823,9 @@ export default function InviteScreen() {
                             void handleAccept();
                           }}
                           placeholder="Телефон, например +7 999 123-45-67"
-                          placeholderTextColor={COLORS.dustyRose}
+                          placeholderTextColor={colors.placeholder}
                           returnKeyType="done"
-                          selectionColor={COLORS.burntOrange}
+                          selectionColor={colors.accent}
                           style={styles.input}
                           value={phone}
                         />
@@ -859,7 +834,7 @@ export default function InviteScreen() {
                         <Ionicons
                           name="information-circle-outline"
                           size={17}
-                          color={COLORS.mutedTerracotta}
+                          color={colors.textMuted}
                           style={styles.noticeIcon}
                         />
                         <Text style={styles.noticeText}>
@@ -874,42 +849,27 @@ export default function InviteScreen() {
                         </Text>
                       )}
 
-                      <Pressable
+                      <Button
+                        title="Принять приглашение"
                         accessibilityLabel="Принять приглашение и создать аккаунт"
-                        accessibilityRole="button"
-                        accessibilityState={{ disabled: isLoading }}
-                        disabled={isLoading}
                         onPress={() => {
                           void handleAccept();
                         }}
-                        style={({ pressed }) => [
-                          styles.primaryButtonShadow,
-                          pressed && !isLoading && styles.pressed,
-                          isLoading && styles.disabled,
-                        ]}
-                      >
-                        <LinearGradient
-                          colors={[COLORS.burntOrange, COLORS.darkBrown]}
-                          start={{ x: 0, y: 0.5 }}
-                          end={{ x: 1, y: 0.5 }}
-                          style={styles.primaryButton}
-                        >
-                          {isLoading ? (
-                            <ActivityIndicator color={COLORS.white} />
-                          ) : (
-                            <Text style={styles.primaryButtonText}>Принять приглашение</Text>
-                          )}
-                        </LinearGradient>
-                      </Pressable>
+                        loading={isLoading}
+                        disabled={isLoading}
+                        block
+                        style={styles.primaryButton}
+                      />
 
-                      <Pressable
+                      <TouchableOpacity
                         accessibilityRole="button"
+                        activeOpacity={0.7}
                         hitSlop={8}
                         onPress={goBackToConfirmPasswordStep}
-                        style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
+                        style={styles.linkButton}
                       >
                         <Text style={styles.linkText}>‹ Назад</Text>
-                      </Pressable>
+                      </TouchableOpacity>
                     </>
                   )}
                 </>
@@ -938,7 +898,7 @@ export default function InviteScreen() {
                     <Ionicons
                       name="key-outline"
                       size={25}
-                      color={COLORS.mutedTerracotta}
+                      color={colors.textMuted}
                       style={styles.inputIcon}
                     />
                     <TextInput
@@ -954,9 +914,9 @@ export default function InviteScreen() {
                         void handleCodeSubmit();
                       }}
                       placeholder="XXXXXX"
-                      placeholderTextColor={COLORS.dustyRose}
+                      placeholderTextColor={colors.placeholder}
                       returnKeyType="done"
-                      selectionColor={COLORS.burntOrange}
+                      selectionColor={colors.accent}
                       style={[styles.input, styles.codeInput]}
                       value={code}
                     />
@@ -987,48 +947,31 @@ export default function InviteScreen() {
                     </Text>
                   )}
 
-                  <Pressable
+                  <Button
+                    title="Продолжить"
                     accessibilityLabel="Продолжить с введённым кодом"
-                    accessibilityRole="button"
-                    accessibilityState={{
-                      disabled: isLookingUp || code.length !== CLAIM_CODE_LENGTH,
-                    }}
-                    disabled={isLookingUp || code.length !== CLAIM_CODE_LENGTH}
                     onPress={() => {
                       void handleCodeSubmit();
                     }}
-                    style={({ pressed }) => [
-                      styles.primaryButtonShadow,
-                      pressed && !isLookingUp && styles.pressed,
-                      (isLookingUp || code.length !== CLAIM_CODE_LENGTH) && styles.disabled,
-                    ]}
-                  >
-                    <LinearGradient
-                      colors={[COLORS.burntOrange, COLORS.darkBrown]}
-                      start={{ x: 0, y: 0.5 }}
-                      end={{ x: 1, y: 0.5 }}
-                      style={styles.primaryButton}
-                    >
-                      {isLookingUp ? (
-                        <ActivityIndicator color={COLORS.white} />
-                      ) : (
-                        <Text style={styles.primaryButtonText}>Продолжить</Text>
-                      )}
-                    </LinearGradient>
-                  </Pressable>
+                    loading={isLookingUp}
+                    disabled={isLookingUp || code.length !== CLAIM_CODE_LENGTH}
+                    block
+                    style={styles.primaryButton}
+                  />
 
-                  <Pressable
+                  <TouchableOpacity
                     accessibilityLabel="Перейти ко входу в существующий аккаунт"
                     accessibilityRole="button"
+                    activeOpacity={0.7}
                     hitSlop={8}
                     onPress={goToLogin}
-                    style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
+                    style={styles.linkButton}
                   >
                     <Text style={styles.linkText}>У меня уже есть аккаунт — войти</Text>
-                  </Pressable>
+                  </TouchableOpacity>
                 </>
               )}
-            </View>
+            </Card>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -1036,18 +979,18 @@ export default function InviteScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.darkBrown,
+    backgroundColor: c.bgDark,
   },
   safeArea: { flex: 1 },
   keyboardArea: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 76,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xxl,
   },
 
   // Card
@@ -1055,14 +998,15 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 430,
     alignSelf: 'center',
-    paddingTop: 66,
-    paddingHorizontal: 28,
-    paddingBottom: 20,
-    borderRadius: 24,
+    paddingTop: spacing.xxl + spacing.xl,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.lg,
+    borderRadius: radius.xxl,
     borderWidth: 1.25,
-    borderColor: 'rgba(255, 255, 255, 0.68)',
+    borderColor: c.borderStrong,
     backgroundColor: 'transparent',
-    shadowColor: COLORS.charcoal,
+    overflow: 'hidden',
+    shadowColor: c.bgDark,
     shadowOffset: { width: 0, height: 18 },
     shadowOpacity: 0.36,
     shadowRadius: 25,
@@ -1070,13 +1014,13 @@ const styles = StyleSheet.create({
   },
   cardGlass: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 24,
+    borderRadius: radius.xxl,
     overflow: 'hidden',
   },
   cardTint: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 24,
-    backgroundColor: 'rgba(247, 241, 236, 0.35)',
+    borderRadius: radius.xxl,
+    backgroundColor: `${c.surface}59`,
   },
   logo: {
     position: 'absolute',
@@ -1086,11 +1030,11 @@ const styles = StyleSheet.create({
     height: 118,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 30,
+    borderRadius: radius.xxl,
     borderWidth: 1.6,
-    borderColor: COLORS.cream,
-    backgroundColor: '#0E0E0E',
-    shadowColor: COLORS.darkBrown,
+    borderColor: c.wheat,
+    backgroundColor: c.bgDark,
+    shadowColor: c.bgDark,
     shadowOffset: { width: 0, height: 11 },
     shadowOpacity: 0.42,
     shadowRadius: 14,
@@ -1099,46 +1043,40 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 114,
     height: 114,
-    borderRadius: 28,
+    borderRadius: radius.xxl,
   },
 
   // Headings
   eyebrow: {
-    color: COLORS.mutedTerracotta,
-    fontSize: 12,
-    fontWeight: '800',
+    ...type.caption,
+    color: c.textMuted,
     letterSpacing: 1.4,
     textAlign: 'center',
     textTransform: 'uppercase',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   title: {
-    color: COLORS.charcoal,
-    fontSize: 24,
-    fontWeight: '900',
+    ...type.display,
+    color: c.text1,
     textAlign: 'center',
     letterSpacing: -0.45,
   },
   subtitle: {
-    marginTop: 13,
-    color: COLORS.darkBrown,
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '600',
+    marginTop: spacing.md,
+    ...type.body,
+    color: c.text1,
     textAlign: 'center',
   },
   hint: {
-    marginTop: 12,
-    color: COLORS.mutedTerracotta,
-    fontSize: 13,
-    lineHeight: 18,
+    marginTop: spacing.md,
+    ...type.caption,
+    color: c.textMuted,
     textAlign: 'center',
   },
   stepIndicator: {
-    marginTop: 14,
-    color: COLORS.mutedTerracotta,
-    fontSize: 12,
-    fontWeight: '800',
+    marginTop: spacing.md,
+    ...type.caption,
+    color: c.textMuted,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     textAlign: 'center',
@@ -1147,176 +1085,146 @@ const styles = StyleSheet.create({
   // Resolving
   resolvingBlock: {
     alignItems: 'center',
-    paddingBottom: 26,
+    paddingBottom: spacing.xl,
   },
   resolvingSpinner: {
-    marginTop: 26,
+    marginTop: spacing.xl,
   },
 
   // Invitee identity
   identityBlock: {
-    marginTop: 16,
+    marginTop: spacing.lg,
     alignItems: 'center',
   },
   inviteeName: {
-    color: COLORS.charcoal,
-    fontSize: 18,
-    fontWeight: '800',
+    ...type.subtitle,
+    color: c.text1,
     textAlign: 'center',
   },
   roleBadge: {
-    marginTop: 10,
+    marginTop: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 999,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: 'rgba(201, 169, 154, 0.9)',
-    backgroundColor: 'rgba(232, 221, 214, 0.82)',
+    borderColor: c.borderStrong,
+    backgroundColor: c.accentSoft,
   },
   roleBadgeText: {
-    color: COLORS.darkBrown,
-    fontSize: 13,
-    fontWeight: '800',
+    ...type.label,
+    color: c.text1,
   },
 
   // Inputs
   inputWrapper: {
-    minHeight: 58,
-    marginTop: 20,
-    paddingHorizontal: 18,
-    borderRadius: 12,
+    minHeight: control.md,
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
     borderWidth: 1.5,
-    borderColor: COLORS.dustyRose,
-    backgroundColor: 'rgba(232, 221, 214, 0.78)',
+    borderColor: c.inputBorder,
+    backgroundColor: `${c.inputBg}C7`,
     flexDirection: 'row',
     alignItems: 'center',
   },
   inputWrapperFocused: {
-    borderColor: COLORS.burntOrange,
+    borderColor: c.accent,
   },
   inputIcon: {
-    marginRight: 15,
+    marginRight: spacing.lg,
   },
   input: {
     flex: 1,
-    paddingVertical: 14,
-    color: COLORS.charcoal,
-    fontSize: 16,
-    fontWeight: '500',
+    paddingVertical: spacing.sm,
+    color: c.text1,
+    ...type.heading,
   },
   codeInput: {
-    fontSize: 22,
-    fontWeight: '800',
+    ...type.title,
+    ...tabular,
     letterSpacing: 6,
     textAlign: 'center',
   },
   eyeButton: {
-    marginLeft: 10,
-    minWidth: 44,
-    minHeight: 44,
+    marginLeft: spacing.sm,
+    minWidth: control.sm + spacing.sm,
+    minHeight: control.sm + spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   // Phone notice
   noticeRow: {
-    marginTop: 10,
+    marginTop: spacing.sm,
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
   noticeIcon: {
     marginTop: 1,
-    marginRight: 7,
+    marginRight: spacing.sm,
   },
   noticeText: {
     flex: 1,
-    color: COLORS.mutedTerracotta,
-    fontSize: 12.5,
-    lineHeight: 17,
+    ...type.caption,
+    color: c.textMuted,
   },
 
   // Password rules
   rules: {
-    marginTop: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
+    marginTop: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: 'rgba(201, 169, 154, 0.6)',
-    backgroundColor: 'rgba(232, 221, 214, 0.5)',
+    borderColor: c.borderStrong,
+    backgroundColor: `${c.inputBg}80`,
   },
   rulesTitle: {
-    color: COLORS.darkBrown,
-    fontSize: 12.5,
-    fontWeight: '800',
-    marginBottom: 8,
+    ...type.caption,
+    color: c.text1,
+    marginBottom: spacing.sm,
   },
   ruleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 3,
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   ruleText: {
     flex: 1,
-    color: COLORS.mutedTerracotta,
-    fontSize: 12.5,
-    lineHeight: 17,
+    ...type.caption,
+    color: c.textMuted,
   },
   ruleTextMet: {
-    color: COLORS.green,
-    fontWeight: '700',
+    color: c.success,
   },
 
   // Error
   errorText: {
-    color: COLORS.red,
-    fontSize: 13,
-    lineHeight: 18,
+    ...type.label,
+    color: c.danger,
     textAlign: 'center',
-    marginTop: 14,
+    marginTop: spacing.md,
   },
 
   // Buttons
-  primaryButtonShadow: {
-    marginTop: 24,
-    borderRadius: 13,
-    shadowColor: COLORS.darkBrown,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.34,
-    shadowRadius: 12,
-    elevation: 8,
-  },
   primaryButton: {
-    minHeight: 60,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
-  primaryButtonText: {
-    color: COLORS.white,
-    fontSize: 19,
-    fontWeight: '900',
-    letterSpacing: 0.1,
+    marginTop: spacing.xl,
   },
   linkButton: {
-    marginTop: 6,
-    minHeight: 44,
+    marginTop: spacing.sm,
+    minHeight: control.sm + spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
   },
   linkText: {
-    color: COLORS.darkBrown,
-    fontSize: 14,
-    fontWeight: '700',
+    ...type.body,
+    color: c.accent,
     textAlign: 'center',
     textDecorationLine: 'underline',
   },
-  pressed: { opacity: 0.82 },
-  disabled: { opacity: 0.66 },
 });

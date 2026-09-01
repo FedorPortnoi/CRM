@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, Image,
+  View, Text, TextInput, Image,
   ScrollView, ActivityIndicator, Platform, StyleSheet,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../store/userStore';
 import { useTheme } from '../hooks/useTheme';
 import { ThemeColors } from '../theme';
+import { Button } from '../components/ui';
 
 const CODE_LENGTH = 6;
 const CODE_REJECT_PATTERN = /[^0-9]/g;
@@ -34,7 +35,7 @@ export default function TwoFactorSetupScreen(): JSX.Element {
   const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
-  const styles = makeStyles(colors);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const setupTotp = useUserStore((s) => s.setupTotp);
   const enableTotp = useUserStore((s) => s.enableTotp);
 
@@ -114,9 +115,13 @@ export default function TwoFactorSetupScreen(): JSX.Element {
           ) : setupError !== null ? (
             <View style={styles.card}>
               <Text style={styles.errorText}>{setupError}</Text>
-              <TouchableOpacity style={styles.secondaryButton} onPress={handleGoBack} accessibilityRole="button">
-                <Text style={styles.secondaryButtonText}>{t('settings.twoFactorGoBack')}</Text>
-              </TouchableOpacity>
+              <Button
+                title={t('settings.twoFactorGoBack')}
+                onPress={handleGoBack}
+                variant="secondary"
+                block
+                style={styles.secondaryButtonSpacing}
+              />
             </View>
           ) : (
             <View style={styles.card}>
@@ -138,9 +143,11 @@ export default function TwoFactorSetupScreen(): JSX.Element {
               <Text style={styles.secretLabel}>{t('settings.twoFactorSecretLabel')}</Text>
               <Text style={styles.secretText} selectable>{chunkSecret(secret)}</Text>
 
-              <TouchableOpacity style={styles.button} onPress={() => setStep('confirm')} accessibilityRole="button">
-                <Text style={styles.buttonText}>{t('settings.twoFactorContinue')}</Text>
-              </TouchableOpacity>
+              <Button
+                title={t('settings.twoFactorContinue')}
+                onPress={() => setStep('confirm')}
+                block
+              />
             </View>
           )
         )}
@@ -167,16 +174,13 @@ export default function TwoFactorSetupScreen(): JSX.Element {
               accessibilityLabel={t('settings.twoFactorConfirmTitle')}
             />
 
-            <TouchableOpacity
-              style={[styles.button, (isConfirming || code.length !== CODE_LENGTH) && styles.buttonDisabled]}
+            <Button
+              title={t('settings.twoFactorConfirm')}
               onPress={() => { void handleConfirm(); }}
+              loading={isConfirming}
               disabled={isConfirming || code.length !== CODE_LENGTH}
-              accessibilityRole="button"
-            >
-              {isConfirming
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.buttonText}>{t('settings.twoFactorConfirm')}</Text>}
-            </TouchableOpacity>
+              block
+            />
 
             {confirmError !== null && <Text style={styles.errorText}>{confirmError}</Text>}
           </View>
@@ -193,9 +197,11 @@ export default function TwoFactorSetupScreen(): JSX.Element {
               ))}
             </View>
 
-            <TouchableOpacity style={styles.button} onPress={handleDone} accessibilityRole="button">
-              <Text style={styles.buttonText}>{t('settings.twoFactorSavedButton')}</Text>
-            </TouchableOpacity>
+            <Button
+              title={t('settings.twoFactorSavedButton')}
+              onPress={handleDone}
+              block
+            />
           </View>
         )}
       </ScrollView>
@@ -205,17 +211,17 @@ export default function TwoFactorSetupScreen(): JSX.Element {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  scrollContent: { flexGrow: 1, padding: 20, paddingBottom: 40 },
+  scrollContent: { flexGrow: 1, padding: 24, paddingBottom: 40 },
   loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
   card: {
     backgroundColor: c.bgPanel, borderWidth: 1, borderColor: c.border,
-    borderRadius: 16, padding: 20,
+    borderRadius: 16, padding: 16,
   },
   stepTitle: { fontSize: 20, fontWeight: '700', color: c.text1, marginBottom: 8 },
-  stepSubtitle: { fontSize: 14, color: c.textMuted, lineHeight: 20, marginBottom: 18 },
+  stepSubtitle: { fontSize: 14, color: c.textMuted, lineHeight: 20, marginBottom: 16 },
   qrWrapper: {
     alignSelf: 'center', width: 220, height: 220, borderRadius: 12,
-    backgroundColor: '#FFFFFF', padding: 12, marginBottom: 18,
+    backgroundColor: '#FFFFFF', padding: 12, marginBottom: 16,
     alignItems: 'center', justifyContent: 'center',
   },
   qrImage: { width: '100%', height: '100%' },
@@ -223,36 +229,29 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   secretText: {
     fontSize: 16, fontWeight: '700', letterSpacing: 1.5, color: c.text1,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontVariant: ['tabular-nums'],
     backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.inputBorder,
     borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12,
-    marginBottom: 20, textAlign: 'center',
+    marginBottom: 16, textAlign: 'center',
   },
   codeInput: {
     borderWidth: 1, borderColor: c.border, borderRadius: 12, backgroundColor: c.bg,
     height: 60, marginBottom: 16, textAlign: 'center',
     fontSize: 28, fontWeight: '700', letterSpacing: 8, color: c.text1,
+    fontVariant: ['tabular-nums'],
   },
-  button: {
-    height: 52, backgroundColor: c.orange, borderRadius: 12,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  secondaryButton: {
-    height: 48, borderRadius: 12, borderWidth: 1, borderColor: c.border,
-    justifyContent: 'center', alignItems: 'center', marginTop: 16,
-  },
-  secondaryButtonText: { color: c.text1, fontSize: 15, fontWeight: '600' },
+  secondaryButtonSpacing: { marginTop: 16 },
   warningText: {
-    fontSize: 13, color: c.amber, lineHeight: 19, marginBottom: 18,
+    fontSize: 13, color: c.amber, lineHeight: 19, marginBottom: 16,
     backgroundColor: 'rgba(204,120,92,0.08)', borderRadius: 10, padding: 12,
   },
   codesList: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 22,
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24,
   },
   codeItem: {
     width: '47%', fontSize: 15, fontWeight: '700', color: c.text1, textAlign: 'center',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontVariant: ['tabular-nums'],
     backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.inputBorder,
     borderRadius: 8, paddingVertical: 10,
   },

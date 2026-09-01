@@ -6,7 +6,6 @@
 // which is what makes "куда перенести" answerable.
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   Modal,
   ScrollView,
   StyleSheet,
@@ -15,9 +14,10 @@ import {
   View,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
 import { PipelineStage } from '../../hooks/usePipelines';
 import { formatDealCount } from './dealCount';
+import { Button } from '../ui';
 
 type Props = {
   visible: boolean;
@@ -77,6 +77,7 @@ export function MoveDealsSheet({
                   key={target.id}
                   style={[styles.option, selected === target.id && styles.optionSelected]}
                   onPress={() => setSelected(target.id)}
+                  activeOpacity={0.7}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: selected === target.id }}
                 >
@@ -96,26 +97,18 @@ export function MoveDealsSheet({
 
           {errorText !== null ? <Text style={styles.error}>{errorText}</Text> : null}
 
-          <TouchableOpacity
-            style={[
-              styles.confirmBtn,
-              (selected === null || submitting) && styles.confirmBtnDisabled,
-            ]}
+          <Button
+            title={t('pipelines.moveDealsConfirm')}
             onPress={() => {
               if (selected !== null) onConfirm(selected);
             }}
             disabled={selected === null || submitting}
-            accessibilityRole="button"
-          >
-            {submitting ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.confirmBtnText}>{t('pipelines.moveDealsConfirm')}</Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cancelBtn} onPress={onClose} accessibilityRole="button">
-            <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
-          </TouchableOpacity>
+            loading={submitting}
+            variant="danger"
+            block
+            style={styles.confirmBtn}
+          />
+          <Button title={t('common.cancel')} onPress={onClose} variant="ghost" block style={styles.cancelBtn} />
         </View>
       </View>
     </Modal>
@@ -123,37 +116,27 @@ export function MoveDealsSheet({
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 24 },
-  card: { backgroundColor: c.bgPanel, borderRadius: 16, padding: 24 },
-  title: { fontSize: 20, fontWeight: '700', color: c.text1, marginBottom: 8 },
-  subtitle: { fontSize: 14, color: c.amber, marginBottom: 16, lineHeight: 20 },
+  overlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: spacing.xl },
+  card: { backgroundColor: c.surface, borderRadius: radius.xl, padding: spacing.xl },
+  title: { ...type.title, color: c.text1, marginBottom: spacing.sm },
+  subtitle: { fontSize: 14, color: c.amber, marginBottom: spacing.lg, lineHeight: 20 },
   list: { maxHeight: 260 },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    borderRadius: 10,
+    gap: spacing.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: c.border,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.sm,
   },
-  optionSelected: { borderColor: c.orange, backgroundColor: c.orange },
-  swatch: { width: 10, height: 10, borderRadius: 5 },
-  optionText: { flex: 1, fontSize: 15, color: c.text1 },
-  optionTextSelected: { color: '#FFFFFF', fontWeight: '600' },
-  error: { fontSize: 13, color: c.red, marginTop: 12, lineHeight: 18 },
-  confirmBtn: {
-    marginTop: 16,
-    backgroundColor: c.red,
-    borderRadius: 10,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confirmBtnDisabled: { opacity: 0.5 },
-  confirmBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  cancelBtn: { marginTop: 10, alignItems: 'center', padding: 12 },
-  cancelBtnText: { color: c.amber, fontSize: 15 },
+  optionSelected: { borderColor: c.accent, backgroundColor: c.accent },
+  swatch: { width: 10, height: 10, borderRadius: radius.sm },
+  optionText: { flex: 1, fontSize: 14, color: c.text1 },
+  optionTextSelected: { color: c.onAccent, fontWeight: '600' },
+  error: { fontSize: 13, color: c.danger, marginTop: spacing.md, lineHeight: 18 },
+  confirmBtn: { marginTop: spacing.lg },
+  cancelBtn: { marginTop: spacing.sm },
 });

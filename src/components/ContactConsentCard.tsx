@@ -134,6 +134,7 @@ export default function ContactConsentCard({ contactId, contactEmail }: Props): 
             <TouchableOpacity
               style={styles.retryButton}
               onPress={() => { void consentQuery.refetch(); }}
+              activeOpacity={0.7}
               accessibilityRole="button"
             >
               <Text style={styles.retryText}>{t('consent.retry')}</Text>
@@ -262,6 +263,7 @@ export default function ContactConsentCard({ contactId, contactEmail }: Props): 
                   key={source}
                   style={styles.sourceRow}
                   onPress={() => grant(source)}
+                  activeOpacity={0.7}
                   accessibilityRole="button"
                 >
                   <Text style={styles.sourceText}>{t(`consent.source_${source}`)}</Text>
@@ -271,6 +273,7 @@ export default function ContactConsentCard({ contactId, contactEmail }: Props): 
             <TouchableOpacity
               style={styles.modalClose}
               onPress={() => setIsSourcePickerVisible(false)}
+              activeOpacity={0.7}
               accessibilityRole="button"
             >
               <Text style={styles.modalCloseText}>{t('consent.cancel')}</Text>
@@ -284,7 +287,7 @@ export default function ContactConsentCard({ contactId, contactEmail }: Props): 
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // The contact screen's ScrollView already pads 16 — matching its section rhythm exactly.
-  section: { marginTop: 20 },
+  section: { marginTop: 24 },
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
@@ -370,13 +373,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.bgPanel,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    padding: 20,
+    padding: 24,
     maxHeight: '80%',
   },
   modalTitle: { fontSize: 17, fontWeight: '700', color: c.text1, marginBottom: 6 },
   modalScroll: { marginTop: 8 },
   sourceRow: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border },
   sourceText: { fontSize: 15, color: c.text1 },
-  modalClose: { alignSelf: 'center', paddingVertical: 12, paddingHorizontal: 20 },
+  modalClose: { alignSelf: 'center', paddingVertical: 12, paddingHorizontal: 16 },
   modalCloseText: { color: c.orange, fontSize: 14, fontWeight: '700' },
 });

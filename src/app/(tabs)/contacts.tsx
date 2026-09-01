@@ -29,7 +29,7 @@ import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import ContactCard, { ContactCardData, ContactCardType } from '../../components/ContactCard';
 import ActionMenuSheet from '../../components/ActionMenuSheet';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, avatarRamp } from '../../theme';
 
 type ContactTypeValue = 'lead' | 'customer' | 'partner' | 'other';
 
@@ -76,7 +76,9 @@ type ListItem = { _type: 'contact'; data: Contact } | { _type: 'header'; letter:
 
 const PER_PAGE = 20;
 
-const AVATAR_COLORS = ['#CC785C', '#6366f1', '#D4A27F', '#CC5247', '#8b5cf6', '#0ea5e9'];
+// Warm ramp: one family, spread across lightness so initials stay legible
+// and adjacent contacts stay distinguishable.
+const AVATAR_COLORS = avatarRamp;
 
 function getInitials(firstName: string, lastName: string | null): string {
   const f = firstName.charAt(0).toUpperCase();
@@ -616,7 +618,7 @@ export default function ContactsScreen(): JSX.Element {
           disabled={isAssigning}
           accessibilityRole="button"
           accessibilityState={{ selected: isSelected, disabled: isAssigning }}
-        >
+          activeOpacity={0.7}>
           <View style={styles.userRowText}>
             <Text style={styles.userName} numberOfLines={1}>
               {item.name}
@@ -633,12 +635,12 @@ export default function ContactsScreen(): JSX.Element {
                 : styles.userSelectionIndicatorEmpty,
             ]}
           >
-            {isSelected ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}
+            {isSelected ? <Check size={14} color={colors.onAccent} strokeWidth={3} /> : null}
           </View>
         </TouchableOpacity>
       );
     },
-    [isAssigning, selectedUserId, styles],
+    [isAssigning, selectedUserId, styles, colors.onAccent],
   );
 
   const segments: { key: SegmentKey; label: string; count: number | undefined }[] = [
@@ -684,9 +686,9 @@ export default function ContactsScreen(): JSX.Element {
           style={({ pressed }) => [styles.headerIconButton, pressed && styles.pressed]}
         >
           {searchOpen ? (
-            <X size={25} color="#FFFFFF" strokeWidth={2.2} />
+            <X size={25} color={colors.onAccent} strokeWidth={2.2} />
           ) : (
-            <Search size={24} color="#FFFFFF" strokeWidth={2.2} />
+            <Search size={24} color={colors.onAccent} strokeWidth={2.2} />
           )}
         </Pressable>
 
@@ -697,12 +699,12 @@ export default function ContactsScreen(): JSX.Element {
           style={({ pressed }) => [styles.addButtonWrap, pressed && styles.pressed]}
         >
           <LinearGradient
-            colors={[colors.orange, '#FA6A1E']}
+            colors={[colors.accent, colors.amber]}
             start={{ x: 0.15, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.addButton}
           >
-            <Plus size={26} color="#FFFFFF" strokeWidth={2.6} />
+            <Plus size={26} color={colors.onAccent} strokeWidth={2.6} />
           </LinearGradient>
         </Pressable>
       </View>
@@ -768,7 +770,7 @@ export default function ContactsScreen(): JSX.Element {
         >
           <SlidersHorizontal
             size={22}
-            color={showNoContact30d ? colors.orange : colors.textMuted}
+            color={showNoContact30d ? colors.accent : colors.textMuted}
           />
         </Pressable>
       </View>
@@ -783,7 +785,7 @@ export default function ContactsScreen(): JSX.Element {
               style={[styles.sortPill, isActive && styles.sortPillActive]}
               accessibilityRole="button"
               accessibilityState={{ selected: isActive }}
-            >
+              activeOpacity={0.7}>
               <Text style={[styles.sortPillText, isActive && styles.sortPillTextActive]}>
                 {opt.label}
               </Text>
@@ -795,8 +797,9 @@ export default function ContactsScreen(): JSX.Element {
       {showNoContact30d ? (
         <View style={styles.filterChip}>
           <Text style={styles.filterChipText}>Нет контакта 30+ дней</Text>
-          <TouchableOpacity onPress={handleToggleNoContactFilter} hitSlop={8}>
-            <X size={14} color={colors.orange} />
+          <TouchableOpacity onPress={handleToggleNoContactFilter} hitSlop={8}
+            activeOpacity={0.7}>
+            <X size={14} color={colors.accent} />
           </TouchableOpacity>
         </View>
       ) : null}
@@ -814,8 +817,8 @@ export default function ContactsScreen(): JSX.Element {
         <RefreshControl
           refreshing={isRefreshing}
           onRefresh={handleRefresh}
-          colors={[colors.orange]}
-          tintColor={colors.orange}
+          colors={[colors.accent]}
+          tintColor={colors.accent}
         />
       }
       onEndReached={loadMore}
@@ -839,14 +842,14 @@ export default function ContactsScreen(): JSX.Element {
                   style={styles.emptyPrimaryButton}
                   onPress={() => router.push('/contact/new')}
                   accessibilityRole="button"
-                >
+                  activeOpacity={0.7}>
                   <Text style={styles.emptyPrimaryText}>{t('contacts.add')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.emptySecondaryButton}
                   onPress={() => router.push('/contact/scan-card')}
                   accessibilityRole="button"
-                >
+                  activeOpacity={0.7}>
                   <Text style={styles.emptySecondaryText}>{t('contacts.scanCard')}</Text>
                 </TouchableOpacity>
               </View>
@@ -857,7 +860,7 @@ export default function ContactsScreen(): JSX.Element {
       ListFooterComponent={
         isFetchingMore ? (
           <View style={styles.footer}>
-            <ActivityIndicator size="small" color={colors.orange} />
+            <ActivityIndicator size="small" color={colors.accent} />
           </View>
         ) : null
       }
@@ -886,7 +889,8 @@ export default function ContactsScreen(): JSX.Element {
       ) : error ? (
         <View style={styles.stateContainer}>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRetry}
+            activeOpacity={0.7}>
             <Text style={styles.retryText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
@@ -904,7 +908,7 @@ export default function ContactsScreen(): JSX.Element {
             onPress={handleCancelSelection}
             disabled={isBulkActionRunning}
             accessibilityRole="button"
-          >
+            activeOpacity={0.7}>
             <Text style={styles.cancelSelectionText} numberOfLines={1}>
               {t('common.cancel')}
             </Text>
@@ -917,7 +921,7 @@ export default function ContactsScreen(): JSX.Element {
             onPress={handleAssignPress}
             disabled={isBulkActionRunning}
             accessibilityRole="button"
-          >
+            activeOpacity={0.7}>
             <Text style={styles.assignButtonText} numberOfLines={1}>
               {`${t('contacts.assign')} (${selectedContactIds.length})`}
             </Text>
@@ -930,9 +934,9 @@ export default function ContactsScreen(): JSX.Element {
             onPress={handleArchivePress}
             disabled={isBulkActionRunning}
             accessibilityRole="button"
-          >
+            activeOpacity={0.7}>
             {isArchiving ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={colors.onAccent} />
             ) : null}
             <Text style={styles.archiveButtonText} numberOfLines={1}>
               {isArchiving
@@ -965,7 +969,7 @@ export default function ContactsScreen(): JSX.Element {
             <View style={styles.userListContainer}>
               {isLoadingUsers ? (
                 <View style={styles.modalStateContainer}>
-                  <ActivityIndicator size="small" color={colors.orange} />
+                  <ActivityIndicator size="small" color={colors.accent} />
                   <Text style={styles.modalStateText}>{t('contacts.loadingUsers')}</Text>
                 </View>
               ) : usersError ? (
@@ -978,7 +982,7 @@ export default function ContactsScreen(): JSX.Element {
                     }}
                     disabled={isAssigning}
                     accessibilityRole="button"
-                  >
+                    activeOpacity={0.7}>
                     <Text style={styles.modalRetryText}>{t('common.retry')}</Text>
                   </TouchableOpacity>
                 </View>
@@ -1002,7 +1006,7 @@ export default function ContactsScreen(): JSX.Element {
                 onPress={handleCloseAssignModal}
                 disabled={isAssigning}
                 accessibilityRole="button"
-              >
+                activeOpacity={0.7}>
                 <Text style={styles.modalCancelText} numberOfLines={1}>
                   {t('common.cancel')}
                 </Text>
@@ -1019,9 +1023,9 @@ export default function ContactsScreen(): JSX.Element {
                   isAssigning || selectedUserId === null || isLoadingUsers
                 }
                 accessibilityRole="button"
-              >
+                activeOpacity={0.7}>
                 {isAssigning ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <ActivityIndicator size="small" color={colors.onAccent} />
                 ) : null}
                 <Text style={styles.modalConfirmText} numberOfLines={1}>
                   {isAssigning ? t('common.loading') : t('contacts.assign')}
@@ -1076,21 +1080,21 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flex: 1,
   },
   title: {
-    color: '#FFFFFF',
-    fontSize: 24,
+    color: c.onAccent,
+    fontSize: 26,
     fontWeight: '800',
     letterSpacing: -0.6,
   },
   subtitle: {
     marginTop: 3,
-    color: 'rgba(255, 255, 255, 0.72)',
+    color: 'rgba(255, 255, 255, 0.72)', // fixed: sits on the accent-filled hero
     fontSize: 13,
     fontWeight: '500',
   },
   addButtonWrap: {
-    marginLeft: 12,
-    borderRadius: 24,
-    shadowColor: '#8B3A00',
+    marginLeft: spacing.md,
+    borderRadius: radius.pill,
+    shadowColor: '#8B3A00', // fixed: warm-tinted shadow, reads correctly in both themes
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.28,
     shadowRadius: 12,
@@ -1099,7 +1103,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   addButton: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1108,14 +1112,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     backgroundColor: c.inputBg,
     marginTop: 16,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.lg,
     minHeight: 46,
     gap: 10,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
     color: c.text1,
     paddingVertical: 10,
   },
@@ -1134,7 +1138,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: c.border,
-    backgroundColor: c.bgPanel,
+    backgroundColor: c.surface,
     shadowColor: c.text1,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.04,
@@ -1151,7 +1155,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   activeTab: {
-    borderBottomColor: c.orange,
+    borderBottomColor: c.accent,
   },
   tabLabel: {
     color: c.textMuted,
@@ -1159,16 +1163,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     fontWeight: '700',
   },
   activeTabLabel: {
-    color: c.orange,
+    color: c.accent,
   },
   tabCount: {
+    fontVariant: ['tabular-nums'],
     marginTop: 4,
     color: c.textMuted,
     fontSize: 14,
     fontWeight: '600',
   },
   activeTabCount: {
-    color: c.orange,
+    color: c.accent,
   },
   filterButton: {
     width: 54,
@@ -1177,7 +1182,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: c.border,
-    backgroundColor: c.bgPanel,
+    backgroundColor: c.surface,
     shadowColor: c.text1,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.04,
@@ -1185,8 +1190,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     elevation: 2,
   },
   filterButtonActive: {
-    borderColor: c.orange,
-    backgroundColor: 'rgba(204,120,92,0.08)',
+    borderColor: c.accent,
+    backgroundColor: c.accentSoft,
   },
   sortRow: {
     flexDirection: 'row',
@@ -1200,11 +1205,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingVertical: 6,
     borderWidth: 1,
     borderColor: c.border,
-    backgroundColor: c.bgPanel,
+    backgroundColor: c.surface,
   },
   sortPillActive: {
-    backgroundColor: c.orange,
-    borderColor: c.orange,
+    backgroundColor: c.accent,
+    borderColor: c.accent,
   },
   sortPillText: {
     fontSize: 13,
@@ -1212,7 +1217,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     fontWeight: '500',
   },
   sortPillTextActive: {
-    color: '#FFFFFF',
+    color: c.onAccent,
   },
   filterChip: {
     flexDirection: 'row',
@@ -1220,7 +1225,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     gap: 6,
     marginHorizontal: 16,
     marginBottom: 8,
-    backgroundColor: 'rgba(204,120,92,0.08)',
+    backgroundColor: c.accentSoft,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -1230,7 +1235,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   filterChipText: {
     fontSize: 13,
-    color: c.orange,
+    color: c.accent,
     fontWeight: '500',
   },
   sectionHeader: {
@@ -1258,7 +1263,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   skeletonCard: {
     height: 104,
     backgroundColor: c.skeleton,
-    borderRadius: 17,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: c.border,
     marginBottom: 12,
@@ -1270,13 +1275,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     padding: 24,
   },
   errorText: {
-    color: c.red,
-    fontSize: 15,
+    color: c.danger,
+    fontSize: 14,
     textAlign: 'center',
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: c.orange,
+    backgroundColor: c.accent,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
@@ -1284,8 +1289,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
   },
   retryText: {
-    color: '#FFFFFF',
-    fontSize: 15,
+    color: c.onAccent,
+    fontSize: 14,
     fontWeight: '600',
   },
   emptyContainer: {
@@ -1296,7 +1301,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 16,
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: 14,
     color: c.textMuted,
     textAlign: 'center',
   },
@@ -1306,7 +1311,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     gap: 10,
   },
   emptyPrimaryButton: {
-    backgroundColor: c.orange,
+    backgroundColor: c.accent,
     borderRadius: 14,
     minHeight: 48,
     alignItems: 'center',
@@ -1314,8 +1319,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 18,
   },
   emptyPrimaryText: {
-    color: '#FFFFFF',
-    fontSize: 15,
+    color: c.onAccent,
+    fontSize: 14,
     fontWeight: '700',
   },
   emptySecondaryButton: {
@@ -1326,11 +1331,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 18,
-    backgroundColor: c.bgPanel,
+    backgroundColor: c.surface,
   },
   emptySecondaryText: {
-    color: c.orange,
-    fontSize: 15,
+    color: c.accent,
+    fontSize: 14,
     fontWeight: '600',
   },
   filterEmptyState: {
@@ -1343,7 +1348,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     marginBottom: 12,
   },
   filterEmptyTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
     color: c.text1,
     textAlign: 'center',
@@ -1359,7 +1364,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   archiveErrorText: {
-    color: c.red,
+    color: c.danger,
     fontSize: 13,
     marginHorizontal: 16,
     marginTop: 12,
@@ -1370,7 +1375,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     paddingTop: 10,
-    backgroundColor: c.bgPanel,
+    backgroundColor: c.surface,
     borderTopWidth: 1,
     borderTopColor: c.border,
   },
@@ -1393,7 +1398,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     minWidth: 96,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: c.orange,
+    backgroundColor: c.accent,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -1402,7 +1407,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     opacity: 0.7,
   },
   assignButtonText: {
-    color: '#FFFFFF',
+    color: c.onAccent,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1411,7 +1416,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     minWidth: 96,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: c.red,
+    backgroundColor: c.danger,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
@@ -1422,7 +1427,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     opacity: 0.7,
   },
   archiveButtonText: {
-    color: '#FFFFFF',
+    color: c.onAccent,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1433,7 +1438,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   assignModal: {
     maxHeight: '78%',
-    backgroundColor: c.bgPanel,
+    backgroundColor: c.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingHorizontal: 16,
@@ -1454,7 +1459,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     marginTop: 4,
   },
   assignErrorText: {
-    color: c.red,
+    color: c.danger,
     fontSize: 13,
     marginBottom: 10,
   },
@@ -1475,7 +1480,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     textAlign: 'center',
   },
   modalErrorText: {
-    color: c.red,
+    color: c.danger,
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 12,
@@ -1484,12 +1489,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     minHeight: 40,
     paddingHorizontal: 18,
     borderRadius: 12,
-    backgroundColor: c.orange,
+    backgroundColor: c.accent,
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalRetryText: {
-    color: '#FFFFFF',
+    color: c.onAccent,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1503,11 +1508,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     marginBottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: c.bgPanel,
+    backgroundColor: c.surface,
   },
   userRowSelected: {
-    borderColor: c.orange,
-    backgroundColor: 'rgba(204,120,92,0.08)',
+    borderColor: c.accent,
+    backgroundColor: c.accentSoft,
   },
   userRowText: {
     flex: 1,
@@ -1516,7 +1521,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   userName: {
     color: c.text1,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
   userEmail: {
@@ -1534,12 +1539,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   userSelectionIndicatorEmpty: {
     borderWidth: 1.5,
     borderColor: c.textMuted,
-    backgroundColor: c.bgPanel,
+    backgroundColor: c.surface,
   },
   userSelectionIndicatorSelected: {
     borderWidth: 1.5,
-    borderColor: c.orange,
-    backgroundColor: c.orange,
+    borderColor: c.accent,
+    backgroundColor: c.accent,
   },
   modalActions: {
     flexDirection: 'row',
@@ -1564,7 +1569,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flex: 1,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: c.orange,
+    backgroundColor: c.accent,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
@@ -1575,7 +1580,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     opacity: 0.7,
   },
   modalConfirmText: {
-    color: '#FFFFFF',
+    color: c.onAccent,
     fontSize: 14,
     fontWeight: '600',
   },

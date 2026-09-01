@@ -5,7 +5,7 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, type } from '../../theme';
 
 export type FunnelBarDatum = {
   key: string;
@@ -50,9 +50,9 @@ export default function FunnelChart({
       {stages.map((stage, index) => {
         const barWidth = maxTotal > 0 ? (stage.total / maxTotal) * width : 0;
         const segments: Array<{ value: number; color: string }> = [
-          { value: stage.open, color: colors.amber },
-          { value: stage.won, color: colors.orange },
-          { value: stage.lost, color: colors.red },
+          { value: stage.open, color: colors.warning },
+          { value: stage.won, color: colors.accent },
+          { value: stage.lost, color: colors.danger },
         ];
 
         let cursor = 0;
@@ -115,25 +115,26 @@ export default function FunnelChart({
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   stageRow: {
-    marginTop: 14,
+    marginTop: spacing.md,
   },
   stageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 6,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   stageName: {
     flex: 1,
-    fontSize: 14,
+    ...type.body,
     fontWeight: '600',
     color: c.text1,
   },
   stageCount: {
-    fontSize: 14,
+    ...type.body,
     fontWeight: '700',
     color: c.text1,
+    fontVariant: ['tabular-nums'],
   },
   barPlaceholder: {
     height: BAR_HEIGHT,
@@ -141,13 +142,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.skeleton,
   },
   stageValue: {
-    fontSize: 12,
-    color: c.amber,
-    marginTop: 6,
+    ...type.caption,
+    color: c.textMuted,
+    marginTop: spacing.sm,
+    fontVariant: ['tabular-nums'],
   },
   conversion: {
-    fontSize: 11,
+    ...type.micro,
     color: c.textMuted,
-    marginTop: 8,
+    marginTop: spacing.sm,
+    fontVariant: ['tabular-nums'],
   },
 });

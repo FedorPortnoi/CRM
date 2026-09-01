@@ -1,51 +1,49 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
-  Alert,
   Image,
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
-  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../store/userStore';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeColors, spacing, radius, type, control } from '../theme';
+import { Button, Card } from '../components/ui';
 
 type FocusedField = 'email' | 'password' | null;
-
-const COLORS = {
-  cream: '#E8DDD6',
-  dustyRose: '#C9A99A',
-  mutedTerracotta: '#B07868',
-  darkBrown: '#8B3A00',
-  burntOrange: '#C45A10',
-  charcoal: '#333333',
-  white: '#FFFFFF',
-} as const;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { user, isLoading, error, pendingVerification, pendingTotp, login } = useUserStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<FocusedField>(null);
+  // Validation happens client-side before the store is ever touched, so it
+  // gets its own inline slot instead of borrowing the store's `error` — a
+  // native Alert() previously covered for this, which read as a jarring
+  // interruption on a screen that otherwise never leaves the page.
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
+  const visibleError = localError ?? error;
 
   useEffect(() => {
     if (!isLoading && error === null && user !== null) {
@@ -82,13 +80,14 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!normalizedEmail || !password) {
-      Alert.alert('Заполните поля', 'Введите email и пароль, чтобы продолжить.');
+      setLocalError('Введите email и пароль, чтобы продолжить.');
       return;
     }
     if (!EMAIL_PATTERN.test(normalizedEmail)) {
-      Alert.alert('Проверьте email', 'Введите корректный адрес электронной почты.');
+      setLocalError('Введите корректный адрес электронной почты.');
       return;
     }
+    setLocalError(null);
     await login(normalizedEmail, password);
   };
 
@@ -109,11 +108,11 @@ export default function LoginScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.card}>
+            <Card padded={false} style={styles.card}>
               {/* Frosted-glass backdrop */}
               <BlurView
                 intensity={55}
-                tint="light"
+                tint={isDark ? 'dark' : 'light'}
                 experimentalBlurMethod="dimezisBlurView"
                 style={styles.cardGlass}
               />
@@ -142,7 +141,7 @@ export default function LoginScreen() {
                   were holding, not a manager's shared password they never
                   had — the two forms just happened to sit one tap apart. */}
               <View style={styles.tabs}>
-                <Pressable
+                <View
                   accessibilityRole="tab"
                   accessibilityState={{ selected: true }}
                   style={[styles.tab, styles.loginTab, styles.tabActive]}
@@ -150,23 +149,19 @@ export default function LoginScreen() {
                   <Text style={[styles.tabText, styles.tabTextActive]}>
                     {t('auth.tabLogin')}
                   </Text>
-                </Pressable>
+                </View>
 
-                <Pressable
+                <TouchableOpacity
                   accessibilityLabel="Перейти к вводу кода приглашения"
                   accessibilityRole="button"
+                  activeOpacity={0.7}
                   onPress={() => router.push('/invite' as never)}
-                  style={({ pressed }) => [
-                    styles.tab,
-                    styles.registerTab,
-                    styles.tabInactive,
-                    pressed && styles.pressed,
-                  ]}
+                  style={[styles.tab, styles.registerTab, styles.tabInactive]}
                 >
                   <Text style={[styles.tabText, styles.tabTextInactive]}>
                     {t('auth.tabJoin')}
                   </Text>
-                </Pressable>
+                </TouchableOpacity>
               </View>
 
               {/* Email input */}
@@ -179,7 +174,7 @@ export default function LoginScreen() {
                 <Ionicons
                   name="mail-outline"
                   size={25}
-                  color={COLORS.mutedTerracotta}
+                  color={colors.textMuted}
                   style={styles.inputIcon}
                 />
                 <TextInput
@@ -189,13 +184,13 @@ export default function LoginScreen() {
                   inputMode="email"
                   keyboardType="email-address"
                   onBlur={() => setFocusedField(null)}
-                  onChangeText={setEmail}
+                  onChangeText={(v) => { setEmail(v); if (localError) setLocalError(null); }}
                   onFocus={() => setFocusedField('email')}
                   onSubmitEditing={() => setFocusedField('password')}
                   placeholder={t('auth.email')}
-                  placeholderTextColor={COLORS.dustyRose}
+                  placeholderTextColor={colors.placeholder}
                   returnKeyType="next"
-                  selectionColor={COLORS.burntOrange}
+                  selectionColor={colors.accent}
                   style={styles.input}
                   value={email}
                 />
@@ -211,7 +206,7 @@ export default function LoginScreen() {
                 <Ionicons
                   name="lock-closed-outline"
                   size={25}
-                  color={COLORS.mutedTerracotta}
+                  color={colors.textMuted}
                   style={styles.inputIcon}
                 />
                 <TextInput
@@ -219,61 +214,48 @@ export default function LoginScreen() {
                   autoComplete="current-password"
                   autoCorrect={false}
                   onBlur={() => setFocusedField(null)}
-                  onChangeText={setPassword}
+                  onChangeText={(v) => { setPassword(v); if (localError) setLocalError(null); }}
                   onFocus={() => setFocusedField('password')}
                   onSubmitEditing={() => { void handleLogin(); }}
                   placeholder={t('auth.password')}
-                  placeholderTextColor={COLORS.dustyRose}
+                  placeholderTextColor={colors.placeholder}
                   returnKeyType="done"
                   secureTextEntry={!showPassword}
-                  selectionColor={COLORS.burntOrange}
+                  selectionColor={colors.accent}
                   style={styles.input}
                   value={password}
                 />
-                <Pressable
+                <TouchableOpacity
                   accessibilityLabel={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
                   accessibilityRole="button"
+                  activeOpacity={0.7}
                   hitSlop={12}
                   onPress={() => setShowPassword(v => !v)}
-                  style={({ pressed }) => [styles.eyeButton, pressed && styles.pressed]}
+                  style={styles.eyeButton}
                 >
                   <Ionicons
                     name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                     size={26}
-                    color={COLORS.mutedTerracotta}
+                    color={colors.textMuted}
                   />
-                </Pressable>
+                </TouchableOpacity>
               </View>
 
-
-              {/* Error */}
-              {error !== null && (
-                <Text style={styles.errorText}>{error}</Text>
+              {/* Error — inline and specific, never a system alert */}
+              {visibleError !== null && (
+                <Text accessibilityLiveRegion="polite" style={styles.errorText}>
+                  {visibleError}
+                </Text>
               )}
 
               {/* Login button */}
-              <Pressable
-                accessibilityRole="button"
-                disabled={isLoading}
+              <Button
+                title={t('auth.signIn')}
                 onPress={() => { void handleLogin(); }}
-                style={({ pressed }) => [
-                  styles.loginButtonShadow,
-                  pressed && !isLoading && styles.pressed,
-                  isLoading && styles.disabled,
-                ]}
-              >
-                <LinearGradient
-                  colors={[COLORS.burntOrange, COLORS.darkBrown]}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={styles.loginButton}
-                >
-                  {isLoading
-                    ? <ActivityIndicator color={COLORS.white} />
-                    : <Text style={styles.loginButtonText}>{t('auth.signIn')}</Text>
-                  }
-                </LinearGradient>
-              </Pressable>
+                loading={isLoading}
+                block
+                style={styles.loginButton}
+              />
 
               {/* Reset-by-email is keyed on User.email, and reaching this screen
                   at all already means the account has one — nothing left that
@@ -283,16 +265,17 @@ export default function LoginScreen() {
                   the product: both /auth/me routes need a session the locked-out
                   user does not have, and the remedy was a hand-written UPDATE
                   against the production database. */}
-              <Pressable
+              <TouchableOpacity
                 accessibilityLabel="Восстановить пароль"
                 accessibilityRole="button"
+                activeOpacity={0.7}
                 hitSlop={8}
                 onPress={() => router.push('/forgot-password' as never)}
-                style={({ pressed }) => [styles.inviteLinkButton, pressed && styles.pressed]}
+                style={styles.inviteLinkButton}
               >
                 <Text style={styles.inviteLinkText}>{t('auth.forgotPassword')}</Text>
-              </Pressable>
-            </View>
+              </TouchableOpacity>
+            </Card>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -300,18 +283,18 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.darkBrown,
+    backgroundColor: c.bgDark,
   },
   safeArea: { flex: 1 },
   keyboardArea: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 76,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xxl,
   },
 
   // Card
@@ -319,14 +302,15 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 430,
     alignSelf: 'center',
-    paddingTop: 66,
-    paddingHorizontal: 28,
-    paddingBottom: 20,
-    borderRadius: 24,
+    paddingTop: spacing.xxl + spacing.xl,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.lg,
+    borderRadius: radius.xxl,
     borderWidth: 1.25,
-    borderColor: 'rgba(255, 255, 255, 0.68)',
+    borderColor: c.borderStrong,
     backgroundColor: 'transparent',
-    shadowColor: COLORS.charcoal,
+    overflow: 'hidden',
+    shadowColor: c.bgDark,
     shadowOffset: { width: 0, height: 18 },
     shadowOpacity: 0.36,
     shadowRadius: 25,
@@ -334,13 +318,13 @@ const styles = StyleSheet.create({
   },
   cardGlass: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 24,
+    borderRadius: radius.xxl,
     overflow: 'hidden',
   },
   cardTint: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 24,
-    backgroundColor: 'rgba(247, 241, 236, 0.35)',
+    borderRadius: radius.xxl,
+    backgroundColor: `${c.surface}59`,
   },
   logo: {
     position: 'absolute',
@@ -350,11 +334,11 @@ const styles = StyleSheet.create({
     height: 118,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 30,
+    borderRadius: radius.xxl,
     borderWidth: 1.6,
-    borderColor: COLORS.cream,
-    backgroundColor: '#0E0E0E',
-    shadowColor: COLORS.darkBrown,
+    borderColor: c.wheat,
+    backgroundColor: c.bgDark,
+    shadowColor: c.bgDark,
     shadowOffset: { width: 0, height: 11 },
     shadowOpacity: 0.42,
     shadowRadius: 14,
@@ -363,145 +347,113 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 114,
     height: 114,
-    borderRadius: 28,
+    borderRadius: radius.xxl,
   },
   title: {
-    color: COLORS.charcoal,
-    fontSize: 24,
-    fontWeight: '900',
+    ...type.display,
+    color: c.text1,
     textAlign: 'center',
     letterSpacing: -0.45,
   },
   subtitle: {
-    marginTop: 13,
-    color: COLORS.darkBrown,
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '600',
+    marginTop: spacing.md,
+    ...type.body,
+    color: c.text1,
     textAlign: 'center',
   },
 
   // Tabs
   tabs: {
     flexDirection: 'row',
-    marginTop: 30,
-    padding: 4,
-    borderRadius: 24,
+    marginTop: spacing.xxl,
+    padding: spacing.xs,
+    borderRadius: radius.xxl,
     borderWidth: 1,
-    borderColor: 'rgba(201, 169, 154, 0.78)',
-    backgroundColor: 'rgba(232, 221, 214, 0.82)',
+    borderColor: c.borderStrong,
+    backgroundColor: `${c.inputBg}D1`,
   },
   tab: {
-    minHeight: 46,
+    minHeight: control.sm + spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
-    paddingHorizontal: 10,
+    borderRadius: radius.xxl,
+    paddingHorizontal: spacing.md,
   },
   loginTab: { flex: 0.9 },
   registerTab: { flex: 1.35 },
   tabActive: {
-    backgroundColor: COLORS.burntOrange,
-    shadowColor: COLORS.darkBrown,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.24,
-    shadowRadius: 8,
-    elevation: 6,
+    backgroundColor: c.accent,
   },
   tabInactive: {
     backgroundColor: 'transparent',
   },
   tabText: {
-    fontSize: 14,
-    fontWeight: '800',
+    ...type.label,
     textAlign: 'center',
   },
   tabTextActive: {
-    color: COLORS.white,
+    color: c.onAccent,
   },
   tabTextInactive: {
-    color: COLORS.mutedTerracotta,
+    color: c.textMuted,
   },
 
   // Inputs
   inputWrapper: {
-    minHeight: 58,
-    marginTop: 20,
-    paddingHorizontal: 18,
-    borderRadius: 12,
+    minHeight: control.md,
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
     borderWidth: 1.5,
-    borderColor: COLORS.dustyRose,
-    backgroundColor: 'rgba(232, 221, 214, 0.78)',
+    borderColor: c.inputBorder,
+    backgroundColor: `${c.inputBg}C7`,
     flexDirection: 'row',
     alignItems: 'center',
   },
   inputWrapperFocused: {
-    borderColor: COLORS.burntOrange,
+    borderColor: c.accent,
   },
   inputIcon: {
-    marginRight: 15,
+    marginRight: spacing.lg,
   },
   input: {
     flex: 1,
-    paddingVertical: 14,
-    color: COLORS.charcoal,
-    fontSize: 16,
-    fontWeight: '500',
+    paddingVertical: spacing.sm,
+    color: c.text1,
+    ...type.heading,
   },
   eyeButton: {
-    marginLeft: 10,
+    marginLeft: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   // Error
   errorText: {
-    color: '#ef4444',
-    fontSize: 13,
+    ...type.label,
+    color: c.danger,
     textAlign: 'center',
-    marginTop: 14,
+    marginTop: spacing.md,
   },
 
   // Login button
-  loginButtonShadow: {
-    marginTop: 27,
-    borderRadius: 13,
-    shadowColor: COLORS.darkBrown,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.34,
-    shadowRadius: 12,
-    elevation: 8,
-  },
   loginButton: {
-    minHeight: 60,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
-  loginButtonText: {
-    color: COLORS.white,
-    fontSize: 19,
-    fontWeight: '900',
-    letterSpacing: 0.1,
+    marginTop: spacing.xl,
   },
 
   // Invite door — same treatment as the link buttons on InviteScreen, so the two
   // screens that point at each other look like they belong together.
   inviteLinkButton: {
-    marginTop: 10,
-    minHeight: 44,
+    marginTop: spacing.sm,
+    minHeight: control.sm + spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
   },
   inviteLinkText: {
-    color: COLORS.darkBrown,
-    fontSize: 14,
-    fontWeight: '700',
+    ...type.body,
+    color: c.accent,
     textAlign: 'center',
     textDecorationLine: 'underline',
   },
-  pressed: { opacity: 0.82 },
-  disabled: { opacity: 0.66 },
 });

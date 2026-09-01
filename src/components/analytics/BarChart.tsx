@@ -81,8 +81,8 @@ export default function BarChart({
                 width={barWidth}
                 height={barHeight}
                 rx={3}
-                fill={isSelected ? colors.orange : colors.amber}
-                fillOpacity={isSelected ? 1 : 0.45}
+                fill={colors.accent}
+                fillOpacity={isSelected ? 1 : 0.35}
               />
             ) : null}
             {showLabel ? (
@@ -91,7 +91,7 @@ export default function BarChart({
                 y={height - 6}
                 fontSize={10}
                 fontWeight={isSelected ? '700' : '400'}
-                fill={isSelected ? colors.orange : colors.textMuted}
+                fill={isSelected ? colors.accent : colors.textMuted}
                 textAnchor="middle"
               >
                 {datum.label}
@@ -103,7 +103,7 @@ export default function BarChart({
               y={0}
               width={slot}
               height={height}
-              fill={colors.orange}
+              fill={colors.accent}
               fillOpacity={0}
               onPress={() => onSelect(datum.key)}
             />

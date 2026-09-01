@@ -6,6 +6,8 @@ import { initI18n } from '../i18n';
 import { getStoredLanguage, hasSelectedLanguage } from '../i18n/storage';
 import { API_URL } from '../utils/api';
 import { useUserStore } from '../store/userStore';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeColors } from '../theme';
 
 type StoredUser = {
   onboarding_completed?: boolean;
@@ -81,6 +83,9 @@ async function fetchFreshUser(token: string): Promise<FreshUserResult> {
 }
 
 export default function AppIndex() {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
+
   useEffect(() => {
     let mounted = true;
 
@@ -174,14 +179,15 @@ export default function AppIndex() {
 
   return (
     <View style={styles.center}>
-      <ActivityIndicator />
+      <ActivityIndicator color={colors.accent} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   center: {
     alignItems: 'center',
+    backgroundColor: c.bg,
     flex: 1,
     justifyContent: 'center',
   },

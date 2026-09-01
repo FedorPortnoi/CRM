@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { AlertCircle } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import AttachmentsSection from '../../components/AttachmentsSection';
@@ -12,7 +13,9 @@ import { formatMarketDate } from '../../market/profile';
 import { labelKeyForRule } from '../../utils/recurrence';
 import { useAuditLog } from '../../hooks/useAuditLog';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Screen, Card, Button, Badge, EmptyState, Skeleton, SkeletonText } from '../../components/ui';
+import type { BadgeVariant } from '../../components/ui';
 
 interface TaskAssignee {
   id: string;
@@ -33,10 +36,10 @@ function taskActionLabel(action: string): string {
   return map[action] ?? action;
 }
 
-function taskActionColor(action: string, c: ThemeColors): { bg: string; text: string } {
-  if (action === 'created') return { bg: 'rgba(204,120,92,0.08)', text: c.orange };
-  if (action === 'completed') return { bg: '#dcfce7', text: c.wheat };
-  return { bg: c.bg, text: c.text1 };
+function taskActionVariant(action: string): BadgeVariant {
+  if (action === 'created') return 'accent';
+  if (action === 'completed') return 'success';
+  return 'neutral';
 }
 
 interface Task {
@@ -66,18 +69,18 @@ function isOverdue(due_date: string | null, status: string): boolean {
   return new Date(due_date) < new Date();
 }
 
-function priorityBadgeColor(priority: string, c: ThemeColors): string {
-  if (priority === 'urgent') return c.red;
-  if (priority === 'high') return '#E8A000';
-  if (priority === 'medium') return c.orange;
-  return c.textMuted;
+function priorityVariant(priority: string): BadgeVariant {
+  if (priority === 'urgent') return 'danger';
+  if (priority === 'high') return 'warning';
+  if (priority === 'medium') return 'accent';
+  return 'neutral';
 }
 
-function statusBadgeColor(status: string, c: ThemeColors): string {
-  if (status === 'done') return c.orange;
-  if (status === 'in_progress') return c.orange;
-  if (status === 'pending') return '#E8A000';
-  return c.textMuted;
+function statusVariant(status: string): BadgeVariant {
+  if (status === 'done') return 'success';
+  if (status === 'in_progress') return 'accent';
+  if (status === 'pending') return 'warning';
+  return 'neutral';
 }
 
 function formatRecurrence(isRecurring: boolean, rule: string | null, t: (key: string) => string): string {
@@ -108,27 +111,6 @@ function formatPriority(priority: string, t: (key: string) => string): string {
 function formatStatus(status: string, t: (key: string) => string): string {
   const key = STATUS_LABEL_KEYS[status];
   return key ? t(key) : status.replace('_', ' ');
-}
-
-interface SkeletonBoxProps {
-  width: number;
-  height: number;
-  borderRadius?: number;
-  marginBottom?: number;
-}
-
-function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return (
-    <View
-      style={{
-        width,
-        height,
-        backgroundColor: 'rgba(204,120,92,0.08)',
-        borderRadius,
-        marginBottom,
-      }}
-    />
-  );
 }
 
 export default function TaskDetailScreen(): JSX.Element {
@@ -267,29 +249,22 @@ export default function TaskDetailScreen(): JSX.Element {
     return (
       <>
         <Stack.Screen options={{ title: t('tasks.task') }} />
-        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-          <View style={styles.card}>
-            <SkeletonBox width={240} height={20} marginBottom={12} />
-            <SkeletonBox width={160} height={13} marginBottom={14} />
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <SkeletonBox width={72} height={22} borderRadius={4} />
-              <SkeletonBox width={72} height={22} borderRadius={4} />
+        <Screen contentContainerStyle={styles.contentPad}>
+          <Card style={styles.cardSpacing}>
+            <Skeleton width="70%" height={22} style={styles.skeletonGapMd} />
+            <Skeleton width="45%" height={16} style={styles.skeletonGapMd} />
+            <View style={styles.badgeRow}>
+              <Skeleton width={72} height={24} rounded={radius.pill} />
+              <Skeleton width={72} height={24} rounded={radius.pill} />
             </View>
-          </View>
-          <View style={[styles.card, { marginTop: 16 }]}>
-            {([0, 1] as const).map((i) => (
-              <View key={i} style={[styles.detailRow, i > 0 ? { marginTop: 12 } : {}]}>
-                <SkeletonBox width={64} height={12} />
-                <SkeletonBox width={150} height={12} />
-              </View>
-            ))}
-          </View>
-          <View style={[styles.card, { marginTop: 16 }]}>
-            <SkeletonBox width={48} height={12} marginBottom={10} />
-            <SkeletonBox width={220} height={12} marginBottom={6} />
-            <SkeletonBox width={180} height={12} />
-          </View>
-        </ScrollView>
+          </Card>
+          <Card style={styles.cardSpacing}>
+            <SkeletonText lines={2} lastLineWidth="60%" />
+          </Card>
+          <Card>
+            <SkeletonText lines={3} lastLineWidth="50%" />
+          </Card>
+        </Screen>
       </>
     );
   }
@@ -299,10 +274,12 @@ export default function TaskDetailScreen(): JSX.Element {
       <>
         <Stack.Screen options={{ title: t('tasks.task') }} />
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{fetchError}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => fetchTask(false)}>
-            <Text style={styles.retryText}>{t('common.retry')}</Text>
-          </TouchableOpacity>
+          <EmptyState
+            icon={<AlertCircle size={32} color={colors.danger} strokeWidth={2} />}
+            title={fetchError}
+            actionLabel={t('common.retry')}
+            onAction={() => fetchTask(false)}
+          />
         </View>
       </>
     );
@@ -338,25 +315,21 @@ export default function TaskDetailScreen(): JSX.Element {
           ),
         }}
       />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.orange} />}
+      <Screen
+        refreshing={isRefreshing}
+        onRefresh={onRefresh}
+        contentContainerStyle={styles.contentPad}
       >
-        <View style={styles.card}>
+        <Card style={styles.cardSpacing}>
           <Text style={styles.taskTitle}>{task.title}</Text>
           {task.due_date ? (
-            <Text style={[styles.dueDate, dueDateOverdue ? styles.dueDateOverdue : null]}>{t('tasks.dueOn', { date: formatDate(task.due_date) })}</Text>
+            <Text style={[styles.dueDate, styles.tabular, dueDateOverdue ? styles.dueDateOverdue : null]}>{t('tasks.dueOn', { date: formatDate(task.due_date) })}</Text>
           ) : null}
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-            <View style={[styles.badge, { backgroundColor: priorityBadgeColor(task.priority, colors) }]}>
-              <Text style={styles.badgeText}>{formatPriority(task.priority, t)}</Text>
-            </View>
-            <View style={[styles.badge, { backgroundColor: statusBadgeColor(task.status, colors) }]}>
-              <Text style={styles.badgeText}>{formatStatus(task.status, t)}</Text>
-            </View>
+          <View style={styles.badgeRow}>
+            <Badge label={formatPriority(task.priority, t)} variant={priorityVariant(task.priority)} />
+            <Badge label={formatStatus(task.status, t)} variant={statusVariant(task.status)} />
           </View>
-        </View>
+        </Card>
 
         {task.status === 'cancelled' ? (
           <View style={styles.cancelledBanner}>
@@ -364,12 +337,12 @@ export default function TaskDetailScreen(): JSX.Element {
           </View>
         ) : null}
 
-        <View style={[styles.card, { marginTop: 16 }]}>
+        <Card style={styles.cardSpacing}>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>{t('tasks.assigned')}</Text>
             <Text style={styles.detailValue}>{task.assignee.name}</Text>
           </View>
-          <View style={[styles.detailRow, { marginTop: 12 }]}>
+          <View style={[styles.detailRow, styles.detailRowSpaced]}>
             <Text style={styles.detailLabel}>{t('tasks.contact')}</Text>
             {task.contact !== null && contactName !== null ? (
               <TouchableOpacity
@@ -387,220 +360,163 @@ export default function TaskDetailScreen(): JSX.Element {
               <Text style={styles.detailValue}>{t('tasks.none')}</Text>
             )}
           </View>
-          <View style={[styles.detailRow, { marginTop: 12 }]}>
+          <View style={[styles.detailRow, styles.detailRowSpaced]}>
             <Text style={styles.detailLabel}>{t('tasks.repeat')}</Text>
             <Text style={task.is_recurring ? styles.recurrenceValue : styles.detailValue}>
               {formatRecurrence(task.is_recurring, task.recurrence_rule, t)}
             </Text>
           </View>
-        </View>
+        </Card>
 
         {/* The schedule behind the task — when it reminds, how often, and until when. */}
         <ReminderSummaryList taskId={id as string} />
 
-        <View style={[styles.card, { marginTop: 16 }]}>
+        <Card style={styles.cardSpacing}>
           <Text style={styles.sectionLabel}>{t('tasks.notes')}</Text>
           <Text style={task.description ? styles.notesText : styles.emptyText}>{task.description ?? t('tasks.noNotes')}</Text>
-        </View>
+        </Card>
 
         {hasActions ? (
-          <View style={[styles.card, { marginTop: 16 }]}>
-            {actionError ? <Text style={[styles.errorText, { marginBottom: 12 }]}>{actionError}</Text> : null}
-            {showCompleteButton ? (
-              <TouchableOpacity
-                style={[styles.button, styles.buttonPrimary, isActionLoading ? styles.buttonDisabled : null]}
-                onPress={handleComplete}
-                disabled={isActionLoading}
-                activeOpacity={0.7}
-              >
-                {isActionLoading ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={styles.buttonText}>{completeLabel}</Text>
-                )}
-              </TouchableOpacity>
-            ) : null}
-            {showCancelButton ? (
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  styles.buttonDestructive,
-                  showCompleteButton ? { marginTop: 10 } : null,
-                  isActionLoading ? styles.buttonDisabled : null,
-                ]}
-                onPress={handleCancel}
-                disabled={isActionLoading}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.buttonText}>{t('tasks.cancelTask')}</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
+          <Card style={styles.cardSpacing}>
+            {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
+            <View style={styles.actionStack}>
+              {showCompleteButton ? (
+                <Button
+                  title={completeLabel}
+                  onPress={() => { handleComplete().catch(() => undefined); }}
+                  loading={isActionLoading}
+                  disabled={isActionLoading}
+                  block
+                />
+              ) : null}
+              {showCancelButton ? (
+                <Button
+                  title={t('tasks.cancelTask')}
+                  onPress={() => { handleCancel().catch(() => undefined); }}
+                  loading={isActionLoading}
+                  disabled={isActionLoading}
+                  variant="danger"
+                  block
+                />
+              ) : null}
+            </View>
+          </Card>
         ) : null}
 
         {/* Activity log */}
-        <View style={styles.auditSection}>
-          <Text style={styles.auditSectionTitle}>{t('contacts.activityLog')}</Text>
+        <Card>
+          <Text style={styles.sectionLabel}>{t('contacts.activityLog')}</Text>
           {auditLog.length === 0 ? (
-            <Text style={styles.auditEmpty}>{t('contacts.noActivity')}</Text>
+            <EmptyState title={t('contacts.noActivity')} style={styles.auditEmpty} />
           ) : (
-            auditLog.map((entry) => {
-              const actionColors = taskActionColor(entry.action, colors);
-              return (
-                <View key={entry.id} style={styles.auditRow}>
-                  <View style={[styles.auditBadge, { backgroundColor: actionColors.bg }]}>
-                    <Text style={[styles.auditBadgeText, { color: actionColors.text }]}>{taskActionLabel(entry.action)}</Text>
-                  </View>
-                  <Text style={styles.auditDate}>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</Text>
-                </View>
-              );
-            })
+            auditLog.map((entry) => (
+              <View key={entry.id} style={styles.auditRow}>
+                <Badge label={taskActionLabel(entry.action)} variant={taskActionVariant(entry.action)} />
+                <Text style={[styles.auditDate, styles.tabular]}>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</Text>
+              </View>
+            ))
           )}
-        </View>
+        </Card>
 
         <AttachmentsSection entityType="task" entityId={id as string} />
-      </ScrollView>
+      </Screen>
     </>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: c.bg },
-  content: { padding: 16, paddingBottom: 40 },
-  card: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+  contentPad: {
+    paddingTop: spacing.lg,
+  },
+  cardSpacing: {
+    marginBottom: spacing.lg,
+  },
+  skeletonGapMd: {
+    marginBottom: spacing.sm,
   },
   taskTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...type.title,
     color: c.text1,
-    marginBottom: 6,
+    marginBottom: spacing.sm,
   },
-  dueDate: { fontSize: 13, color: c.amber },
-  dueDateOverdue: { color: c.red, fontWeight: '500' },
-  badge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  badgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '600',
+  dueDate: { ...type.body, color: c.textMuted },
+  dueDateOverdue: { color: c.danger, fontWeight: '600' },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
   cancelledBanner: {
-    marginTop: 12,
-    backgroundColor: 'rgba(204,82,71,0.12)',
-    borderRadius: 12,
-    padding: 12,
+    marginBottom: spacing.lg,
+    backgroundColor: c.dangerSoft,
+    borderRadius: radius.lg,
+    padding: spacing.md,
     borderLeftWidth: 3,
-    borderLeftColor: c.red,
+    borderLeftColor: c.danger,
   },
-  cancelledText: { fontSize: 13, color: c.red, fontWeight: '500' },
+  cancelledText: { ...type.body, color: c.danger, fontWeight: '600' },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  detailLabel: { fontSize: 13, color: c.textMuted, width: 100 },
-  detailValue: { fontSize: 13, color: c.text1, flex: 1, textAlign: 'right' },
-  recurrenceValue: { fontSize: 13, color: c.orange, flex: 1, textAlign: 'right', fontWeight: '600' },
+  detailRowSpaced: { marginTop: spacing.md },
+  detailLabel: { ...type.body, color: c.textMuted, width: 100 },
+  detailValue: { ...type.body, color: c.text1, flex: 1, textAlign: 'right' },
+  recurrenceValue: { ...type.body, color: c.accent, flex: 1, textAlign: 'right', fontWeight: '600' },
   linkText: {
-    fontSize: 13,
-    color: c.orange,
-    fontWeight: '500',
+    ...type.body,
+    color: c.accent,
+    fontWeight: '600',
     textAlign: 'right',
   },
   sectionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...type.micro,
     color: c.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 8,
+    marginBottom: spacing.md,
   },
-  notesText: { fontSize: 14, color: c.text1, lineHeight: 20 },
-  emptyText: { fontSize: 14, color: c.textMuted },
-  button: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+  notesText: { ...type.body, color: c.text1, lineHeight: 20 },
+  emptyText: { ...type.body, color: c.textMuted },
+  actionStack: { gap: spacing.sm },
+  actionError: {
+    ...type.caption,
+    color: c.danger,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
   },
-  buttonPrimary: { backgroundColor: c.orange },
-  buttonDestructive: { backgroundColor: c.red },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  tabular: {
+    fontVariant: ['tabular-nums'],
+  },
   errorContainer: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-  },
-  errorText: {
-    fontSize: 14,
-    color: c.red,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  retryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: c.orange,
-    borderRadius: 6,
-  },
-  retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
-  auditSection: {
-    marginTop: 16,
-  },
-  auditSectionTitle: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: c.amber,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    marginBottom: 8,
+    backgroundColor: c.bg,
   },
   auditEmpty: {
-    fontSize: 13,
-    color: c.textMuted,
+    paddingVertical: spacing.md,
+    paddingHorizontal: 0,
   },
   auditRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: c.bg,
-  },
-  auditBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  auditBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
+    borderBottomColor: c.border,
   },
   auditDate: {
-    fontSize: 12,
+    ...type.caption,
     color: c.textMuted,
   },
   headerEditButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   headerEditText: {
-    color: c.orange,
-    fontSize: 16,
-    fontWeight: '600',
+    color: c.accent,
+    ...type.heading,
   },
 });

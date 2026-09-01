@@ -18,7 +18,9 @@ import {
   type ContactAiErrorCode,
 } from '../../hooks/useContactAi';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, type } from '../../theme';
+import { Card, Button, Badge, EmptyState, Skeleton } from '../../components/ui';
+import type { BadgeVariant } from '../../components/ui';
 
 interface Attachment {
   id: string;
@@ -73,17 +75,22 @@ function activityIcon(type: 'message' | 'task' | 'meeting'): string {
   return '📅';
 }
 
-function statusBadgeColor(status: string, c: ThemeColors): string {
-  if (status === 'active') return c.orange;
-  if (status === 'inactive') return '#E8A000';
-  return c.textMuted;
+function statusVariant(status: string): BadgeVariant {
+  if (status === 'active') return 'accent';
+  if (status === 'inactive') return 'warning';
+  return 'neutral';
 }
 
-function taskBadgeColor(status: 'pending' | 'in_progress' | 'done' | 'cancelled', c: ThemeColors): string {
-  if (status === 'done') return c.orange;
-  if (status === 'in_progress') return c.orange;
-  if (status === 'pending') return '#E8A000';
-  return c.textMuted;
+function taskVariant(status: 'pending' | 'in_progress' | 'done' | 'cancelled'): BadgeVariant {
+  if (status === 'done') return 'success';
+  if (status === 'in_progress') return 'accent';
+  if (status === 'pending') return 'warning';
+  return 'neutral';
+}
+
+function auditVariant(action: string): BadgeVariant {
+  if (action === 'created') return 'accent';
+  return 'neutral';
 }
 
 // The AI summary fails with a CODE; the server's message is operator-facing English
@@ -108,12 +115,6 @@ const AI_ERROR_KEY_BY_CODE: Record<string, string> = {
   UNAUTHORIZED: 'errors.unauthorized',
   NETWORK_ERROR: 'errors.networkError',
 };
-
-interface SkeletonBoxProps { width: number; height: number; borderRadius?: number; marginRight?: number; marginBottom?: number; }
-
-function SkeletonBox({ width, height, borderRadius = 4, marginRight = 0, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: 'rgba(204,120,92,0.08)', borderRadius, marginRight, marginBottom }} />;
-}
 
 export default function ContactDetailScreen(): JSX.Element {
   const { t } = useTranslation();
@@ -232,36 +233,33 @@ export default function ContactDetailScreen(): JSX.Element {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.orange} />}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
       >
-        <View style={styles.card}>
+        <Card>
           {isLoading ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <SkeletonBox width={60} height={60} borderRadius={30} marginRight={12} />
-              <View style={{ flex: 1 }}>
-                <SkeletonBox width={180} height={16} marginBottom={8} />
-                <SkeletonBox width={130} height={12} />
+            <View style={styles.rowStart}>
+              <Skeleton width={60} height={60} rounded={30} style={styles.avatarSkeleton} />
+              <View style={styles.flex1}>
+                <Skeleton width={180} height={16} style={styles.skeletonGapSm} />
+                <Skeleton width={130} height={12} />
               </View>
             </View>
           ) : contactError ? (
-            <View>
-              <Text style={styles.errorText}>{contactError}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
-                <Text style={styles.retryText}>{t('common.retry')}</Text>
-              </TouchableOpacity>
-            </View>
+            <EmptyState title={contactError} actionLabel={t('common.retry')} onAction={onRefresh} style={styles.inlineEmpty} />
           ) : contact ? (
             <View>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+              <View style={styles.headerRow}>
                 <View style={styles.avatar}>
                   <Text style={styles.avatarText}>{contact.first_name.charAt(0).toUpperCase()}</Text>
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={styles.flex1}>
                   <Text style={styles.contactName}>{contactName}</Text>
                   {contact.company ? <Text style={styles.secondaryText}>{contact.company}</Text> : null}
-                  <View style={[styles.statusBadge, { backgroundColor: statusBadgeColor(contact.status, colors) }]}>
-                    <Text style={styles.badgeText}>{contact.status === 'active' ? t('contacts.statusActive') : contact.status === 'inactive' ? t('contacts.statusInactive') : contact.status}</Text>
-                  </View>
+                  <Badge
+                    variant={statusVariant(contact.status)}
+                    label={contact.status === 'active' ? t('contacts.statusActive') : contact.status === 'inactive' ? t('contacts.statusInactive') : contact.status}
+                    style={styles.statusBadge}
+                  />
                 </View>
               </View>
               {(contact.phone || contact.mobile || contact.email) ? (
@@ -286,7 +284,10 @@ export default function ContactDetailScreen(): JSX.Element {
                   ) : null}
                 </View>
               ) : null}
-              <TouchableOpacity
+              <Button
+                title={t('contacts.conversation')}
+                icon={<MessageCircle size={18} color={colors.onAccent} />}
+                block
                 style={styles.conversationButton}
                 onPress={() => {
                   const phone = contact?.phone ?? contact?.mobile ?? null;
@@ -312,15 +313,10 @@ export default function ContactDetailScreen(): JSX.Element {
                     ]);
                   }
                 }}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-              >
-                <MessageCircle size={18} color="#FFFFFF" />
-                <Text style={styles.conversationButtonText}>{t('contacts.conversation')}</Text>
-              </TouchableOpacity>
+              />
             </View>
           ) : null}
-        </View>
+        </Card>
 
         {/* Consent sits directly under the contact's own details: it is a fact about this
             person, and the ФЗ-38 evidence has to be as visible as their phone number.
@@ -334,11 +330,11 @@ export default function ContactDetailScreen(): JSX.Element {
         {showAiSection ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('contactAi.title')}</Text>
-            <View style={[styles.card, styles.aiCard]}>
+            <Card style={styles.aiCard}>
               {summaryMutation.isPending ? (
                 <>
                   <View style={styles.aiLoadingRow}>
-                    <ActivityIndicator color={colors.orange} />
+                    <ActivityIndicator color={colors.accent} />
                     <Text style={styles.aiHint}>{t('contactAi.generating')}</Text>
                   </View>
                   <Text style={styles.aiNote}>{t('contactAi.generatingHint')}</Text>
@@ -376,17 +372,12 @@ export default function ContactDetailScreen(): JSX.Element {
               {aiOff ? <Text style={styles.aiNote}>{t('contactAi.notConfiguredHint')}</Text> : null}
 
               {!summaryMutation.isPending && !aiOff ? (
-                <TouchableOpacity
-                  style={aiSummary ? styles.aiSecondaryButton : styles.aiButton}
+                <Button
+                  title={aiSummary ? t('contactAi.regenerate') : t('contactAi.generate')}
+                  variant={aiSummary ? 'secondary' : 'primary'}
+                  icon={aiSummary ? undefined : <Sparkles size={16} color={colors.onAccent} strokeWidth={2.2} />}
                   onPress={() => summaryMutation.mutate()}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                >
-                  {aiSummary ? null : <Sparkles size={16} color="#FFFFFF" strokeWidth={2.2} />}
-                  <Text style={aiSummary ? styles.aiSecondaryButtonText : styles.aiButtonText}>
-                    {aiSummary ? t('contactAi.regenerate') : t('contactAi.generate')}
-                  </Text>
-                </TouchableOpacity>
+                />
               ) : null}
 
               {aiSummary ? <Text style={styles.aiNote}>{t('contactAi.disclaimer')}</Text> : null}
@@ -394,46 +385,41 @@ export default function ContactDetailScreen(): JSX.Element {
                   reads the email/phone columns and masks anything phone- or
                   address-shaped out of the free text (ФЗ-152 ст. 5 ч. 5). */}
               <Text style={styles.aiNote}>{t('contactAi.privacyNote')}</Text>
-            </View>
+            </Card>
           </View>
         ) : null}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('contacts.activity')}</Text>
-          <View style={styles.card}>
+          <Card>
             {isLoading ? (
               <>
                 {[0, 1, 2].map((i) => (
-                  <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                    <SkeletonBox width={32} height={32} borderRadius={16} marginRight={10} />
-                    <View style={{ flex: 1 }}>
-                      <SkeletonBox width={200} height={12} marginBottom={6} />
-                      <SkeletonBox width={100} height={10} />
+                  <View key={i} style={styles.activityRow}>
+                    <Skeleton width={32} height={32} rounded={16} style={styles.activityIconSkeleton} />
+                    <View style={styles.flex1}>
+                      <Skeleton width={200} height={12} style={styles.skeletonGapXs} />
+                      <Skeleton width={100} height={10} />
                     </View>
                   </View>
                 ))}
               </>
             ) : activityError ? (
-              <View>
-                <Text style={styles.errorText}>{activityError}</Text>
-                <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
-                  <Text style={styles.retryText}>{t('common.retry')}</Text>
-                </TouchableOpacity>
-              </View>
+              <EmptyState title={activityError} actionLabel={t('common.retry')} onAction={onRefresh} style={styles.inlineEmpty} />
             ) : !activity || activity.items.length === 0 ? (
-              <Text style={styles.emptyText}>{t('contacts.noActivity')}</Text>
+              <EmptyState title={t('contacts.noActivity')} style={styles.inlineEmpty} />
             ) : (
               activity.items.slice(0, 20).map((item) => (
-                <View key={item.id} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <Text style={{ fontSize: 18, marginRight: 10, marginTop: 1 }}>{activityIcon(item.type)}</Text>
-                  <View style={{ flex: 1 }}>
+                <View key={item.id} style={styles.activityRowStart}>
+                  <Text style={styles.activityIcon}>{activityIcon(item.type)}</Text>
+                  <View style={styles.flex1}>
                     <Text style={styles.activitySummary} numberOfLines={2}>{item.summary}</Text>
-                    <Text style={styles.activityDate}>{formatDate(item.created_at)}</Text>
+                    <Text style={[styles.activityDate, styles.tabular]}>{formatDate(item.created_at)}</Text>
                   </View>
                 </View>
               ))
             )}
-          </View>
+          </Card>
         </View>
 
         <View style={styles.section}>
@@ -441,34 +427,27 @@ export default function ContactDetailScreen(): JSX.Element {
           {isLoading ? (
             <>
               {[0, 1].map((i) => (
-                <View key={i} style={[styles.card, { marginBottom: 8 }]}>
-                  <SkeletonBox width={160} height={14} marginBottom={8} />
-                  <SkeletonBox width={100} height={10} />
-                </View>
+                <Card key={i} style={styles.listItemSpacing}>
+                  <Skeleton width={160} height={14} style={styles.skeletonGapSm} />
+                  <Skeleton width={100} height={10} />
+                </Card>
               ))}
             </>
           ) : dealsError ? (
-            <View style={styles.card}>
-              <Text style={styles.errorText}>{dealsError}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
-                <Text style={styles.retryText}>{t('common.retry')}</Text>
-              </TouchableOpacity>
-            </View>
+            <Card><EmptyState title={dealsError} actionLabel={t('common.retry')} onAction={onRefresh} style={styles.inlineEmpty} /></Card>
           ) : !deals || deals.length === 0 ? (
-            <View style={styles.card}><Text style={styles.emptyText}>{t('contacts.noDeals')}</Text></View>
+            <Card><EmptyState title={t('contacts.noDeals')} style={styles.inlineEmpty} /></Card>
           ) : (
             deals.map((deal) => (
-              <View key={deal.id} style={[styles.card, { marginBottom: 8 }]}>
+              <Card key={deal.id} style={styles.listItemSpacing}>
                 <Text style={styles.dealTitle}>{deal.title}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={styles.rowGap}>
                   {deal.stage ? (
-                    <View style={styles.stageBadge}>
-                      <Text style={styles.stageBadgeText}>{deal.stage.name}</Text>
-                    </View>
+                    <Badge label={deal.stage.name} variant="neutral" />
                   ) : null}
-                  <Text style={styles.dealValue}>{formatValue(deal.value, deal.currency)}</Text>
+                  <Text style={[styles.dealValue, styles.tabular]}>{formatValue(deal.value, deal.currency)}</Text>
                 </View>
-              </View>
+              </Card>
             ))
           )}
         </View>
@@ -486,6 +465,7 @@ export default function ContactDetailScreen(): JSX.Element {
                   },
                 })}
                 accessibilityRole="button"
+                activeOpacity={0.7}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Text style={styles.sectionAddBtn}>+ {t('tasks.addTask')}</Text>
@@ -495,41 +475,36 @@ export default function ContactDetailScreen(): JSX.Element {
           {isLoading ? (
             <>
               {[0, 1].map((i) => (
-                <View key={i} style={[styles.card, { marginBottom: 8 }]}>
-                  <SkeletonBox width={170} height={14} marginBottom={8} />
-                  <SkeletonBox width={90} height={10} />
-                </View>
+                <Card key={i} style={styles.listItemSpacing}>
+                  <Skeleton width={170} height={14} style={styles.skeletonGapSm} />
+                  <Skeleton width={90} height={10} />
+                </Card>
               ))}
             </>
           ) : tasksError ? (
-            <View style={styles.card}>
-              <Text style={styles.errorText}>{tasksError}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
-                <Text style={styles.retryText}>{t('common.retry')}</Text>
-              </TouchableOpacity>
-            </View>
+            <Card><EmptyState title={tasksError} actionLabel={t('common.retry')} onAction={onRefresh} style={styles.inlineEmpty} /></Card>
           ) : !tasks || tasks.length === 0 ? (
-            <View style={styles.card}><Text style={styles.emptyText}>{t('contacts.noTasks')}</Text></View>
+            <Card><EmptyState title={t('contacts.noTasks')} style={styles.inlineEmpty} /></Card>
           ) : (
             tasks.map((task) => (
-              <TouchableOpacity
+              <Card
                 key={task.id}
-                style={[styles.card, { marginBottom: 8 }]}
                 onPress={() => router.push({ pathname: '/task/[id]', params: { id: task.id } })}
-                activeOpacity={0.7}
+                style={styles.listItemSpacing}
               >
                 <Text style={styles.taskTitle}>{task.title}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <View style={[styles.taskBadge, { backgroundColor: taskBadgeColor(task.status, colors) }]}>
-                    <Text style={styles.badgeText}>{task.status === 'pending' ? t('tasks.pending') : task.status === 'in_progress' ? t('tasks.inProgress') : task.status === 'done' ? t('tasks.completed') : t('tasks.cancelled')}</Text>
-                  </View>
+                <View style={styles.rowGap}>
+                  <Badge
+                    variant={taskVariant(task.status)}
+                    label={task.status === 'pending' ? t('tasks.pending') : task.status === 'in_progress' ? t('tasks.inProgress') : task.status === 'done' ? t('tasks.completed') : t('tasks.cancelled')}
+                  />
                   {task.due_date ? (
-                    <Text style={[styles.taskDueDate, isOverdue(task.due_date, task.status) ? styles.overdueText : null]}>
+                    <Text style={[styles.taskDueDate, styles.tabular, isOverdue(task.due_date, task.status) ? styles.overdueText : null]}>
                       {formatDate(task.due_date)}
                     </Text>
                   ) : null}
                 </View>
-              </TouchableOpacity>
+              </Card>
             ))
           )}
         </View>
@@ -537,13 +512,14 @@ export default function ContactDetailScreen(): JSX.Element {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('contacts.activityLog')}</Text>
           {auditLog.length === 0 ? (
-            <Text style={styles.emptyText}>{t('contacts.noActivity')}</Text>
+            <EmptyState title={t('contacts.noActivity')} style={styles.inlineEmpty} />
           ) : auditLog.map((entry) => (
             <View key={entry.id} style={styles.auditRow}>
-              <View style={[styles.auditBadge, { backgroundColor: entry.action === 'created' ? 'rgba(204,120,92,0.08)' : entry.action === 'updated' ? '#dbeafe' : colors.bg }]}>
-                <Text style={[styles.auditBadgeText, { color: entry.action === 'created' ? colors.orange : entry.action === 'updated' ? '#1d4ed8' : colors.text1 }]}>{entry.action === 'created' ? t('contacts.actionCreated') : entry.action === 'updated' ? t('contacts.actionUpdated') : entry.action}</Text>
-              </View>
-              <Text style={styles.auditDate}>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</Text>
+              <Badge
+                variant={auditVariant(entry.action)}
+                label={entry.action === 'created' ? t('contacts.actionCreated') : entry.action === 'updated' ? t('contacts.actionUpdated') : entry.action}
+              />
+              <Text style={[styles.auditDate, styles.tabular]}>{new Date(entry.created_at).toLocaleDateString('ru-RU')}</Text>
             </View>
           ))}
         </View>
@@ -556,81 +532,55 @@ export default function ContactDetailScreen(): JSX.Element {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  content: { padding: 16, paddingBottom: 32 },
-  card: { backgroundColor: c.bgPanel, borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  section: { marginTop: 20 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: c.amber, textTransform: 'uppercase', letterSpacing: 0.5 },
-  sectionAddBtn: { fontSize: 13, fontWeight: '600', color: c.orange },
-  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: c.orange, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  avatarText: { color: '#FFFFFF', fontSize: 22, fontWeight: '700' },
-  contactName: { fontSize: 20, fontWeight: '700', color: c.text1, marginBottom: 4 },
-  secondaryText: { fontSize: 14, color: c.amber, marginBottom: 6 },
-  statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, marginTop: 4 },
-  badgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600', textTransform: 'capitalize' },
-  detailRows: { marginTop: 14, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 12 },
-  detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  detailLabel: { fontSize: 13, color: c.textMuted, width: 64 },
-  detailValue: { fontSize: 13, color: c.text1, flex: 1 },
-  conversationButton: {
-    marginTop: 14,
-    minHeight: 44,
-    borderRadius: 12,
-    backgroundColor: c.orange,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  conversationButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  section: { marginTop: spacing.xl },
+  sectionTitle: { ...type.label, color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionAddBtn: { ...type.label, color: c.accent },
+  flex1: { flex: 1 },
+  rowStart: { flexDirection: 'row', alignItems: 'center' },
+  rowGap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },
+  avatarSkeleton: { marginRight: spacing.md },
+  avatarText: { color: c.onAccent, fontSize: 20, fontWeight: '700' },
+  contactName: { ...type.title, color: c.text1, marginBottom: spacing.xs },
+  secondaryText: { ...type.body, color: c.textMuted, marginBottom: spacing.sm },
+  statusBadge: { marginTop: spacing.xs },
+  detailRows: { marginTop: spacing.md, borderTopWidth: 1, borderTopColor: c.border, paddingTop: spacing.md },
+  detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
+  detailLabel: { ...type.body, color: c.textMuted, width: 64 },
+  detailValue: { ...type.body, color: c.text1, flex: 1 },
+  conversationButton: { marginTop: spacing.md },
   // AI summary. Same card as every other section; the primary button deliberately
   // matches conversationButton so the screen keeps one primary-action shape.
-  aiCard: { gap: 10 },
-  aiLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  aiHint: { fontSize: 13, color: c.amber, lineHeight: 19 },
-  aiSummaryText: { fontSize: 15, color: c.text1, lineHeight: 22 },
-  aiNextAction: { borderTopWidth: 1, borderTopColor: c.border, paddingTop: 10, gap: 4 },
-  aiNextActionLabel: { fontSize: 11, fontWeight: '700', color: c.amber, textTransform: 'uppercase', letterSpacing: 0.5 },
+  aiCard: { gap: spacing.sm },
+  aiLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  aiHint: { ...type.body, color: c.textMuted, lineHeight: 19 },
+  aiSummaryText: { fontSize: 16, color: c.text1, lineHeight: 22 },
+  aiNextAction: { borderTopWidth: 1, borderTopColor: c.border, paddingTop: spacing.sm, gap: spacing.xs },
+  aiNextActionLabel: { ...type.micro, color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   aiNextActionText: { fontSize: 14, fontWeight: '500', color: c.text1, lineHeight: 20 },
-  aiNote: { fontSize: 11, color: c.textMuted, lineHeight: 16 },
-  aiButton: {
-    minHeight: 44,
-    borderRadius: 12,
-    backgroundColor: c.orange,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  aiButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  aiSecondaryButton: {
-    minHeight: 40,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.borderStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  aiSecondaryButtonText: { color: c.orange, fontSize: 14, fontWeight: '600' },
-  activitySummary: { fontSize: 14, color: c.text1, marginBottom: 2 },
-  activityDate: { fontSize: 12, color: c.textMuted },
-  dealTitle: { fontSize: 15, fontWeight: '600', color: c.text1, marginBottom: 8 },
-  stageBadge: { backgroundColor: c.orange, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
-  stageBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
-  dealValue: { fontSize: 13, color: c.amber },
-  taskTitle: { fontSize: 15, fontWeight: '500', color: c.text1, marginBottom: 8 },
-  taskBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
-  taskDueDate: { fontSize: 12, color: c.amber },
-  overdueText: { color: c.red, fontWeight: '500' },
-  errorText: { fontSize: 14, color: c.red, marginBottom: 8 },
-  retryButton: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: c.orange, borderRadius: 6 },
-  retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
-  emptyText: { fontSize: 14, color: c.textMuted, textAlign: 'center', paddingVertical: 8 },
-  headerEditButton: { paddingHorizontal: 8, paddingVertical: 4 },
-  headerEditText: { color: c.orange, fontSize: 16, fontWeight: '600' },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  addLink: { color: c.orange, fontSize: 14, fontWeight: '600' },
-  auditRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
-  auditBadge: { borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2 },
-  auditBadgeText: { fontSize: 12, fontWeight: '600' },
-  auditDate: { fontSize: 12, color: c.textMuted },
+  aiNote: { ...type.micro, fontWeight: '500', color: c.textMuted, lineHeight: 16 },
+  activityRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
+  activityRowStart: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.md },
+  activityIconSkeleton: { marginRight: spacing.sm },
+  activityIcon: { fontSize: 20, marginRight: spacing.sm, marginTop: 1 },
+  activitySummary: { ...type.body, color: c.text1, marginBottom: 2 },
+  activityDate: { ...type.caption, color: c.textMuted },
+  skeletonGapXs: { marginBottom: spacing.xs },
+  skeletonGapSm: { marginBottom: spacing.sm },
+  listItemSpacing: { marginBottom: spacing.sm },
+  dealTitle: { fontSize: 16, fontWeight: '600', color: c.text1, marginBottom: spacing.sm },
+  dealValue: { ...type.body, color: c.textMuted },
+  taskTitle: { fontSize: 16, fontWeight: '500', color: c.text1, marginBottom: spacing.sm },
+  taskDueDate: { ...type.caption, color: c.textMuted },
+  overdueText: { color: c.danger, fontWeight: '600' },
+  errorText: { ...type.body, color: c.danger, marginBottom: spacing.sm },
+  inlineEmpty: { paddingVertical: spacing.md, paddingHorizontal: 0 },
+  tabular: { fontVariant: ['tabular-nums'] },
+  headerEditButton: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  headerEditText: { color: c.accent, ...type.heading },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  auditRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xs },
+  auditDate: { ...type.caption, color: c.textMuted },
 });

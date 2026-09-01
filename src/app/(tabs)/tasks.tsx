@@ -7,16 +7,17 @@ import {
   StyleSheet,
   ListRenderItemInfo,
   RefreshControl,
-  ActivityIndicator,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, ListChecks } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { useTaskScopeStore } from '../../store/taskScopeStore';
 import { API_URL } from '../../utils/api';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Badge, BadgeVariant, EmptyState, Skeleton } from '../../components/ui';
 
 type TaskStatus = 'pending' | 'in_progress' | 'done' | 'cancelled';
 
@@ -48,16 +49,17 @@ function formatDue(due: string | null): string {
   return new Date(due).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' });
 }
 
-function badgeColor(status: TaskStatus, colors: ReturnType<typeof import('../../hooks/useTheme').useTheme>['colors']): string {
+/** Status reads through the semantic palette: done is green, not accent. */
+function badgeVariant(status: TaskStatus): BadgeVariant {
   switch (status) {
     case 'done':
-      return colors.orange;
+      return 'success';
     case 'in_progress':
-      return colors.amber;
+      return 'accent';
     case 'pending':
-      return '#E8A000';
+      return 'warning';
     default:
-      return colors.textMuted;
+      return 'neutral';
   }
 }
 
@@ -142,6 +144,7 @@ export default function TasksScreen(): JSX.Element {
           router.push({ pathname: '/task/[id]', params: { id: item.id } })
         }
         accessibilityRole="button"
+        activeOpacity={0.7}
       >
         <View style={styles.rowContent}>
           <Text style={[styles.rowTitle, overdue && styles.rowTitleOverdue]}>
@@ -153,30 +156,29 @@ export default function TasksScreen(): JSX.Element {
                 {dueDateStr}
               </Text>
             ) : null}
-            <View
-              style={[styles.badge, { backgroundColor: badgeColor(item.status, colors) }]}
-            >
-              <Text style={styles.badgeText}>
-                {item.status === 'in_progress'
+            <Badge
+              variant={badgeVariant(item.status)}
+              label={
+                item.status === 'in_progress'
                   ? t('tasks.inProgress')
                   : item.status === 'done'
                     ? t('tasks.completed')
                     : item.status === 'cancelled'
                       ? t('tasks.cancelled')
-                      : t('tasks.pending')}
-              </Text>
-            </View>
+                      : t('tasks.pending')
+              }
+            />
           </View>
         </View>
       </TouchableOpacity>
     );
-  }, [t, styles, colors]);
+  }, [t, styles]);
 
   if (isLoading) {
     return (
       <View style={styles.skeletonContainer}>
         {Array.from({ length: 6 }).map((_, i) => (
-          <View key={i} style={styles.skeletonRow} />
+          <Skeleton key={i} height={64} rounded={radius.lg} style={styles.skeletonRow} />
         ))}
       </View>
     );
@@ -184,12 +186,12 @@ export default function TasksScreen(): JSX.Element {
 
   if (error) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
-          <Text style={styles.retryText}>{t('common.retry')}</Text>
-        </TouchableOpacity>
-      </View>
+      <EmptyState
+        icon={<AlertTriangle size={48} color={colors.danger} strokeWidth={1.5} />}
+        title={error}
+        actionLabel={t('common.retry')}
+        onAction={handleRetry}
+      />
     );
   }
 
@@ -197,15 +199,14 @@ export default function TasksScreen(): JSX.Element {
 
   return (
     <View style={styles.container}>
-      <View style={styles.circle1} pointerEvents="none" />
-      <View style={styles.circle2} pointerEvents="none" />
-      <View style={styles.circle3} pointerEvents="none" />
       {isManager ? (
         <View style={styles.scopeBar}>
           <TouchableOpacity
             style={[styles.scopePill, scope === 'direct' && styles.scopePillActive]}
             onPress={() => void setScope('direct')}
             accessibilityRole="button"
+            accessibilityState={{ selected: scope === 'direct' }}
+            activeOpacity={0.7}
           >
             <Text style={[styles.scopeText, scope === 'direct' && styles.scopeTextActive]}>
               {t('tasks.scopeDirect')}
@@ -215,6 +216,8 @@ export default function TasksScreen(): JSX.Element {
             style={[styles.scopePill, scope === 'subtree' && styles.scopePillActive]}
             onPress={() => void setScope('subtree')}
             accessibilityRole="button"
+            accessibilityState={{ selected: scope === 'subtree' }}
+            activeOpacity={0.7}
           >
             <Text style={[styles.scopeText, scope === 'subtree' && styles.scopeTextActive]}>
               {t('tasks.scopeSubtree')}
@@ -226,6 +229,9 @@ export default function TasksScreen(): JSX.Element {
         <TouchableOpacity
           style={[styles.tab, activeTab === 'today' && styles.tabActive]}
           onPress={() => setActiveTab('today')}
+          accessibilityRole="button"
+          accessibilityState={{ selected: activeTab === 'today' }}
+          activeOpacity={0.7}
         >
           <Text
             style={[styles.tabText, activeTab === 'today' && styles.tabTextActive]}
@@ -236,6 +242,9 @@ export default function TasksScreen(): JSX.Element {
         <TouchableOpacity
           style={[styles.tab, activeTab === 'all' && styles.tabActive]}
           onPress={() => setActiveTab('all')}
+          accessibilityRole="button"
+          accessibilityState={{ selected: activeTab === 'all' }}
+          activeOpacity={0.7}
         >
           <Text
             style={[styles.tabText, activeTab === 'all' && styles.tabTextActive]}
@@ -253,16 +262,15 @@ export default function TasksScreen(): JSX.Element {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={[colors.orange]}
-            tintColor={colors.orange}
+            colors={[colors.accent]}
+            tintColor={colors.accent}
           />
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              {activeTab === 'today' ? t('tasks.noToday') : t('tasks.noTasks')}
-            </Text>
-          </View>
+          <EmptyState
+            icon={<ListChecks size={48} color={colors.skeleton} strokeWidth={1.5} />}
+            title={activeTab === 'today' ? t('tasks.noToday') : t('tasks.noTasks')}
+          />
         }
         contentContainerStyle={
           displayTasks.length === 0 ? styles.emptyContent : styles.listContent
@@ -277,184 +285,105 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flex: 1,
     backgroundColor: c.bg,
   },
-  circle1: {
-    position: 'absolute',
-    width: 350,
-    height: 350,
-    borderRadius: 175,
-    backgroundColor: 'rgba(6,95,70,0.04)',
-    top: -80,
-    right: -100,
-  },
-  circle2: {
-    position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: 'rgba(6,95,70,0.03)',
-    bottom: 100,
-    left: -80,
-  },
-  circle3: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(6,95,70,0.03)',
-    top: '40%',
-    right: -60,
-  },
   skeletonContainer: {
     flex: 1,
-    backgroundColor: c.bgPanel,
-    padding: 12,
-    paddingTop: 16,
+    backgroundColor: c.surface,
+    padding: spacing.md,
+    paddingTop: spacing.lg,
   },
   skeletonRow: {
-    height: 64,
-    backgroundColor: c.bg,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: c.bgPanel,
-  },
-  errorText: {
-    color: c.red,
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  retryButton: {
-    backgroundColor: c.orange,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  retryText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    marginBottom: spacing.sm,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: c.bgPanel,
+    backgroundColor: c.surface,
     borderBottomWidth: 1,
     borderBottomColor: c.bg,
   },
   tab: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: spacing.md,
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   tabActive: {
-    borderBottomColor: c.orange,
+    borderBottomColor: c.accent,
   },
   tabText: {
-    fontSize: 14,
-    fontWeight: '500',
+    ...type.body,
     color: c.textMuted,
   },
   tabTextActive: {
-    color: c.orange,
+    color: c.accent,
     fontWeight: '600',
   },
   scopeBar: {
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 2,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
   },
   scopePill: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 999,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: c.border,
     backgroundColor: c.bg,
     alignItems: 'center',
   },
   scopePillActive: {
-    backgroundColor: c.orange,
-    borderColor: c.orange,
+    backgroundColor: c.accent,
+    borderColor: c.accent,
   },
   scopeText: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...type.label,
     color: c.amber,
   },
   scopeTextActive: {
-    color: '#FFFFFF',
+    color: c.onAccent,
   },
   listContent: {
-    paddingTop: 8,
-    paddingBottom: 24,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl,
   },
   emptyContent: {
     flexGrow: 1,
   },
-  emptyContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 60,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: c.textMuted,
-  },
   row: {
-    backgroundColor: c.bgPanel,
-    marginHorizontal: 12,
-    marginTop: 8,
-    borderRadius: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    backgroundColor: c.surface,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: c.border,
   },
   rowContent: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   rowTitle: {
-    fontSize: 15,
+    ...type.heading,
     fontWeight: '600',
     color: c.text1,
-    marginBottom: 6,
+    marginBottom: spacing.sm,
   },
   rowTitleOverdue: {
-    color: c.red,
+    color: c.danger,
   },
   rowMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   rowDate: {
-    fontSize: 12,
+    ...type.caption,
     color: c.amber,
+    fontVariant: ['tabular-nums'],
   },
   rowDateOverdue: {
-    color: c.red,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  badgeText: {
-    fontSize: 11,
-    color: '#FFFFFF',
-    fontWeight: '600',
+    color: c.danger,
   },
 });

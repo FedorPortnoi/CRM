@@ -100,7 +100,7 @@ export default function ReminderEditor({
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{loadError}</Text>
           {onRetry ? (
-            <TouchableOpacity onPress={onRetry}>
+            <TouchableOpacity onPress={onRetry} activeOpacity={0.7}>
               <Text style={styles.retryText}>{t('common.retry')}</Text>
             </TouchableOpacity>
           ) : null}
@@ -128,6 +128,7 @@ export default function ReminderEditor({
             <TouchableOpacity
               style={styles.rowDelete}
               onPress={() => confirmDelete(draft)}
+              activeOpacity={0.7}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Text style={styles.rowDeleteText}>&#x2715;</Text>

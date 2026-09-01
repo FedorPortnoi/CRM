@@ -4,10 +4,12 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { CheckCircle2 } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, type, spacing, radius, control, tabular } from '../../theme';
+import { Button } from '../../components/ui';
 
 type Phase = 'phone' | 'code' | 'loading' | 'done';
 
@@ -69,11 +71,13 @@ export default function TelegramImportScreen() {
   if (phase === 'done') {
     return (
       <View style={styles.center}>
-        <Text style={styles.doneEmoji}>✓</Text>
-        <Text style={styles.doneTitle}>Импортировано {imported} контактов</Text>
-        <TouchableOpacity style={[styles.btn, { backgroundColor: TELEGRAM_BLUE }]} onPress={() => router.push('/(tabs)/contacts' as never)}>
-          <Text style={styles.btnText}>Перейти к контактам</Text>
-        </TouchableOpacity>
+        <CheckCircle2 size={52} color={TELEGRAM_BLUE} strokeWidth={2} />
+        <Text style={[styles.doneTitle, tabular]}>Импортировано {imported} контактов</Text>
+        <Button
+          title="Перейти к контактам"
+          onPress={() => router.push('/(tabs)/contacts' as never)}
+          style={{ backgroundColor: TELEGRAM_BLUE }}
+        />
       </View>
     );
   }
@@ -117,17 +121,18 @@ export default function TelegramImportScreen() {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <TouchableOpacity
-          style={[styles.btn, { backgroundColor: TELEGRAM_BLUE }]}
+        <Button
+          title={phase === 'phone' ? 'Получить код' : 'Импортировать'}
           onPress={phase === 'phone' ? () => void sendCode() : () => void verify()}
-        >
-          <Text style={styles.btnText}>
-            {phase === 'phone' ? 'Получить код' : 'Импортировать'}
-          </Text>
-        </TouchableOpacity>
+          style={{ backgroundColor: TELEGRAM_BLUE, marginBottom: spacing.md }}
+        />
 
         {phase === 'code' && (
-          <TouchableOpacity style={styles.back} onPress={() => { setPhase('phone'); setCode(''); setError(''); }}>
+          <TouchableOpacity
+            style={styles.back}
+            onPress={() => { setPhase('phone'); setCode(''); setError(''); }}
+            activeOpacity={0.7}
+          >
             <Text style={styles.backText}>← Изменить номер</Text>
           </TouchableOpacity>
         )}
@@ -138,20 +143,17 @@ export default function TelegramImportScreen() {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  content: { flex: 1, padding: 24, justifyContent: 'center' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg, gap: 16 },
-  title: { fontSize: 24, fontWeight: '800', color: c.text1, marginBottom: 6 },
-  sub: { fontSize: 14, color: c.amber, marginBottom: 28, lineHeight: 20 },
+  content: { flex: 1, padding: spacing.xl, justifyContent: 'center' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg, gap: spacing.lg },
+  title: { ...type.display, color: c.text1, marginBottom: spacing.xs },
+  sub: { ...type.body, color: c.amber, marginBottom: spacing.xl },
   input: {
-    height: 54, borderWidth: 1, borderColor: c.inputBorder, borderRadius: 12,
-    backgroundColor: c.surface, paddingHorizontal: 16, fontSize: 17, color: c.text1, marginBottom: 12,
+    height: control.md, borderWidth: 1, borderColor: c.inputBorder, borderRadius: radius.lg,
+    backgroundColor: c.surface, paddingHorizontal: spacing.lg, fontSize: 16, color: c.text1, marginBottom: spacing.md,
   },
-  codeInput: { fontSize: 30, fontWeight: '700', textAlign: 'center', letterSpacing: 10 },
-  btn: { height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  btnText: { color: c.onAccent, fontSize: 16, fontWeight: '700' },
-  back: { alignItems: 'center', paddingVertical: 10 },
+  codeInput: { ...type.display, textAlign: 'center', letterSpacing: 10 },
+  back: { alignItems: 'center', paddingVertical: spacing.sm },
   backText: { color: c.amber, fontSize: 14 },
-  error: { color: c.danger, fontSize: 13, marginBottom: 10, textAlign: 'center' },
-  doneEmoji: { fontSize: 52, color: TELEGRAM_BLUE, fontWeight: '700' },
-  doneTitle: { fontSize: 18, fontWeight: '700', color: c.text1 },
+  error: { color: c.danger, fontSize: 13, marginBottom: spacing.sm, textAlign: 'center' },
+  doneTitle: { ...type.title, color: c.text1 },
 });

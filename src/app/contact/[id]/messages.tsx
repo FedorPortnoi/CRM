@@ -21,7 +21,12 @@ import { useOrgWebSocket } from '../../../utils/websocket';
 import { sendOrQueueMutation } from '../../../utils/offlineMutation';
 import { formatMarketDateTime } from '../../../market/profile';
 import { useTheme } from '../../../hooks/useTheme';
-import { ThemeColors } from '../../../theme';
+import { ThemeColors, spacing, radius } from '../../../theme';
+import { EmptyState, Skeleton } from '../../../components/ui';
+
+// Muted text/icon color for the outbound (accent-filled) bubble. Derived from
+// `onAccent`, which is white in both themes, so a flat rgba constant is safe here.
+const OUTBOUND_MUTED = 'rgba(255,255,255,0.72)';
 
 type MessageDirection = 'inbound' | 'outbound';
 type MessageChannel = 'in_app' | 'email';
@@ -409,8 +414,8 @@ export default function ContactMessagesScreen(): JSX.Element {
             ) : null}
             <Text style={[styles.messageText, bubbleTextStyle]}>{bodyParts.bodyText}</Text>
             <View style={styles.statusRow}>
-              {item.status === 'read' ? <Check size={12} color={isOutbound ? '#D8E8FF' : colors.amber} /> : null}
-              <Text style={[styles.statusText, mutedTextStyle]}>{statusText(item, t)}</Text>
+              {item.status === 'read' ? <Check size={12} color={isOutbound ? OUTBOUND_MUTED : colors.amber} /> : null}
+              <Text style={[styles.statusText, styles.tabular, mutedTextStyle]}>{statusText(item, t)}</Text>
             </View>
           </View>
         </View>
@@ -430,15 +435,18 @@ export default function ContactMessagesScreen(): JSX.Element {
       <Stack.Screen options={{ title: contactTitle, headerBackTitle: t('contacts.title') }} />
 
       {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.orange} />
+        <View style={styles.listContent}>
+          <Skeleton width="70%" height={54} rounded={radius.lg} style={styles.skeletonGap} />
+          <Skeleton width="60%" height={40} rounded={radius.lg} style={[styles.skeletonGap, styles.skeletonSelf]} />
+          <Skeleton width="55%" height={54} rounded={radius.lg} style={styles.skeletonGap} />
         </View>
       ) : fetchError !== null ? (
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{fetchError}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => { void loadConversation(false); }}>
-            <Text style={styles.retryText}>{t('common.retry')}</Text>
-          </TouchableOpacity>
+          <EmptyState
+            title={fetchError}
+            actionLabel={t('common.retry')}
+            onAction={() => { void loadConversation(false); }}
+          />
         </View>
       ) : (
         <>
@@ -470,11 +478,11 @@ export default function ContactMessagesScreen(): JSX.Element {
               ) : null
             }
             ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <MessageCircle size={34} color={colors.textMuted} />
-                <Text style={styles.emptyTitle}>{t('contacts.noConversationYet')}</Text>
-                <Text style={styles.emptyText}>{t('contacts.startConversation')}</Text>
-              </View>
+              <EmptyState
+                icon={<MessageCircle size={34} color={colors.textMuted} />}
+                title={t('contacts.noConversationYet')}
+                description={t('contacts.startConversation')}
+              />
             }
           />
 
@@ -626,51 +634,33 @@ export default function ContactMessagesScreen(): JSX.Element {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorContainer: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  errorText: { color: c.red, fontSize: 14, textAlign: 'center', marginBottom: 16 },
-  retryButton: {
-    backgroundColor: c.orange,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 12,
-    minHeight: 44,
     justifyContent: 'center',
   },
-  retryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  skeletonGap: { marginBottom: spacing.sm },
+  skeletonSelf: { alignSelf: 'flex-end' },
+  tabular: { fontVariant: ['tabular-nums'] },
   listContent: { padding: 12, paddingBottom: 16 },
   emptyListContent: { flexGrow: 1, padding: 12 },
   threadHeader: {
     backgroundColor: c.bgPanel,
     borderRadius: 12,
-    padding: 14,
+    padding: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: c.border,
   },
-  threadName: { color: c.text1, fontSize: 17, fontWeight: '700', marginBottom: 4 },
+  threadName: { color: c.text1, fontSize: 16, fontWeight: '700', marginBottom: 4 },
   threadDetail: { color: c.amber, fontSize: 12, lineHeight: 18 },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  emptyTitle: { color: c.text1, fontSize: 17, fontWeight: '700', marginTop: 12 },
-  emptyText: { color: c.amber, fontSize: 14, marginTop: 4, textAlign: 'center' },
-  messageRow: { flexDirection: 'row', marginBottom: 10 },
+  messageRow: { flexDirection: 'row', marginBottom: 8 },
   outboundRow: { justifyContent: 'flex-end' },
   inboundRow: { justifyContent: 'flex-start' },
   messageBubble: {
     maxWidth: '84%',
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 8,
   },
   outboundBubble: { backgroundColor: c.orange },
   inboundBubble: {
@@ -686,19 +676,19 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     marginBottom: 4,
   },
   messageChannel: { fontSize: 11, fontWeight: '700' },
-  messageTime: { fontSize: 11 },
+  messageTime: { fontSize: 11, fontVariant: ['tabular-nums'] },
   messageText: { fontSize: 14, lineHeight: 20 },
   outboundText: { color: '#FFFFFF' },
   inboundText: { color: c.text1 },
-  outboundMutedText: { color: '#D8E8FF' },
+  outboundMutedText: { color: OUTBOUND_MUTED },
   inboundMutedText: { color: c.amber },
-  durationText: { fontSize: 12, fontWeight: '600', marginBottom: 3 },
+  durationText: { fontSize: 12, fontWeight: '600', marginBottom: 4, fontVariant: ['tabular-nums'] },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 4,
-    marginTop: 5,
+    marginTop: 4,
   },
   statusText: { fontSize: 11 },
   composer: {
@@ -706,23 +696,23 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: c.border,
     paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 14,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
   submitErrorBanner: {
-    backgroundColor: 'rgba(204,82,71,0.12)',
+    backgroundColor: c.dangerSoft,
     borderRadius: 12,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 8,
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  submitErrorText: { color: c.red, fontSize: 13 },
+  submitErrorText: { color: c.danger, fontSize: 13 },
   modeRow: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(204,120,92,0.08)',
+    backgroundColor: c.accentSoft,
     borderRadius: 12,
-    padding: 3,
-    marginBottom: 10,
+    padding: 4,
+    marginBottom: 8,
   },
   modeButton: {
     flex: 1,
@@ -731,7 +721,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
   },
   modeButtonActive: { backgroundColor: c.orange },
   modeButtonText: { color: c.orange, fontSize: 13, fontWeight: '700' },
@@ -746,7 +736,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: c.border,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
     color: c.text1,
     fontSize: 14,
   },
@@ -770,7 +760,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: c.inputBg,
   },
-  directionButtonActive: { backgroundColor: 'rgba(204,120,92,0.08)', borderColor: c.orange },
+  directionButtonActive: { backgroundColor: c.accentSoft, borderColor: c.orange },
   directionButtonText: { color: c.amber, fontSize: 13, fontWeight: '700' },
   directionButtonTextActive: { color: c.orange },
   callFieldsRow: { flexDirection: 'row', gap: 8 },
@@ -780,22 +770,22 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: c.border,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
     minHeight: 44,
     color: c.text1,
     fontSize: 14,
   },
-  durationInput: { width: 72 },
+  durationInput: { width: 72, fontVariant: ['tabular-nums'] },
   callNotesInput: { flex: 1, minHeight: 44, maxHeight: 92 },
   logCallButton: {
-    marginTop: 10,
+    marginTop: 8,
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: '#188038',
+    backgroundColor: c.success,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
   },
-  logCallButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  logCallButtonText: { color: c.onAccent, fontSize: 16, fontWeight: '700' },
 });

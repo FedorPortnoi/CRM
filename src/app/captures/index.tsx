@@ -17,7 +17,8 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { formatMarketDateTime } from '../../market/profile';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Card, Button, Badge, EmptyState, Skeleton } from '../../components/ui';
 
 type PendingCapture = {
   id: string;
@@ -208,43 +209,40 @@ export default function CapturesScreen(): JSX.Element {
     ({ item }: ListRenderItemInfo<PendingCapture>): JSX.Element => {
       const busy = actionId === item.id;
       return (
-        <View style={styles.card}>
+        <Card style={styles.cardSpacing}>
           <View style={styles.cardHeader}>
-            <View style={styles.typeBadge}>
-              <Text style={styles.typeBadgeText}>{typeLabel(item.type)}</Text>
-            </View>
-            <Text style={styles.phoneText}>
+            <Badge label={typeLabel(item.type)} variant="neutral" />
+            <Text style={[styles.phoneText, styles.tabular]}>
               {item.phone_number ?? t('captures.unknown')}
             </Text>
-            <Text style={styles.timestampText}>{formatTimestamp(item.created_at)}</Text>
+            <Text style={[styles.timestampText, styles.tabular]}>{formatTimestamp(item.created_at)}</Text>
           </View>
           <View style={styles.cardActions}>
-            <TouchableOpacity
-              style={[styles.cardButton, styles.cardButtonPrimary, busy && styles.cardButtonDisabled]}
+            <Button
+              title={t('captures.match')}
               onPress={() => { openMatchModal(item.id); }}
               disabled={busy}
-              accessibilityRole="button"
-            >
-              <Text style={styles.cardButtonPrimaryText}>{t('captures.match')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.cardButton, styles.cardButtonSecondary, busy && styles.cardButtonDisabled]}
+              size="sm"
+              style={styles.cardButton}
+            />
+            <Button
+              title={t('captures.createContact')}
               onPress={() => { handleCreateContact(item.id, item.phone_number); }}
               disabled={busy}
-              accessibilityRole="button"
-            >
-              <Text style={styles.cardButtonSecondaryText}>{t('captures.createContact')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.cardButton, styles.cardButtonDanger, busy && styles.cardButtonDisabled]}
+              size="sm"
+              variant="secondary"
+              style={styles.cardButton}
+            />
+            <Button
+              title={t('captures.dismiss')}
               onPress={() => { void handleDismiss(item.id); }}
               disabled={busy}
-              accessibilityRole="button"
-            >
-              <Text style={styles.cardButtonDangerText}>{t('captures.dismiss')}</Text>
-            </TouchableOpacity>
+              size="sm"
+              variant="danger"
+              style={styles.cardButton}
+            />
           </View>
-        </View>
+        </Card>
       );
     },
     [actionId, t, typeLabel, openMatchModal, handleCreateContact, handleDismiss, styles],
@@ -252,19 +250,20 @@ export default function CapturesScreen(): JSX.Element {
 
   const renderContactResult = useCallback(
     ({ item }: ListRenderItemInfo<ContactResult>): JSX.Element => (
-      <TouchableOpacity
-        style={styles.contactRow}
+      <Card
         onPress={() => { void handleMatchToContact(item.id); }}
-        accessibilityRole="button"
+        style={styles.contactRow}
       >
-        <View style={styles.contactRowMain}>
-          <Text style={styles.contactRowName}>{contactDisplayName(item)}</Text>
-          {item.phone ? (
-            <Text style={styles.contactRowPhone}>{item.phone}</Text>
-          ) : null}
+        <View style={styles.contactRowInner}>
+          <View style={styles.contactRowMain}>
+            <Text style={styles.contactRowName}>{contactDisplayName(item)}</Text>
+            {item.phone ? (
+              <Text style={[styles.contactRowPhone, styles.tabular]}>{item.phone}</Text>
+            ) : null}
+          </View>
+          <Text style={styles.selectLabel}>{t('captures.selectContact')}</Text>
         </View>
-        <Text style={styles.selectLabel}>{t('captures.selectContact')}</Text>
-      </TouchableOpacity>
+      </Card>
     ),
     [handleMatchToContact, t, styles],
   );
@@ -274,27 +273,26 @@ export default function CapturesScreen(): JSX.Element {
 
   const ListEmpty = useCallback((): JSX.Element | null => {
     if (isLoading) return null;
-    return <Text style={styles.emptyText}>{t('captures.empty')}</Text>;
-  }, [isLoading, t, styles]);
+    return <EmptyState title={t('captures.empty')} />;
+  }, [isLoading, t]);
 
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: t('captures.title') }} />
 
       {isLoading && captures.length === 0 ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.orange} />
+        <View style={styles.listContent}>
+          <Skeleton height={92} rounded={radius.lg} style={styles.skeletonGap} />
+          <Skeleton height={92} rounded={radius.lg} style={styles.skeletonGap} />
+          <Skeleton height={92} rounded={radius.lg} style={styles.skeletonGap} />
         </View>
       ) : error ? (
         <View style={styles.centered}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => { void fetchCaptures(); }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
-          </TouchableOpacity>
+          <EmptyState
+            title={error}
+            actionLabel={t('common.retry')}
+            onAction={() => { void fetchCaptures(); }}
+          />
         </View>
       ) : (
         <FlatList
@@ -318,6 +316,7 @@ export default function CapturesScreen(): JSX.Element {
               style={styles.closeButton}
               onPress={closeMatchModal}
               accessibilityRole="button"
+              activeOpacity={0.7}
             >
               <Text style={styles.closeButtonText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
@@ -334,7 +333,7 @@ export default function CapturesScreen(): JSX.Element {
           />
 
           {isSearching ? (
-            <ActivityIndicator style={styles.searchSpinner} color={colors.orange} />
+            <ActivityIndicator style={styles.searchSpinner} color={colors.accent} />
           ) : (
             <FlatList
               data={contactResults}
@@ -353,190 +352,115 @@ export default function CapturesScreen(): JSX.Element {
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'rgba(204,120,92,0.08)',
+    backgroundColor: c.bg,
   },
   centered: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: spacing.xl,
   },
   listContent: {
-    padding: 12,
+    padding: spacing.md,
   },
-  card: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    marginBottom: 10,
-    padding: 12,
+  tabular: {
+    fontVariant: ['tabular-nums'],
+  },
+  skeletonGap: {
+    marginBottom: spacing.sm,
+  },
+  cardSpacing: {
+    marginBottom: spacing.sm,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
     flexWrap: 'wrap',
-  },
-  typeBadge: {
-    backgroundColor: 'rgba(204,120,92,0.08)',
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  typeBadgeText: {
-    color: c.orange,
-    fontSize: 12,
-    fontWeight: '600',
   },
   phoneText: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: c.text1,
   },
   timestampText: {
-    fontSize: 12,
+    ...type.caption,
     color: c.textMuted,
   },
   cardActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
   },
   cardButton: {
     flex: 1,
-    minHeight: 36,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  cardButtonPrimary: {
-    backgroundColor: c.orange,
-  },
-  cardButtonSecondary: {
-    backgroundColor: c.bgPanel,
-    borderWidth: 1,
-    borderColor: c.orange,
-  },
-  cardButtonDanger: {
-    backgroundColor: c.bgPanel,
-    borderWidth: 1,
-    borderColor: c.red,
-  },
-  cardButtonDisabled: {
-    opacity: 0.5,
-  },
-  cardButtonPrimaryText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  cardButtonSecondaryText: {
-    color: c.orange,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  cardButtonDangerText: {
-    color: c.red,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  emptyText: {
-    color: c.textMuted,
-    fontSize: 14,
-    textAlign: 'center',
-    paddingVertical: 24,
-  },
-  errorText: {
-    color: c.red,
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  retryButton: {
-    backgroundColor: c.orange,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
   },
   // Modal
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(204,120,92,0.08)',
-    paddingTop: 16,
+    backgroundColor: c.bg,
+    paddingTop: spacing.lg,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...type.subtitle,
     color: c.text1,
   },
   closeButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   closeButtonText: {
-    color: c.orange,
-    fontSize: 15,
+    color: c.accent,
+    fontSize: 16,
     fontWeight: '600',
   },
   searchInput: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    borderRadius: 12,
-    marginHorizontal: 16,
-    paddingHorizontal: 14,
+    borderRadius: radius.lg,
+    marginHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    fontSize: 15,
+    fontSize: 16,
     color: c.text1,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   searchSpinner: {
-    marginTop: 24,
+    marginTop: spacing.xl,
   },
   modalListContent: {
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
   },
   contactRow: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    marginBottom: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    marginBottom: spacing.sm,
+  },
+  contactRowInner: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   contactRowMain: {
     flex: 1,
-    paddingRight: 12,
+    paddingRight: spacing.md,
   },
   contactRowName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: c.text1,
   },
   contactRowPhone: {
     fontSize: 12,
-    color: c.amber,
+    color: c.textMuted,
     marginTop: 2,
   },
   selectLabel: {
-    color: c.orange,
+    color: c.accent,
     fontSize: 13,
     fontWeight: '600',
   },

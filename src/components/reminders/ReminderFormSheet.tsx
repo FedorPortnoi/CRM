@@ -130,13 +130,13 @@ export default function ReminderFormSheet({
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity onPress={onClose}>
+        <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
           <Text style={styles.headerCancel}>{t('common.cancel')}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
           {local.id === null ? t('reminders.newTitle') : t('reminders.editTitle')}
         </Text>
-        <TouchableOpacity onPress={handleSave}>
+        <TouchableOpacity onPress={handleSave} activeOpacity={0.7}>
           <Text style={styles.headerDone}>{t('common.done')}</Text>
         </TouchableOpacity>
       </View>
@@ -240,7 +240,7 @@ export default function ReminderFormSheet({
               <Text style={styles.dropdownChevron}>{'⌄'}</Text>
             </TouchableOpacity>
             {local.expires_on ? (
-              <TouchableOpacity onPress={() => patch({ expires_on: null })}>
+              <TouchableOpacity onPress={() => patch({ expires_on: null })} activeOpacity={0.7}>
                 <Text style={styles.clearLink}>{t('reminders.expiresAtClear')}</Text>
               </TouchableOpacity>
             ) : null}
@@ -267,7 +267,7 @@ export default function ReminderFormSheet({
                 selected: timezoneLabel(local.timezone, i18n.language),
               })}
             </Text>
-            <TouchableOpacity onPress={() => patch({ timezone: deviceTimezone })}>
+            <TouchableOpacity onPress={() => patch({ timezone: deviceTimezone })} activeOpacity={0.7}>
               <Text style={styles.mismatchAction}>{t('reminders.timezoneUseDevice')}</Text>
             </TouchableOpacity>
           </View>
@@ -301,7 +301,7 @@ export default function ReminderFormSheet({
       >
         <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
           <Text style={styles.modalTitle}>{t(startLabelKey)}</Text>
-          <TouchableOpacity onPress={() => setShowStartCalendar(false)}>
+          <TouchableOpacity onPress={() => setShowStartCalendar(false)} activeOpacity={0.7}>
             <Text style={styles.headerDone}>{t('common.done')}</Text>
           </TouchableOpacity>
         </View>
@@ -331,7 +331,7 @@ export default function ReminderFormSheet({
       >
         <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
           <Text style={styles.modalTitle}>{t('reminders.expiresAtSelect')}</Text>
-          <TouchableOpacity onPress={() => setShowExpiryCalendar(false)}>
+          <TouchableOpacity onPress={() => setShowExpiryCalendar(false)} activeOpacity={0.7}>
             <Text style={styles.headerDone}>{t('common.done')}</Text>
           </TouchableOpacity>
         </View>
@@ -393,7 +393,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   summaryText: { fontSize: 15, fontWeight: '600', color: c.text1, lineHeight: 21 },
   summaryZone: { fontSize: 12, color: c.textMuted, marginTop: 4 },
-  label: { fontSize: 14, fontWeight: '600', color: c.text1, marginBottom: 6, marginTop: 20 },
+  label: { fontSize: 14, fontWeight: '600', color: c.text1, marginBottom: 6, marginTop: 24 },
   hint: { fontSize: 12, color: c.textMuted, lineHeight: 17, marginTop: 6 },
   warningText: { fontSize: 12, color: c.red, marginTop: 6 },
   fieldError: { color: c.red, fontSize: 12, marginTop: 6 },

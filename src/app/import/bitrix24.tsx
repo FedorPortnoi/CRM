@@ -1,13 +1,15 @@
 import { useState, useMemo } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  View, Text, TextInput, StyleSheet,
   ActivityIndicator, ScrollView, Switch,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { CheckCircle2 } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, type, spacing, radius, control, tabular } from '../../theme';
+import { Card, Button } from '../../components/ui';
 
 type Phase = 'input' | 'loading' | 'done';
 
@@ -56,12 +58,14 @@ export default function Bitrix24ImportScreen() {
   if (phase === 'done' && result) {
     return (
       <View style={styles.center}>
-        <Text style={[styles.doneEmoji, { color: colors.danger }]}>✓</Text>
-        <Text style={styles.doneTitle}>{result.contacts_imported} контактов</Text>
-        {result.deals_imported > 0 && <Text style={styles.doneSub}>{result.deals_imported} сделок</Text>}
-        <TouchableOpacity style={[styles.btn, { backgroundColor: colors.danger }]} onPress={() => router.push('/(tabs)/contacts' as never)}>
-          <Text style={styles.btnText}>Перейти к контактам</Text>
-        </TouchableOpacity>
+        <CheckCircle2 size={52} color={colors.danger} strokeWidth={2} />
+        <Text style={[styles.doneTitle, tabular]}>{result.contacts_imported} контактов</Text>
+        {result.deals_imported > 0 && <Text style={[styles.doneSub, tabular]}>{result.deals_imported} сделок</Text>}
+        <Button
+          title="Перейти к контактам"
+          onPress={() => router.push('/(tabs)/contacts' as never)}
+          variant="danger"
+        />
       </View>
     );
   }
@@ -81,7 +85,7 @@ export default function Bitrix24ImportScreen() {
         autoCorrect={false}
       />
 
-      <View style={styles.switchRow}>
+      <Card style={styles.switchRow} padded={false}>
         <Text style={styles.switchLabel}>Импортировать сделки</Text>
         <Switch
           value={includeDeals}
@@ -89,38 +93,32 @@ export default function Bitrix24ImportScreen() {
           thumbColor={colors.onAccent}
           trackColor={{ true: colors.danger, false: colors.border }}
         />
-      </View>
+      </Card>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <TouchableOpacity style={[styles.btn, { backgroundColor: colors.danger }]} onPress={() => void run()}>
-        <Text style={styles.btnText}>Начать импорт</Text>
-      </TouchableOpacity>
+      <Button title="Начать импорт" onPress={() => void run()} variant="danger" block />
     </ScrollView>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  content: { padding: 24, paddingTop: 32 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg, gap: 12 },
-  title: { fontSize: 24, fontWeight: '800', color: c.text1, marginBottom: 6 },
-  sub: { fontSize: 13, color: c.amber, marginBottom: 24, lineHeight: 18 },
+  content: { padding: spacing.xl, paddingTop: spacing.xxl },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg, gap: spacing.md },
+  title: { ...type.display, color: c.text1, marginBottom: spacing.xs },
+  sub: { ...type.label, color: c.amber, marginBottom: spacing.xl },
   input: {
-    height: 54, borderWidth: 1, borderColor: c.inputBorder, borderRadius: 12,
-    backgroundColor: c.surface, paddingHorizontal: 16, fontSize: 14, color: c.text1, marginBottom: 16,
+    height: control.md, borderWidth: 1, borderColor: c.inputBorder, borderRadius: radius.lg,
+    backgroundColor: c.surface, paddingHorizontal: spacing.lg, fontSize: 14, color: c.text1, marginBottom: spacing.lg,
   },
   switchRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: c.surface, borderRadius: 12, padding: 16, marginBottom: 20,
-    borderWidth: 1, borderColor: c.borderStrong,
+    padding: spacing.lg, marginBottom: spacing.xl,
   },
-  switchLabel: { fontSize: 15, color: c.text1, fontWeight: '500' },
-  btn: { height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  btnText: { color: c.onAccent, fontSize: 16, fontWeight: '700' },
-  error: { color: c.danger, fontSize: 13, marginBottom: 12, textAlign: 'center' },
-  loadingText: { fontSize: 15, color: c.text1, fontWeight: '600' },
-  doneEmoji: { fontSize: 52, fontWeight: '700' },
-  doneTitle: { fontSize: 22, fontWeight: '800', color: c.text1 },
-  doneSub: { fontSize: 15, color: c.amber },
+  switchLabel: { ...type.body, color: c.text1 },
+  error: { color: c.danger, fontSize: 13, marginBottom: spacing.md, textAlign: 'center' },
+  loadingText: { ...type.body, color: c.text1 },
+  doneTitle: { ...type.title, color: c.text1 },
+  doneSub: { ...type.body, color: c.amber },
 });

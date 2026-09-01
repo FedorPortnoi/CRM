@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Modal, StyleSheet } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Calendar } from 'react-native-calendars';
@@ -10,7 +10,8 @@ import { formatMarketDate } from '../../market/profile';
 import { useCreateMutation } from '../../hooks/useCreateMutation';
 import { RECURRENCE_OPTIONS, labelKeyForRule } from '../../utils/recurrence';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Button } from '../../components/ui';
 import ReminderEditor from '../../components/reminders/ReminderEditor';
 import {
   firstLocalFireInstant,
@@ -288,8 +289,9 @@ export default function NewTaskScreen(): JSX.Element | null {
               })}
             </Text>
             <View style={styles.suggestionButtons}>
-              <TouchableOpacity
-                style={styles.suggestionBtnPrimary}
+              <Button
+                title={t('tasks.suggestContactLink')}
+                style={styles.suggestionBtn}
                 onPress={() => {
                   const id = suggestionContact?.id;
                   setShowSuggestionModal(false);
@@ -299,18 +301,16 @@ export default function NewTaskScreen(): JSX.Element | null {
                   }
                   void doSubmit(id);
                 }}
-              >
-                <Text style={styles.suggestionBtnTextPrimary}>{t('tasks.suggestContactLink')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.suggestionBtnSecondary}
+              />
+              <Button
+                title={t('tasks.suggestContactSkip')}
+                variant="secondary"
+                style={styles.suggestionBtn}
                 onPress={() => {
                   setShowSuggestionModal(false);
                   void doSubmit();
                 }}
-              >
-                <Text style={styles.suggestionBtnTextSecondary}>{t('tasks.suggestContactSkip')}</Text>
-              </TouchableOpacity>
+              />
             </View>
           </View>
         </View>
@@ -339,6 +339,7 @@ export default function NewTaskScreen(): JSX.Element | null {
             <TouchableOpacity
               key={c.id}
               style={styles.mentionRow}
+              activeOpacity={0.7}
               onPress={() => handleMentionSelect(c)}
             >
               <Text style={styles.mentionName}>{contactDisplayName(c)}</Text>
@@ -349,11 +350,11 @@ export default function NewTaskScreen(): JSX.Element | null {
       )}
 
       <Text style={styles.label}>{t('tasks.dueDateOptional')}</Text>
-      <TouchableOpacity style={styles.input} onPress={() => setShowCalendar(true)}>
-        <Text style={dueDate ? styles.inputText : styles.placeholderText}>{dueDate ? formatDate(dueDate) : t('tasks.pickDate')}</Text>
+      <TouchableOpacity style={styles.input} activeOpacity={0.7} onPress={() => setShowCalendar(true)}>
+        <Text style={[dueDate ? styles.inputText : styles.placeholderText, styles.tabular]}>{dueDate ? formatDate(dueDate) : t('tasks.pickDate')}</Text>
       </TouchableOpacity>
       {dueDate !== '' && (
-        <TouchableOpacity onPress={() => setDueDate('')}>
+        <TouchableOpacity activeOpacity={0.7} onPress={() => setDueDate('')}>
           <Text style={styles.clearLink}>{t('tasks.clear')}</Text>
         </TouchableOpacity>
       )}
@@ -361,7 +362,7 @@ export default function NewTaskScreen(): JSX.Element | null {
       <Modal animationType="slide" visible={showCalendar} onRequestClose={() => setShowCalendar(false)}>
         <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
           <Text style={styles.modalTitle}>{t('tasks.selectDate')}</Text>
-          <TouchableOpacity onPress={() => setShowCalendar(false)}>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => setShowCalendar(false)}>
             <Text style={styles.modalDone}>{t('tasks.done')}</Text>
           </TouchableOpacity>
         </View>
@@ -373,7 +374,7 @@ export default function NewTaskScreen(): JSX.Element | null {
           }}
           markedDates={
             dueDate
-              ? ({ [dueDate]: { selected: true, selectedColor: colors.orange } } as Record<string, { selected?: boolean; selectedColor?: string }>)
+              ? ({ [dueDate]: { selected: true, selectedColor: colors.accent } } as Record<string, { selected?: boolean; selectedColor?: string }>)
               : {}
           }
         />
@@ -383,7 +384,7 @@ export default function NewTaskScreen(): JSX.Element | null {
       <ReminderEditor value={reminders} onChange={setReminders} defaultDate={dueDate} />
 
       <Text style={styles.label}>{t('tasks.repeat')}</Text>
-      <TouchableOpacity style={styles.dropdownField} onPress={() => setShowRepeatPicker(true)} activeOpacity={0.75}>
+      <TouchableOpacity style={styles.dropdownField} onPress={() => setShowRepeatPicker(true)} activeOpacity={0.7}>
         <Text style={styles.inputText}>{t(labelKeyForRule(recurrenceRule) ?? 'tasks.recurrenceNone')}</Text>
         <Text style={styles.dropdownChevron}>{'⌄'}</Text>
       </TouchableOpacity>
@@ -398,6 +399,7 @@ export default function NewTaskScreen(): JSX.Element | null {
                 <TouchableOpacity
                   key={option.labelKey}
                   style={styles.pickerRow}
+                  activeOpacity={0.7}
                   onPress={() => {
                     setRecurrenceRule(option.rule);
                     setShowRepeatPicker(false);
@@ -413,7 +415,7 @@ export default function NewTaskScreen(): JSX.Element | null {
       </Modal>
 
       <Text style={styles.label}>{t('tasks.assignedTo')}</Text>
-      <TouchableOpacity style={styles.dropdownField} onPress={() => setShowAssigneePicker(true)} activeOpacity={0.75}>
+      <TouchableOpacity style={styles.dropdownField} onPress={() => setShowAssigneePicker(true)} activeOpacity={0.7}>
         <Text style={styles.inputText}>
           {assigneeId === user.id ? t('tasks.assignedToYou', { name: assigneeName || user.name }) : assigneeName}
         </Text>
@@ -431,6 +433,7 @@ export default function NewTaskScreen(): JSX.Element | null {
                 <TouchableOpacity
                   key={member.id}
                   style={styles.pickerRow}
+                  activeOpacity={0.7}
                   onPress={() => {
                     setAssigneeId(member.id);
                     setAssigneeName(member.name);
@@ -451,6 +454,7 @@ export default function NewTaskScreen(): JSX.Element | null {
         <View style={styles.chip}>
           <Text style={styles.chipText}>{selectedContactName}</Text>
           <TouchableOpacity
+            activeOpacity={0.7}
             onPress={() => {
               setSelectedContactId('');
               setSelectedContactName('');
@@ -476,6 +480,7 @@ export default function NewTaskScreen(): JSX.Element | null {
             <TouchableOpacity
               key={c.id}
               style={styles.dropdownRow}
+              activeOpacity={0.7}
               onPress={() => {
                 setSelectedContactId(c.id);
                 setSelectedContactName(contactDisplayName(c));
@@ -491,13 +496,14 @@ export default function NewTaskScreen(): JSX.Element | null {
         </View>
       )}
 
-      <TouchableOpacity
-        style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+      <Button
+        title={t('tasks.createTask')}
         onPress={() => { void handleSubmit(); }}
+        loading={isSubmitting}
         disabled={isSubmitting}
-      >
-        {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitText}>{t('tasks.createTask')}</Text>}
-      </TouchableOpacity>
+        block
+        style={styles.submitButton}
+      />
     </ScrollView>
     </>
   );
@@ -505,9 +511,10 @@ export default function NewTaskScreen(): JSX.Element | null {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { padding: 16, backgroundColor: c.bg, flexGrow: 1 },
-  errorBanner: { backgroundColor: 'rgba(204,82,71,0.12)', padding: 12, borderRadius: 12, marginBottom: 16 },
-  errorBannerText: { color: c.red },
-  label: { fontSize: 14, fontWeight: '600', color: c.text1, marginBottom: 6, marginTop: 16 },
+  errorBanner: { backgroundColor: c.dangerSoft, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.lg },
+  errorBannerText: { color: c.danger },
+  label: { ...type.label, color: c.text1, marginBottom: spacing.sm, marginTop: spacing.lg },
+  tabular: { fontVariant: ['tabular-nums'] },
   input: {
     borderWidth: 1,
     borderColor: c.inputBorder,
@@ -528,7 +535,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  dropdownChevron: { color: c.amber, fontSize: 18, marginLeft: 8 },
+  dropdownChevron: { color: c.amber, fontSize: 16, marginLeft: 8 },
   pickerOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
   pickerSheet: {
     backgroundColor: c.bgPanel,
@@ -563,19 +570,19 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: c.border,
   },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: c.text1 },
+  modalTitle: { fontSize: 20, fontWeight: '600', color: c.text1 },
   modalDone: { fontSize: 16, color: c.orange, fontWeight: '600' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(204,120,92,0.08)',
-    borderRadius: 20,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    backgroundColor: c.accentSoft,
+    borderRadius: radius.pill,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     alignSelf: 'flex-start',
   },
-  chipText: { color: c.orange, fontSize: 14, marginRight: 8 },
-  chipRemove: { color: c.orange, fontSize: 14, fontWeight: '600' },
+  chipText: { color: c.accent, fontSize: 14, marginRight: spacing.sm },
+  chipRemove: { color: c.accent, fontSize: 14, fontWeight: '600' },
   dropdown: {
     backgroundColor: c.bgPanel,
     borderRadius: 12,
@@ -630,33 +637,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
-  suggestionTitle: { fontSize: 17, fontWeight: '700', color: c.text1, marginBottom: 8 },
+  suggestionTitle: { fontSize: 16, fontWeight: '700', color: c.text1, marginBottom: 8 },
   suggestionBody: { fontSize: 14, color: c.textMuted, lineHeight: 20, marginBottom: 20 },
-  suggestionButtons: { flexDirection: 'row', gap: 10 },
-  suggestionBtnPrimary: {
-    flex: 1,
-    backgroundColor: c.orange,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  suggestionBtnTextPrimary: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  suggestionBtnSecondary: {
-    flex: 1,
-    backgroundColor: c.wheat,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  suggestionBtnTextSecondary: { color: c.textMuted, fontSize: 15, fontWeight: '600' },
+  suggestionButtons: { flexDirection: 'row', gap: spacing.sm },
+  suggestionBtn: { flex: 1 },
   submitButton: {
-    backgroundColor: c.orange,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 32,
+    marginTop: spacing.xl,
+    marginBottom: spacing.xxl,
   },
-  submitButtonDisabled: { opacity: 0.6 },
-  submitText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });

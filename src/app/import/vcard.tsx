@@ -23,7 +23,7 @@ export default function VCardImportScreen() {
   return (
     <FileImportScreen<VContact>
       mimeTypes={['text/vcard', 'text/x-vcard', '*/*']}
-      accentColor="#8B5CF6" // per-channel accent (not a hardcoded dark-palette value; renders fine on both themes)
+      accentColor={colors.accent}
       parse={parseVCards}
       endpoint="/import/vcard"
       getKey={(_item, index) => String(index)}

@@ -1,17 +1,19 @@
 // Shared building blocks for the report screens: panel cards, stat tiles, metric rows and the
 // loading / error / empty states. Same visual language as the dashboard cards.
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { AlertCircle, BarChart3 } from 'lucide-react-native';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Card, EmptyState, Skeleton } from '../ui';
 
 export type ReportTone = 'default' | 'positive' | 'negative' | 'warning';
 
 function toneColor(tone: ReportTone, c: ThemeColors): string {
-  if (tone === 'positive') return c.orange;
-  if (tone === 'negative') return c.red;
-  if (tone === 'warning') return c.amber;
+  if (tone === 'positive') return c.success;
+  if (tone === 'negative') return c.danger;
+  if (tone === 'warning') return c.warning;
   return c.text1;
 }
 
@@ -25,11 +27,11 @@ export function ReportCard({ title, hint, children }: ReportCardProps): JSX.Elem
   const { colors } = useTheme();
   const s = makeStyles(colors);
   return (
-    <View style={s.card}>
+    <Card style={s.card}>
       {title ? <Text style={s.cardTitle}>{title}</Text> : null}
       {hint ? <Text style={s.cardHint}>{hint}</Text> : null}
       {children}
-    </View>
+    </Card>
   );
 }
 
@@ -139,14 +141,13 @@ export function ReportLoading(): JSX.Element {
   return (
     <View style={s.stateWrap} accessibilityRole="progressbar" accessibilityLabel={t('reports.loading')}>
       <View style={s.tileSkeletonRow}>
-        <View style={s.tileSkeleton} />
-        <View style={s.tileSkeleton} />
-        <View style={s.tileSkeleton} />
+        <View style={s.tileSkeletonItem}><Skeleton height={76} rounded={radius.lg} /></View>
+        <View style={s.tileSkeletonItem}><Skeleton height={76} rounded={radius.lg} /></View>
+        <View style={s.tileSkeletonItem}><Skeleton height={76} rounded={radius.lg} /></View>
       </View>
-      <View style={s.blockSkeleton} />
-      <View style={s.rowSkeleton} />
-      <View style={s.rowSkeleton} />
-      <Text style={s.stateText}>{t('reports.loading')}</Text>
+      <Skeleton height={150} rounded={radius.lg} />
+      <Skeleton height={56} rounded={radius.lg} />
+      <Skeleton height={56} rounded={radius.lg} />
     </View>
   );
 }
@@ -158,14 +159,13 @@ interface ReportErrorProps {
 export function ReportError({ onRetry }: ReportErrorProps): JSX.Element {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const s = makeStyles(colors);
   return (
-    <View style={s.errorBox}>
-      <Text style={s.errorText}>{t('reports.failedToLoad')}</Text>
-      <TouchableOpacity style={s.retryButton} onPress={onRetry} accessibilityRole="button">
-        <Text style={s.retryText}>{t('common.retry')}</Text>
-      </TouchableOpacity>
-    </View>
+    <EmptyState
+      icon={<AlertCircle size={28} color={colors.danger} />}
+      title={t('reports.failedToLoad')}
+      actionLabel={t('common.retry')}
+      onAction={onRetry}
+    />
   );
 }
 
@@ -176,183 +176,126 @@ interface ReportEmptyProps {
 export function ReportEmpty({ text }: ReportEmptyProps): JSX.Element {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const s = makeStyles(colors);
   return (
-    <View style={s.stateWrap}>
-      <Text style={s.stateText}>{text ?? t('reports.empty')}</Text>
-    </View>
+    <EmptyState
+      icon={<BarChart3 size={28} color={colors.textMuted} />}
+      title={text ?? t('reports.empty')}
+    />
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   card: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    marginBottom: spacing.md,
   },
   cardTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: c.amber,
+    ...type.label,
+    color: c.textMuted,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   cardHint: {
-    fontSize: 12,
+    ...type.caption,
     color: c.textMuted,
-    marginTop: 6,
+    marginTop: spacing.sm,
     lineHeight: 17,
   },
   statGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   statTile: {
     flexGrow: 1,
     flexBasis: '30%',
     minWidth: 100,
-    backgroundColor: c.bgPanel,
-    borderRadius: 14,
+    backgroundColor: c.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: c.border,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
   },
   statLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: c.amber,
-    marginBottom: 6,
+    ...type.micro,
+    color: c.textMuted,
+    marginBottom: spacing.sm,
   },
   statValue: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...type.subtitle,
+    fontVariant: ['tabular-nums'],
   },
   statSub: {
-    fontSize: 11,
+    ...type.micro,
     color: c.textMuted,
-    marginTop: 3,
+    marginTop: spacing.xs,
+    fontVariant: ['tabular-nums'],
   },
   metricRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    paddingVertical: 7,
+    gap: spacing.md,
+    paddingVertical: spacing.xs + 1,
   },
   metricLabel: {
     flex: 1,
-    fontSize: 13,
+    ...type.label,
     color: c.textMuted,
   },
   metricValue: {
-    fontSize: 14,
+    ...type.body,
     fontWeight: '600',
     flexShrink: 0,
+    fontVariant: ['tabular-nums'],
   },
   shareTrack: {
     height: 6,
-    borderRadius: 3,
+    borderRadius: radius.sm,
     backgroundColor: c.skeleton,
     overflow: 'hidden',
-    marginTop: 6,
+    marginTop: spacing.sm,
   },
   shareFill: {
     height: 6,
-    borderRadius: 3,
+    borderRadius: radius.sm,
   },
   note: {
-    fontSize: 11,
+    ...type.micro,
     color: c.textMuted,
     lineHeight: 16,
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   legend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 14,
-    marginTop: 12,
+    gap: spacing.md,
+    marginTop: spacing.md,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: spacing.xs + 2,
   },
   legendDot: {
     width: 9,
     height: 9,
-    borderRadius: 5,
+    borderRadius: radius.sm,
   },
   legendLabel: {
-    fontSize: 11,
+    ...type.micro,
     color: c.textMuted,
   },
   stateWrap: {
-    paddingVertical: 12,
-    gap: 10,
-  },
-  stateText: {
-    fontSize: 13,
-    color: c.textMuted,
-    textAlign: 'center',
-    paddingVertical: 8,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
   },
   tileSkeletonRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: spacing.sm,
   },
-  tileSkeleton: {
+  tileSkeletonItem: {
     flex: 1,
-    height: 76,
-    borderRadius: 14,
-    backgroundColor: c.skeleton,
-  },
-  blockSkeleton: {
-    height: 150,
-    borderRadius: 14,
-    backgroundColor: c.skeleton,
-  },
-  rowSkeleton: {
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: c.skeleton,
-  },
-  errorBox: {
-    backgroundColor: 'rgba(204,82,71,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(204,82,71,0.12)',
-    borderRadius: 12,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  errorText: {
-    flex: 1,
-    color: c.red,
-    fontSize: 13,
-  },
-  retryButton: {
-    backgroundColor: c.orange,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 12,
-    minHeight: 36,
-    justifyContent: 'center',
-  },
-  retryText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
   },
 });

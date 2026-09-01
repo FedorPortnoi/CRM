@@ -8,7 +8,7 @@ import { useChatStore } from '../store/chatStore';
 import { useNotificationStore } from '../store/notificationStore';
 import MoreSheet from './MoreSheet';
 import { useTheme } from '../hooks/useTheme';
-import { ThemeColors } from '../theme';
+import { ThemeColors, spacing, radius, type } from '../theme';
 
 const MORE_PATHS = new Set([
   '/tasks', '/chat', '/notifications', '/calendar', '/settings', '/reports', '/nearby',
@@ -36,7 +36,7 @@ export default function BottomTabBar(): JSX.Element {
 
   return (
     <>
-      <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+      <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
         <View style={styles.bar}>
           {tabs.map(({ path, label, Icon }) => {
             const active = pathname === path;
@@ -48,7 +48,7 @@ export default function BottomTabBar(): JSX.Element {
                 activeOpacity={0.7}
                 accessibilityRole="button"
               >
-                <Icon size={24} color={active ? colors.orange : colors.textMuted} strokeWidth={2.6} />
+                <Icon size={24} color={active ? colors.accent : colors.textMuted} strokeWidth={2.6} />
                 <Text style={[styles.label, active && styles.labelActive]}>{label}</Text>
               </TouchableOpacity>
             );
@@ -61,7 +61,7 @@ export default function BottomTabBar(): JSX.Element {
             accessibilityRole="button"
           >
             <View>
-              <MoreHorizontal size={24} color={isMoreActive ? colors.orange : colors.textMuted} strokeWidth={2.6} />
+              <MoreHorizontal size={24} color={isMoreActive ? colors.accent : colors.textMuted} strokeWidth={2.6} />
               {moreBadge > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{moreBadge > 99 ? '99+' : moreBadge}</Text>
@@ -88,7 +88,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.bgDark,
     borderTopWidth: 1,
     borderTopColor: c.border,
-    shadowColor: '#000',
+    shadowColor: '#000', // fixed: shadows read dark in both themes
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -96,34 +96,38 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   bar: {
     flexDirection: 'row',
-    paddingTop: 10,
+    paddingTop: spacing.sm,
   },
   tab: {
     flex: 1,
     alignItems: 'center',
-    gap: 3,
-    paddingBottom: 4,
+    gap: spacing.xs,
+    paddingBottom: spacing.xs,
   },
   label: {
-    fontSize: 11,
+    ...type.micro,
     color: c.textMuted,
-    fontWeight: '600',
   },
   labelActive: {
-    color: c.orange,
+    color: c.accent,
     fontWeight: '700',
   },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -8,
+    top: -spacing.xs,
+    right: -spacing.sm,
     minWidth: 18,
     height: 18,
-    borderRadius: 9,
-    backgroundColor: '#E5484D',
+    borderRadius: radius.pill,
+    backgroundColor: c.danger,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: spacing.xs,
   },
-  badgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+  badgeText: {
+    ...type.micro,
+    color: c.onAccent,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
 });

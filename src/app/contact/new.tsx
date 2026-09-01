@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TextInput, ScrollView, StyleSheet } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
@@ -7,7 +7,8 @@ import { API_URL } from '../../utils/api';
 import { enqueue } from '../../utils/offlineQueue';
 import { useCreateMutation } from '../../hooks/useCreateMutation';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Button } from '../../components/ui';
 
 type RouteParamValue = string | string[] | undefined;
 
@@ -195,17 +196,14 @@ export default function NewContactScreen(): JSX.Element {
           />
         </View>
 
-        <TouchableOpacity
-          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+        <Button
+          title={t('contacts.new')}
           onPress={() => { void submit(); }}
+          loading={isSubmitting}
           disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text style={styles.submitButtonText}>{t('contacts.new')}</Text>
-          )}
-        </TouchableOpacity>
+          block
+          style={styles.submitButton}
+        />
       </ScrollView>
     </View>
   );
@@ -214,48 +212,41 @@ export default function NewContactScreen(): JSX.Element {
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   scrollView: { flex: 1 },
-  content: { padding: 16 },
+  content: { padding: spacing.lg },
   errorBanner: {
-    backgroundColor: 'rgba(204,82,71,0.12)',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
+    backgroundColor: c.dangerSoft,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.lg,
   },
-  errorBannerText: { color: c.red },
-  fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: c.text1, marginBottom: 4 },
+  errorBannerText: { color: c.danger },
+  fieldGroup: { marginBottom: spacing.lg },
+  label: { ...type.label, color: c.text1, marginBottom: spacing.xs },
   input: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
     minHeight: 44,
-    fontSize: 15,
+    fontSize: 16,
     color: c.text1,
   },
   notesInput: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
     height: 100,
-    fontSize: 15,
+    fontSize: 16,
     color: c.text1,
   },
-  fieldError: { color: c.red, fontSize: 12, marginTop: 4 },
+  fieldError: { color: c.danger, fontSize: 12, marginTop: spacing.xs },
   submitButton: {
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    minHeight: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 32,
+    marginTop: spacing.xl,
+    marginBottom: spacing.xxl,
   },
-  submitButtonDisabled: { opacity: 0.7 },
-  submitButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });

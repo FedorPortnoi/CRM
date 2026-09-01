@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView,
-  ScrollView, ActivityIndicator, Platform, StyleSheet,
+  ScrollView, Platform, StyleSheet,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +10,7 @@ import { API_URL } from '../utils/api';
 import { checkPassword } from '../utils/password';
 import { useTheme } from '../hooks/useTheme';
 import { ThemeColors } from '../theme';
+import { Button } from '../components/ui';
 
 const CODE_LENGTH = 6;
 const CODE_REJECT_PATTERN = /[^0-9]/g;
@@ -173,16 +174,13 @@ export default function ForgotPasswordScreen() {
                 value={email}
                 onChangeText={setEmail}
               />
-              <TouchableOpacity
-                style={[styles.button, isSubmitting && styles.buttonDisabled]}
+              <Button
+                title={t('auth.sendCode')}
+                onPress={() => { void requestCode(); }}
+                loading={isSubmitting}
                 disabled={isSubmitting}
-                onPress={requestCode}
-                accessibilityRole="button"
-              >
-                {isSubmitting
-                  ? <ActivityIndicator color="#FFFFFF" />
-                  : <Text style={styles.buttonText}>{t('auth.sendCode')}</Text>}
-              </TouchableOpacity>
+                block
+              />
             </>
           ) : (
             <>
@@ -205,21 +203,19 @@ export default function ForgotPasswordScreen() {
                 value={newPassword}
                 onChangeText={setNewPassword}
               />
-              <TouchableOpacity
-                style={[styles.button, isSubmitting && styles.buttonDisabled]}
+              <Button
+                title={t('auth.resetPassword')}
+                onPress={() => { void submitReset(); }}
+                loading={isSubmitting}
                 disabled={isSubmitting}
-                onPress={submitReset}
-                accessibilityRole="button"
-              >
-                {isSubmitting
-                  ? <ActivityIndicator color="#FFFFFF" />
-                  : <Text style={styles.buttonText}>{t('auth.resetPassword')}</Text>}
-              </TouchableOpacity>
+                block
+              />
 
               <TouchableOpacity
                 disabled={cooldown > 0}
-                onPress={requestCode}
+                onPress={() => { void requestCode(); }}
                 accessibilityRole="button"
+                activeOpacity={0.7}
                 style={styles.resend}
               >
                 <Text style={[styles.resendText, cooldown > 0 && styles.resendDisabled]}>
@@ -234,7 +230,11 @@ export default function ForgotPasswordScreen() {
           {error !== null && <Text style={styles.error}>{error}</Text>}
         </View>
 
-        <TouchableOpacity onPress={() => { router.replace('/login' as never); }} accessibilityRole="button">
+        <TouchableOpacity
+          onPress={() => { router.replace('/login' as never); }}
+          accessibilityRole="button"
+          activeOpacity={0.7}
+        >
           <Text style={styles.backLink}>{t('auth.backToLogin')}</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -256,7 +256,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 8, marginBottom: 24, paddingHorizontal: 8,
   },
   card: {
-    backgroundColor: colors.bgPanel, borderRadius: 16, padding: 20,
+    backgroundColor: colors.bgPanel, borderRadius: 16, padding: 16,
     borderWidth: 1, borderColor: colors.border,
   },
   input: {
@@ -266,20 +266,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   codeInput: {
     height: 56, borderRadius: 12, borderWidth: 1, borderColor: colors.border,
     textAlign: 'center', fontSize: 24, letterSpacing: 8,
-    color: colors.text1, marginBottom: 12,
+    color: colors.text1, marginBottom: 12, fontVariant: ['tabular-nums'],
   },
-  button: {
-    height: 48, borderRadius: 12, backgroundColor: colors.orange,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  resend: { marginTop: 14, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
-  resendText: { color: colors.orange, fontSize: 14, fontWeight: '600' },
+  resend: { marginTop: 12, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
+  resendText: { color: colors.orange, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
   resendDisabled: { color: colors.textMuted },
   error: { color: colors.red, fontSize: 13, marginTop: 12, textAlign: 'center' },
   backLink: {
     color: colors.textMuted, fontSize: 14, textAlign: 'center',
-    marginTop: 20, textDecorationLine: 'underline',
+    marginTop: 24, textDecorationLine: 'underline',
   },
 });

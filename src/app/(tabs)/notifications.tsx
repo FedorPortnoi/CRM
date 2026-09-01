@@ -7,7 +7,8 @@ import { useRouter } from 'expo-router';
 import { Bell, CheckCheck, CheckSquare, Users, Kanban } from 'lucide-react-native';
 import { useNotificationStore, AppNotification } from '../../store/notificationStore';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { EmptyState, Skeleton } from '../../components/ui';
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -32,6 +33,19 @@ function routeFor(n: AppNotification): string {
   if (n.entity_type === 'task') return `/task/${n.entity_id}`;
   if (n.entity_type === 'deal') return `/deal/${n.entity_id}`;
   return `/contact/${n.entity_id}`;
+}
+
+/** Loading placeholder shaped like a real notification row. */
+function SkeletonRow({ styles }: { styles: ReturnType<typeof makeStyles> }): JSX.Element {
+  return (
+    <View style={styles.row}>
+      <Skeleton width={38} height={38} rounded={radius.md} />
+      <View style={styles.content}>
+        <Skeleton width="55%" height={14} />
+        <Skeleton width="85%" height={12} style={styles.skeletonBody} />
+      </View>
+    </View>
+  );
 }
 
 export default function NotificationsScreen() {
@@ -62,7 +76,7 @@ export default function NotificationsScreen() {
       <TouchableOpacity
         style={[styles.row, !item.is_read && styles.rowUnread]}
         onPress={() => handleOpen(item)}
-        activeOpacity={0.75}
+        activeOpacity={0.7}
       >
         <View style={[styles.iconWrap, !item.is_read && styles.iconWrapUnread]}>
           {entityIcon(item.entity_type, colors.amber)}
@@ -82,31 +96,41 @@ export default function NotificationsScreen() {
     [handleOpen, styles, colors.amber],
   );
 
+  // First page still in flight: show row-shaped skeletons rather than a bare
+  // spinner, so the list does not jump when real rows arrive.
+  const initialLoading = loading && notifications.length === 0;
+
   return (
     <View style={styles.container}>
-      <FlatList
-        data={notifications}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.3}
-        contentContainerStyle={[styles.list, { paddingBottom: 32 }]}
-        showsVerticalScrollIndicator={false}
-        ListFooterComponent={loading ? <ActivityIndicator color={colors.orange} style={{ marginVertical: 16 }} /> : null}
-        ListEmptyComponent={
-          !loading ? (
-            <View style={styles.empty}>
-              <Bell size={52} color={colors.skeleton} strokeWidth={1.3} />
-              <Text style={styles.emptyTitle}>Всё тихо</Text>
-              <Text style={styles.emptySub}>Здесь будут уведомления о задачах, сделках и контактах</Text>
-            </View>
-          ) : null
-        }
-      />
+      {initialLoading ? (
+        <View style={styles.list}>
+          {Array.from({ length: 6 }, (_, i) => <SkeletonRow key={i} styles={styles} />)}
+        </View>
+      ) : (
+        <FlatList
+          data={notifications}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.3}
+          contentContainerStyle={[styles.list, styles.listPad]}
+          showsVerticalScrollIndicator={false}
+          ListFooterComponent={loading ? <ActivityIndicator color={colors.accent} style={styles.footer} /> : null}
+          ListEmptyComponent={
+            !loading ? (
+              <EmptyState
+                icon={<Bell size={52} color={colors.skeleton} strokeWidth={1.3} />}
+                title="Всё тихо"
+                description="Здесь будут уведомления о задачах, сделках и контактах"
+              />
+            ) : null
+          }
+        />
+      )}
 
       {unreadCount > 0 && (
-        <TouchableOpacity style={styles.markAllBtn} onPress={() => void markAllRead()} activeOpacity={0.85}>
-          <CheckCheck size={16} color={colors.orange} strokeWidth={2.5} />
+        <TouchableOpacity style={styles.markAllBtn} onPress={() => void markAllRead()} activeOpacity={0.7}>
+          <CheckCheck size={16} color={colors.accent} strokeWidth={2.5} />
           <Text style={styles.markAllText}>Прочитать все ({unreadCount})</Text>
         </TouchableOpacity>
       )}
@@ -116,39 +140,39 @@ export default function NotificationsScreen() {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  list: { paddingTop: 4 },
+  list: { paddingTop: spacing.xs },
+  listPad: { paddingBottom: spacing.xxl },
+  footer: { marginVertical: spacing.lg },
   row: {
     flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: c.bgPanel, paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: c.border, gap: 12,
+    backgroundColor: c.surface, paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: c.border, gap: spacing.md,
   },
   rowUnread: { backgroundColor: c.skeleton },
   iconWrap: {
-    width: 38, height: 38, borderRadius: 10,
+    width: 38, height: 38, borderRadius: radius.md,
     backgroundColor: c.wheat, alignItems: 'center', justifyContent: 'center',
-    marginTop: 1,
   },
-  iconWrapUnread: { backgroundColor: 'rgba(204,120,92,0.15)' },
+  iconWrapUnread: { backgroundColor: c.accentSoft },
   content: { flex: 1 },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 },
-  title: { fontSize: 14, fontWeight: '500', color: c.textMuted, flex: 1, marginRight: 8 },
+  skeletonBody: { marginTop: spacing.sm },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  title: { ...type.body, color: c.textMuted, flex: 1, marginRight: spacing.sm },
   titleUnread: { fontWeight: '700', color: c.text1 },
-  time: { fontSize: 11, color: c.textMuted, flexShrink: 0 },
-  body: { fontSize: 13, color: c.amber, lineHeight: 18 },
+  time: { ...type.micro, color: c.textMuted, flexShrink: 0, fontVariant: ['tabular-nums'] },
+  body: { ...type.label, fontWeight: '500', color: c.amber },
   dot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: c.orange, marginTop: 6, flexShrink: 0,
+    width: spacing.sm, height: spacing.sm, borderRadius: radius.pill,
+    backgroundColor: c.accent, marginTop: spacing.sm, flexShrink: 0,
   },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12, marginTop: 100 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: c.text1 },
-  emptySub: { fontSize: 14, color: c.amber, textAlign: 'center', lineHeight: 20 },
   markAllBtn: {
-    position: 'absolute', bottom: 20, alignSelf: 'center',
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: c.bgPanel, paddingHorizontal: 18, paddingVertical: 10,
-    borderRadius: 20, borderWidth: 1, borderColor: c.border,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    position: 'absolute', bottom: spacing.xl, alignSelf: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: c.surface, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+    borderRadius: radius.xxl, borderWidth: 1, borderColor: c.border,
+    shadowColor: '#000', // fixed: shadows read dark in both themes
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07, shadowRadius: 6, elevation: 3,
   },
-  markAllText: { color: c.orange, fontWeight: '600', fontSize: 14 },
+  markAllText: { ...type.body, fontWeight: '600', color: c.accent, fontVariant: ['tabular-nums'] },
 });

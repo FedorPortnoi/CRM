@@ -4,12 +4,9 @@
 // i18n:    webhooks.* (+ common.*)
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Clipboard,
   Modal,
-  Platform,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
@@ -23,9 +20,10 @@ import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUserStore } from '../../store/userStore';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type, fonts, tabular } from '../../theme';
 import { API_URL } from '../../utils/api';
 import { formatMarketDateTime, formatMarketNumber } from '../../market/profile';
+import { Screen, Card, Button, Badge, EmptyState, SkeletonText } from '../../components/ui';
 
 type WebhookStatus = 'active' | 'paused';
 type DeliveryStatus = 'pending' | 'success' | 'failed';
@@ -394,15 +392,11 @@ export default function WebhooksScreen(): JSX.Element {
 
   if (!canManage) {
     return (
-      <View style={styles.wrapper}>
+      <Screen contentContainerStyle={styles.content}>
         <Stack.Screen options={{ title: t('webhooks.title') }} />
-        <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.pageTitle}>{t('webhooks.title')}</Text>
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>{t('webhooks.adminOnly')}</Text>
-          </View>
-        </ScrollView>
-      </View>
+        <Text style={styles.pageTitle}>{t('webhooks.title')}</Text>
+        <EmptyState title={t('webhooks.adminOnly')} />
+      </Screen>
     );
   }
 
@@ -413,39 +407,35 @@ export default function WebhooksScreen(): JSX.Element {
   const canLoadMoreDeliveries = logLimit < MAX_DELIVERY_LIMIT && deliveries.length < deliveriesTotal;
 
   return (
-    <View style={styles.wrapper}>
+    <>
+    <Screen
+      contentContainerStyle={styles.content}
+      refreshing={endpointsQuery.isFetching && !endpointsQuery.isLoading}
+      onRefresh={() => { void endpointsQuery.refetch(); }}
+    >
       <Stack.Screen options={{ title: t('webhooks.title') }} />
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={endpointsQuery.isFetching && !endpointsQuery.isLoading}
-            onRefresh={() => { void endpointsQuery.refetch(); }}
-            tintColor={colors.orange}
-          />
-        }
-      >
-        <Text style={styles.pageTitle}>{t('webhooks.title')}</Text>
-        <Text style={styles.pageSubtitle}>{t('webhooks.subtitle')}</Text>
+      <Text style={styles.pageTitle}>{t('webhooks.title')}</Text>
+      <Text style={styles.pageSubtitle}>{t('webhooks.subtitle')}</Text>
 
-        {endpointsQuery.isLoading ? (
-          <View style={styles.stateCard}>
-            <ActivityIndicator color={colors.orange} />
-          </View>
-        ) : endpointsQuery.error ? (
-          <View style={styles.errorCard}>
-            <Text style={styles.errorText}>{messageFor(endpointsQuery.error, 'webhooks.failedToLoad')}</Text>
-            <TouchableOpacity onPress={() => { void endpointsQuery.refetch(); }} accessibilityRole="button">
-              <Text style={styles.linkText}>{t('common.retry')}</Text>
-            </TouchableOpacity>
-          </View>
-        ) : endpoints.length === 0 ? (
-          <View style={styles.stateCard}>
-            <Text style={styles.cardTitle}>{t('webhooks.empty')}</Text>
-            <Text style={styles.cardText}>{t('webhooks.emptyHint')}</Text>
-          </View>
-        ) : (
-          endpoints.map((endpoint) => {
+      {endpointsQuery.isLoading ? (
+        <Card style={styles.skeletonCard}>
+          <SkeletonText lines={3} />
+        </Card>
+      ) : endpointsQuery.error ? (
+        <View style={styles.errorCard}>
+          <Text style={styles.errorText}>{messageFor(endpointsQuery.error, 'webhooks.failedToLoad')}</Text>
+          <TouchableOpacity
+            onPress={() => { void endpointsQuery.refetch(); }}
+            accessibilityRole="button"
+            activeOpacity={0.7}
+          >
+            <Text style={styles.linkText}>{t('common.retry')}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : endpoints.length === 0 ? (
+        <EmptyState title={t('webhooks.empty')} description={t('webhooks.emptyHint')} />
+      ) : (
+        endpoints.map((endpoint) => {
             const isBusy =
               (statusMutation.isPending && statusMutation.variables?.id === endpoint.id)
               || (rotateMutation.isPending && rotateMutation.variables === endpoint.id)
@@ -453,33 +443,32 @@ export default function WebhooksScreen(): JSX.Element {
             const isActive = endpoint.status === 'active';
 
             return (
-              <View key={endpoint.id} style={[styles.card, isBusy && styles.cardBusy]}>
+              <Card key={endpoint.id} style={isBusy ? styles.cardBusy : undefined}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.endpointUrl} numberOfLines={2} selectable>{endpoint.url}</Text>
-                  <View style={[styles.badge, isActive ? styles.badgeActive : styles.badgePaused]}>
-                    <Text style={[styles.badgeText, isActive ? styles.badgeTextActive : styles.badgeTextPaused]}>
-                      {isActive ? t('webhooks.statusActive') : t('webhooks.statusPaused')}
-                    </Text>
-                  </View>
+                  <Badge
+                    variant={isActive ? 'accent' : 'neutral'}
+                    label={isActive ? t('webhooks.statusActive') : t('webhooks.statusPaused')}
+                  />
                 </View>
 
                 <View style={styles.chipWrap}>
                   {endpoint.events.map((event) => (
-                    <View key={event} style={styles.chip}>
-                      <Text style={styles.chipText}>{eventLabel(event)}</Text>
-                    </View>
+                    <Badge key={event} variant="neutral" label={eventLabel(event)} />
                   ))}
                 </View>
-                <Text style={styles.metaText}>{t('webhooks.eventsCount', { count: endpoint.events.length })}</Text>
+                <Text style={[styles.metaText, tabular]}>
+                  {t('webhooks.eventsCount', { count: endpoint.events.length })}
+                </Text>
 
-                <Text style={styles.metaText}>
+                <Text style={[styles.metaText, tabular]}>
                   {endpoint.last_delivery_at
                     ? `${t('webhooks.lastDelivery')}: ${formatMarketDateTime(endpoint.last_delivery_at)}`
                     : t('webhooks.neverDelivered')}
                 </Text>
 
                 {endpoint.failure_count > 0 ? (
-                  <Text style={styles.failureText}>
+                  <Text style={[styles.failureText, tabular]}>
                     {t('webhooks.failureCount', { count: endpoint.failure_count })}
                   </Text>
                 ) : null}
@@ -488,68 +477,59 @@ export default function WebhooksScreen(): JSX.Element {
                 ) : null}
 
                 <View style={styles.actions}>
-                  <TouchableOpacity
-                    style={styles.outlineBtn}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    title={t('webhooks.deliveries')}
                     onPress={() => openLog(endpoint)}
                     disabled={isBusy}
-                    accessibilityRole="button"
-                  >
-                    <Text style={styles.outlineBtnText}>{t('webhooks.deliveries')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.outlineBtn}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    title={t('common.edit')}
                     onPress={() => openEdit(endpoint)}
                     disabled={isBusy}
-                    accessibilityRole="button"
-                  >
-                    <Text style={styles.outlineBtnText}>{t('common.edit')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.outlineBtn}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    title={isActive ? t('webhooks.pause') : t('webhooks.resume')}
                     onPress={() => statusMutation.mutate({ id: endpoint.id, next: isActive ? 'paused' : 'active' })}
                     disabled={isBusy}
-                    accessibilityRole="button"
-                  >
-                    <Text style={styles.outlineBtnText}>
-                      {isActive ? t('webhooks.pause') : t('webhooks.resume')}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.outlineBtn}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    title={t('webhooks.rotateSecret')}
                     onPress={() => confirmRotate(endpoint)}
                     disabled={isBusy}
-                    accessibilityRole="button"
-                  >
-                    <Text style={styles.outlineBtnText}>{t('webhooks.rotateSecret')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.outlineBtn, styles.dangerBtn]}
+                  />
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    title={t('webhooks.delete')}
                     onPress={() => confirmDelete(endpoint)}
                     disabled={isBusy}
-                    accessibilityRole="button"
-                  >
-                    <Text style={[styles.outlineBtnText, styles.dangerBtnText]}>{t('webhooks.delete')}</Text>
-                  </TouchableOpacity>
+                  />
                 </View>
-              </View>
+              </Card>
             );
           })
         )}
 
-        <TouchableOpacity
-          style={[styles.primaryBtn, limitReached && styles.btnDisabled]}
+        <Button
+          title={t('webhooks.add')}
           onPress={openCreate}
           disabled={limitReached}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: limitReached }}
-        >
-          <Text style={styles.primaryBtnText}>{t('webhooks.add')}</Text>
-        </TouchableOpacity>
+          block
+          style={styles.addBtn}
+        />
         {limitReached ? <Text style={styles.hintText}>{t('webhooks.limitReached')}</Text> : null}
 
         <Text style={styles.hintText}>{t('webhooks.signatureHint')}</Text>
         <Text style={styles.hintText}>{t('webhooks.retryHint')}</Text>
-      </ScrollView>
+    </Screen>
 
       {/* Create / edit */}
       <Modal visible={formVisible} transparent animationType="fade" onRequestClose={closeForm}>
@@ -585,8 +565,8 @@ export default function WebhooksScreen(): JSX.Element {
                     value={formActive}
                     onValueChange={setFormActive}
                     disabled={saveMutation.isPending}
-                    trackColor={{ false: colors.borderStrong, true: colors.orange }}
-                    thumbColor="#FFFFFF"
+                    trackColor={{ false: colors.borderStrong, true: colors.accent }}
+                    thumbColor={colors.onAccent}
                     accessibilityLabel={t('webhooks.status')}
                   />
                 </View>
@@ -594,7 +574,7 @@ export default function WebhooksScreen(): JSX.Element {
 
               <Text style={styles.label}>{t('webhooks.events')}</Text>
               {eventsQuery.isLoading ? (
-                <ActivityIndicator color={colors.orange} style={styles.inlineLoader} />
+                <SkeletonText lines={4} style={styles.inlineLoader} />
               ) : (
                 <View style={styles.eventList}>
                   {availableEvents.map((event) => {
@@ -605,6 +585,7 @@ export default function WebhooksScreen(): JSX.Element {
                         style={[styles.eventRow, selected && styles.eventRowSelected]}
                         onPress={() => toggleFormEvent(event)}
                         disabled={saveMutation.isPending}
+                        activeOpacity={0.7}
                         accessibilityRole="checkbox"
                         accessibilityState={{ checked: selected }}
                       >
@@ -625,26 +606,20 @@ export default function WebhooksScreen(): JSX.Element {
 
               {formError !== null ? <Text style={styles.formError}>{formError}</Text> : null}
 
-              <TouchableOpacity
-                style={[styles.primaryBtn, saveMutation.isPending && styles.btnDisabled]}
+              <Button
+                title={t('webhooks.save')}
                 onPress={submitForm}
-                disabled={saveMutation.isPending}
-                accessibilityRole="button"
-              >
-                {saveMutation.isPending ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={styles.primaryBtnText}>{t('webhooks.save')}</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.cancelBtn}
+                loading={saveMutation.isPending}
+                block
+                style={styles.formPrimaryBtn}
+              />
+              <Button
+                title={t('common.cancel')}
                 onPress={closeForm}
                 disabled={saveMutation.isPending}
-                accessibilityRole="button"
-              >
-                <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
+                variant="ghost"
+                block
+              />
             </ScrollView>
           </View>
         </View>
@@ -666,18 +641,18 @@ export default function WebhooksScreen(): JSX.Element {
               <Text style={styles.secretValue} selectable>{revealedSecret?.secret ?? ''}</Text>
             </View>
             <Text style={styles.hintText}>{t('webhooks.signatureHint')}</Text>
-            <TouchableOpacity style={styles.primaryBtn} onPress={copySecret} accessibilityRole="button">
-              <Text style={styles.primaryBtnText}>
-                {secretCopied ? t('webhooks.copied') : t('webhooks.copy')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelBtn}
+            <Button
+              title={secretCopied ? t('webhooks.copied') : t('webhooks.copy')}
+              onPress={copySecret}
+              block
+              style={styles.formPrimaryBtn}
+            />
+            <Button
+              title={t('common.done')}
               onPress={() => setRevealedSecret(null)}
-              accessibilityRole="button"
-            >
-              <Text style={styles.cancelBtnText}>{t('common.done')}</Text>
-            </TouchableOpacity>
+              variant="ghost"
+              block
+            />
           </View>
         </View>
       </Modal>
@@ -703,6 +678,7 @@ export default function WebhooksScreen(): JSX.Element {
                       key={filter}
                       style={[styles.filterPill, selected && styles.filterPillSelected]}
                       onPress={() => { setLogFilter(filter); setLogLimit(DELIVERY_PAGE_SIZE); }}
+                      activeOpacity={0.7}
                       accessibilityRole="radio"
                       accessibilityState={{ checked: selected }}
                     >
@@ -715,35 +691,39 @@ export default function WebhooksScreen(): JSX.Element {
               </View>
 
               {deliveriesQuery.isLoading ? (
-                <ActivityIndicator color={colors.orange} style={styles.inlineLoader} />
+                <SkeletonText lines={4} style={styles.inlineLoader} />
               ) : deliveriesQuery.error ? (
                 <View style={styles.errorCard}>
                   <Text style={styles.errorText}>{messageFor(deliveriesQuery.error, 'webhooks.failedToLoad')}</Text>
-                  <TouchableOpacity onPress={() => { void deliveriesQuery.refetch(); }} accessibilityRole="button">
+                  <TouchableOpacity
+                    onPress={() => { void deliveriesQuery.refetch(); }}
+                    accessibilityRole="button"
+                    activeOpacity={0.7}
+                  >
                     <Text style={styles.linkText}>{t('common.retry')}</Text>
                   </TouchableOpacity>
                 </View>
               ) : deliveries.length === 0 ? (
-                <Text style={styles.cardText}>{t('webhooks.deliveriesEmpty')}</Text>
+                <EmptyState title={t('webhooks.deliveriesEmpty')} />
               ) : (
                 deliveries.map((delivery) => (
                   <View key={delivery.id} style={styles.deliveryRow}>
                     <View style={styles.deliveryMain}>
                       <Text style={styles.deliveryEvent} numberOfLines={1}>{eventLabel(delivery.event_type)}</Text>
-                      <Text style={styles.deliveryMeta}>{formatMarketDateTime(delivery.created_at)}</Text>
-                      <Text style={styles.deliveryMeta}>
+                      <Text style={[styles.deliveryMeta, tabular]}>{formatMarketDateTime(delivery.created_at)}</Text>
+                      <Text style={[styles.deliveryMeta, tabular]}>
                         {t('webhooks.deliveryAttempts', { count: delivery.attempts })}
                         {delivery.response_status !== null
                           ? ` · ${t('webhooks.deliveryResponse')}: ${formatMarketNumber(delivery.response_status)}`
                           : ''}
                       </Text>
                       {delivery.delivered_at !== null ? (
-                        <Text style={styles.deliveryMeta}>
+                        <Text style={[styles.deliveryMeta, tabular]}>
                           {t('webhooks.deliveredAt', { date: formatMarketDateTime(delivery.delivered_at) })}
                         </Text>
                       ) : null}
                       {delivery.status === 'pending' && delivery.next_attempt_at !== null ? (
-                        <Text style={styles.deliveryMeta}>
+                        <Text style={[styles.deliveryMeta, tabular]}>
                           {t('webhooks.deliveryNextAttempt', { date: formatMarketDateTime(delivery.next_attempt_at) })}
                         </Text>
                       ) : null}
@@ -753,216 +733,153 @@ export default function WebhooksScreen(): JSX.Element {
                         </Text>
                       ) : null}
                     </View>
-                    <View
-                      style={[
-                        styles.badge,
-                        delivery.status === 'success' && styles.badgeActive,
-                        delivery.status === 'failed' && styles.badgeFailed,
-                        delivery.status === 'pending' && styles.badgePaused,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.badgeText,
-                          delivery.status === 'success' && styles.badgeTextActive,
-                          delivery.status === 'failed' && styles.badgeTextFailed,
-                          delivery.status === 'pending' && styles.badgeTextPaused,
-                        ]}
-                      >
-                        {t(DELIVERY_STATUS_KEY[delivery.status])}
-                      </Text>
-                    </View>
+                    <Badge
+                      variant={
+                        delivery.status === 'success' ? 'success'
+                        : delivery.status === 'failed' ? 'danger'
+                        : 'neutral'
+                      }
+                      label={t(DELIVERY_STATUS_KEY[delivery.status])}
+                    />
                   </View>
                 ))
               )}
 
               {canLoadMoreDeliveries ? (
-                <TouchableOpacity
-                  style={styles.outlineBtn}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  title={t('webhooks.loadMore')}
                   onPress={() => setLogLimit((current) => Math.min(current + DELIVERY_PAGE_SIZE, MAX_DELIVERY_LIMIT))}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.outlineBtnText}>{t('webhooks.loadMore')}</Text>
-                </TouchableOpacity>
+                  style={styles.loadMoreBtn}
+                />
               ) : null}
 
-              <TouchableOpacity
-                style={styles.cancelBtn}
+              <Button
+                title={t('webhooks.close')}
                 onPress={() => setLogEndpoint(null)}
-                accessibilityRole="button"
-              >
-                <Text style={styles.cancelBtnText}>{t('webhooks.close')}</Text>
-              </TouchableOpacity>
+                variant="ghost"
+                block
+              />
             </ScrollView>
           </View>
         </View>
       </Modal>
-    </View>
+    </>
   );
 }
 
-const monoFont = Platform.select({ ios: 'Menlo', default: 'monospace' });
-
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  wrapper: { flex: 1, backgroundColor: c.bg },
-  content: { padding: 16, paddingBottom: 40, gap: 10 },
-  pageTitle: { fontSize: 24, fontWeight: '700', color: c.text1 },
-  pageSubtitle: { fontSize: 13, color: c.amber, marginBottom: 4 },
-  card: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 14,
-    gap: 6,
-  },
+  content: { padding: spacing.lg, gap: spacing.md },
+  skeletonCard: { gap: spacing.sm },
+  pageTitle: { ...type.title, color: c.text1 },
+  pageSubtitle: { ...type.label, color: c.amber, marginBottom: spacing.xs },
+  addBtn: { marginTop: spacing.sm },
+  formPrimaryBtn: { marginTop: spacing.sm },
+  loadMoreBtn: { alignSelf: 'center' },
   cardBusy: { opacity: 0.6 },
-  stateCard: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 20,
-    gap: 6,
-    alignItems: 'center',
-  },
-  cardTitle: { fontSize: 15, fontWeight: '600', color: c.text1 },
-  cardText: { fontSize: 13, color: c.textMuted, lineHeight: 18 },
-  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  endpointUrl: { flex: 1, fontSize: 15, fontWeight: '600', color: c.text1, lineHeight: 20 },
-  badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeActive: { backgroundColor: 'rgba(204,120,92,0.12)' },
-  badgePaused: { backgroundColor: c.skeleton },
-  badgeFailed: { backgroundColor: 'rgba(204,82,71,0.12)' },
-  badgeText: { fontSize: 11, fontWeight: '700' },
-  badgeTextActive: { color: c.orange },
-  badgeTextPaused: { color: c.amber },
-  badgeTextFailed: { color: c.red },
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  chip: { borderRadius: 6, backgroundColor: c.skeleton, paddingHorizontal: 8, paddingVertical: 3 },
-  chipText: { fontSize: 11, fontWeight: '600', color: c.amber },
+  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  endpointUrl: { ...type.heading, flex: 1, color: c.text1 },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
   metaText: { fontSize: 12, color: c.textMuted },
   failureText: { fontSize: 12, color: c.red, fontWeight: '600' },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  outlineBtn: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: c.border,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  outlineBtnText: { fontSize: 12, fontWeight: '600', color: c.text1 },
-  dangerBtn: { borderColor: 'rgba(204,82,71,0.35)' },
-  dangerBtnText: { color: c.red },
-  primaryBtn: {
-    backgroundColor: c.orange,
-    borderRadius: 10,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  primaryBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
-  btnDisabled: { opacity: 0.5 },
-  cancelBtn: { alignItems: 'center', paddingVertical: 12, marginTop: 4 },
-  cancelBtnText: { color: c.amber, fontSize: 15 },
-  hintText: { fontSize: 12, color: c.textMuted, lineHeight: 17, marginTop: 4 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  hintText: { fontSize: 12, color: c.textMuted, lineHeight: 17, marginTop: spacing.xs },
   errorCard: {
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: c.red,
-    backgroundColor: 'rgba(204,82,71,0.08)',
-    padding: 14,
-    gap: 8,
+    borderColor: c.danger,
+    backgroundColor: c.dangerSoft,
+    padding: spacing.lg,
+    gap: spacing.sm,
   },
-  errorText: { color: c.red, fontSize: 13, lineHeight: 18 },
-  linkText: { color: c.orange, fontSize: 13, fontWeight: '700' },
-  overlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 18 },
+  errorText: { color: c.danger, fontSize: 13, lineHeight: 18 },
+  linkText: { color: c.accent, fontSize: 13, fontWeight: '700' },
+  overlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: spacing.lg },
   modalCard: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 16,
+    backgroundColor: c.surface,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: c.borderStrong,
-    padding: 20,
+    padding: spacing.xl,
   },
   modalCardTall: { maxHeight: '90%', padding: 0 },
-  modalScroll: { padding: 20 },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: c.text1 },
-  label: { fontSize: 13, fontWeight: '600', color: c.text1, marginTop: 16, marginBottom: 6 },
-  labelInline: { fontSize: 13, fontWeight: '600', color: c.text1 },
+  modalScroll: { padding: spacing.lg },
+  modalTitle: { ...type.title, color: c.text1 },
+  label: { ...type.label, color: c.text1, marginTop: spacing.lg, marginBottom: spacing.sm },
+  labelInline: { ...type.label, color: c.text1 },
   input: {
     backgroundColor: c.inputBg,
-    borderRadius: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    padding: 12,
-    fontSize: 15,
+    padding: spacing.md,
+    fontSize: 16,
     color: c.text1,
   },
-  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 18 },
-  switchRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  inlineLoader: { marginVertical: 16 },
-  eventList: { gap: 7 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.lg },
+  switchRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  inlineLoader: { marginVertical: spacing.lg },
+  eventList: { gap: spacing.sm },
   eventRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    borderRadius: 9,
+    gap: spacing.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: c.border,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  eventRowSelected: { borderColor: c.orange, backgroundColor: 'rgba(204,120,92,0.08)' },
+  eventRowSelected: { borderColor: c.accent, backgroundColor: c.accentSoft },
   eventRowMain: { flex: 1 },
   eventRowText: { fontSize: 13, color: c.textMuted },
   eventRowTextSelected: { color: c.text1, fontWeight: '600' },
-  monoSmall: { fontSize: 10, color: c.textFaint, fontFamily: monoFont, marginTop: 2 },
+  monoSmall: { ...type.micro, fontFamily: fonts.mono, color: c.textFaint, marginTop: spacing.xs },
   checkbox: {
     width: 20,
     height: 20,
-    borderRadius: 5,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: c.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxSelected: { borderColor: c.orange, backgroundColor: c.orange },
-  checkboxMark: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
-  formError: { color: c.red, fontSize: 12, lineHeight: 17, marginTop: 12 },
-  secretUrl: { fontSize: 13, color: c.amber, fontWeight: '600', marginTop: 6 },
-  warningText: { fontSize: 13, color: c.red, lineHeight: 18, marginTop: 12 },
+  checkboxSelected: { borderColor: c.accent, backgroundColor: c.accent },
+  checkboxMark: { color: c.onAccent, fontSize: 12, fontWeight: '800' },
+  formError: { color: c.danger, fontSize: 12, lineHeight: 17, marginTop: spacing.md },
+  secretUrl: { fontSize: 13, color: c.amber, fontWeight: '600', marginTop: spacing.sm },
+  warningText: { fontSize: 13, color: c.danger, lineHeight: 18, marginTop: spacing.md },
   secretBox: {
-    borderRadius: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: c.orange,
+    borderColor: c.accent,
     backgroundColor: c.bg,
-    padding: 14,
-    marginTop: 10,
+    padding: spacing.lg,
+    marginTop: spacing.md,
   },
-  secretValue: { fontSize: 13, lineHeight: 19, color: c.text1, fontFamily: monoFont },
-  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 14, marginBottom: 6 },
+  secretValue: { ...type.mono, color: c.text1 },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg, marginBottom: spacing.sm },
   filterPill: {
-    borderRadius: 20,
+    borderRadius: radius.xxl,
     borderWidth: 1,
     borderColor: c.border,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
-  filterPillSelected: { backgroundColor: c.orange, borderColor: c.orange },
+  filterPillSelected: { backgroundColor: c.accent, borderColor: c.accent },
   filterPillText: { fontSize: 12, color: c.text1 },
-  filterPillTextSelected: { color: '#FFFFFF', fontWeight: '600' },
+  filterPillTextSelected: { color: c.onAccent, fontWeight: '600' },
   deliveryRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 10,
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: c.border,
   },
   deliveryMain: { flex: 1 },
   deliveryEvent: { fontSize: 13, fontWeight: '600', color: c.text1 },
-  deliveryMeta: { fontSize: 11, color: c.textMuted, lineHeight: 16, marginTop: 2 },
-  deliveryError: { fontSize: 11, color: c.red, lineHeight: 15, marginTop: 4 },
+  deliveryMeta: { fontSize: 11, color: c.textMuted, lineHeight: 16, marginTop: spacing.xs },
+  deliveryError: { fontSize: 11, color: c.danger, lineHeight: 15, marginTop: spacing.xs },
 });

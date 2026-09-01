@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView,
-  ScrollView, ActivityIndicator, Platform, StyleSheet,
+  ScrollView, Platform, StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +11,7 @@ import { useUserStore } from '../store/userStore';
 import { checkPassword } from '../utils/password';
 import { useTheme } from '../hooks/useTheme';
 import { ThemeColors } from '../theme';
+import { Button } from '../components/ui';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -32,7 +33,7 @@ export default function SetPasswordScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
-  const styles = makeStyles(colors);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { user, changePassword, setCredentials } = useUserStore();
 
   const needsEmail = user?.must_change_email === true;
@@ -156,7 +157,12 @@ export default function SetPasswordScreen() {
               value={newPassword}
               onChangeText={setNewPassword}
             />
-            <TouchableOpacity onPress={() => setShowNew(p => !p)} style={styles.eyeButton} accessibilityRole="button">
+            <TouchableOpacity
+              onPress={() => setShowNew(p => !p)}
+              style={styles.eyeButton}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+            >
               {showNew ? <EyeOff size={18} color={colors.textMuted} /> : <Eye size={18} color={colors.textMuted} />}
             </TouchableOpacity>
           </View>
@@ -192,22 +198,24 @@ export default function SetPasswordScreen() {
               value={confirmPassword}
               onChangeText={setConfirmPassword}
             />
-            <TouchableOpacity onPress={() => setShowConfirm(p => !p)} style={styles.eyeButton} accessibilityRole="button">
+            <TouchableOpacity
+              onPress={() => setShowConfirm(p => !p)}
+              style={styles.eyeButton}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+            >
               {showConfirm ? <EyeOff size={18} color={colors.textMuted} /> : <Eye size={18} color={colors.textMuted} />}
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={[styles.button, isLoading && styles.buttonDisabled]}
+          <Button
+            title={needsEmail ? t('auth.setCredentialsButton') : t('auth.setPasswordButton')}
             onPress={() => { void handleSubmit(); }}
+            loading={isLoading}
             disabled={isLoading || !newPassword || !confirmPassword || (needsEmail && !email)}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-          >
-            {isLoading
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.buttonText}>{needsEmail ? t('auth.setCredentialsButton') : t('auth.setPasswordButton')}</Text>}
-          </TouchableOpacity>
+            block
+            style={styles.submitButton}
+          />
 
           {error !== null && (
             <Text style={styles.errorText}>{error}</Text>
@@ -222,11 +230,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   circle1: {
     position: 'absolute', width: 350, height: 350, borderRadius: 175,
-    backgroundColor: 'rgba(6,95,70,0.04)', top: -80, right: -100,
+    backgroundColor: c.accentSoft, top: -80, right: -100,
   },
   circle2: {
     position: 'absolute', width: 280, height: 280, borderRadius: 140,
-    backgroundColor: 'rgba(6,95,70,0.03)', bottom: 100, left: -80,
+    backgroundColor: c.accentSoft, bottom: 100, left: -80,
   },
   scrollContent: {
     flexGrow: 1, justifyContent: 'center', alignItems: 'center',
@@ -265,11 +273,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   ruleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 },
   ruleText: { flex: 1, fontSize: 12.5, lineHeight: 17, color: c.textMuted },
   ruleTextMet: { color: c.green, fontWeight: '700' },
-  button: {
-    height: 52, backgroundColor: c.orange, borderRadius: 12,
-    justifyContent: 'center', alignItems: 'center', marginTop: 4,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  submitButton: { marginTop: 4 },
   errorText: { color: c.red, fontSize: 14, textAlign: 'center', marginTop: 12 },
 });

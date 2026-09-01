@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import TimezonePicker from '../../components/reminders/TimezonePicker';
@@ -10,7 +10,8 @@ import {
 } from '../../hooks/useTaskReminders';
 import { useTheme } from '../../hooks/useTheme';
 import { useUserStore } from '../../store/userStore';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing } from '../../theme';
+import { Button, Card } from '../../components/ui';
 
 export default function TimezoneSettingsScreen(): JSX.Element {
   const { t, i18n } = useTranslation();
@@ -45,34 +46,29 @@ export default function TimezoneSettingsScreen(): JSX.Element {
       <Stack.Screen options={{ title: t('settings.timezoneTitle') }} />
       <Text style={styles.intro}>{t('settings.timezoneDescription')}</Text>
 
-      <TouchableOpacity
-        style={styles.card}
-        onPress={() => setPickerOpen(true)}
-        accessibilityRole="button"
-      >
-        <View>
-          <Text style={styles.label}>{t('reminders.timezone')}</Text>
-          <Text style={styles.value}>{timezoneLabel(selected, i18n.language)}</Text>
+      <Card onPress={() => setPickerOpen(true)} style={styles.card} accessibilityLabel={t('reminders.timezone')}>
+        <View style={styles.cardRow}>
+          <View>
+            <Text style={styles.label}>{t('reminders.timezone')}</Text>
+            <Text style={styles.value}>{timezoneLabel(selected, i18n.language)}</Text>
+          </View>
+          <Text style={styles.chevron}>{'>'}</Text>
         </View>
-        <Text style={styles.chevron}>{'>'}</Text>
-      </TouchableOpacity>
+      </Card>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {user?.timezone === selected ? (
         <Text style={styles.saved}>{t('settings.timezoneSaved')}</Text>
       ) : null}
 
-      <TouchableOpacity
-        style={[styles.save, saving || user?.timezone === selected ? styles.disabled : null]}
+      <Button
+        title={t('common.save')}
         onPress={() => void save()}
         disabled={saving || user?.timezone === selected}
-      >
-        {saving ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.saveText}>{t('common.save')}</Text>
-        )}
-      </TouchableOpacity>
+        loading={saving}
+        block
+        style={styles.save}
+      />
 
       <TimezonePicker
         visible={pickerOpen}
@@ -85,31 +81,14 @@ export default function TimezoneSettingsScreen(): JSX.Element {
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: c.bg, padding: 20 },
-  intro: { color: c.textMuted, fontSize: 14, lineHeight: 20, marginBottom: 18 },
-  card: {
-    backgroundColor: c.bgPanel,
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: 14,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  label: { color: c.textMuted, fontSize: 12, marginBottom: 6 },
+  container: { flex: 1, backgroundColor: c.bg, padding: spacing.lg },
+  intro: { color: c.textMuted, fontSize: 14, lineHeight: 20, marginBottom: spacing.lg },
+  card: { padding: spacing.lg },
+  cardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  label: { color: c.textMuted, fontSize: 12, marginBottom: spacing.sm },
   value: { color: c.text1, fontSize: 16, fontWeight: '600' },
   chevron: { color: c.textMuted, fontSize: 20 },
-  error: { color: c.red, fontSize: 13, marginTop: 12 },
-  saved: { color: c.orange, fontSize: 13, marginTop: 12 },
-  save: {
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 48,
-    marginTop: 20,
-  },
-  disabled: { opacity: 0.5 },
-  saveText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  error: { color: c.danger, fontSize: 13, marginTop: spacing.md },
+  saved: { color: c.orange, fontSize: 13, marginTop: spacing.md },
+  save: { marginTop: spacing.xl },
 });

@@ -8,7 +8,6 @@
 // plaintext AsyncStorage), never logged, and never re-fetchable.
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Clipboard,
   FlatList,
@@ -28,7 +27,8 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { formatMarketDate, formatMarketDateTime } from '../../market/profile';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type, tabular, control } from '../../theme';
+import { Screen, Card, Button, Badge, EmptyState, SkeletonText } from '../../components/ui';
 
 // Mirrors API_KEY_SCOPES in backend/services/api-keys.ts.
 const SCOPES = [
@@ -304,52 +304,41 @@ export default function ApiKeysScreen(): JSX.Element {
       const status = keyStatus(item, Date.now());
       const isRevoking = revokingId === item.id;
       const creator = creatorName(item.created_by);
-      const statusStyle =
-        status === 'active' ? styles.badgeActive : status === 'revoked' ? styles.badgeRevoked : styles.badgeExpired;
-      const statusTextStyle =
-        status === 'active'
-          ? styles.badgeTextActive
-          : status === 'revoked'
-            ? styles.badgeTextRevoked
-            : styles.badgeTextExpired;
+      const statusVariant = status === 'active' ? 'accent' : status === 'revoked' ? 'danger' : 'neutral';
 
       return (
-        <View style={[styles.card, status !== 'active' && styles.cardMuted]}>
+        <Card style={status !== 'active' ? styles.cardMuted : undefined}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderMain}>
               <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
               {/* Only the prefix ever reaches the client after creation. */}
               <Text style={styles.prefix} selectable>{item.key_prefix}…</Text>
             </View>
-            <View style={[styles.badge, statusStyle]}>
-              <Text style={[styles.badgeText, statusTextStyle]}>{t(STATUS_LABEL_KEYS[status])}</Text>
-            </View>
+            <Badge variant={statusVariant} label={t(STATUS_LABEL_KEYS[status])} />
           </View>
 
           <View style={styles.chipWrap}>
             {item.scopes.map((scope) => (
-              <View key={scope} style={styles.chip}>
-                <Text style={styles.chipText}>{t(SCOPE_LABEL_KEYS[scope])}</Text>
-              </View>
+              <Badge key={scope} variant="neutral" label={t(SCOPE_LABEL_KEYS[scope])} />
             ))}
           </View>
 
           <View style={styles.metaWrap}>
             <View style={styles.metaRow}>
               <Text style={styles.metaLabel}>{t('apiKeys.createdAt')}</Text>
-              <Text style={styles.metaValue}>
+              <Text style={[styles.metaValue, tabular]}>
                 {formatMarketDate(item.created_at, { day: 'numeric', month: 'short', year: 'numeric' })}
               </Text>
             </View>
             <View style={styles.metaRow}>
               <Text style={styles.metaLabel}>{t('apiKeys.lastUsed')}</Text>
-              <Text style={styles.metaValue}>
+              <Text style={[styles.metaValue, tabular]}>
                 {item.last_used_at ? formatMarketDateTime(item.last_used_at) : t('apiKeys.neverUsed')}
               </Text>
             </View>
             <View style={styles.metaRow}>
               <Text style={styles.metaLabel}>{t('apiKeys.expiresAt')}</Text>
-              <Text style={styles.metaValue}>
+              <Text style={[styles.metaValue, tabular]}>
                 {item.expires_at
                   ? formatMarketDate(item.expires_at, { day: 'numeric', month: 'short', year: 'numeric' })
                   : t('apiKeys.expiresNever')}
@@ -364,38 +353,31 @@ export default function ApiKeysScreen(): JSX.Element {
           </View>
 
           {status !== 'revoked' ? (
-            <TouchableOpacity
-              style={[styles.revokeBtn, isRevoking && styles.disabled]}
+            <Button
+              variant="danger"
+              size="sm"
+              title={t('apiKeys.revoke')}
               onPress={() => confirmRevoke(item)}
               disabled={isRevoking}
-              accessibilityRole="button"
+              loading={isRevoking}
+              style={styles.revokeBtn}
               accessibilityLabel={`${t('apiKeys.revoke')}: ${item.name}`}
-            >
-              {isRevoking ? (
-                <ActivityIndicator size="small" color={colors.red} />
-              ) : (
-                <Text style={styles.revokeBtnText}>{t('apiKeys.revoke')}</Text>
-              )}
-            </TouchableOpacity>
+            />
           ) : null}
-        </View>
+        </Card>
       );
     },
-    [confirmRevoke, creatorName, revokingId, styles, colors.red, t],
+    [confirmRevoke, creatorName, revokingId, styles, t],
   );
 
   if (!canManage) {
     return (
-      <View style={styles.container}>
+      <Screen contentContainerStyle={styles.gateContent}>
         <Stack.Screen options={{ title: t('apiKeys.title') }} />
-        <ScrollView contentContainerStyle={styles.gateContent}>
-          <Text style={styles.pageTitle}>{t('apiKeys.title')}</Text>
-          <Text style={styles.pageSubtitle}>{t('apiKeys.subtitle')}</Text>
-          <View style={styles.noticeCard}>
-            <Text style={styles.noticeTitle}>{t('apiKeys.adminOnly')}</Text>
-          </View>
-        </ScrollView>
-      </View>
+        <Text style={styles.pageTitle}>{t('apiKeys.title')}</Text>
+        <Text style={styles.pageSubtitle}>{t('apiKeys.subtitle')}</Text>
+        <EmptyState title={t('apiKeys.adminOnly')} />
+      </Screen>
     );
   }
 
@@ -404,11 +386,14 @@ export default function ApiKeysScreen(): JSX.Element {
       <Stack.Screen options={{ title: t('apiKeys.title') }} />
 
       {keysQuery.isLoading ? (
-        <ActivityIndicator style={styles.loader} color={colors.orange} />
+        <View style={styles.list}>
+          <Card style={styles.skeletonCard}><SkeletonText lines={3} /></Card>
+          <Card style={styles.skeletonCard}><SkeletonText lines={3} /></Card>
+        </View>
       ) : keysQuery.error ? (
         <View style={styles.errorWrap}>
           <Text style={styles.errorText}>{keysQuery.error.message}</Text>
-          <TouchableOpacity onPress={() => { void keysQuery.refetch(); }} accessibilityRole="button">
+          <TouchableOpacity onPress={() => { void keysQuery.refetch(); }} accessibilityRole="button" activeOpacity={0.7}>
             <Text style={styles.retryText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
@@ -433,24 +418,18 @@ export default function ApiKeysScreen(): JSX.Element {
             </View>
           }
           ListEmptyComponent={
-            <View style={styles.noticeCard}>
-              <Text style={styles.noticeTitle}>{t('apiKeys.empty')}</Text>
-              <Text style={styles.noticeText}>{t('apiKeys.emptyHint')}</Text>
-            </View>
+            <EmptyState title={t('apiKeys.empty')} description={t('apiKeys.emptyHint')} />
           }
         />
       )}
 
-      <TouchableOpacity
-        style={[styles.primaryBtn, limitReached && styles.disabled]}
+      <Button
+        title={t('apiKeys.create')}
         onPress={() => { resetForm(); setCreateVisible(true); }}
         disabled={limitReached}
-        accessibilityRole="button"
-        accessibilityLabel={t('apiKeys.create')}
-        accessibilityState={{ disabled: limitReached }}
-      >
-        <Text style={styles.primaryBtnText}>{t('apiKeys.create')}</Text>
-      </TouchableOpacity>
+        block
+        style={styles.createBtn}
+      />
 
       {/* ── Create ─────────────────────────────────────────────────────────── */}
       <Modal
@@ -483,6 +462,7 @@ export default function ApiKeysScreen(): JSX.Element {
                     key={scope}
                     style={[styles.scopeRow, selected && styles.scopeRowSelected]}
                     onPress={() => toggleScope(scope)}
+                    activeOpacity={0.7}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: selected }}
                     accessibilityLabel={t(SCOPE_LABEL_KEYS[scope])}
@@ -512,27 +492,20 @@ export default function ApiKeysScreen(): JSX.Element {
 
             {formError !== null ? <Text style={styles.formError}>{formError}</Text> : null}
 
-            <TouchableOpacity
-              style={[styles.primaryBtn, styles.modalPrimary, createMutation.isPending && styles.disabled]}
+            <Button
+              title={t('apiKeys.create')}
               onPress={submitCreate}
-              disabled={createMutation.isPending}
-              accessibilityRole="button"
-              accessibilityLabel={t('apiKeys.create')}
-            >
-              {createMutation.isPending ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.primaryBtnText}>{t('apiKeys.create')}</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelBtn}
+              loading={createMutation.isPending}
+              block
+              style={styles.modalPrimary}
+            />
+            <Button
+              title={t('common.cancel')}
               onPress={() => setCreateVisible(false)}
               disabled={createMutation.isPending}
-              accessibilityRole="button"
-            >
-              <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
-            </TouchableOpacity>
+              variant="ghost"
+              block
+            />
           </ScrollView>
         </View>
       </Modal>
@@ -552,14 +525,13 @@ export default function ApiKeysScreen(): JSX.Element {
               <Text style={styles.secretValue} selectable>{revealed?.key}</Text>
             </View>
 
-            <TouchableOpacity
-              style={[styles.copyBtn, copied && styles.copyBtnDone]}
+            <Button
+              title={copied ? t('apiKeys.copied') : t('apiKeys.copy')}
               onPress={copyKey}
-              accessibilityRole="button"
-              accessibilityLabel={t('apiKeys.copy')}
-            >
-              <Text style={styles.copyBtnText}>{copied ? t('apiKeys.copied') : t('apiKeys.copy')}</Text>
-            </TouchableOpacity>
+              block
+              variant={copied ? 'secondary' : 'primary'}
+              style={styles.copyBtn}
+            />
 
             <Text style={styles.revealLabel}>{t('apiKeys.baseUrl')}</Text>
             <Text style={styles.revealMono} selectable>{publicApiBaseUrl()}</Text>
@@ -567,9 +539,13 @@ export default function ApiKeysScreen(): JSX.Element {
             <Text style={styles.revealLabel}>{t('apiKeys.authHeader')}</Text>
             <Text style={styles.revealHint}>{t('apiKeys.usageHint')}</Text>
 
-            <TouchableOpacity style={styles.closeBtn} onPress={closeReveal} accessibilityRole="button">
-              <Text style={styles.closeBtnText}>{t('apiKeys.close')}</Text>
-            </TouchableOpacity>
+            <Button
+              title={t('apiKeys.close')}
+              onPress={closeReveal}
+              variant="ghost"
+              block
+              style={styles.closeBtn}
+            />
           </View>
         </View>
       </Modal>
@@ -579,167 +555,117 @@ export default function ApiKeysScreen(): JSX.Element {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  loader: { marginTop: 40 },
-  list: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 80 },
-  gateContent: { padding: 16, gap: 8 },
-  header: { marginBottom: 12, gap: 4 },
-  pageTitle: { fontSize: 24, fontWeight: '700', color: c.text1 },
+  list: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm, paddingBottom: control.md + spacing.xxl },
+  skeletonCard: { gap: spacing.sm },
+  gateContent: { padding: spacing.lg, gap: spacing.sm },
+  header: { marginBottom: spacing.md, gap: spacing.xs },
+  pageTitle: { ...type.title, color: c.text1 },
   pageSubtitle: { fontSize: 13, color: c.amber },
-  scopesHint: { fontSize: 12, color: c.textMuted, lineHeight: 17, marginTop: 4 },
+  scopesHint: { fontSize: 12, color: c.textMuted, lineHeight: 17, marginTop: spacing.xs },
   limitCard: {
-    marginTop: 10,
-    backgroundColor: c.bgPanel,
-    borderRadius: 10,
+    marginTop: spacing.sm,
+    backgroundColor: c.dangerSoft,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: 'rgba(204,82,71,0.35)',
-    padding: 12,
+    borderColor: c.danger,
+    padding: spacing.md,
   },
-  limitText: { fontSize: 13, color: c.red },
-  noticeCard: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 16,
-    gap: 6,
-  },
-  noticeTitle: { fontSize: 15, fontWeight: '600', color: c.text1 },
-  noticeText: { fontSize: 13, color: c.textMuted, lineHeight: 18 },
-  errorWrap: { marginTop: 40, paddingHorizontal: 24, gap: 12, alignItems: 'center' },
-  errorText: { color: c.red, textAlign: 'center' },
-  retryText: { color: c.orange, fontWeight: '600', fontSize: 15 },
+  limitText: { fontSize: 13, color: c.danger },
+  errorWrap: { marginTop: spacing.xxl, paddingHorizontal: spacing.xl, gap: spacing.md, alignItems: 'center' },
+  errorText: { color: c.danger, textAlign: 'center' },
+  retryText: { color: c.accent, ...type.heading },
 
-  card: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 14,
-    marginBottom: 10,
-    gap: 10,
-  },
   cardMuted: { opacity: 0.6 },
-  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  cardHeaderMain: { flex: 1, gap: 3 },
-  cardName: { fontSize: 15, fontWeight: '600', color: c.text1 },
-  prefix: { fontSize: 13, color: c.amber, letterSpacing: 0.5 },
-  badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontSize: 12, fontWeight: '600' },
-  badgeActive: { backgroundColor: 'rgba(212,162,127,0.15)' },
-  badgeRevoked: { backgroundColor: 'rgba(204,82,71,0.15)' },
-  badgeExpired: { backgroundColor: 'rgba(232,224,212,0.08)' },
-  badgeTextActive: { color: c.amber },
-  badgeTextRevoked: { color: c.red },
-  badgeTextExpired: { color: c.textMuted },
+  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  cardHeaderMain: { flex: 1, gap: spacing.xs },
+  cardName: { ...type.heading, color: c.text1 },
+  prefix: { ...type.mono, color: c.amber },
 
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: {
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: c.border,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  chipText: { fontSize: 11, color: c.text1 },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 
-  metaWrap: { gap: 4 },
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  metaWrap: { gap: spacing.xs },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
   metaLabel: { fontSize: 12, color: c.textMuted },
   metaValue: { fontSize: 12, color: c.text1, flexShrink: 1, textAlign: 'right' },
 
-  revokeBtn: {
-    alignSelf: 'flex-start',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(204,82,71,0.35)',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
-  revokeBtnText: { fontSize: 13, fontWeight: '600', color: c.red },
-  disabled: { opacity: 0.5 },
+  revokeBtn: { alignSelf: 'flex-start' },
 
-  primaryBtn: { margin: 16, backgroundColor: c.orange, borderRadius: 10, padding: 14, alignItems: 'center' },
-  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  createBtn: { margin: spacing.lg },
 
   modal: { flex: 1, backgroundColor: c.bg },
-  modalScroll: { padding: 24, paddingTop: 60, paddingBottom: 48 },
-  modalTitle: { fontSize: 22, fontWeight: '700', color: c.text1, marginBottom: 12 },
-  modalPrimary: { marginHorizontal: 0, marginTop: 24 },
-  label: { fontSize: 13, fontWeight: '600', color: c.text1, marginBottom: 6, marginTop: 16 },
-  fieldHint: { fontSize: 12, color: c.textMuted, lineHeight: 17, marginTop: 6, marginBottom: 4 },
+  modalScroll: { padding: spacing.xl, paddingTop: spacing.xxl * 2, paddingBottom: spacing.xxl },
+  modalTitle: { ...type.subtitle, color: c.text1, marginBottom: spacing.md },
+  modalPrimary: { marginHorizontal: 0, marginTop: spacing.xl },
+  label: { ...type.label, color: c.text1, marginBottom: spacing.sm, marginTop: spacing.lg },
+  fieldHint: { fontSize: 12, color: c.textMuted, lineHeight: 17, marginTop: spacing.sm, marginBottom: spacing.xs },
   input: {
     backgroundColor: c.inputBg,
-    borderRadius: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    padding: 12,
-    fontSize: 15,
+    padding: spacing.md,
+    fontSize: 16,
     color: c.text1,
   },
-  scopeList: { gap: 6, marginTop: 4 },
+  scopeList: { gap: spacing.sm, marginTop: spacing.xs },
   scopeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    borderRadius: 8,
+    gap: spacing.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: c.border,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  scopeRowSelected: { borderColor: c.orange },
+  scopeRowSelected: { borderColor: c.accent },
   checkbox: {
     width: 20,
     height: 20,
-    borderRadius: 5,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: c.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxSelected: { backgroundColor: c.orange, borderColor: c.orange },
-  checkboxMark: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  checkboxSelected: { backgroundColor: c.accent, borderColor: c.accent },
+  checkboxMark: { color: c.onAccent, fontSize: 13, fontWeight: '700' },
   scopeLabel: { fontSize: 14, color: c.text1 },
-  formError: { fontSize: 13, color: c.red, marginTop: 16 },
-  cancelBtn: { marginTop: 12, alignItems: 'center', padding: 12 },
-  cancelBtnText: { color: c.amber, fontSize: 15 },
+  formError: { fontSize: 13, color: c.danger, marginTop: spacing.lg },
 
-  revealOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 24 },
-  revealCard: { backgroundColor: c.bgPanel, borderRadius: 16, padding: 24 },
-  revealTitle: { fontSize: 20, fontWeight: '700', color: c.text1 },
-  revealName: { fontSize: 14, color: c.amber, marginTop: 4 },
+  revealOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: spacing.xl },
+  revealCard: { backgroundColor: c.surface, borderRadius: radius.xl, padding: spacing.xl },
+  revealTitle: { ...type.title, color: c.text1 },
+  revealName: { fontSize: 14, color: c.amber, marginTop: spacing.xs },
   warningBox: {
-    marginTop: 16,
-    backgroundColor: 'rgba(204,82,71,0.12)',
-    borderRadius: 8,
+    marginTop: spacing.lg,
+    backgroundColor: c.dangerSoft,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: 'rgba(204,82,71,0.35)',
-    padding: 12,
+    borderColor: c.danger,
+    padding: spacing.md,
   },
-  warningText: { fontSize: 13, color: c.red, lineHeight: 18, fontWeight: '600' },
+  warningText: { fontSize: 13, color: c.danger, lineHeight: 18, fontWeight: '600' },
   secretBox: {
-    marginTop: 12,
+    marginTop: spacing.md,
     backgroundColor: c.bg,
-    borderRadius: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: c.border,
-    padding: 12,
+    padding: spacing.md,
   },
-  secretValue: { fontSize: 13, color: c.text1, letterSpacing: 0.3 },
-  copyBtn: { marginTop: 12, backgroundColor: c.orange, borderRadius: 10, padding: 13, alignItems: 'center' },
-  copyBtnDone: { backgroundColor: c.border },
-  copyBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  secretValue: { ...type.mono, color: c.text1 },
+  copyBtn: { marginTop: spacing.md },
   revealLabel: {
     fontSize: 12,
     fontWeight: '600',
     color: c.amber,
-    marginTop: 16,
-    marginBottom: 4,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  revealMono: { fontSize: 13, color: c.text1 },
+  revealMono: { ...type.mono, color: c.text1 },
   revealHint: { fontSize: 12, color: c.textMuted, lineHeight: 17 },
-  closeBtn: { marginTop: 20, alignItems: 'center', padding: 12 },
-  closeBtnText: { color: c.amber, fontSize: 15 },
+  closeBtn: { marginTop: spacing.xl },
 });

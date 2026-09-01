@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   View,
 }  from 'react-native';
-import type { DimensionValue } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Plus, Workflow as WorkflowIcon } from 'lucide-react-native';
@@ -17,7 +16,8 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import HomeBackButton from '../../components/HomeBackButton';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors, spacing, radius, type } from '../../theme';
+import { ThemeColors, spacing, radius, type, tabular } from '../../theme';
+import { Card, Skeleton, EmptyState } from '../../components/ui';
 
 interface WorkflowItem {
   id: string;
@@ -31,18 +31,6 @@ interface WorkflowItem {
 interface WorkflowsApiResponse {
   data: WorkflowItem[];
   meta: { total: number };
-}
-
-interface SkeletonBoxProps {
-  width: DimensionValue;
-  height: number;
-  borderRadius?: number;
-  marginBottom?: number;
-}
-
-function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  const { colors } = useTheme();
-  return <View style={{ width, height, backgroundColor: colors.accentSoft, borderRadius, marginBottom }} />;
 }
 
 const TRIGGER_KEY_MAP: Record<string, string> = {
@@ -142,18 +130,18 @@ export default function WorkflowsScreen(): JSX.Element {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.header}>
-          <SkeletonBox width={140} height={28} borderRadius={6} />
-          <SkeletonBox width={40} height={40} borderRadius={8} />
+          <Skeleton width={140} height={28} rounded={radius.sm} />
+          <Skeleton width={40} height={40} rounded={radius.md} />
         </View>
         <View style={styles.list}>
           {[0, 1, 2].map((i) => (
             <View key={i} style={styles.skeletonRow}>
-              <SkeletonBox width={42} height={42} borderRadius={8} marginBottom={0} />
+              <Skeleton width={42} height={42} rounded={radius.md} />
               <View style={styles.skeletonBody}>
-                <SkeletonBox width='70%' height={16} borderRadius={4} marginBottom={8} />
-                <SkeletonBox width='50%' height={13} borderRadius={4} />
+                <Skeleton width='70%' height={16} style={styles.skeletonLine} />
+                <Skeleton width='50%' height={13} />
               </View>
-              <SkeletonBox width={51} height={31} borderRadius={16} />
+              <Skeleton width={51} height={31} rounded={radius.xl} />
             </View>
           ))}
         </View>
@@ -173,13 +161,14 @@ export default function WorkflowsScreen(): JSX.Element {
             style={styles.addButton}
             onPress={() => { router.push('/workflows/new' as never); }}
             accessibilityRole='button'
+            activeOpacity={0.7}
           >
             <Plus size={20} color={colors.onAccent} />
           </TouchableOpacity>
         </View>
         <View style={styles.center}>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => { fetchWorkflows(false); }}>
+          <TouchableOpacity style={styles.retryButton} onPress={() => { fetchWorkflows(false); }} activeOpacity={0.7}>
             <Text style={styles.retryText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
@@ -198,6 +187,7 @@ export default function WorkflowsScreen(): JSX.Element {
           style={styles.addButton}
           onPress={() => { router.push('/workflows/new' as never); }}
           accessibilityRole='button'
+          activeOpacity={0.7}
         >
           <Plus size={20} color={colors.onAccent} />
         </TouchableOpacity>
@@ -209,12 +199,14 @@ export default function WorkflowsScreen(): JSX.Element {
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
         }
-        ListEmptyComponent={<Text style={styles.emptyText}>{t('workflows.empty')}</Text>}
+        ListEmptyComponent={
+          <EmptyState icon={<WorkflowIcon size={32} color={colors.textMuted} />} title={t('workflows.empty')} />
+        }
         renderItem={({ item }) => {
           const actionCount = Array.isArray(item.actions) ? item.actions.length : 0;
           const isEnabled = item.status === 'active';
           return (
-            <View style={styles.row}>
+            <Card padded={false} style={styles.row}>
               <View style={styles.iconBox}>
                 <WorkflowIcon size={20} color={colors.accent} />
               </View>
@@ -227,17 +219,17 @@ export default function WorkflowsScreen(): JSX.Element {
                 <Text style={styles.rowMeta}>{getTriggerLabel(item.trigger)}</Text>
               </TouchableOpacity>
               <View style={styles.rowRight}>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{actionCount}</Text>
+                <View style={styles.countBadge}>
+                  <Text style={styles.countBadgeText}>{actionCount}</Text>
                 </View>
                 <Switch
                   value={isEnabled}
                   onValueChange={(val) => { handleToggle(item, val); }}
-                  trackColor={{ false: colors.border, true: '#93C5FD' }}
-                  thumbColor={isEnabled ? colors.accent : colors.textMuted}
+                  trackColor={{ false: colors.border, true: colors.accent }}
+                  thumbColor={colors.onAccent}
                 />
               </View>
-            </View>
+            </Card>
           );
         }}
       />
@@ -254,7 +246,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  title: { fontSize: type.display.fontSize, fontWeight: '700', color: c.text1 },
+  title: { ...type.display, color: c.text1 },
   addButton: {
     width: 40,
     height: 40,
@@ -264,16 +256,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
   },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
-  emptyList: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  emptyText: { color: c.amber, fontSize: type.heading.fontSize, textAlign: 'center' },
+  emptyList: { flexGrow: 1 },
   row: {
     minHeight: 72,
-    backgroundColor: c.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: c.border,
     padding: spacing.md,
-    marginBottom: 10,
+    marginBottom: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -284,10 +271,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: c.border,
     padding: spacing.md,
-    marginBottom: 10,
+    marginBottom: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
   },
+  skeletonLine: { marginBottom: spacing.sm },
   skeletonBody: { flex: 1, marginHorizontal: spacing.md },
   iconBox: {
     width: 42,
@@ -299,19 +287,19 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     marginRight: spacing.md,
   },
   rowBody: { flex: 1 },
-  rowTitle: { fontSize: type.heading.fontSize, fontWeight: '700', color: c.text1 },
-  rowMeta: { marginTop: spacing.xs, color: c.amber, fontSize: type.label.fontSize },
-  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: spacing.sm },
-  badge: {
+  rowTitle: { ...type.heading, color: c.text1 },
+  rowMeta: { marginTop: spacing.xs, color: c.amber, ...type.label },
+  rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginLeft: spacing.sm },
+  countBadge: {
     minWidth: 24,
     height: 24,
-    borderRadius: radius.lg,
+    borderRadius: radius.pill,
     backgroundColor: c.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: spacing.xs,
   },
-  badgeText: { fontSize: type.caption.fontSize, fontWeight: '700', color: c.accent },
+  countBadgeText: { ...type.caption, color: c.accent, ...tabular },
   errorText: { color: c.danger, marginBottom: spacing.md, textAlign: 'center' },
   retryButton: {
     paddingHorizontal: spacing.lg,
@@ -320,5 +308,5 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.accent,
     justifyContent: 'center',
   },
-  retryText: { color: c.onAccent, fontWeight: '700' },
+  retryText: { color: c.onAccent, ...type.heading },
 });

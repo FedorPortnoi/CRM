@@ -63,10 +63,10 @@ export function OnboardingWalkthrough(): JSX.Element | null {
       <Text style={styles.desc}>{t(`onboarding.step_${step}_desc`)}</Text>
 
       <View style={styles.actions}>
-        <TouchableOpacity onPress={handleSkip} style={styles.skipBtn} accessibilityRole="button">
+        <TouchableOpacity onPress={handleSkip} style={styles.skipBtn} activeOpacity={0.7} accessibilityRole="button">
           <Text style={styles.skipText}>{t('onboarding.skipAll')}</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleGotIt} style={styles.gotItBtn} accessibilityRole="button">
+        <TouchableOpacity onPress={handleGotIt} style={styles.gotItBtn} activeOpacity={0.7} accessibilityRole="button">
           <Text style={styles.gotItText}>{t('onboarding.gotIt')}</Text>
         </TouchableOpacity>
       </View>
@@ -143,7 +143,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   gotItBtn: {
     backgroundColor: c.orange,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 12,
   },

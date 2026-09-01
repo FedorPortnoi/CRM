@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { AlertTriangle, Kanban as KanbanIcon } from 'lucide-react-native';
 import KanbanBoard from '../../screens/KanbanBoard';
 import { useDealsStore } from '../../store/dealsStore';
 import { usePipelinesStore } from '../../store/pipelinesStore';
 import { formatMoney } from '../../market/profile';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { EmptyState, Skeleton } from '../../components/ui';
 
 type ViewMode = 'board' | 'list';
 
@@ -33,6 +35,19 @@ type DealRow = { type: 'header'; stageId: string; stageName: string; count: numb
 
 function formatValue(value: number | null, currency: string | null): string {
   return formatMoney(value, currency, { empty: '--' });
+}
+
+/** Loading placeholder shaped like a real deal row. */
+function SkeletonDealRow({ styles }: { styles: ReturnType<typeof makeListStyles> }): JSX.Element {
+  return (
+    <View style={styles.dealRow}>
+      <View style={styles.dealMain}>
+        <Skeleton width="60%" height={14} />
+        <Skeleton width="35%" height={13} style={styles.skeletonContact} />
+      </View>
+      <Skeleton width={72} height={14} />
+    </View>
+  );
 }
 
 function DealListView(): JSX.Element {
@@ -80,31 +95,29 @@ function DealListView(): JSX.Element {
 
   if (isLoading || pipelinesLoading) {
     return (
-      <View style={listStyles.centered}>
-        <ActivityIndicator size="large" color={colors.orange} />
+      <View style={listStyles.list}>
+        {Array.from({ length: 8 }, (_, i) => <SkeletonDealRow key={i} styles={listStyles} />)}
       </View>
     );
   }
 
   if (error || pipelinesError) {
     return (
-      <View style={listStyles.centered}>
-        <Text style={listStyles.errorText}>{error ?? pipelinesError}</Text>
-        <TouchableOpacity
-          style={listStyles.retryButton}
-          onPress={() => void fetchPipelines().then(() => fetchDeals())}
-        >
-          <Text style={listStyles.retryText}>{t('common.retry')}</Text>
-        </TouchableOpacity>
-      </View>
+      <EmptyState
+        icon={<AlertTriangle size={48} color={colors.danger} strokeWidth={1.5} />}
+        title={error ?? pipelinesError ?? ''}
+        actionLabel={t('common.retry')}
+        onAction={() => void fetchPipelines().then(() => fetchDeals())}
+      />
     );
   }
 
   if (rows.length === 0) {
     return (
-      <View style={listStyles.centered}>
-        <Text style={listStyles.emptyText}>{t('deals.noOpenDeals')}</Text>
-      </View>
+      <EmptyState
+        icon={<KanbanIcon size={48} color={colors.skeleton} strokeWidth={1.5} />}
+        title={t('deals.noOpenDeals')}
+      />
     );
   }
 
@@ -118,8 +131,8 @@ function DealListView(): JSX.Element {
         <RefreshControl
           refreshing={isRefreshing}
           onRefresh={handleRefresh}
-          colors={[colors.orange]}
-          tintColor={colors.orange}
+          colors={[colors.accent]}
+          tintColor={colors.accent}
         />
       }
       renderItem={({ item }) => {
@@ -140,7 +153,7 @@ function DealListView(): JSX.Element {
             style={listStyles.dealRow}
             onPress={() => router.push({ pathname: '/deal/[id]', params: { id: deal.id } })}
             accessibilityRole="button"
-            activeOpacity={0.75}
+            activeOpacity={0.7}
           >
             <View style={listStyles.dealMain}>
               <Text style={listStyles.dealTitle} numberOfLines={1}>{deal.title}</Text>
@@ -162,14 +175,13 @@ export default function PipelineScreen(): JSX.Element {
 
   return (
     <View style={styles.container}>
-      <View style={styles.circle1} pointerEvents="none" />
-      <View style={styles.circle2} pointerEvents="none" />
-      <View style={styles.circle3} pointerEvents="none" />
       <View style={styles.toggleBar}>
         <TouchableOpacity
           style={[styles.toggleBtn, viewMode === 'board' ? styles.toggleActive : null]}
           onPress={() => setViewMode('board')}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityState={{ selected: viewMode === 'board' }}
         >
           <Text style={[styles.toggleText, viewMode === 'board' ? styles.toggleTextActive : null]}>
             {t('deals.board')}
@@ -179,6 +191,8 @@ export default function PipelineScreen(): JSX.Element {
           style={[styles.toggleBtn, viewMode === 'list' ? styles.toggleActive : null]}
           onPress={() => setViewMode('list')}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityState={{ selected: viewMode === 'list' }}
         >
           <Text style={[styles.toggleText, viewMode === 'list' ? styles.toggleTextActive : null]}>
             {t('deals.list')}
@@ -194,62 +208,55 @@ export default function PipelineScreen(): JSX.Element {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  circle1: { position: 'absolute', width: 350, height: 350, borderRadius: 175, backgroundColor: 'rgba(6,95,70,0.04)', top: -80, right: -100 },
-  circle2: { position: 'absolute', width: 280, height: 280, borderRadius: 140, backgroundColor: 'rgba(6,95,70,0.03)', bottom: 100, left: -80 },
-  circle3: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(6,95,70,0.03)', top: '40%', right: -60 },
   toggleBar: {
     flexDirection: 'row',
-    backgroundColor: c.bgPanel,
+    backgroundColor: c.surface,
     borderBottomWidth: 1,
     borderBottomColor: c.bg,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
   },
   toggleBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 7,
-    borderRadius: 20,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.xxl,
     backgroundColor: c.bg,
   },
-  toggleActive: { backgroundColor: c.orange },
-  toggleText: { fontSize: 14, fontWeight: '600', color: c.amber },
-  toggleTextActive: { color: '#FFFFFF' },
+  toggleActive: { backgroundColor: c.accent },
+  toggleText: { ...type.body, fontWeight: '600', color: c.amber },
+  toggleTextActive: { color: c.onAccent },
   content: { flex: 1 },
 });
 
 const makeListStyles = (c: ThemeColors) => StyleSheet.create({
   list: { flex: 1 },
-  listContent: { paddingBottom: 24 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  errorText: { fontSize: 14, color: c.red, textAlign: 'center', marginBottom: 12 },
-  retryButton: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: c.orange, borderRadius: 12 },
-  retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
-  emptyText: { fontSize: 15, color: c.textMuted },
+  listContent: { paddingBottom: spacing.xl },
+  skeletonContact: { marginTop: spacing.sm },
   stageHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: c.bgPanel,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: c.surface,
     borderBottomWidth: 1,
     borderBottomColor: c.border,
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
-  stageHeaderText: { fontSize: 13, fontWeight: '700', color: c.text1, textTransform: 'uppercase', letterSpacing: 0.5 },
-  stageCount: { fontSize: 12, color: c.textMuted, fontWeight: '600' },
+  stageHeaderText: { ...type.label, fontWeight: '700', color: c.text1, textTransform: 'uppercase', letterSpacing: 0.5 },
+  stageCount: { ...type.caption, color: c.textMuted, fontVariant: ['tabular-nums'] },
   dealRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: c.bgPanel,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    backgroundColor: c.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: c.bg,
   },
-  dealMain: { flex: 1, marginRight: 12 },
-  dealTitle: { fontSize: 15, fontWeight: '500', color: c.text1, marginBottom: 2 },
-  dealContact: { fontSize: 13, color: c.textMuted },
-  dealValue: { fontSize: 14, fontWeight: '600', color: c.orange },
+  dealMain: { flex: 1, marginRight: spacing.md },
+  dealTitle: { ...type.body, color: c.text1, marginBottom: spacing.xs },
+  dealContact: { ...type.label, fontWeight: '500', color: c.textMuted },
+  dealValue: { ...type.body, fontWeight: '600', color: c.accent, fontVariant: ['tabular-nums'] },
 });

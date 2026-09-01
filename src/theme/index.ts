@@ -92,18 +92,58 @@ export const radius = {
 } as const;
 
 /**
+ * Geist (OFL) — embedded natively via the expo-font config plugin in app.json,
+ * so the faces are registered before the first frame: no runtime useFonts(),
+ * no load gate, and therefore no interaction with the splash sequence.
+ *
+ * Files are named after each face's POSTSCRIPT name on purpose: Android
+ * resolves a font in assets/fonts by FILE BASENAME while iOS resolves by
+ * PostScript name, and naming them this way is what makes one fontFamily
+ * string resolve identically on both platforms. Renaming these files breaks
+ * iOS silently (system-font fallback, no error).
+ *
+ * Faces are registered under per-weight family names. Pair a face with its
+ * matching `fontWeight` and Android renders FAUX BOLD on top of an already
+ * bold face, so the `type` steps below pin the family and set
+ * `fontWeight: 'normal'`. Spread a type step and DO NOT re-add fontWeight.
+ *
+ * Verified before adoption: all five faces carry the complete Russian
+ * alphabet plus the ruble sign (U+20BD) — this app ships an `ru` locale.
+ */
+export const fonts = {
+  regular:  'Geist-Regular',
+  medium:   'Geist-Medium',
+  semibold: 'Geist-SemiBold',
+  bold:     'Geist-Bold',
+  mono:     'GeistMono-Regular',
+} as const;
+
+/**
+ * Spread onto any style whose digits change in place — money, counts, timers,
+ * table columns — so glyph advance stays constant and numbers stop wobbling.
+ *
+ * Deliberately not `as const`: RN's `TextStyle.fontVariant` is a mutable
+ * `FontVariant[]`, and a `readonly` tuple fails every call site with a
+ * TS2769 overload error.
+ */
+export const tabular: { fontVariant: NonNullable<import('react-native').TextStyle['fontVariant']> } = {
+  fontVariant: ['tabular-nums'],
+};
+
+/**
  * Type scale. Seven steps replacing the eighteen ad-hoc sizes in use;
  * each maps onto the size that was already most common for that role.
  */
 export const type = {
-  display:  { fontSize: 26, fontWeight: '700', lineHeight: 32 },
-  title:    { fontSize: 20, fontWeight: '700', lineHeight: 26 },
-  subtitle: { fontSize: 18, fontWeight: '700', lineHeight: 24 },
-  heading:  { fontSize: 16, fontWeight: '700', lineHeight: 22 },
-  body:     { fontSize: 14, fontWeight: '500', lineHeight: 20 },
-  label:    { fontSize: 13, fontWeight: '600', lineHeight: 18 },
-  caption:  { fontSize: 12, fontWeight: '600', lineHeight: 16 },
-  micro:    { fontSize: 11, fontWeight: '600', lineHeight: 14 },
+  display:  { fontSize: 26, fontWeight: 'normal', lineHeight: 32, fontFamily: fonts.bold },
+  title:    { fontSize: 20, fontWeight: 'normal', lineHeight: 26, fontFamily: fonts.bold },
+  subtitle: { fontSize: 18, fontWeight: 'normal', lineHeight: 24, fontFamily: fonts.bold },
+  heading:  { fontSize: 16, fontWeight: 'normal', lineHeight: 22, fontFamily: fonts.bold },
+  body:     { fontSize: 14, fontWeight: 'normal', lineHeight: 20, fontFamily: fonts.medium },
+  label:    { fontSize: 13, fontWeight: 'normal', lineHeight: 18, fontFamily: fonts.semibold },
+  caption:  { fontSize: 12, fontWeight: 'normal', lineHeight: 16, fontFamily: fonts.semibold },
+  micro:    { fontSize: 11, fontWeight: 'normal', lineHeight: 14, fontFamily: fonts.semibold },
+  mono:     { fontSize: 13, fontWeight: 'normal', lineHeight: 18, fontFamily: fonts.mono },
 } as const;
 
 /**
@@ -115,9 +155,24 @@ export const control = {
   md: 52,
 } as const;
 
+/**
+ * Avatar hue ramp. Indexed by a stable hash of the contact name, so a person
+ * keeps the same colour everywhere they appear. Lives here because it is used
+ * by more than one screen and silently drifted when it did not.
+ */
+export const avatarRamp = [
+  '#CC785C', // terracotta (accent)
+  '#D4A27F', // amber
+  '#8A5A3B', // deep brown
+  '#B8894B', // ochre
+  '#5BAF7A', // green
+  '#A34A3C', // brick
+] as const;
+
 export type ThemeColors = typeof dark;
 export type ThemeName = 'dark' | 'light';
 export type Spacing = keyof typeof spacing;
 export type Radius = keyof typeof radius;
 export type TypeStep = keyof typeof type;
 export type Control = keyof typeof control;
+export type FontFace = keyof typeof fonts;

@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import { CheckCircle2, Kanban, Users, Zap } from 'lucide-react-native';
 import { useUserStore } from '../store/userStore';
 import { useTheme } from '../hooks/useTheme';
 import { ThemeColors } from '../theme';
+import { Button } from '../components/ui';
 
 const slides = [
   {
@@ -40,7 +40,7 @@ const slides = [
 export default function OnboardingScreen(): JSX.Element {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const styles = makeStyles(colors);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const completeOnboarding = useUserStore((s) => s.completeOnboarding);
   const [step, setStep] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -82,26 +82,23 @@ export default function OnboardingScreen(): JSX.Element {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <TouchableOpacity
-          style={styles.primary}
+        <Button
+          title={isLast ? t('onboarding.getStarted') : t('common.next')}
           onPress={() => {
             if (isLast) { void finish(); }
             else { setStep(step + 1); }
           }}
+          loading={isSaving}
           disabled={isSaving}
-          accessibilityRole="button"
-        >
-          {isSaving ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.primaryText}>{isLast ? t('onboarding.getStarted') : t('common.next')}</Text>
-          )}
-        </TouchableOpacity>
+          block
+          style={styles.primary}
+        />
 
         {!isLast && (
           <TouchableOpacity
             style={styles.skip}
             onPress={() => { void finish(); }}
+            activeOpacity={0.7}
             accessibilityRole="button"
           >
             <Text style={styles.skipText}>{t('onboarding.skipAll')}</Text>
@@ -130,16 +127,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 32 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.border },
   dotActive: { backgroundColor: c.orange, width: 24 },
-  error: { color: '#C5221F', textAlign: 'center', marginBottom: 12 },
-  primary: {
-    height: 52,
-    borderRadius: 12,
-    backgroundColor: c.orange,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  primaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  error: { color: c.danger, textAlign: 'center', marginBottom: 12 },
+  primary: { marginBottom: 12 },
   skip: { alignItems: 'center', paddingVertical: 8 },
   skipText: { color: c.amber, fontSize: 14 },
 });

@@ -78,7 +78,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.bgPanel,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingTop: 12,
   },
   handle: {

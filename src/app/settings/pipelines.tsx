@@ -14,7 +14,6 @@
 //      but must not be draggable into the middle of a working funnel.
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   RefreshControl,
   StyleSheet,
@@ -27,7 +26,8 @@ import { useTranslation } from 'react-i18next';
 import DraggableFlatList, { type RenderItemParams } from 'react-native-draggable-flatlist';
 import { useUserStore } from '../../store/userStore';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius } from '../../theme';
+import { Button, EmptyState, Skeleton } from '../../components/ui';
 import {
   PipelineApiError,
   PipelineStage,
@@ -318,6 +318,7 @@ export default function PipelineSettingsScreen(): JSX.Element {
                 onPress={() => setPickedPipelineId(p.id)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: active }}
+                activeOpacity={0.7}
               >
                 <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
                   {p.name}
@@ -331,7 +332,7 @@ export default function PipelineSettingsScreen(): JSX.Element {
         {canManage ? t('pipelines.intro') : t('pipelines.readOnlyNotice')}
       </Text>
       {stages.length === 0 && !pipelinesQuery.isLoading ? (
-        <Text style={styles.empty}>{t('pipelines.noStages')}</Text>
+        <EmptyState title={t('pipelines.noStages')} />
       ) : null}
     </View>
   );
@@ -349,6 +350,7 @@ export default function PipelineSettingsScreen(): JSX.Element {
               onPress={() => canManage && openEditEditor(stage)}
               disabled={!canManage}
               accessibilityRole="button"
+              activeOpacity={0.7}
             >
               <View
                 style={[styles.archivedSwatch, { backgroundColor: stage.color ?? colors.borderStrong }]}
@@ -371,13 +373,18 @@ export default function PipelineSettingsScreen(): JSX.Element {
       />
 
       {pipelinesQuery.isLoading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={colors.orange} />
+        <View style={styles.list}>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} height={56} style={styles.skeletonRow} />
+          ))}
+        </View>
       ) : pipelinesQuery.error ? (
         <View style={styles.errorBlock}>
           <Text style={styles.errorText}>{messageFor(pipelinesQuery.error)}</Text>
           <TouchableOpacity
             onPress={() => void pipelinesQuery.refetch()}
             accessibilityRole="button"
+            activeOpacity={0.7}
           >
             <Text style={styles.retry}>{t('common.retry')}</Text>
           </TouchableOpacity>
@@ -404,14 +411,13 @@ export default function PipelineSettingsScreen(): JSX.Element {
       )}
 
       {canManage && pipeline !== null ? (
-        <TouchableOpacity
-          style={styles.addButton}
+        <Button
+          title={t('pipelines.addStageButton')}
           onPress={() => setLibraryOpen(true)}
           disabled={busy}
-          accessibilityRole="button"
-        >
-          <Text style={styles.addButtonText}>{t('pipelines.addStageButton')}</Text>
-        </TouchableOpacity>
+          block
+          style={styles.addButton}
+        />
       ) : null}
 
       <StageLibrarySheet
@@ -462,10 +468,11 @@ export default function PipelineSettingsScreen(): JSX.Element {
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   listContainer: { flex: 1 },
-  list: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 90 },
-  pipelineChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  list: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxl + spacing.xl },
+  skeletonRow: { marginBottom: spacing.sm },
+  pipelineChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   chip: {
-    borderRadius: 20,
+    borderRadius: radius.xxl,
     borderWidth: 1,
     borderColor: c.border,
     paddingHorizontal: 14,
@@ -474,11 +481,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   chipActive: { backgroundColor: c.orange, borderColor: c.orange },
   chipText: { fontSize: 13, color: c.text1 },
-  chipTextActive: { color: '#fff', fontWeight: '600' },
-  intro: { fontSize: 12, color: c.amber, lineHeight: 17, marginBottom: 14 },
-  empty: { fontSize: 13, color: c.textMuted, lineHeight: 19, marginBottom: 14 },
-  errorBlock: { marginTop: 40, paddingHorizontal: 24, alignItems: 'center', gap: 12 },
-  errorText: { color: c.red, textAlign: 'center' },
+  chipTextActive: { color: c.onAccent, fontWeight: '600' },
+  intro: { fontSize: 12, color: c.amber, lineHeight: 17, marginBottom: spacing.md },
+  errorBlock: { marginTop: 32, paddingHorizontal: 24, alignItems: 'center', gap: spacing.md },
+  errorText: { color: c.danger, textAlign: 'center' },
   retry: { color: c.orange, fontWeight: '600', fontSize: 14 },
   sectionLabel: {
     fontSize: 12,
@@ -488,29 +494,22 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     letterSpacing: 0.5,
   },
   archivedBlock: { marginTop: 24 },
-  archivedHint: { fontSize: 12, color: c.textMuted, marginTop: 4, marginBottom: 10, lineHeight: 16 },
+  archivedHint: { fontSize: 12, color: c.textMuted, marginTop: 4, marginBottom: spacing.sm, lineHeight: 16 },
   archivedRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: spacing.sm,
     backgroundColor: c.bgPanel,
-    borderRadius: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: c.border,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
     opacity: 0.75,
   },
-  archivedSwatch: { width: 10, height: 10, borderRadius: 5 },
+  archivedSwatch: { width: 10, height: 10, borderRadius: radius.pill },
   archivedName: { flex: 1, fontSize: 14, color: c.text1 },
   archivedAction: { fontSize: 12, color: c.orange, fontWeight: '600' },
-  addButton: {
-    margin: 16,
-    backgroundColor: c.orange,
-    borderRadius: 10,
-    padding: 14,
-    alignItems: 'center',
-  },
-  addButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  addButton: { margin: spacing.lg },
 });

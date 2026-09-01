@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Linking,
@@ -20,6 +19,7 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Button } from '../../components/ui';
 
 type CameraPermissionState = 'unknown' | 'granted' | 'denied';
 
@@ -213,6 +213,7 @@ export default function ScanCardScreen(): JSX.Element {
                   onPress={() => {
                     void takePhoto();
                   }}
+                  activeOpacity={0.7}
                   accessibilityRole="button"
                 >
                   <Text style={styles.secondaryButtonText}>{t('contacts.scanRetakePhoto')}</Text>
@@ -222,6 +223,7 @@ export default function ScanCardScreen(): JSX.Element {
                   onPress={() => {
                     void pickImage();
                   }}
+                  activeOpacity={0.7}
                   accessibilityRole="button"
                 >
                   <Text style={styles.secondaryButtonText}>{t('contacts.scanChangeImage')}</Text>
@@ -230,29 +232,21 @@ export default function ScanCardScreen(): JSX.Element {
             </>
           ) : (
             <>
-              <TouchableOpacity
-                style={[
-                  styles.cameraButton,
-                  isRequestingCamera && styles.buttonDisabled,
-                ]}
-                disabled={isRequestingCamera}
+              <Button
+                title={t('contacts.scanTakePhoto')}
                 onPress={() => {
                   void takePhoto();
                 }}
-                accessibilityRole="button"
-              >
-                {isRequestingCamera ? (
-                  <ActivityIndicator color={colors.onAccent} />
-                ) : (
-                  <Camera size={24} color={colors.onAccent} />
-                )}
-                <Text style={styles.cameraButtonText}>{t('contacts.scanTakePhoto')}</Text>
-              </TouchableOpacity>
+                loading={isRequestingCamera}
+                icon={<Camera size={24} color={colors.onAccent} />}
+                style={styles.cameraButton}
+              />
               <TouchableOpacity
                 style={styles.libraryButton}
                 onPress={() => {
                   void pickImage();
                 }}
+                activeOpacity={0.7}
                 accessibilityRole="button"
               >
                 <Text style={styles.libraryButtonText}>{t('contacts.scanChooseFromLibrary')}</Text>
@@ -266,6 +260,7 @@ export default function ScanCardScreen(): JSX.Element {
             onPress={() => {
               void Linking.openSettings();
             }}
+            activeOpacity={0.7}
             accessibilityRole="button"
           >
             <Text style={styles.settingsButtonText}>{t('contacts.scanOpenSettings')}</Text>
@@ -289,6 +284,7 @@ export default function ScanCardScreen(): JSX.Element {
                 onPress={() => {
                   void takePhoto();
                 }}
+                activeOpacity={0.7}
                 accessibilityRole="button"
               >
                 <Text style={styles.errorActionText}>{t('contacts.scanRetake')}</Text>
@@ -298,6 +294,7 @@ export default function ScanCardScreen(): JSX.Element {
                 onPress={() => {
                   void pickImage();
                 }}
+                activeOpacity={0.7}
                 accessibilityRole="button"
               >
                 <Text style={styles.errorActionText}>{t('contacts.scanChooseImage')}</Text>
@@ -305,21 +302,17 @@ export default function ScanCardScreen(): JSX.Element {
             </View>
           </View>
         ) : null}
-        <TouchableOpacity
-          style={[styles.button, isScanning && styles.buttonDisabled]}
-          disabled={isScanning || !canScan}
+        <Button
+          title={t('contacts.scanAndCreate')}
           onPress={() => {
             void scan();
           }}
-          accessibilityRole="button"
-        >
-          {isScanning ? (
-            <ActivityIndicator color={colors.onAccent} />
-          ) : (
-            <ScanText size={20} color={colors.onAccent} />
-          )}
-          <Text style={styles.buttonText}>{t('contacts.scanAndCreate')}</Text>
-        </TouchableOpacity>
+          disabled={!canScan}
+          loading={isScanning}
+          icon={<ScanText size={20} color={colors.onAccent} />}
+          block
+          style={styles.button}
+        />
       </ScrollView>
     </SafeAreaView>
   );
@@ -327,9 +320,9 @@ export default function ScanCardScreen(): JSX.Element {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
-  container: { padding: spacing.lg, paddingBottom: 28 },
-  title: { fontSize: type.display.fontSize, fontWeight: '700', color: c.text1, marginBottom: spacing.sm },
-  helperText: { color: c.textMuted, lineHeight: 20, marginBottom: spacing.md },
+  container: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  title: { ...type.display, color: c.text1, marginBottom: spacing.sm },
+  helperText: { ...type.body, color: c.textMuted, marginBottom: spacing.md },
   capturePanel: {
     minHeight: 190,
     borderRadius: radius.lg,
@@ -341,21 +334,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     overflow: 'hidden',
     padding: spacing.md,
   },
-  image: { width: '100%', height: 190, borderRadius: 8 },
-  captureActions: { flexDirection: 'row', gap: 10, marginTop: spacing.md },
-  cameraButton: {
-    height: 52,
-    minWidth: 180,
-    borderRadius: radius.lg,
-    backgroundColor: c.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  cameraButtonText: { color: c.onAccent, fontWeight: '700', fontSize: type.heading.fontSize },
-  libraryButton: { marginTop: spacing.md, paddingVertical: 10, paddingHorizontal: spacing.md },
-  libraryButtonText: { color: c.success, fontWeight: '700' },
+  image: { width: '100%', height: 190, borderRadius: radius.md },
+  captureActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  cameraButton: { minWidth: 180 },
+  libraryButton: { marginTop: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  libraryButtonText: { ...type.label, color: c.success },
   secondaryButton: {
     flex: 1,
     minHeight: 44,
@@ -364,20 +347,20 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderColor: c.success,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: spacing.sm,
   },
-  secondaryButtonText: { color: c.success, fontWeight: '700' },
+  secondaryButtonText: { ...type.label, color: c.success },
   settingsButton: {
     alignSelf: 'flex-start',
-    paddingVertical: 10,
+    paddingVertical: spacing.sm,
     marginTop: spacing.xs,
   },
-  settingsButtonText: { color: c.success, fontWeight: '700' },
+  settingsButtonText: { ...type.label, color: c.success },
   sectionLabel: {
+    ...type.label,
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
     color: c.text1,
-    fontWeight: '700',
   },
   input: {
     minHeight: 160,
@@ -386,6 +369,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderColor: c.inputBorder,
     backgroundColor: c.surface,
     padding: spacing.md,
+    ...type.body,
     color: c.text1,
   },
   errorBox: {
@@ -396,8 +380,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.dangerSoft,
     padding: spacing.md,
   },
-  error: { color: c.danger, lineHeight: 20 },
-  errorActions: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  error: { ...type.body, color: c.danger },
+  errorActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   errorAction: {
     minHeight: 38,
     borderRadius: radius.md,
@@ -408,17 +392,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
   },
-  errorActionText: { color: c.danger, fontWeight: '700' },
+  errorActionText: { ...type.label, color: c.danger },
   button: {
-    height: 52,
-    borderRadius: radius.lg,
-    backgroundColor: c.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
     marginTop: spacing.lg,
   },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: c.onAccent, fontWeight: '700', fontSize: type.heading.fontSize },
 });

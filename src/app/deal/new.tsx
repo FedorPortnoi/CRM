@@ -19,7 +19,8 @@ import { usePipelinesStore } from '../../store/pipelinesStore';
 import { API_URL } from '../../utils/api';
 import { useCreateMutation } from '../../hooks/useCreateMutation';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Button, EmptyState } from '../../components/ui';
 
 interface PipelineStage {
   id: string;
@@ -155,6 +156,7 @@ export default function NewDealScreen(): JSX.Element {
   const renderPipelineItem = ({ item }: ListRenderItemInfo<Pipeline>) => (
     <TouchableOpacity
       style={styles.modalItem}
+      activeOpacity={0.7}
       onPress={() => {
         setSelectedPipelineId(item.id);
         setSelectedStageId('');
@@ -175,6 +177,7 @@ export default function NewDealScreen(): JSX.Element {
   const renderStageItem = ({ item }: ListRenderItemInfo<PipelineStage>) => (
     <TouchableOpacity
       style={styles.modalItem}
+      activeOpacity={0.7}
       onPress={() => {
         setSelectedStageId(item.id);
         setShowStageModal(false);
@@ -194,6 +197,7 @@ export default function NewDealScreen(): JSX.Element {
   const renderContactItem = ({ item }: ListRenderItemInfo<ContactPreview>) => (
     <TouchableOpacity
       style={styles.contactResultItem}
+      activeOpacity={0.7}
       onPress={() => {
         setSelectedContactId(item.id);
         setSelectedContactName(
@@ -236,7 +240,7 @@ export default function NewDealScreen(): JSX.Element {
 
       <Text style={styles.label}>{t('deals.valueUsd')}</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, styles.tabular]}
         value={valueStr}
         onChangeText={setValueStr}
         keyboardType="numeric"
@@ -245,9 +249,9 @@ export default function NewDealScreen(): JSX.Element {
       />
 
       <Text style={styles.label}>{t('deals.pipeline')} *</Text>
-      <TouchableOpacity style={styles.pickerButton} onPress={() => setShowPipelineModal(true)}>
+      <TouchableOpacity style={styles.pickerButton} activeOpacity={0.7} onPress={() => setShowPipelineModal(true)}>
         {isLoading ? (
-          <ActivityIndicator color={colors.orange} />
+          <ActivityIndicator color={colors.accent} />
         ) : (
           <Text style={styles.pickerButtonText}>
             {selectedPipelineId
@@ -266,7 +270,7 @@ export default function NewDealScreen(): JSX.Element {
         <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{t('deals.selectPipeline')}</Text>
-            <TouchableOpacity onPress={() => setShowPipelineModal(false)}>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => setShowPipelineModal(false)}>
               <Text style={styles.modalClose}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -281,6 +285,7 @@ export default function NewDealScreen(): JSX.Element {
       <Text style={styles.label}>{t('deals.stage')} *</Text>
       <TouchableOpacity
         style={[styles.pickerButton, stagePickerDisabled && styles.pickerButtonDisabled]}
+        activeOpacity={0.7}
         onPress={() => {
           if (!stagePickerDisabled) setShowStageModal(true);
         }}
@@ -305,7 +310,7 @@ export default function NewDealScreen(): JSX.Element {
         <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{t('deals.selectStage')}</Text>
-            <TouchableOpacity onPress={() => setShowStageModal(false)}>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => setShowStageModal(false)}>
               <Text style={styles.modalClose}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -313,6 +318,7 @@ export default function NewDealScreen(): JSX.Element {
             data={filteredStages}
             keyExtractor={(item) => item.id}
             renderItem={renderStageItem}
+            ListEmptyComponent={<EmptyState title={t('pipelines.noStages')} />}
           />
         </View>
       </Modal>
@@ -322,6 +328,7 @@ export default function NewDealScreen(): JSX.Element {
         <View style={styles.contactChip}>
           <Text style={styles.contactChipText}>{selectedContactName}</Text>
           <TouchableOpacity
+            activeOpacity={0.7}
             onPress={() => {
               setSelectedContactId('');
               setSelectedContactName('');
@@ -365,7 +372,7 @@ export default function NewDealScreen(): JSX.Element {
 
       <Text style={styles.label}>{t('tasks.dueDateOptional')}</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, styles.tabular]}
         value={nextActionDue}
         onChangeText={setNextActionDue}
         placeholder={t('deals.nextActionDuePlaceholder')}
@@ -373,17 +380,14 @@ export default function NewDealScreen(): JSX.Element {
         autoCapitalize="none"
       />
 
-      <TouchableOpacity
-        style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+      <Button
+        title={t('deals.createDeal')}
         onPress={() => void submit()}
+        loading={isSubmitting}
         disabled={isSubmitting}
-      >
-        {isSubmitting ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.submitButtonText}>{t('deals.createDeal')}</Text>
-        )}
-      </TouchableOpacity>
+        block
+        style={styles.submitButton}
+      />
     </ScrollView>
     </>
   );
@@ -398,30 +402,32 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     padding: 16,
   },
   errorBanner: {
-    backgroundColor: 'rgba(204,82,71,0.12)',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
+    backgroundColor: c.dangerSoft,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.lg,
   },
   errorBannerText: {
-    color: c.red,
+    color: c.danger,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...type.label,
     color: c.text1,
-    marginTop: 16,
-    marginBottom: 6,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   input: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
     fontSize: 16,
     color: c.text1,
+  },
+  tabular: {
+    fontVariant: ['tabular-nums'],
   },
   fieldError: {
     color: c.red,
@@ -457,12 +463,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderBottomColor: c.border,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
     color: c.text1,
   },
   modalClose: {
-    fontSize: 18,
+    fontSize: 20,
     color: c.amber,
     paddingHorizontal: 8,
   },
@@ -514,23 +520,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderBottomColor: c.border,
   },
   contactResultText: {
-    fontSize: 15,
+    fontSize: 16,
     color: c.text1,
   },
   submitButton: {
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 32,
-    marginBottom: 16,
-  },
-  submitButtonDisabled: {
-    opacity: 0.7,
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    marginTop: spacing.xxl,
+    marginBottom: spacing.lg,
   },
 });

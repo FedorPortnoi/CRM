@@ -1,14 +1,11 @@
 import { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
-  View,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Upload } from 'lucide-react-native';
@@ -16,7 +13,8 @@ import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors, spacing, radius, type } from '../../theme';
+import { ThemeColors, spacing, radius, type, tabular } from '../../theme';
+import { Card, Button } from '../../components/ui';
 
 type CsvRow = {
   first_name: string;
@@ -149,19 +147,19 @@ export default function ImportCsvScreen(): JSX.Element {
           autoCorrect={false}
           textAlignVertical="top"
         />
-        <View style={styles.preview}>
+        <Card style={styles.preview}>
           <Text style={styles.previewText}>{rows.length} корректных строк</Text>
-        </View>
+        </Card>
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <TouchableOpacity
-          style={[styles.button, (rows.length === 0 || isImporting) && styles.buttonDisabled]}
-          disabled={rows.length === 0 || isImporting}
+        <Button
+          title="Импортировать"
           onPress={() => { void submit(); }}
-          accessibilityRole="button"
-        >
-          {isImporting ? <ActivityIndicator color={colors.onAccent} /> : <Upload size={20} color={colors.onAccent} />}
-          <Text style={styles.buttonText}>Импортировать</Text>
-        </TouchableOpacity>
+          disabled={rows.length === 0}
+          loading={isImporting}
+          icon={<Upload size={20} color={colors.onAccent} />}
+          block
+          style={styles.button}
+        />
       </ScrollView>
     </SafeAreaView>
   );
@@ -171,7 +169,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
   container: { flex: 1 },
   content: { padding: spacing.lg },
-  title: { fontSize: type.display.fontSize, fontWeight: '700', color: c.text1, marginBottom: spacing.md },
+  title: { ...type.display, color: c.text1, marginBottom: spacing.md },
   input: {
     minHeight: 260,
     borderRadius: radius.lg,
@@ -179,29 +177,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderColor: c.inputBorder,
     backgroundColor: c.surface,
     padding: spacing.md,
-    fontSize: type.body.fontSize,
+    ...type.mono,
     color: c.text1,
   },
   preview: {
     marginTop: spacing.md,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    backgroundColor: c.surface,
-    borderWidth: 1,
-    borderColor: c.border,
   },
-  previewText: { color: c.text1, fontWeight: '600' },
-  error: { color: c.danger, marginTop: spacing.md },
+  previewText: { ...type.label, ...tabular, color: c.text1 },
+  error: { ...type.body, color: c.danger, marginTop: spacing.md },
   button: {
-    height: 52,
-    borderRadius: radius.lg,
-    backgroundColor: c.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
     marginTop: spacing.lg,
   },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: c.onAccent, fontWeight: '700', fontSize: type.heading.fontSize },
 });

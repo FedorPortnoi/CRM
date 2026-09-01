@@ -36,7 +36,9 @@
 // a foreign speech-recognition provider (see backend/services/transcription.ts).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
+  Animated,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
@@ -53,7 +55,7 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, History, Mic, Plus, Send, ServerCog, Sparkles, X } from 'lucide-react-native';
+import { AlertCircle, Check, History, Mic, Plus, Send, ServerCog, Sparkles, X } from 'lucide-react-native';
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
@@ -77,7 +79,8 @@ import {
 } from '../../hooks/useAssistant';
 import ToolActivity from '../../components/assistant/ToolActivity';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Card, Button, EmptyState, SkeletonText } from '../../components/ui';
 
 /** Warn about the server-side cap only when the user is close to it. */
 const CHARS_LEFT_WARNING = 300;
@@ -147,6 +150,60 @@ function formatVoiceDuration(ms: number): string {
   return `${String(minutes)}:${String(seconds).padStart(2, '0')}`;
 }
 
+/** Pulses the recording dot so "live" reads as live, not as a static icon.
+ * Honors the OS reduce-motion setting like the Skeleton primitive does. */
+function useRecordingPulse(active: boolean): Animated.Value {
+  const pulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!active) {
+      pulse.setValue(1);
+      return;
+    }
+    let cancelled = false;
+    let loop: Animated.CompositeAnimation | null = null;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((reduced) => {
+        if (cancelled || reduced) return;
+        loop = Animated.loop(
+          Animated.sequence([
+            Animated.timing(pulse, { toValue: 0.3, duration: 600, useNativeDriver: true }),
+            Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+          ]),
+        );
+        loop.start();
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      loop?.stop();
+    };
+  }, [active, pulse]);
+
+  return pulse;
+}
+
+/** Two placeholder turns shaped like the real transcript — used while the
+ * status probe or a stored conversation is still loading. */
+function ChatSkeleton(): JSX.Element {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
+  return (
+    <View style={styles.chatSkeletonWrap}>
+      <View style={styles.turnAssistant}>
+        <View style={styles.bubbleAssistant}>
+          <SkeletonText lines={2} lastLineWidth="70%" />
+        </View>
+      </View>
+      <View style={styles.turnAssistant}>
+        <View style={[styles.bubbleAssistant, styles.chatSkeletonNarrow]}>
+          <SkeletonText lines={1} lastLineWidth="55%" />
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function AssistantScreen(): JSX.Element {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -198,6 +255,7 @@ export default function AssistantScreen(): JSX.Element {
   const recorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(recorder);
   const { mutate: transcribeVoice } = useTranscribeVoice();
+  const recordingPulse = useRecordingPulse(voiceState === 'recording');
 
   const isSending = sendMutation.isPending;
 
@@ -470,20 +528,20 @@ export default function AssistantScreen(): JSX.Element {
 
   // ── Not connected: the realistic deployment failure ────────────────────────
   const notConfiguredCard = (
-    <View style={styles.stateCard}>
-      <ServerCog size={30} color={colors.amber} strokeWidth={1.8} />
-      <Text style={styles.stateTitle}>{t('assistant.notConfiguredTitle')}</Text>
-      <Text style={styles.stateBody}>{t('assistant.notConfiguredBody')}</Text>
-      <Text style={styles.stateHint}>{t('assistant.notConfiguredHint')}</Text>
-    </View>
+    <EmptyState
+      icon={<ServerCog size={30} color={colors.warning} strokeWidth={1.8} />}
+      title={t('assistant.notConfiguredTitle')}
+      description={`${t('assistant.notConfiguredBody')}\n${t('assistant.notConfiguredHint')}`}
+    />
   );
 
   const emptyCard = (
-    <View style={styles.empty}>
-      <Sparkles size={30} color={colors.orange} strokeWidth={2} />
-      <Text style={styles.emptyTitle}>{t('assistant.emptyTitle')}</Text>
-      <Text style={styles.emptySubtitle}>{t('assistant.subtitle')}</Text>
-      <Text style={styles.emptyHint}>{t('assistant.emptyHint')}</Text>
+    <View>
+      <EmptyState
+        icon={<Sparkles size={30} color={colors.accent} strokeWidth={2} />}
+        title={t('assistant.emptyTitle')}
+        description={`${t('assistant.subtitle')}\n${t('assistant.emptyHint')}`}
+      />
       {canChat
         ? [t('assistant.example1'), t('assistant.example2'), t('assistant.example3')].map((example) => (
             <TouchableOpacity
@@ -492,6 +550,7 @@ export default function AssistantScreen(): JSX.Element {
               onPress={() => setDraft(example)}
               accessibilityRole="button"
               accessibilityLabel={example}
+              activeOpacity={0.7}
             >
               <Text style={styles.exampleText}>{example}</Text>
             </TouchableOpacity>
@@ -505,48 +564,31 @@ export default function AssistantScreen(): JSX.Element {
   // spinner) each time the draft changes.
   const renderEmptyState = (): JSX.Element => {
     if (statusQuery.isPending) {
-      return (
-        <View style={styles.stateCard}>
-          <ActivityIndicator color={colors.orange} />
-          <Text style={styles.stateHint}>{t('assistant.statusChecking')}</Text>
-        </View>
-      );
+      return <ChatSkeleton />;
     }
     if (statusQuery.isError) {
       return (
-        <View style={styles.stateCard}>
-          <Text style={styles.stateBody}>{t('assistant.statusFailed')}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => { void statusQuery.refetch(); }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.retryText}>{t('assistant.retry')}</Text>
-          </TouchableOpacity>
-        </View>
+        <EmptyState
+          icon={<AlertCircle size={28} color={colors.danger} />}
+          title={t('assistant.statusFailed')}
+          actionLabel={t('assistant.retry')}
+          onAction={() => { void statusQuery.refetch(); }}
+        />
       );
     }
     if (isLoadingConversation) {
-      return (
-        <View style={styles.stateCard}>
-          <ActivityIndicator color={colors.orange} />
-        </View>
-      );
+      return <ChatSkeleton />;
     }
     // Reopening a stored conversation failed — its own state, not the "cannot
     // send" banner, because nothing was sent.
     if (openedConversationId !== null && conversationQuery.isError) {
       return (
-        <View style={styles.stateCard}>
-          <Text style={styles.stateBody}>{t('assistant.historyFailed')}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => { void conversationQuery.refetch(); }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.retryText}>{t('assistant.retry')}</Text>
-          </TouchableOpacity>
-        </View>
+        <EmptyState
+          icon={<AlertCircle size={28} color={colors.danger} />}
+          title={t('assistant.historyFailed')}
+          actionLabel={t('assistant.retry')}
+          onAction={() => { void conversationQuery.refetch(); }}
+        />
       );
     }
     if (notConfigured) return notConfiguredCard;
@@ -579,8 +621,9 @@ export default function AssistantScreen(): JSX.Element {
                   accessibilityRole="button"
                   accessibilityLabel={t('assistant.newConversation')}
                   hitSlop={8}
+                  activeOpacity={0.7}
                 >
-                  <Plus size={22} color={colors.orange} strokeWidth={2.2} />
+                  <Plus size={22} color={colors.accent} strokeWidth={2.2} />
                 </TouchableOpacity>
               ) : null}
               <TouchableOpacity
@@ -589,8 +632,9 @@ export default function AssistantScreen(): JSX.Element {
                 accessibilityRole="button"
                 accessibilityLabel={t('assistant.history')}
                 hitSlop={8}
+                activeOpacity={0.7}
               >
-                <History size={22} color={colors.orange} strokeWidth={2.2} />
+                <History size={22} color={colors.accent} strokeWidth={2.2} />
               </TouchableOpacity>
             </View>
           ),
@@ -615,7 +659,7 @@ export default function AssistantScreen(): JSX.Element {
           ListFooterComponent={
             isSending ? (
               <View style={styles.pending}>
-                <ActivityIndicator color={colors.orange} />
+                <ActivityIndicator color={colors.accent} />
                 <Text style={styles.pendingText}>{t('assistant.thinking')}</Text>
                 <Text style={styles.pendingSeconds}>
                   {t('assistant.thinkingElapsed', { count: elapsedSeconds })}
@@ -630,7 +674,7 @@ export default function AssistantScreen(): JSX.Element {
           <View style={styles.errorBox}>
             <Text style={styles.errorText}>{errorText}</Text>
             {hasFailedBubble && !notConfigured ? (
-              <TouchableOpacity onPress={handleRetry} accessibilityRole="button" hitSlop={6}>
+              <TouchableOpacity onPress={handleRetry} accessibilityRole="button" hitSlop={6} activeOpacity={0.7}>
                 <Text style={styles.errorAction}>{t('assistant.retrySend')}</Text>
               </TouchableOpacity>
             ) : null}
@@ -641,7 +685,7 @@ export default function AssistantScreen(): JSX.Element {
           <View
             style={[
               styles.composer,
-              { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 14) },
+              { paddingBottom: keyboardVisible ? spacing.sm : Math.max(insets.bottom, spacing.md + 2) },
             ]}
           >
             {voiceErrorText !== null ? (
@@ -660,11 +704,12 @@ export default function AssistantScreen(): JSX.Element {
                   onPress={() => { void cancelRecording(); }}
                   accessibilityRole="button"
                   accessibilityLabel={t('assistant.voiceCancel')}
+                  activeOpacity={0.7}
                 >
-                  <X size={20} color={colors.red} strokeWidth={2.2} />
+                  <X size={20} color={colors.danger} strokeWidth={2.2} />
                 </TouchableOpacity>
                 <View style={styles.voiceStatus}>
-                  <View style={styles.voiceDot} />
+                  <Animated.View style={[styles.voiceDot, { opacity: recordingPulse }]} />
                   <Text style={styles.voiceStatusText}>{t('assistant.voiceRecording')}</Text>
                   <Text style={styles.voiceTimer}>
                     {formatVoiceDuration(recorderState.durationMillis)}
@@ -675,8 +720,9 @@ export default function AssistantScreen(): JSX.Element {
                   onPress={() => { void finishRecording(); }}
                   accessibilityRole="button"
                   accessibilityLabel={t('assistant.voiceStop')}
+                  activeOpacity={0.7}
                 >
-                  <Check size={18} color="#FFFFFF" strokeWidth={2.4} />
+                  <Check size={18} color={colors.onAccent} strokeWidth={2.4} />
                 </TouchableOpacity>
               </View>
             ) : (
@@ -694,7 +740,7 @@ export default function AssistantScreen(): JSX.Element {
                 />
                 {voiceState === 'transcribing' ? (
                   <View style={[styles.sendButton, styles.sendButtonDisabled]}>
-                    <ActivityIndicator color="#FFFFFF" size="small" />
+                    <ActivityIndicator color={colors.onAccent} size="small" />
                   </View>
                 ) : showMicButton ? (
                   <TouchableOpacity
@@ -703,8 +749,9 @@ export default function AssistantScreen(): JSX.Element {
                     disabled={composerDisabled}
                     accessibilityRole="button"
                     accessibilityLabel={t('assistant.voiceRecord')}
+                    activeOpacity={0.7}
                   >
-                    <Mic size={18} color="#FFFFFF" strokeWidth={2.4} />
+                    <Mic size={18} color={colors.onAccent} strokeWidth={2.4} />
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
@@ -716,11 +763,12 @@ export default function AssistantScreen(): JSX.Element {
                     disabled={composerDisabled || draft.trim().length === 0}
                     accessibilityRole="button"
                     accessibilityLabel={t('assistant.send')}
+                    activeOpacity={0.7}
                   >
                     {isSending ? (
-                      <ActivityIndicator color="#FFFFFF" size="small" />
+                      <ActivityIndicator color={colors.onAccent} size="small" />
                     ) : (
-                      <Send size={18} color="#FFFFFF" strokeWidth={2.4} />
+                      <Send size={18} color={colors.onAccent} strokeWidth={2.4} />
                     )}
                   </TouchableOpacity>
                 )}
@@ -744,28 +792,30 @@ export default function AssistantScreen(): JSX.Element {
             <Text style={styles.modalTitle}>{t('assistant.historyTitle')}</Text>
 
             {conversationsQuery.isPending ? (
-              <ActivityIndicator color={colors.orange} style={styles.modalLoader} />
-            ) : conversationsQuery.isError ? (
-              <View style={styles.modalState}>
-                <Text style={styles.errorText}>{t('assistant.historyFailed')}</Text>
-                <TouchableOpacity
-                  style={styles.retryButton}
-                  onPress={() => { void conversationsQuery.refetch(); }}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.retryText}>{t('assistant.retry')}</Text>
-                </TouchableOpacity>
+              <View style={styles.modalSkeletonWrap}>
+                <SkeletonText lines={2} lastLineWidth="60%" />
+                <SkeletonText lines={2} lastLineWidth="45%" />
               </View>
+            ) : conversationsQuery.isError ? (
+              <EmptyState
+                icon={<AlertCircle size={28} color={colors.danger} />}
+                title={t('assistant.historyFailed')}
+                actionLabel={t('assistant.retry')}
+                onAction={() => { void conversationsQuery.refetch(); }}
+              />
             ) : (conversationsQuery.data ?? []).length === 0 ? (
-              <Text style={styles.modalEmpty}>{t('assistant.historyEmpty')}</Text>
+              <EmptyState
+                icon={<History size={28} color={colors.textMuted} />}
+                title={t('assistant.historyEmpty')}
+              />
             ) : (
               <ScrollView style={styles.modalScroll}>
                 {(conversationsQuery.data ?? []).map((conversation) => (
-                  <TouchableOpacity
+                  <Card
                     key={conversation.id}
                     style={styles.historyRow}
                     onPress={() => openConversation(conversation.id)}
-                    accessibilityRole="button"
+                    accessibilityLabel={conversation.title ?? t('assistant.untitled')}
                   >
                     <Text style={styles.historyTitle} numberOfLines={1}>
                       {conversation.title ?? t('assistant.untitled')}
@@ -775,25 +825,25 @@ export default function AssistantScreen(): JSX.Element {
                         count: conversation.message_count,
                       })}`}
                     </Text>
-                  </TouchableOpacity>
+                  </Card>
                 ))}
               </ScrollView>
             )}
 
-            <TouchableOpacity
-              style={styles.modalPrimary}
+            <Button
+              title={t('assistant.newConversation')}
               onPress={() => {
                 setHistoryOpen(false);
                 startNewConversation();
               }}
-              accessibilityRole="button"
-            >
-              <Text style={styles.modalPrimaryText}>{t('assistant.newConversation')}</Text>
-            </TouchableOpacity>
+              block
+              style={styles.modalPrimary}
+            />
             <TouchableOpacity
               style={styles.modalClose}
               onPress={() => setHistoryOpen(false)}
               accessibilityRole="button"
+              activeOpacity={0.7}
             >
               <Text style={styles.modalCloseText}>{t('assistant.close')}</Text>
             </TouchableOpacity>
@@ -807,120 +857,99 @@ export default function AssistantScreen(): JSX.Element {
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: c.bg },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
-  headerButton: { padding: 8 },
+  headerButton: { padding: spacing.sm },
   banner: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 12,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
     backgroundColor: c.bgPanel,
     borderWidth: 1,
     borderColor: c.border,
   },
-  bannerText: { color: c.amber, fontSize: 13, lineHeight: 18 },
-  list: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 20 },
-  listEmpty: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 24 },
+  bannerText: { color: c.textMuted, ...type.label, lineHeight: 18 },
+  list: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl },
+  listEmpty: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.xl },
 
-  empty: { alignItems: 'center', gap: 10 },
-  emptyTitle: { fontSize: 20, fontWeight: '700', color: c.text1 },
-  emptySubtitle: { fontSize: 14, color: c.amber, textAlign: 'center', lineHeight: 20 },
-  emptyHint: { fontSize: 13, color: c.textMuted, textAlign: 'center', lineHeight: 19, marginBottom: 4 },
+  chatSkeletonWrap: { gap: spacing.sm },
+  chatSkeletonNarrow: { maxWidth: '70%' },
+
   exampleChip: {
     alignSelf: 'stretch',
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: c.border,
     backgroundColor: c.bgPanel,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm,
   },
-  exampleText: { color: c.text1, fontSize: 14, lineHeight: 19 },
+  exampleText: { color: c.text1, ...type.body, lineHeight: 19 },
 
-  stateCard: {
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.bgPanel,
-    padding: 20,
-  },
-  stateTitle: { fontSize: 18, fontWeight: '700', color: c.text1, textAlign: 'center' },
-  stateBody: { fontSize: 14, color: c.amber, textAlign: 'center', lineHeight: 20 },
-  stateHint: { fontSize: 12, color: c.textMuted, textAlign: 'center', lineHeight: 18 },
-  retryButton: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.borderStrong,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  retryText: { color: c.orange, fontSize: 14, fontWeight: '600' },
-
-  turnUser: { alignItems: 'flex-end', marginBottom: 16 },
-  turnAssistant: { alignItems: 'flex-start', marginBottom: 16 },
-  turnAuthor: { fontSize: 11, color: c.textMuted, marginBottom: 4, fontWeight: '600' },
+  turnUser: { alignItems: 'flex-end', marginBottom: spacing.lg },
+  turnAssistant: { alignItems: 'flex-start', marginBottom: spacing.lg },
+  turnAuthor: { ...type.micro, color: c.textMuted, marginBottom: spacing.xs },
   bubbleUser: {
     maxWidth: '92%',
-    backgroundColor: c.orange,
-    borderRadius: 14,
+    backgroundColor: c.accent,
+    borderRadius: radius.xl,
     borderBottomRightRadius: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   bubbleAssistant: {
     maxWidth: '96%',
     backgroundColor: c.bgPanel,
-    borderRadius: 14,
+    borderRadius: radius.xl,
     borderBottomLeftRadius: 4,
     borderWidth: 1,
     borderColor: c.border,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   bubbleFailed: { opacity: 0.6 },
-  bubbleText: { color: c.text1, fontSize: 15, lineHeight: 21 },
-  bubbleTextUser: { color: '#FFFFFF', fontSize: 15, lineHeight: 21 },
-  notSent: { fontSize: 11, color: c.red, marginTop: 4 },
+  bubbleText: { color: c.text1, ...type.body, lineHeight: 21 },
+  bubbleTextUser: { color: c.onAccent, ...type.body, lineHeight: 21 },
+  notSent: { ...type.micro, color: c.danger, marginTop: spacing.xs },
 
-  pending: { alignItems: 'center', gap: 6, paddingVertical: 18 },
-  pendingText: { color: c.text1, fontSize: 14, fontWeight: '600' },
-  pendingSeconds: { color: c.orange, fontSize: 13, fontWeight: '600' },
-  pendingHint: { color: c.textMuted, fontSize: 12, textAlign: 'center', paddingHorizontal: 24, lineHeight: 17 },
+  pending: { alignItems: 'center', gap: spacing.sm - 2, paddingVertical: spacing.lg + 2 },
+  pendingText: { color: c.text1, ...type.body, fontWeight: '600' },
+  pendingSeconds: { color: c.accent, ...type.label, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  pendingHint: { color: c.textMuted, ...type.caption, textAlign: 'center', paddingHorizontal: spacing.xl, lineHeight: 17 },
 
-  errorBox: { paddingHorizontal: 16, paddingBottom: 8, gap: 4 },
-  errorText: { color: c.red, fontSize: 13, lineHeight: 18 },
-  errorAction: { color: c.orange, fontSize: 13, fontWeight: '700' },
+  errorBox: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.xs },
+  errorText: { color: c.danger, ...type.label, lineHeight: 18 },
+  errorAction: { color: c.accent, ...type.label, fontWeight: '700' },
 
   composer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 14,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
     borderTopWidth: 1,
     borderTopColor: c.border,
     backgroundColor: c.bgDark,
-    gap: 6,
+    gap: spacing.sm - 2,
   },
-  composerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  charsLeft: { fontSize: 11, color: c.amber, textAlign: 'right' },
+  composerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  charsLeft: { ...type.micro, color: c.warning, textAlign: 'right', fontVariant: ['tabular-nums'] },
   input: {
     flex: 1,
     maxHeight: 120,
     minHeight: 44,
     borderWidth: 1.5,
     borderColor: c.inputBorder,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     backgroundColor: c.inputBg,
     color: c.text1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    ...type.body,
   },
   sendButton: {
     width: 44,
     height: 44,
-    borderRadius: 12,
-    backgroundColor: c.orange,
+    borderRadius: radius.lg,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -929,7 +958,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   voiceCancelButton: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1.5,
     borderColor: c.inputBorder,
     alignItems: 'center',
@@ -939,39 +968,32 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
     minHeight: 44,
-    paddingHorizontal: 6,
+    paddingHorizontal: spacing.xs + 2,
   },
-  voiceDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: c.red },
-  voiceStatusText: { color: c.text1, fontSize: 14, fontWeight: '600' },
-  voiceTimer: { color: c.amber, fontSize: 14, fontVariant: ['tabular-nums'] },
-  voiceHint: { fontSize: 11, color: c.amber, textAlign: 'right' },
+  voiceDot: { width: 10, height: 10, borderRadius: radius.sm, backgroundColor: c.danger },
+  voiceStatusText: { color: c.text1, ...type.body, fontWeight: '600' },
+  voiceTimer: { color: c.textMuted, ...type.body, fontVariant: ['tabular-nums'] },
+  voiceHint: { ...type.micro, color: c.textMuted, textAlign: 'right' },
 
   modalBackdrop: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
   modalCard: {
     backgroundColor: c.bgPanel,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    padding: spacing.xl,
     maxHeight: '75%',
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: c.text1, marginBottom: 12 },
-  modalLoader: { marginVertical: 24 },
-  modalState: { alignItems: 'center', gap: 12, paddingVertical: 16 },
-  modalEmpty: { fontSize: 14, color: c.amber, textAlign: 'center', paddingVertical: 24 },
-  modalScroll: { marginBottom: 8 },
-  historyRow: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
-  historyTitle: { fontSize: 15, color: c.text1, fontWeight: '600' },
-  historyMeta: { fontSize: 12, color: c.amber, marginTop: 3 },
+  modalTitle: { ...type.subtitle, color: c.text1, marginBottom: spacing.md },
+  modalSkeletonWrap: { gap: spacing.md, paddingVertical: spacing.md },
+  modalScroll: { marginBottom: spacing.sm },
+  historyRow: { marginBottom: spacing.sm },
+  historyTitle: { ...type.body, color: c.text1, fontWeight: '600' },
+  historyMeta: { ...type.caption, color: c.textMuted, marginTop: spacing.xs, fontVariant: ['tabular-nums'] },
   modalPrimary: {
-    marginTop: 4,
-    backgroundColor: c.orange,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
+    marginTop: spacing.xs,
   },
-  modalPrimaryText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
-  modalClose: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 20 },
-  modalCloseText: { color: c.amber, fontSize: 14 },
+  modalClose: { alignSelf: 'center', paddingVertical: spacing.sm, paddingHorizontal: spacing.xl },
+  modalCloseText: { color: c.textMuted, ...type.caption },
 });

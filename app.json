@@ -100,7 +100,18 @@
         "4КУБ"
       ],
       "expo-router",
-      "expo-font",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Geist-Regular.ttf",
+            "./assets/fonts/Geist-Medium.ttf",
+            "./assets/fonts/Geist-SemiBold.ttf",
+            "./assets/fonts/Geist-Bold.ttf",
+            "./assets/fonts/GeistMono-Regular.ttf"
+          ]
+        }
+      ],
       "expo-secure-store",
       "expo-notifications",
       "./plugins/withRuStorePush",

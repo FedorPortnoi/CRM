@@ -59,7 +59,7 @@ import {
   StatTile,
 } from '../../components/analytics/ReportCards';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
 
 const TAB_LABEL_KEYS: Record<ReportKind, string> = {
   funnel: 'reports.funnel',
@@ -102,10 +102,11 @@ function inclusiveEnd(isoDate: string): Date {
   return new Date(new Date(isoDate).getTime() - 1);
 }
 
+/** Traffic-light read on the health score — the one place a green/red split earns its keep. */
 function healthTone(score: number, colors: ThemeColors): string {
-  if (score >= 60) return colors.orange;
-  if (score >= 35) return colors.amber;
-  return colors.red;
+  if (score >= 60) return colors.success;
+  if (score >= 35) return colors.warning;
+  return colors.danger;
 }
 
 // ─── Generic loading / error / empty wrapper ──────────────────────────────────
@@ -149,9 +150,9 @@ function FunnelView({ data, meta }: FunnelViewProps): JSX.Element {
   if (data.totals.deal_count === 0) return <ReportEmpty />;
 
   const legend = [
-    { key: 'open', label: t('reports.funnelOpen'), color: colors.amber },
-    { key: 'won', label: t('reports.funnelWon'), color: colors.orange },
-    { key: 'lost', label: t('reports.funnelLost'), color: colors.red },
+    { key: 'open', label: t('reports.funnelOpen'), color: colors.warning },
+    { key: 'won', label: t('reports.funnelWon'), color: colors.accent },
+    { key: 'lost', label: t('reports.funnelLost'), color: colors.danger },
   ];
 
   return (
@@ -285,7 +286,7 @@ function RepsView({ data, meta }: RepsViewProps): JSX.Element {
           </View>
           <ShareBar
             fraction={maxRevenue > 0 ? rep.revenue / maxRevenue : 0}
-            color={colors.orange}
+            color={colors.accent}
           />
           <View style={styles.divider} />
           <RepMetrics row={rep} currency={meta.currency} />
@@ -329,16 +330,16 @@ function WinLossView({ data, meta }: WinLossViewProps): JSX.Element {
       <ReportCard>
         <ShareDonut
           segments={[
-            { key: 'won', value: data.totals.won_count, color: colors.orange },
-            { key: 'lost', value: data.totals.lost_count, color: colors.red },
+            { key: 'won', value: data.totals.won_count, color: colors.success },
+            { key: 'lost', value: data.totals.lost_count, color: colors.danger },
           ]}
           centerValue={percent(data.totals.won_share)}
           centerLabel={t('reports.wlWonShare')}
         />
         <ChartLegend
           items={[
-            { key: 'won', label: t('reports.wlWon'), color: colors.orange },
-            { key: 'lost', label: t('reports.wlLost'), color: colors.red },
+            { key: 'won', label: t('reports.wlWon'), color: colors.success },
+            { key: 'lost', label: t('reports.wlLost'), color: colors.danger },
           ]}
         />
       </ReportCard>
@@ -383,7 +384,7 @@ function WinLossView({ data, meta }: WinLossViewProps): JSX.Element {
                 </Text>
                 <Text style={styles.listRowValue}>{percent(row.share)}</Text>
               </View>
-              <ShareBar fraction={row.share / 100} color={colors.red} />
+              <ShareBar fraction={row.share / 100} color={colors.danger} />
               <Text style={styles.listRowSub}>
                 {`${t('reports.wlCount')}: ${count(row.count)} · ${t('reports.wlValue')}: ${money(row.value, meta.currency)}`}
               </Text>
@@ -404,7 +405,7 @@ function WinLossView({ data, meta }: WinLossViewProps): JSX.Element {
                 </Text>
                 <Text style={styles.listRowValue}>{percent(row.won_share)}</Text>
               </View>
-              <ShareBar fraction={row.won_share / 100} color={colors.orange} />
+              <ShareBar fraction={row.won_share / 100} color={colors.success} />
               <Text style={styles.listRowSub}>
                 {`${t('reports.wlWon')}: ${count(row.won_count)} · ${t('reports.wlLost')}: ${count(row.lost_count)} · ${money(row.decided_value, meta.currency)}`}
               </Text>
@@ -482,6 +483,7 @@ function RevenueView({
             onPress={() => onGranularityChange(option)}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
+            activeOpacity={0.7}
           >
             <Text style={[styles.granularityText, active && styles.granularityTextActive]}>
               {t(GRANULARITY_LABEL_KEYS[option])}
@@ -713,6 +715,7 @@ export default function ReportsScreen(): JSX.Element {
                 onPress={() => setTab(key)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
+                activeOpacity={0.7}
               >
                 <Text style={[styles.tabText, active && styles.tabTextActive]}>
                   {t(TAB_LABEL_KEYS[key])}
@@ -727,7 +730,7 @@ export default function ReportsScreen(): JSX.Element {
         style={styles.scroll}
         contentContainerStyle={styles.content}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.orange} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
         }
       >
         <Text style={styles.subtitle}>{t('reports.subtitle')}</Text>
@@ -796,13 +799,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingBottom: 48,
+    paddingBottom: spacing.xxl,
   },
   subtitle: {
-    fontSize: 13,
-    color: c.amber,
-    paddingHorizontal: 16,
-    paddingTop: 14,
+    ...type.label,
+    color: c.textMuted,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
   },
   tabBar: {
     borderBottomWidth: 1,
@@ -811,125 +814,125 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   tabRow: {
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
   tab: {
-    borderRadius: 20,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: c.border,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   tabActive: {
-    backgroundColor: c.orange,
-    borderColor: c.orange,
+    backgroundColor: c.accent,
+    borderColor: c.accent,
   },
   tabText: {
-    fontSize: 13,
+    ...type.label,
     color: c.text1,
   },
   tabTextActive: {
-    color: '#FFFFFF',
+    color: c.onAccent,
     fontWeight: '600',
   },
   body: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
   },
   groupLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: c.amber,
+    ...type.micro,
+    color: c.textMuted,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   granularityRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
   granularityChip: {
-    borderRadius: 20,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: c.border,
     backgroundColor: c.bgPanel,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   granularityChipActive: {
-    backgroundColor: c.orange,
-    borderColor: c.orange,
+    backgroundColor: c.accent,
+    borderColor: c.accent,
   },
   granularityText: {
-    fontSize: 13,
+    ...type.label,
     color: c.text1,
   },
   granularityTextActive: {
-    color: '#FFFFFF',
+    color: c.onAccent,
     fontWeight: '600',
   },
   chartWrap: {
-    marginTop: 14,
+    marginTop: spacing.md,
   },
   divider: {
     height: 1,
     backgroundColor: c.border,
-    marginVertical: 12,
+    marginVertical: spacing.md,
   },
   mutedText: {
-    fontSize: 13,
+    ...type.label,
     color: c.textMuted,
-    marginTop: 10,
+    marginTop: spacing.sm,
   },
   bucketTitle: {
-    fontSize: 14,
+    ...type.body,
     fontWeight: '700',
     color: c.text1,
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   repHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: spacing.md,
   },
   repName: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '700',
+    ...type.heading,
     color: c.text1,
   },
   repRevenue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: c.orange,
+    ...type.heading,
+    color: c.accent,
+    fontVariant: ['tabular-nums'],
   },
   listRow: {
-    marginTop: 14,
+    marginTop: spacing.md,
   },
   listRowHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: spacing.sm,
   },
   listRowLabel: {
     flex: 1,
-    fontSize: 14,
+    ...type.body,
     fontWeight: '600',
     color: c.text1,
   },
   listRowValue: {
-    fontSize: 14,
+    ...type.body,
     fontWeight: '700',
     color: c.text1,
+    fontVariant: ['tabular-nums'],
   },
   listRowSub: {
-    fontSize: 11,
+    ...type.micro,
     color: c.textMuted,
-    marginTop: 6,
+    marginTop: spacing.sm,
+    fontVariant: ['tabular-nums'],
   },
 });

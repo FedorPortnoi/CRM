@@ -21,7 +21,8 @@ import {
   type ReportScope,
 } from '../../hooks/useReports';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Button } from '../ui';
 
 const PERIOD_LABEL_KEYS: Record<ReportPeriod, string> = {
   '7d': 'reports.period7d',
@@ -122,6 +123,7 @@ export default function ReportFilterBar({
               onPress={() => selectPeriod(period)}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
+              activeOpacity={0.7}
             >
               <Text style={[styles.chipText, active && styles.chipTextActive]}>
                 {t(PERIOD_LABEL_KEYS[period])}
@@ -132,7 +134,7 @@ export default function ReportFilterBar({
       </ScrollView>
 
       {rangeLabel ? (
-        <TouchableOpacity onPress={openRangeModal} accessibilityRole="button">
+        <TouchableOpacity onPress={openRangeModal} accessibilityRole="button" activeOpacity={0.7}>
           <Text style={styles.rangeLabel}>{rangeLabel}</Text>
         </TouchableOpacity>
       ) : null}
@@ -146,6 +148,7 @@ export default function ReportFilterBar({
               onPress={() => onChange({ ...filters, pipeline_id: null })}
               accessibilityRole="button"
               accessibilityState={{ selected: filters.pipeline_id === null }}
+              activeOpacity={0.7}
             >
               <Text style={[styles.chipText, filters.pipeline_id === null && styles.chipTextActive]}>
                 {t('reports.pipelineAll')}
@@ -160,6 +163,7 @@ export default function ReportFilterBar({
                   onPress={() => onChange({ ...filters, pipeline_id: pipeline.id })}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
+                  activeOpacity={0.7}
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
                     {pipeline.name}
@@ -184,6 +188,7 @@ export default function ReportFilterBar({
                   onPress={() => onChange({ ...filters, scope })}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
+                  activeOpacity={0.7}
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>
                     {t(SCOPE_LABEL_KEYS[scope])}
@@ -233,23 +238,27 @@ export default function ReportFilterBar({
 
             <Text style={styles.modalHint}>{t('reports.dateHint')}</Text>
 
-            <TouchableOpacity
-              style={[styles.primaryButton, !canApply && styles.primaryButtonDisabled]}
+            <Button
+              title={t('reports.apply')}
               onPress={applyRange}
               disabled={!canApply}
-              accessibilityRole="button"
-            >
-              <Text style={styles.primaryButtonText}>{t('reports.apply')}</Text>
-            </TouchableOpacity>
+              block
+              style={styles.primaryButton}
+            />
 
-            <TouchableOpacity style={styles.secondaryButton} onPress={resetRange} accessibilityRole="button">
-              <Text style={styles.secondaryButtonText}>{t('reports.reset')}</Text>
-            </TouchableOpacity>
+            <Button
+              title={t('reports.reset')}
+              variant="ghost"
+              onPress={resetRange}
+              block
+              style={styles.secondaryButton}
+            />
 
             <TouchableOpacity
-              style={styles.secondaryButton}
+              style={styles.cancelRow}
               onPress={() => setRangeModalVisible(false)}
               accessibilityRole="button"
+              activeOpacity={0.7}
             >
               <Text style={styles.cancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
@@ -262,117 +271,101 @@ export default function ReportFilterBar({
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   wrap: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
   },
   groupLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: c.amber,
+    ...type.micro,
+    color: c.textMuted,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
-    marginTop: 10,
-    marginBottom: 8,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
   },
   chipRow: {
     flexDirection: 'row',
-    gap: 8,
-    paddingRight: 16,
+    gap: spacing.sm,
+    paddingRight: spacing.lg,
   },
   chip: {
-    borderRadius: 20,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: c.border,
     backgroundColor: c.bgPanel,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 1,
     maxWidth: 180,
   },
   chipActive: {
-    backgroundColor: c.orange,
-    borderColor: c.orange,
+    backgroundColor: c.accent,
+    borderColor: c.accent,
   },
   chipText: {
-    fontSize: 13,
+    ...type.label,
     color: c.text1,
   },
   chipTextActive: {
-    color: '#FFFFFF',
+    color: c.onAccent,
     fontWeight: '600',
   },
   rangeLabel: {
-    fontSize: 12,
-    color: c.amber,
-    marginTop: 10,
+    ...type.caption,
+    color: c.textMuted,
+    marginTop: spacing.sm,
+    fontVariant: ['tabular-nums'],
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: c.overlay,
     justifyContent: 'center',
-    padding: 24,
+    padding: spacing.xl,
   },
   modalCard: {
     backgroundColor: c.bgPanel,
-    borderRadius: 16,
-    padding: 24,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...type.title,
     color: c.text1,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   inputLabel: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...type.label,
     color: c.text1,
-    marginBottom: 6,
-    marginTop: 12,
+    marginBottom: spacing.sm,
+    marginTop: spacing.md,
   },
   input: {
     backgroundColor: c.inputBg,
-    borderRadius: 8,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    padding: 12,
-    fontSize: 15,
+    padding: spacing.md,
+    ...type.body,
     color: c.text1,
   },
   inputInvalid: {
-    borderColor: c.red,
+    borderColor: c.danger,
   },
   modalHint: {
-    fontSize: 12,
+    ...type.caption,
     color: c.textMuted,
-    marginTop: 10,
+    marginTop: spacing.sm,
   },
   primaryButton: {
-    marginTop: 20,
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  primaryButtonDisabled: {
-    opacity: 0.5,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
+    marginTop: spacing.xl,
   },
   secondaryButton: {
-    marginTop: 10,
-    alignItems: 'center',
-    paddingVertical: 10,
+    marginTop: spacing.sm,
   },
-  secondaryButtonText: {
-    color: c.orange,
-    fontSize: 15,
-    fontWeight: '600',
+  cancelRow: {
+    marginTop: spacing.sm,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
   },
   cancelText: {
-    color: c.amber,
-    fontSize: 15,
+    color: c.textMuted,
+    ...type.body,
   },
 });

@@ -1,10 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Linking,
-  RefreshControl,
-  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -21,7 +18,7 @@ import {
   mergeAmoImportResults,
   useAmoCrm,
 } from '../../hooks/useAmoCrm';
-import type { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type, tabular } from '../../theme';
 import { formatMarketDateTime } from '../../market/profile';
 import {
   AmoButton,
@@ -29,6 +26,7 @@ import {
   AmoNotice,
   AmoSectionCard,
 } from '../../components/amocrm/AmoUi';
+import { Screen, EmptyState, SkeletonText } from '../../components/ui';
 
 const ERROR_COPY: Record<string, { key: string; fallback: string }> = {
   FORBIDDEN: { key: 'amocrm.errors.forbidden', fallback: 'У вас нет прав для этого действия.' },
@@ -114,8 +112,8 @@ export default function AmoCrmSettingsScreen(): JSX.Element {
 
   const connectionTone = useMemo(() => {
     if (!status?.connected) return colors.textMuted;
-    if (status.status === 'active') return colors.orange;
-    return colors.red;
+    if (status.status === 'active') return colors.accent;
+    return colors.danger;
   }, [colors, status]);
 
   const runImport = useCallback(
@@ -148,48 +146,35 @@ export default function AmoCrmSettingsScreen(): JSX.Element {
 
   if (!canManage) {
     return (
-      <View style={styles.screen}>
+      <Screen contentContainerStyle={styles.centered}>
         <Stack.Screen options={{ title: t('amocrm.title', { defaultValue: 'amoCRM' }) }} />
-        <View style={styles.centered}>
-          <AmoNotice colors={colors} tone="warning">
-            {t('amocrm.forbidden', {
-              defaultValue: 'Подключать amoCRM и просматривать состояние синхронизации могут владелец и администратор.',
-            })}
-          </AmoNotice>
-        </View>
-      </View>
+        <EmptyState
+          title={t('amocrm.forbidden', {
+            defaultValue: 'Подключать amoCRM и просматривать состояние синхронизации могут владелец и администратор.',
+          })}
+        />
+      </Screen>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <Screen
+      contentContainerStyle={styles.content}
+      refreshing={refreshing}
+      onRefresh={() => void refresh()}
+    >
       <Stack.Screen options={{ title: t('amocrm.title', { defaultValue: 'amoCRM' }) }} />
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void refresh()}
-            tintColor={colors.orange}
-          />
-        }
-      >
-        <Text style={styles.pageTitle}>{t('amocrm.title', { defaultValue: 'amoCRM' })}</Text>
-        <Text style={styles.pageIntro}>
-          {t('amocrm.intro', {
-            defaultValue:
-              'Подключение, первичный импорт и двусторонняя синхронизация контактов и сделок.',
-          })}
-        </Text>
+      <Text style={styles.pageTitle}>{t('amocrm.title', { defaultValue: 'amoCRM' })}</Text>
+      <Text style={styles.pageIntro}>
+        {t('amocrm.intro', {
+          defaultValue:
+            'Подключение, первичный импорт и двусторонняя синхронизация контактов и сделок.',
+        })}
+      </Text>
 
-        {statusQuery.isPending ? (
-          <View style={styles.loading}>
-            <ActivityIndicator color={colors.orange} />
-            <Text style={styles.muted}>
-              {t('amocrm.loading', { defaultValue: 'Проверяем подключение…' })}
-            </Text>
-          </View>
-        ) : statusError ? (
+      {statusQuery.isPending ? (
+        <SkeletonText lines={3} style={styles.loading} />
+      ) : statusError ? (
           <AmoNotice colors={colors} tone="error">{statusError}</AmoNotice>
         ) : (
           <AmoSectionCard
@@ -223,6 +208,7 @@ export default function AmoCrmSettingsScreen(): JSX.Element {
                 <TouchableOpacity
                   onPress={() => void Linking.openURL(status.base_url as string)}
                   accessibilityRole="link"
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.link}>
                     {t('amocrm.connection.openAccount', { defaultValue: 'Открыть' })}
@@ -346,10 +332,7 @@ export default function AmoCrmSettingsScreen(): JSX.Element {
             })}
           >
             {previewQuery.isPending ? (
-              <View style={styles.inlineLoading}>
-                <ActivityIndicator color={colors.orange} size="small" />
-                <Text style={styles.muted}>{t('amocrm.import.previewLoading', { defaultValue: 'Читаем данные amoCRM…' })}</Text>
-              </View>
+              <SkeletonText lines={2} />
             ) : previewError ? (
               <AmoNotice colors={colors} tone="error">{previewError}</AmoNotice>
             ) : previewQuery.data ? (
@@ -417,7 +400,7 @@ export default function AmoCrmSettingsScreen(): JSX.Element {
                 value={includeCompanies}
                 onValueChange={setIncludeCompanies}
                 disabled={importMutation.isPending}
-                trackColor={{ false: colors.borderStrong, true: colors.orange }}
+                trackColor={{ false: colors.borderStrong, true: colors.accent }}
               />
             </View>
             <View style={styles.optionRow}>
@@ -429,7 +412,7 @@ export default function AmoCrmSettingsScreen(): JSX.Element {
                 value={includeLeads}
                 onValueChange={setIncludeLeads}
                 disabled={importMutation.isPending}
-                trackColor={{ false: colors.borderStrong, true: colors.orange }}
+                trackColor={{ false: colors.borderStrong, true: colors.accent }}
               />
             </View>
 
@@ -508,66 +491,63 @@ export default function AmoCrmSettingsScreen(): JSX.Element {
           </AmoSectionCard>
         ) : null}
 
-        <Text style={styles.footer}>
-          {t('amocrm.footer', {
-            defaultValue: 'Токены и секреты никогда не показываются в приложении.',
-          })}
-        </Text>
-      </ScrollView>
-    </View>
+      <Text style={styles.footer}>
+        {t('amocrm.footer', {
+          defaultValue: 'Токены и секреты никогда не показываются в приложении.',
+        })}
+      </Text>
+    </Screen>
   );
 }
 
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
-    screen: { flex: 1, backgroundColor: c.bg },
-    content: { padding: 14, paddingBottom: 44, gap: 14 },
-    pageTitle: { color: c.text1, fontSize: 24, fontWeight: '800' },
-    pageIntro: { color: c.textMuted, fontSize: 14, lineHeight: 20, marginTop: -8 },
-    centered: { flex: 1, justifyContent: 'center', padding: 18 },
-    loading: { paddingVertical: 28, alignItems: 'center', gap: 10 },
-    inlineLoading: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+    content: { padding: spacing.lg, gap: spacing.md },
+    pageTitle: { ...type.title, color: c.text1 },
+    pageIntro: { color: c.textMuted, fontSize: 14, lineHeight: 20, marginTop: -spacing.xs },
+    centered: { flex: 1, justifyContent: 'center', padding: spacing.lg },
+    loading: { paddingVertical: spacing.xl },
     flex: { flex: 1 },
     muted: { color: c.textMuted, fontSize: 12, lineHeight: 17 },
-    connectionRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    statusDot: { width: 11, height: 11, borderRadius: 6 },
-    connectionTitle: { color: c.text1, fontSize: 15, fontWeight: '700' },
-    link: { color: c.orange, fontSize: 13, fontWeight: '700' },
-    metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    connectionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    statusDot: { width: 11, height: 11, borderRadius: radius.sm },
+    connectionTitle: { color: c.text1, fontSize: 16, fontWeight: '700' },
+    link: { color: c.accent, fontSize: 13, fontWeight: '700' },
+    metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     detailRow: {
       flexDirection: 'row',
       alignItems: 'flex-start',
       justifyContent: 'space-between',
-      gap: 12,
-      paddingVertical: 3,
+      gap: spacing.md,
+      paddingVertical: spacing.xs,
     },
     detailLabel: { flex: 1, color: c.textMuted, fontSize: 13 },
-    detailValue: { color: c.text1, fontSize: 13, fontWeight: '600', textAlign: 'right' },
+    detailValue: { ...tabular, color: c.text1, fontSize: 13, fontWeight: '600', textAlign: 'right' },
     subheading: { color: c.text1, fontSize: 14, fontWeight: '700' },
     pipelineRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: spacing.sm,
       borderTopWidth: 1,
       borderTopColor: c.border,
-      paddingTop: 9,
+      paddingTop: spacing.sm,
     },
     pipelineName: { color: c.text1, fontSize: 13, fontWeight: '600' },
     archiveBadge: {
       color: c.textMuted,
       backgroundColor: c.skeleton,
-      borderRadius: 7,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
+      borderRadius: radius.sm,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
       fontSize: 11,
     },
-    optionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 3 },
+    optionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xs },
     optionTitle: { color: c.text1, fontSize: 14, fontWeight: '600' },
     resultBox: {
       borderTopWidth: 1,
       borderTopColor: c.border,
-      paddingTop: 12,
-      gap: 8,
+      paddingTop: spacing.md,
+      gap: spacing.sm,
     },
     resultText: { color: c.text1, fontSize: 13, lineHeight: 19 },
     footer: { color: c.textMuted, textAlign: 'center', fontSize: 11, lineHeight: 16 },

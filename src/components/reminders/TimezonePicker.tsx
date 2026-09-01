@@ -37,7 +37,7 @@ export default function TimezonePicker({ visible, value, onChange, onClose }: Pr
         >
           <View style={styles.header}>
             <Text style={styles.title}>{t('reminders.timezoneSelect')}</Text>
-            <TouchableOpacity onPress={onClose}>
+            <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
               <Text style={styles.done}>{t('common.done')}</Text>
             </TouchableOpacity>
           </View>

@@ -6,7 +6,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { describeArc, safeFraction } from './geometry';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, type } from '../../theme';
 
 const START_ANGLE = 270; // left end of the arc
 const SWEEP = 180;
@@ -77,7 +77,7 @@ export default function ScoreGauge({
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   wrap: {
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: spacing.md,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -85,14 +85,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   value: {
-    fontSize: 30,
-    fontWeight: '700',
+    ...type.display,
+    fontVariant: ['tabular-nums'],
   },
   caption: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: c.amber,
-    marginTop: 10,
+    ...type.caption,
+    color: c.textMuted,
+    marginTop: spacing.sm,
     textAlign: 'center',
   },
 });

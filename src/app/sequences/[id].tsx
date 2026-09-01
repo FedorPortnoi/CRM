@@ -29,7 +29,7 @@ import {
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Plus, UserPlus, X } from 'lucide-react-native';
+import { AlertCircle, ArrowDown, ArrowUp, Inbox, Layers, Plus, UserPlus, X } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { formatMarketDate, formatMarketDateTime } from '../../market/profile';
 import {
@@ -57,7 +57,9 @@ import {
 } from '../../hooks/useSequences';
 import ConsentRefusalNotice from '../../components/ConsentRefusalNotice';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Screen, Card, Button, Badge, EmptyState, Skeleton, SkeletonText } from '../../components/ui';
+import type { BadgeVariant } from '../../components/ui';
 
 const STATUS_LABEL_KEYS: Record<SequenceStatus, string> = {
   draft: 'sequences.statusDraft',
@@ -83,18 +85,17 @@ const ENROLLMENT_LABEL_KEYS: Record<EnrollmentStatus, string> = {
 
 const ENROLLMENT_FILTERS: (EnrollmentStatus | 'all')[] = ['all', ...ENROLLMENT_STATUSES];
 
-function sequenceStatusColor(status: SequenceStatus, c: ThemeColors): string {
-  if (status === 'active') return c.orange;
-  if (status === 'paused') return c.amber;
-  if (status === 'draft') return c.textMuted;
-  return c.textFaint;
+function sequenceStatusBadgeVariant(status: SequenceStatus): BadgeVariant {
+  if (status === 'active') return 'accent';
+  if (status === 'paused') return 'warning';
+  return 'neutral';
 }
 
-function enrollmentStatusColor(status: EnrollmentStatus, c: ThemeColors): string {
-  if (status === 'active') return c.orange;
-  if (status === 'completed') return c.amber;
-  if (status === 'failed' || status === 'unsubscribed') return c.red;
-  return c.textMuted;
+function enrollmentStatusBadgeVariant(status: EnrollmentStatus): BadgeVariant {
+  if (status === 'active') return 'accent';
+  if (status === 'completed') return 'success';
+  if (status === 'failed' || status === 'unsubscribed') return 'danger';
+  return 'neutral';
 }
 
 /** Enrollment refusals we can name; anything else falls back to the generic panel. */
@@ -327,23 +328,32 @@ export default function SequenceDetailScreen(): JSX.Element {
 
   if (!canManage) {
     return (
-      <View style={styles.screen}>
+      <>
         <Stack.Screen options={{ title: t('sequences.title') }} />
-        <ScrollView contentContainerStyle={styles.gate}>
-          <View style={styles.notice}>
+        <Screen>
+          <Card>
             <Text style={styles.noticeText}>{t('sequences.adminOnly')}</Text>
-          </View>
-        </ScrollView>
-      </View>
+          </Card>
+        </Screen>
+      </>
     );
   }
 
   if (detailQuery.isPending) {
     return (
-      <View style={styles.screen}>
+      <>
         <Stack.Screen options={{ title: t('sequences.title') }} />
-        <ActivityIndicator style={styles.loader} color={colors.orange} />
-      </View>
+        <Screen contentContainerStyle={styles.content}>
+          <Card>
+            <Skeleton width={200} height={20} style={styles.skeletonGap} />
+            <Skeleton width={140} height={14} style={styles.skeletonGap} />
+            <Skeleton width={90} height={18} rounded={radius.pill} />
+          </Card>
+          <Card>
+            <SkeletonText lines={3} lastLineWidth="65%" />
+          </Card>
+        </Screen>
+      </>
     );
   }
 
@@ -352,39 +362,32 @@ export default function SequenceDetailScreen(): JSX.Element {
       detailQuery.error instanceof SequenceApiError &&
       detailQuery.error.code === 'SEQUENCE_NOT_FOUND';
     return (
-      <View style={styles.screen}>
+      <>
         <Stack.Screen options={{ title: t('sequences.title') }} />
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>
-            {notFound ? t('sequences.notFound') : t('sequences.detailFailed')}
-          </Text>
-          {notFound ? null : (
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={() => { void detailQuery.refetch(); }}
-              accessibilityRole="button"
-            >
-              <Text style={styles.retryText}>{t('sequences.retry')}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+        <Screen>
+          <EmptyState
+            icon={<AlertCircle size={32} color={colors.danger} />}
+            title={notFound ? t('sequences.notFound') : t('sequences.detailFailed')}
+            actionLabel={notFound ? undefined : t('sequences.retry')}
+            onAction={notFound ? undefined : () => { void detailQuery.refetch(); }}
+          />
+        </Screen>
+      </>
     );
   }
 
-  const statusColor = sequenceStatusColor(sequence.status, colors);
   const canEnroll = sequence.status !== 'archived' && steps.length > 0;
+  const openEnroll = (): void => {
+    setRefusal(null);
+    setEnrollOpen(true);
+  };
 
   const header = (
     <View>
-      <View style={styles.headerCard}>
+      <Card>
         <View style={styles.headerRow}>
           <Text style={styles.headerTitle}>{sequence.name}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
-            <Text style={[styles.statusBadgeText, { color: statusColor }]}>
-              {t(STATUS_LABEL_KEYS[sequence.status])}
-            </Text>
-          </View>
+          <Badge label={t(STATUS_LABEL_KEYS[sequence.status])} variant={sequenceStatusBadgeVariant(sequence.status)} />
         </View>
 
         {sequence.description ? (
@@ -394,60 +397,55 @@ export default function SequenceDetailScreen(): JSX.Element {
         <Text style={styles.headerNote}>{t(STATUS_NOTE_KEYS[sequence.status])}</Text>
         <Text style={styles.legalNote}>{t('sequences.consentNote')}</Text>
 
-        {isBusy ? <ActivityIndicator color={colors.orange} style={styles.inlineLoader} /> : null}
+        {isBusy ? <ActivityIndicator color={colors.accent} style={styles.inlineLoader} /> : null}
         {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
 
         {sequence.status === 'archived' ? null : (
           <View style={styles.actionRow}>
             {sequence.status === 'active' ? (
-              <TouchableOpacity
-                style={styles.secondaryButton}
+              <Button
+                title={t('sequences.pause')}
+                variant="secondary"
                 onPress={() => changeStatus('paused')}
                 disabled={isBusy}
-                accessibilityRole="button"
-              >
-                <Text style={styles.secondaryButtonText}>{t('sequences.pause')}</Text>
-              </TouchableOpacity>
+                style={styles.flexButton}
+              />
             ) : (
-              <TouchableOpacity
-                style={styles.primaryButton}
+              <Button
+                title={sequence.status === 'paused' ? t('sequences.resume') : t('sequences.activate')}
                 onPress={() => changeStatus('active')}
                 disabled={isBusy || steps.length === 0}
-                accessibilityRole="button"
-              >
-                <Text style={styles.primaryButtonText}>
-                  {sequence.status === 'paused' ? t('sequences.resume') : t('sequences.activate')}
-                </Text>
-              </TouchableOpacity>
+                style={styles.flexButton}
+              />
             )}
 
-            <TouchableOpacity
-              style={styles.dangerButton}
+            <Button
+              title={t('sequences.archive')}
+              variant="danger"
               onPress={confirmArchive}
               disabled={isBusy}
-              accessibilityRole="button"
-            >
-              <Text style={styles.dangerButtonText}>{t('sequences.archive')}</Text>
-            </TouchableOpacity>
+              style={styles.flexButton}
+            />
           </View>
         )}
 
         {sequence.status !== 'active' && steps.length === 0 ? (
           <Text style={styles.hintText}>{t('sequences.activateNeedsSteps')}</Text>
         ) : null}
-      </View>
+      </Card>
 
       {/* ── Steps ─────────────────────────────────────────────────────────── */}
       <Text style={styles.sectionTitle}>{t('sequences.stepsTitle')}</Text>
 
       {steps.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyCardText}>{t('sequences.noSteps')}</Text>
-          <Text style={styles.emptyCardHint}>{t('sequences.noStepsHint')}</Text>
-        </View>
+        <EmptyState
+          icon={<Layers size={28} color={colors.textMuted} />}
+          title={t('sequences.noSteps')}
+          description={t('sequences.noStepsHint')}
+        />
       ) : (
         steps.map((step, index) => (
-          <View key={step.id} style={styles.stepCard}>
+          <Card key={step.id} style={styles.stepCard}>
             <View style={styles.stepHeader}>
               <View style={styles.stepBadge}>
                 <Text style={styles.stepBadgeText}>{index + 1}</Text>
@@ -468,6 +466,7 @@ export default function SequenceDetailScreen(): JSX.Element {
                   disabled={index === 0 || isBusy}
                   accessibilityRole="button"
                   accessibilityLabel={t('sequences.moveUp')}
+                  activeOpacity={0.7}
                 >
                   <ArrowUp
                     size={16}
@@ -481,6 +480,7 @@ export default function SequenceDetailScreen(): JSX.Element {
                   disabled={index === steps.length - 1 || isBusy}
                   accessibilityRole="button"
                   accessibilityLabel={t('sequences.moveDown')}
+                  activeOpacity={0.7}
                 >
                   <ArrowDown
                     size={16}
@@ -494,8 +494,9 @@ export default function SequenceDetailScreen(): JSX.Element {
                   disabled={isBusy}
                   accessibilityRole="button"
                   accessibilityLabel={t('sequences.removeStep')}
+                  activeOpacity={0.7}
                 >
-                  <X size={16} color={colors.red} strokeWidth={2} />
+                  <X size={16} color={colors.danger} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -511,22 +512,22 @@ export default function SequenceDetailScreen(): JSX.Element {
             ) : step.body ? (
               <Text style={styles.stepBody} numberOfLines={3}>{step.body}</Text>
             ) : null}
-          </View>
+          </Card>
         ))
       )}
 
       {sequence.status === 'archived' ? null : (
-        <TouchableOpacity
-          style={styles.addStepButton}
+        <Button
+          title={t('sequences.addStep')}
+          variant="ghost"
+          icon={<Plus size={16} color={colors.accent} strokeWidth={2.5} />}
           onPress={() => {
             resetStepForm();
             setStepModalOpen(true);
           }}
-          accessibilityRole="button"
-        >
-          <Plus size={16} color={colors.orange} strokeWidth={2.5} />
-          <Text style={styles.addStepText}>{t('sequences.addStep')}</Text>
-        </TouchableOpacity>
+          block
+          style={styles.addStepButton}
+        />
       )}
 
       {/* ── Enrollments ───────────────────────────────────────────────────── */}
@@ -549,6 +550,7 @@ export default function SequenceDetailScreen(): JSX.Element {
               onPress={() => setEnrollmentFilter(value)}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
+              activeOpacity={0.7}
             >
               <Text style={[styles.chipText, active && styles.chipTextActive]}>
                 {value === 'all' ? t('sequences.filterAll') : t(ENROLLMENT_LABEL_KEYS[value])}
@@ -559,7 +561,13 @@ export default function SequenceDetailScreen(): JSX.Element {
       </ScrollView>
 
       {enrollmentsQuery.isPending ? (
-        <ActivityIndicator color={colors.orange} style={styles.inlineLoader} />
+        <View style={styles.enrollSkeletonWrap}>
+          {Array.from({ length: 2 }).map((_, index) => (
+            <Card key={index} style={styles.enrollCard}>
+              <SkeletonText lines={2} lastLineWidth="50%" />
+            </Card>
+          ))}
+        </View>
       ) : enrollmentsQuery.isError ? (
         <Text style={styles.errorText}>{t('sequences.enrollmentsFailed')}</Text>
       ) : null}
@@ -575,22 +583,24 @@ export default function SequenceDetailScreen(): JSX.Element {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.orange} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.accent} />
         }
         ListHeaderComponent={header}
         ListEmptyComponent={
           enrollmentsQuery.isPending || enrollmentsQuery.isError ? null : (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyCardText}>{t('sequences.enrollmentsEmpty')}</Text>
-              <Text style={styles.emptyCardHint}>{t('sequences.enrollmentsEmptyHint')}</Text>
-            </View>
+            <EmptyState
+              icon={<Inbox size={28} color={colors.textMuted} />}
+              title={t('sequences.enrollmentsEmpty')}
+              description={t('sequences.enrollmentsEmptyHint')}
+              actionLabel={canEnroll ? t('sequences.enroll') : undefined}
+              onAction={canEnroll ? openEnroll : undefined}
+            />
           )
         }
         renderItem={({ item }) => {
-          const color = enrollmentStatusColor(item.status, colors);
           const name = item.contact ? contactDisplayName(item.contact) : t('sequences.unknownContact');
           return (
-            <View style={styles.enrollCard}>
+            <Card style={styles.enrollCard}>
               <View style={styles.enrollRow}>
                 <View style={styles.enrollInfo}>
                   <Text style={styles.enrollName} numberOfLines={1}>
@@ -601,11 +611,7 @@ export default function SequenceDetailScreen(): JSX.Element {
                     <Text style={styles.enrollEmail} numberOfLines={1}>{item.contact.email}</Text>
                   ) : null}
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: color + '22' }]}>
-                  <Text style={[styles.statusBadgeText, { color }]}>
-                    {t(ENROLLMENT_LABEL_KEYS[item.status])}
-                  </Text>
-                </View>
+                <Badge label={t(ENROLLMENT_LABEL_KEYS[item.status])} variant={enrollmentStatusBadgeVariant(item.status)} />
               </View>
 
               <Text style={styles.enrollMeta}>
@@ -623,32 +629,28 @@ export default function SequenceDetailScreen(): JSX.Element {
               </Text>
 
               {item.status === 'active' ? (
-                <TouchableOpacity
-                  style={styles.stopButton}
+                <Button
+                  title={t('sequences.stop')}
+                  variant="danger"
+                  size="sm"
                   onPress={() => confirmUnenroll(item)}
                   disabled={unenroll.isPending}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.stopButtonText}>{t('sequences.stop')}</Text>
-                </TouchableOpacity>
+                  style={styles.stopButton}
+                />
               ) : null}
-            </View>
+            </Card>
           );
         }}
       />
 
       {canEnroll ? (
-        <TouchableOpacity
+        <Button
+          title={t('sequences.enroll')}
+          icon={<UserPlus size={18} color={colors.onAccent} strokeWidth={2.5} />}
+          onPress={openEnroll}
+          block
           style={styles.enrollButton}
-          onPress={() => {
-            setRefusal(null);
-            setEnrollOpen(true);
-          }}
-          accessibilityRole="button"
-        >
-          <UserPlus size={18} color="#FFFFFF" strokeWidth={2.5} />
-          <Text style={styles.enrollButtonText}>{t('sequences.enroll')}</Text>
-        </TouchableOpacity>
+        />
       ) : null}
 
       {/* ── Add-step modal ────────────────────────────────────────────────── */}
@@ -679,6 +681,7 @@ export default function SequenceDetailScreen(): JSX.Element {
                   onPress={() => setStepMode('inline')}
                   accessibilityRole="button"
                   accessibilityState={{ selected: stepMode === 'inline' }}
+                  activeOpacity={0.7}
                 >
                   <Text
                     style={[styles.modePillText, stepMode === 'inline' && styles.modePillTextActive]}
@@ -691,6 +694,7 @@ export default function SequenceDetailScreen(): JSX.Element {
                   onPress={() => setStepMode('template')}
                   accessibilityRole="button"
                   accessibilityState={{ selected: stepMode === 'template' }}
+                  activeOpacity={0.7}
                 >
                   <Text
                     style={[styles.modePillText, stepMode === 'template' && styles.modePillTextActive]}
@@ -702,24 +706,25 @@ export default function SequenceDetailScreen(): JSX.Element {
 
               {stepMode === 'template' ? (
                 templatesQuery.isPending ? (
-                  <ActivityIndicator color={colors.orange} style={styles.inlineLoader} />
+                  <View style={styles.skeletonGap}>
+                    <SkeletonText lines={2} lastLineWidth="60%" />
+                  </View>
                 ) : templates.length === 0 ? (
                   <Text style={styles.fieldHint}>{t('sequences.noTemplates')}</Text>
                 ) : (
                   templates.map((template) => (
-                    <TouchableOpacity
+                    <Card
                       key={template.id}
                       style={[
                         styles.templateRow,
                         stepTemplateId === template.id && styles.templateRowSelected,
                       ]}
                       onPress={() => setStepTemplateId(template.id)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: stepTemplateId === template.id }}
+                      accessibilityLabel={template.name}
                     >
                       <Text style={styles.templateName}>{template.name}</Text>
                       <Text style={styles.templateSubject} numberOfLines={1}>{template.subject}</Text>
-                    </TouchableOpacity>
+                    </Card>
                   ))
                 )
               ) : (
@@ -748,22 +753,18 @@ export default function SequenceDetailScreen(): JSX.Element {
 
               {stepError ? <Text style={styles.errorText}>{stepError}</Text> : null}
 
-              <TouchableOpacity
-                style={styles.primaryButtonWide}
+              <Button
+                title={t('sequences.saveStep')}
                 onPress={submitStep}
-                disabled={addStep.isPending}
-                accessibilityRole="button"
-              >
-                {addStep.isPending ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>{t('sequences.saveStep')}</Text>
-                )}
-              </TouchableOpacity>
+                loading={addStep.isPending}
+                block
+                style={styles.primaryButtonWide}
+              />
               <TouchableOpacity
                 style={styles.modalClose}
                 onPress={() => setStepModalOpen(false)}
                 accessibilityRole="button"
+                activeOpacity={0.7}
               >
                 <Text style={styles.modalCloseText}>{t('sequences.cancel')}</Text>
               </TouchableOpacity>
@@ -809,11 +810,13 @@ export default function SequenceDetailScreen(): JSX.Element {
 
                 <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
                   {enrollContact.isPending ? (
-                    <ActivityIndicator color={colors.orange} style={styles.inlineLoader} />
+                    <ActivityIndicator color={colors.accent} style={styles.inlineLoader} />
                   ) : debouncedTerm.length < 2 ? (
                     <Text style={styles.fieldHint}>{t('sequences.enrollSearchHint')}</Text>
                   ) : contactsQuery.isPending ? (
-                    <ActivityIndicator color={colors.orange} style={styles.inlineLoader} />
+                    <View style={styles.skeletonGap}>
+                      <SkeletonText lines={3} lastLineWidth="55%" />
+                    </View>
                   ) : contactsQuery.isError ? (
                     <Text style={styles.errorText}>{t('sequences.enrollSearchFailed')}</Text>
                   ) : (contactsQuery.data ?? []).length === 0 ? (
@@ -829,13 +832,13 @@ export default function SequenceDetailScreen(): JSX.Element {
                             : blocked === 'CONTACT_NO_EMAIL'
                               ? 'sequences.consentBadgeNoEmail'
                               : 'sequences.consentBadgeOk';
-                      const badgeColor = blocked ? colors.red : colors.orange;
                       return (
                         <TouchableOpacity
                           key={contact.id}
                           style={styles.contactRow}
                           onPress={() => pickContact(contact)}
                           accessibilityRole="button"
+                          activeOpacity={0.7}
                         >
                           <View style={styles.enrollInfo}>
                             <Text style={styles.contactName} numberOfLines={1}>
@@ -846,11 +849,7 @@ export default function SequenceDetailScreen(): JSX.Element {
                               <Text style={styles.enrollEmail} numberOfLines={1}>{contact.email}</Text>
                             ) : null}
                           </View>
-                          <View style={[styles.statusBadge, { backgroundColor: badgeColor + '22' }]}>
-                            <Text style={[styles.statusBadgeText, { color: badgeColor }]}>
-                              {t(badgeKey)}
-                            </Text>
-                          </View>
+                          <Badge label={t(badgeKey)} variant={blocked ? 'danger' : 'success'} />
                         </TouchableOpacity>
                       );
                     })
@@ -861,6 +860,7 @@ export default function SequenceDetailScreen(): JSX.Element {
                   style={styles.modalClose}
                   onPress={() => setEnrollOpen(false)}
                   accessibilityRole="button"
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.modalCloseText}>{t('sequences.cancel')}</Text>
                 </TouchableOpacity>
@@ -875,244 +875,136 @@ export default function SequenceDetailScreen(): JSX.Element {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: c.bg },
-  gate: { padding: 20, gap: 10 },
-  notice: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.bgPanel,
-    padding: 14,
-  },
-  noticeText: { color: c.amber, fontSize: 14, lineHeight: 20 },
-  loader: { marginTop: 32 },
-  inlineLoader: { marginVertical: 12 },
-  list: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 32 },
-  headerCard: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 14,
-    gap: 6,
-  },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: c.text1 },
-  headerDescription: { fontSize: 13, color: c.amber, lineHeight: 18 },
-  headerNote: { fontSize: 13, color: c.text1, lineHeight: 18 },
-  legalNote: { fontSize: 11, color: c.textMuted, lineHeight: 16 },
-  hintText: { fontSize: 12, color: c.amber, lineHeight: 17 },
-  actionRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  primaryButton: {
-    flex: 1,
-    backgroundColor: c.orange,
-    borderRadius: 10,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
-  primaryButtonWide: {
-    backgroundColor: c.orange,
-    borderRadius: 10,
-    minHeight: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  primaryButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
-  secondaryButton: {
-    flex: 1,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.borderStrong,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
-  secondaryButtonText: { color: c.text1, fontSize: 14, fontWeight: '700' },
-  dangerButton: {
-    flex: 1,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.red,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
-  dangerButtonText: { color: c.red, fontSize: 14, fontWeight: '700' },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: c.text1, marginTop: 20, marginBottom: 8 },
-  emptyCard: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 14,
-    gap: 4,
-  },
-  emptyCardText: { fontSize: 14, color: c.text1 },
-  emptyCardHint: { fontSize: 12, color: c.amber, lineHeight: 17 },
+  content: { gap: spacing.md },
+  skeletonGap: { marginTop: spacing.sm },
+  noticeText: { color: c.textMuted, ...type.body, lineHeight: 20 },
+  inlineLoader: { marginVertical: spacing.md },
+  list: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  headerTitle: { flex: 1, ...type.subtitle, color: c.text1 },
+  headerDescription: { ...type.label, color: c.textMuted, lineHeight: 18, marginTop: spacing.sm },
+  headerNote: { ...type.label, color: c.text1, lineHeight: 18, marginTop: spacing.sm },
+  legalNote: { ...type.micro, color: c.textMuted, lineHeight: 16, marginTop: spacing.sm },
+  hintText: { ...type.caption, color: c.textMuted, lineHeight: 17, marginTop: spacing.sm },
+  actionRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  flexButton: { flex: 1 },
+  primaryButtonWide: { marginTop: spacing.lg },
+  sectionTitle: { ...type.heading, color: c.text1, marginTop: spacing.xl, marginBottom: spacing.sm },
   stepCard: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 12,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
-  stepHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  stepHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   stepBadge: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: 'rgba(204,120,92,0.16)',
+    backgroundColor: c.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepBadgeText: { fontSize: 12, fontWeight: '700', color: c.orange },
-  stepDelay: { flex: 1, fontSize: 12, color: c.amber },
-  stepControls: { flexDirection: 'row', gap: 4 },
+  stepBadgeText: { ...type.caption, color: c.accent },
+  stepDelay: { flex: 1, ...type.caption, color: c.textMuted },
+  stepControls: { flexDirection: 'row', gap: spacing.xs },
   iconButton: {
     width: 30,
     height: 30,
-    borderRadius: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: c.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepSubject: { fontSize: 14, fontWeight: '600', color: c.text1, marginTop: 8 },
-  stepSource: { fontSize: 12, color: c.textMuted, marginTop: 4 },
-  stepBody: { fontSize: 12, color: c.textMuted, marginTop: 4, lineHeight: 17 },
+  stepSubject: { ...type.body, fontWeight: '600', color: c.text1, marginTop: spacing.sm },
+  stepSource: { ...type.caption, color: c.textMuted, marginTop: spacing.xs },
+  stepBody: { ...type.caption, color: c.textMuted, marginTop: spacing.xs, lineHeight: 17 },
   addStepButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: 10,
     borderWidth: 1,
-    borderColor: c.orange,
-    paddingVertical: 12,
-    marginTop: 4,
+    borderColor: c.accent,
+    marginTop: spacing.xs,
   },
-  addStepText: { color: c.orange, fontSize: 14, fontWeight: '700' },
   enrollHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
-  enrollCount: { fontSize: 12, color: c.amber, marginBottom: 10 },
-  filters: { paddingVertical: 4, gap: 8 },
+  enrollCount: { ...type.caption, color: c.textMuted, marginBottom: spacing.sm },
+  enrollSkeletonWrap: { gap: spacing.sm },
+  filters: { paddingVertical: spacing.xs, gap: spacing.sm },
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 1,
+    borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: c.border,
     backgroundColor: c.bgPanel,
   },
-  chipActive: { backgroundColor: c.orange, borderColor: c.orange },
-  chipText: { color: c.amber, fontSize: 12, fontWeight: '600' },
-  chipTextActive: { color: '#FFFFFF' },
+  chipActive: { backgroundColor: c.accent, borderColor: c.accent },
+  chipText: { color: c.textMuted, ...type.caption },
+  chipTextActive: { color: c.onAccent },
   enrollCard: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 12,
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
-  enrollRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  enrollRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   enrollInfo: { flex: 1 },
-  enrollName: { fontSize: 14, fontWeight: '600', color: c.text1 },
-  enrollEmail: { fontSize: 12, color: c.amber, marginTop: 2 },
-  enrollMeta: { fontSize: 12, color: c.textMuted, marginTop: 6 },
+  enrollName: { ...type.body, fontWeight: '600', color: c.text1 },
+  enrollEmail: { ...type.caption, color: c.textMuted, marginTop: spacing.xs },
+  enrollMeta: { ...type.caption, color: c.textMuted, marginTop: spacing.sm },
   stopButton: {
     alignSelf: 'flex-start',
-    marginTop: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: c.red,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    marginTop: spacing.sm,
   },
-  stopButtonText: { color: c.red, fontSize: 12, fontWeight: '700' },
-  statusBadge: { borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
-  statusBadgeText: { fontSize: 11, fontWeight: '700' },
   enrollButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    margin: 16,
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    paddingVertical: 14,
+    margin: spacing.lg,
   },
-  enrollButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  errorBox: { padding: 24, alignItems: 'center', gap: 12 },
-  errorText: { color: c.red, fontSize: 13, marginTop: 8, lineHeight: 18 },
-  retryButton: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.border,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  retryText: { color: c.text1, fontSize: 14, fontWeight: '600' },
   modalBackdrop: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
   modalCard: {
     backgroundColor: c.bgPanel,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    padding: spacing.xl,
     maxHeight: '85%',
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: c.text1 },
-  modalSubtitle: { fontSize: 12, color: c.amber, marginTop: 4, marginBottom: 10, lineHeight: 17 },
+  modalTitle: { ...type.subtitle, color: c.text1 },
+  modalSubtitle: { ...type.caption, color: c.textMuted, marginTop: spacing.xs, marginBottom: spacing.sm, lineHeight: 17 },
   // React Native defaults flexShrink to 0 — without this the list overflows the sheet.
-  modalScroll: { marginTop: 10, flexShrink: 1 },
-  modalClose: { alignSelf: 'center', paddingVertical: 12, paddingHorizontal: 20 },
-  modalCloseText: { color: c.amber, fontSize: 15 },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: c.text1, marginTop: 12, marginBottom: 6 },
-  fieldHint: { fontSize: 12, color: c.textMuted, marginTop: 6, lineHeight: 17 },
+  modalScroll: { marginTop: spacing.sm, flexShrink: 1 },
+  modalClose: { alignSelf: 'center', paddingVertical: spacing.md, paddingHorizontal: spacing.xl },
+  modalCloseText: { color: c.textMuted, ...type.body },
+  fieldLabel: { ...type.label, color: c.text1, marginTop: spacing.md, marginBottom: spacing.sm },
+  fieldHint: { ...type.caption, color: c.textMuted, marginTop: spacing.sm, lineHeight: 17 },
   input: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    ...type.body,
     color: c.text1,
   },
   textArea: { minHeight: 120 },
-  modeRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
+  modeRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   modePill: {
     flex: 1,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: c.border,
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     alignItems: 'center',
   },
-  modePillActive: { backgroundColor: c.orange, borderColor: c.orange },
-  modePillText: { fontSize: 13, color: c.text1 },
-  modePillTextActive: { color: '#FFFFFF', fontWeight: '700' },
+  modePillActive: { backgroundColor: c.accent, borderColor: c.accent },
+  modePillText: { ...type.label, color: c.text1 },
+  modePillTextActive: { color: c.onAccent, fontWeight: '700' },
   templateRow: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 12,
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
-  templateRowSelected: { borderColor: c.orange, backgroundColor: 'rgba(204,120,92,0.08)' },
-  templateName: { fontSize: 14, fontWeight: '600', color: c.text1 },
-  templateSubject: { fontSize: 12, color: c.amber, marginTop: 2 },
+  templateRowSelected: { borderColor: c.accent, backgroundColor: c.accentSoft },
+  templateName: { ...type.body, fontWeight: '600', color: c.text1 },
+  templateSubject: { ...type.caption, color: c.textMuted, marginTop: spacing.xs },
   contactRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 12,
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: c.border,
   },
-  contactName: { fontSize: 15, color: c.text1 },
+  contactName: { ...type.body, color: c.text1 },
+  errorText: { color: c.danger, ...type.label, marginTop: spacing.sm, lineHeight: 18 },
 });

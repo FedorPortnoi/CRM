@@ -1,17 +1,18 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, Modal, TextInput, ListRenderItemInfo,
+  Alert, Modal, TextInput, ListRenderItemInfo,
   Share, Clipboard, ScrollView,
 } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, Users } from 'lucide-react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type, tabular } from '../../theme';
+import { Button, EmptyState, Skeleton } from '../../components/ui';
 
 /**
  * Mirrors backend/services/capabilities.ts. The backend is authoritative — it
@@ -58,16 +59,17 @@ interface CreatedInvite {
 }
 
 // Blue marks the account that owns the org; warm tones mark everyone who can
-// change data; muted grey marks the roles that can only look.
+// change data; muted grey marks the roles that can only look. Categorical
+// markers, deliberately outside the semantic token set — not migration strays.
 const ROLE_COLORS: Record<Role, string> = {
-  owner: '#3b82f6',
-  admin: '#CC785C',
-  head: '#CC785C',
-  member: '#D4A27F',
-  marketer: '#D4A27F',
-  support: '#D4A27F',
-  accountant: '#8FA3AD',
-  viewer: '#8FA3AD',
+  owner: '#3b82f6', // fixed:
+  admin: '#CC785C', // fixed:
+  head: '#CC785C', // fixed:
+  member: '#D4A27F', // fixed:
+  marketer: '#D4A27F', // fixed:
+  support: '#D4A27F', // fixed:
+  accountant: '#8FA3AD', // fixed:
+  viewer: '#8FA3AD', // fixed:
 };
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -373,27 +375,41 @@ export default function TeamScreen(): JSX.Element {
         {canManage && !isSelf && item.role !== 'owner' && (
           <View style={styles.actions}>
             {isOwner && (
-              <TouchableOpacity style={styles.actionBtn} onPress={() => promptRoleChange(item)}>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => promptRoleChange(item)} activeOpacity={0.7}>
                 <Text style={styles.actionBtnText}>Роль</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.actionBtn} onPress={() => promptManagerChange(item, members)}>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => promptManagerChange(item, members)} activeOpacity={0.7}>
               <Text style={styles.actionBtnText}>Рук-ль</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, styles.deactivateBtn]} onPress={() => confirmDeactivate(item)}>
-              <Text style={[styles.actionBtnText, { color: colors.red }]}>Убрать</Text>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.deactivateBtn]}
+              onPress={() => confirmDeactivate(item)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.actionBtnText, { color: colors.danger }]}>Убрать</Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
     );
-  }, [canManage, isOwner, currentUser?.id, members, confirmDeactivate, promptRoleChange, promptManagerChange, styles, colors.red]);
+  }, [canManage, isOwner, currentUser?.id, members, confirmDeactivate, promptRoleChange, promptManagerChange, styles, colors.danger]);
 
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: 'Команда', headerBackTitle: 'Настройки' }} />
       {isLoading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={colors.orange} />
+        <View style={styles.list}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={styles.row}>
+              <Skeleton width={36} height={36} rounded={radius.pill} />
+              <View style={styles.rowInfo}>
+                <Skeleton width="50%" height={15} style={styles.skeletonLine} />
+                <Skeleton width="70%" height={12} />
+              </View>
+            </View>
+          ))}
+        </View>
       ) : error ? (
         <Text style={styles.errorText}>{(error as Error).message}</Text>
       ) : (
@@ -402,6 +418,12 @@ export default function TeamScreen(): JSX.Element {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            <EmptyState
+              icon={<Users size={28} color={colors.textMuted} />}
+              title="В команде пока никого нет"
+            />
+          }
           ListHeaderComponent={
             <View>
               {/* Only what is still redeemable: the backend filters out consumed,
@@ -431,8 +453,9 @@ export default function TeamScreen(): JSX.Element {
                             style={[styles.actionBtn, styles.deactivateBtn]}
                             onPress={() => confirmRevokeInvite(invite)}
                             disabled={revokeInviteMutation.isPending}
+                            activeOpacity={0.7}
                           >
-                            <Text style={[styles.actionBtnText, { color: colors.red }]}>Отозвать</Text>
+                            <Text style={[styles.actionBtnText, { color: colors.danger }]}>Отозвать</Text>
                           </TouchableOpacity>
                         </View>
                       ))}
@@ -443,15 +466,18 @@ export default function TeamScreen(): JSX.Element {
                   )}
                 </View>
               )}
-              <Text style={styles.count}>{members.length} {members.length === 1 ? 'участник' : 'участников'}</Text>
+              <Text style={[styles.count, tabular]}>{members.length} {members.length === 1 ? 'участник' : 'участников'}</Text>
             </View>
           }
         />
       )}
       {canManage && (
-        <TouchableOpacity style={styles.inviteButton} onPress={() => setShowInviteModal(true)}>
-          <Text style={styles.inviteButtonText}>+ Добавить сотрудника</Text>
-        </TouchableOpacity>
+        <Button
+          title="+ Добавить сотрудника"
+          onPress={() => setShowInviteModal(true)}
+          block
+          style={styles.ctaSpacing}
+        />
       )}
 
       <Modal visible={createdInvite !== null} animationType="fade" transparent onRequestClose={requestCloseLink}>
@@ -472,17 +498,9 @@ export default function TeamScreen(): JSX.Element {
             </Text>
             <Text style={styles.credHint}>Ссылка действует 24 часа и открывает доступ одному человеку.</Text>
 
-            <TouchableOpacity style={styles.linkShare} onPress={shareLink}>
-              <Text style={styles.linkShareText}>Поделиться</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.linkCopy} onPress={copyLink}>
-              <Text style={styles.linkCopyText}>Копировать</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.credDone} onPress={requestCloseLink}>
-              <Text style={styles.credDoneText}>Готово</Text>
-            </TouchableOpacity>
+            <Button title="Поделиться" onPress={shareLink} block style={styles.linkShare} />
+            <Button title="Копировать" onPress={copyLink} variant="secondary" block style={styles.linkCopy} />
+            <Button title="Готово" onPress={requestCloseLink} variant="ghost" block style={styles.credDone} />
           </View>
         </View>
       </Modal>
@@ -505,6 +523,7 @@ export default function TeamScreen(): JSX.Element {
                 accessibilityRole="button"
                 accessibilityLabel="Назад"
                 hitSlop={8}
+                activeOpacity={0.7}
               >
                 <ArrowLeft size={26} color={colors.text1} strokeWidth={2.4} />
               </TouchableOpacity>
@@ -536,6 +555,7 @@ export default function TeamScreen(): JSX.Element {
                   onPress={() => setInviteRole(r)}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: inviteRole === r }}
+                  activeOpacity={0.7}
                 >
                   <View style={[styles.roleDot, { backgroundColor: ROLE_COLORS[r] }]} />
                   <View style={styles.roleOptionText}>
@@ -545,16 +565,15 @@ export default function TeamScreen(): JSX.Element {
                 </TouchableOpacity>
               ))}
             </View>
-            <TouchableOpacity
-              style={[styles.inviteButton, { marginTop: 24 }]}
+            <Button
+              title={inviteMutation.isPending ? 'Создание…' : 'Создать ссылку'}
               onPress={() => inviteMutation.mutate({ name: inviteName.trim(), role: inviteRole })}
               disabled={inviteMutation.isPending || !inviteName.trim()}
-            >
-              <Text style={styles.inviteButtonText}>{inviteMutation.isPending ? 'Создание…' : 'Создать ссылку'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelBtn} onPress={closeInviteModal}>
-              <Text style={styles.cancelBtnText}>Отмена</Text>
-            </TouchableOpacity>
+              loading={inviteMutation.isPending}
+              block
+              style={styles.submitBtn}
+            />
+            <Button title="Отмена" onPress={closeInviteModal} variant="ghost" block style={styles.cancelBtn} />
           </ScrollView>
         </View>
       </Modal>
@@ -564,52 +583,52 @@ export default function TeamScreen(): JSX.Element {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  list: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 80 },
-  count: { fontSize: 13, color: c.amber, marginBottom: 12 },
+  list: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxl },
+  skeletonLine: { marginBottom: spacing.xs },
+  count: { ...tabular, fontSize: 13, color: c.amber, marginBottom: 12 },
   codeLabel: { fontSize: 12, fontWeight: '600', color: c.amber, textTransform: 'uppercase', letterSpacing: 0.5 },
   codeHint: { fontSize: 12, color: c.amber, marginTop: 8, lineHeight: 17 },
   pendingCard: { backgroundColor: c.bgPanel, borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: c.border },
-  pendingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
-  pendingMeta: { fontSize: 12, color: c.amber, marginTop: 2 },
-  pendingOpened: { fontSize: 11, color: c.orange, marginTop: 2 },
+  pendingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 12 },
+  pendingMeta: { ...tabular, fontSize: 12, color: c.amber, marginTop: 2 },
+  pendingOpened: { ...tabular, fontSize: 11, color: c.orange, marginTop: 2 },
   pendingWaiting: { fontSize: 11, color: c.textMuted, marginTop: 2 },
-  pendingError: { fontSize: 13, color: c.red, marginTop: 10, lineHeight: 18 },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.bgPanel, borderRadius: 10, padding: 12, marginBottom: 8, gap: 10 },
-  avatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  pendingError: { fontSize: 13, color: c.danger, marginTop: spacing.sm, lineHeight: 18 },
+  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.bgPanel, borderRadius: 10, padding: 12, marginBottom: 8, gap: spacing.sm },
+  avatar: { width: 36, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: c.onAccent, fontWeight: '700', fontSize: 16 },
   rowInfo: { flex: 1 },
-  rowName: { fontSize: 15, fontWeight: '600', color: c.text1 },
+  rowName: { fontSize: 16, fontWeight: '600', color: c.text1 },
   rowEmail: { fontSize: 12, color: c.amber, marginTop: 2 },
   rowManager: { fontSize: 11, color: c.orange, marginTop: 2 },
   badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { fontSize: 12, fontWeight: '600' },
-  actions: { flexDirection: 'row', gap: 6 },
+  actions: { flexDirection: 'row', gap: spacing.sm },
   actionBtn: { borderRadius: 6, borderWidth: 1, borderColor: c.border, paddingHorizontal: 8, paddingVertical: 4 },
-  deactivateBtn: { borderColor: 'rgba(204,82,71,0.12)' },
+  deactivateBtn: { borderColor: c.dangerSoft },
   actionBtnText: { fontSize: 12, color: c.text1 },
-  errorText: { color: c.red, textAlign: 'center', marginTop: 40, paddingHorizontal: 24 },
-  inviteButton: { margin: 16, backgroundColor: c.orange, borderRadius: 10, padding: 14, alignItems: 'center' },
-  inviteButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  errorText: { color: c.danger, textAlign: 'center', marginTop: 32, paddingHorizontal: 24 },
+  ctaSpacing: { margin: spacing.lg },
   modal: { flex: 1, backgroundColor: c.bg },
   // Kept numerically in step with NavHeader so the form reads as a pushed
   // screen rather than a stray sheet; change these only alongside that file.
   modalHeader: { backgroundColor: c.bgDark, borderBottomWidth: 1, borderBottomColor: c.border },
   modalHeaderRow: { height: 52, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 },
   modalBackBtn: { padding: 8 },
-  modalHeaderTitle: { fontSize: 18, fontWeight: '700', color: c.text1, marginLeft: 4, flex: 1 },
-  modalBody: { padding: 24, paddingBottom: 48 },
+  // type.subtitle is 18/bold — kept in lockstep with NavHeader.tsx's title size.
+  modalHeaderTitle: { ...type.subtitle, color: c.text1, marginLeft: 4, flex: 1 },
+  modalBody: { padding: 24, paddingBottom: 32 },
   modalIntro: { fontSize: 13, color: c.amber, lineHeight: 19 },
-  label: { fontSize: 13, fontWeight: '600', color: c.text1, marginBottom: 6, marginTop: 12 },
-  input: { backgroundColor: c.inputBg, borderRadius: 8, borderWidth: 1, borderColor: c.inputBorder, padding: 12, fontSize: 15, color: c.text1 },
-  inputHint: { fontSize: 12, color: c.textMuted, marginTop: 6, lineHeight: 16 },
-  roleRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  label: { fontSize: 13, fontWeight: '600', color: c.text1, marginBottom: spacing.sm, marginTop: 12 },
+  input: { backgroundColor: c.inputBg, borderRadius: radius.lg, borderWidth: 1, borderColor: c.inputBorder, padding: 12, ...type.body, color: c.text1 },
+  inputHint: { fontSize: 12, color: c.textMuted, marginTop: spacing.sm, lineHeight: 16 },
   roleList: { gap: 8 },
   roleOption: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: c.border,
@@ -617,28 +636,23 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   roleOptionSelected: { borderColor: c.orange, backgroundColor: c.orange },
   roleOptionText: { flex: 1 },
-  roleDot: { width: 10, height: 10, borderRadius: 5 },
+  roleDot: { width: 10, height: 10, borderRadius: radius.pill },
   roleHint: { fontSize: 12, color: c.textMuted, marginTop: 2, lineHeight: 16 },
-  rolePill: { borderRadius: 20, borderWidth: 1, borderColor: c.border, paddingHorizontal: 14, paddingVertical: 6 },
-  rolePillSelected: { backgroundColor: c.orange, borderColor: c.orange },
   rolePillText: { fontSize: 13, color: c.text1 },
-  rolePillTextSelected: { color: '#fff', fontWeight: '600' },
-  cancelBtn: { marginTop: 12, alignItems: 'center', padding: 12 },
-  cancelBtnText: { color: c.amber, fontSize: 15 },
+  rolePillTextSelected: { color: c.onAccent, fontWeight: '600' },
+  submitBtn: { marginTop: spacing.xl },
+  cancelBtn: { marginTop: spacing.sm },
   credOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 24 },
   credCard: { backgroundColor: c.bgPanel, borderRadius: 16, padding: 24 },
   credTitle: { fontSize: 20, fontWeight: '700', color: c.text1, marginBottom: 8 },
-  credSubtitle: { fontSize: 14, color: c.amber, marginBottom: 20, lineHeight: 20 },
+  credSubtitle: { fontSize: 14, color: c.amber, marginBottom: 24, lineHeight: 20 },
   credHint: { fontSize: 12, color: c.textMuted, marginTop: 8, lineHeight: 17 },
-  credDone: { marginTop: 10, alignItems: 'center', padding: 12 },
-  credDoneText: { color: c.amber, fontSize: 15 },
+  credDone: { marginTop: spacing.sm },
   // The URL wraps rather than truncating: an owner who reads it aloud or
   // screenshots it needs all of it, and an ellipsis would hide the token.
-  linkBox: { backgroundColor: c.bg, borderRadius: 8, borderWidth: 1, borderColor: c.border, paddingHorizontal: 12, paddingVertical: 10 },
+  linkBox: { backgroundColor: c.bg, borderRadius: radius.lg, borderWidth: 1, borderColor: c.border, paddingHorizontal: 12, paddingVertical: 12 },
   linkValue: { fontSize: 13, color: c.text1, fontWeight: '600', lineHeight: 19 },
-  linkWarn: { fontSize: 12, color: c.red, marginTop: 12, lineHeight: 17 },
-  linkShare: { marginTop: 20, backgroundColor: c.orange, borderRadius: 10, padding: 16, alignItems: 'center' },
-  linkShareText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  linkCopy: { marginTop: 10, borderRadius: 10, borderWidth: 1, borderColor: c.borderStrong, padding: 14, alignItems: 'center' },
-  linkCopyText: { color: c.text1, fontWeight: '600', fontSize: 15 },
+  linkWarn: { fontSize: 12, color: c.danger, marginTop: 12, lineHeight: 17 },
+  linkShare: { marginTop: spacing.xl },
+  linkCopy: { marginTop: spacing.sm },
 });

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Clipboard,
   Linking,
@@ -14,6 +13,7 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../hooks/useTheme';
+import { spacing, radius, type, tabular } from '../../theme';
 import type { ThemeColors } from '../../theme';
 import {
   LeadInboxApiError,
@@ -24,6 +24,7 @@ import {
 // (they take `colors` and render cards/buttons/notices), and the two screens
 // looking identical is a feature.
 import { AmoButton, AmoMetric, AmoNotice, AmoSectionCard } from '../../components/amocrm/AmoUi';
+import { EmptyState, SkeletonText } from '../../components/ui';
 
 function errorText(
   error: unknown,
@@ -143,9 +144,7 @@ export default function LeadInboxScreen(): JSX.Element {
         <Text style={styles.pageIntro}>{t('leadInbox.intro')}</Text>
 
         {statusQuery.isPending ? (
-          <View style={styles.loading}>
-            <ActivityIndicator color={colors.orange} />
-          </View>
+          <SkeletonText lines={3} style={styles.loading} />
         ) : loadError ? (
           <AmoNotice colors={colors} tone="error">
             {loadError}
@@ -245,7 +244,7 @@ export default function LeadInboxScreen(): JSX.Element {
 
             <AmoSectionCard colors={colors} title={t('leadInbox.recent.title')}>
               {!data.recent_messages || data.recent_messages.length === 0 ? (
-                <Text style={styles.empty}>{t('leadInbox.recent.empty')}</Text>
+                <EmptyState title={t('leadInbox.recent.empty')} />
               ) : (
                 data.recent_messages.map((m) => (
                   <TouchableOpacity
@@ -253,6 +252,7 @@ export default function LeadInboxScreen(): JSX.Element {
                     disabled={!m.deal_id}
                     onPress={() => m.deal_id && router.push(`/deal/${m.deal_id}` as never)}
                     accessibilityRole={m.deal_id ? 'button' : undefined}
+                    activeOpacity={0.7}
                   >
                     <View style={styles.messageRow}>
                       <View style={styles.messageMain}>
@@ -260,7 +260,7 @@ export default function LeadInboxScreen(): JSX.Element {
                           {m.subject || m.from_addr || '—'}
                         </Text>
                         <Text
-                          style={[styles.messageMeta, m.status === 'failed' && styles.dangerText]}
+                          style={[styles.messageMeta, tabular, m.status === 'failed' && styles.dangerText]}
                         >
                           {messageStatus(m)} ·{' '}
                           {formatWhen(m.received_at ?? m.created_at, t('leadInbox.status.never'))}
@@ -295,36 +295,35 @@ export default function LeadInboxScreen(): JSX.Element {
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
     screen: { flex: 1, backgroundColor: c.bg },
-    centered: { justifyContent: 'center', padding: 20 },
-    content: { padding: 16, gap: 14, paddingBottom: 40 },
-    pageTitle: { color: c.text1, fontSize: 24, fontWeight: '800' },
+    centered: { justifyContent: 'center', padding: spacing.xl },
+    content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
+    pageTitle: { ...type.title, color: c.text1 },
     pageIntro: { color: c.textMuted, fontSize: 14, lineHeight: 20 },
-    loading: { paddingVertical: 32, alignItems: 'center' },
+    loading: { paddingVertical: spacing.xl },
     address: {
       color: c.text1,
       fontSize: 16,
       fontWeight: '700',
       backgroundColor: c.bg,
-      borderRadius: 10,
+      borderRadius: radius.md,
       borderWidth: 1,
       borderColor: c.border,
-      paddingHorizontal: 12,
-      paddingVertical: 12,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
     },
     step: { color: c.text1, fontSize: 14, lineHeight: 20 },
     stepNote: { color: c.textMuted, fontSize: 13, lineHeight: 18 },
-    metricsRow: { flexDirection: 'row', gap: 8 },
-    empty: { color: c.textMuted, fontSize: 13, lineHeight: 18 },
+    metricsRow: { flexDirection: 'row', gap: spacing.sm },
     messageRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 8,
+      paddingVertical: spacing.sm,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: c.border,
     },
     messageMain: { flex: 1 },
     messageSubject: { color: c.text1, fontSize: 14, fontWeight: '600' },
     messageMeta: { color: c.textMuted, fontSize: 12, marginTop: 2 },
-    dangerText: { color: c.red },
-    chevron: { color: c.textMuted, fontSize: 16, marginLeft: 8 },
+    dangerText: { color: c.danger },
+    chevron: { color: c.textMuted, fontSize: 16, marginLeft: spacing.sm },
   });

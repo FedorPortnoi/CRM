@@ -1,6 +1,8 @@
 import React, { type ReactNode } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type { ThemeColors } from '../../theme';
+import { spacing, radius, type, tabular } from '../../theme';
+import { Card, Button } from '../ui';
 
 export function AmoSectionCard({
   colors,
@@ -15,11 +17,11 @@ export function AmoSectionCard({
 }): JSX.Element {
   const styles = makeStyles(colors);
   return (
-    <View style={styles.card}>
+    <Card style={styles.card}>
       <Text style={styles.title}>{title}</Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       <View style={styles.body}>{children}</View>
-    </View>
+    </Card>
   );
 }
 
@@ -37,14 +39,15 @@ export function AmoMetric({
   const styles = makeStyles(colors);
   return (
     <View style={[styles.metric, danger && styles.metricDanger]}>
-      <Text style={[styles.metricValue, danger && styles.dangerText]}>{value}</Text>
+      <Text style={[styles.metricValue, tabular, danger && styles.dangerText]}>{value}</Text>
       <Text style={styles.metricLabel}>{label}</Text>
     </View>
   );
 }
 
+// `colors` stays in the signature so every call site keeps working unchanged —
+// the primitive underneath pulls its own theme via useTheme().
 export function AmoButton({
-  colors,
   label,
   onPress,
   busy = false,
@@ -58,26 +61,15 @@ export function AmoButton({
   disabled?: boolean;
   secondary?: boolean;
 }): JSX.Element {
-  const styles = makeStyles(colors);
-  const unavailable = disabled || busy;
   return (
-    <TouchableOpacity
-      style={[
-        styles.button,
-        secondary ? styles.buttonSecondary : styles.buttonPrimary,
-        unavailable && styles.disabled,
-      ]}
+    <Button
+      title={label}
       onPress={onPress}
-      disabled={unavailable}
-      accessibilityRole="button"
-      accessibilityState={{ disabled: unavailable, busy }}
-    >
-      {busy ? (
-        <ActivityIndicator color={secondary ? colors.orange : '#FFFFFF'} size="small" />
-      ) : (
-        <Text style={[styles.buttonText, secondary && styles.buttonSecondaryText]}>{label}</Text>
-      )}
-    </TouchableOpacity>
+      loading={busy}
+      disabled={disabled}
+      variant={secondary ? 'secondary' : 'primary'}
+      block
+    />
   );
 }
 
@@ -107,53 +99,33 @@ export function AmoNotice({
 
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
-    card: {
-      backgroundColor: c.bgPanel,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 16,
-      gap: 4,
-    },
-    title: { color: c.text1, fontSize: 17, fontWeight: '700' },
+    card: { gap: spacing.xs },
+    title: { ...type.subtitle, color: c.text1 },
     subtitle: { color: c.textMuted, fontSize: 13, lineHeight: 18 },
-    body: { marginTop: 10, gap: 10 },
+    body: { marginTop: spacing.sm, gap: spacing.sm },
     metric: {
       flex: 1,
       minWidth: 88,
       backgroundColor: c.bg,
-      borderRadius: 10,
-      paddingHorizontal: 10,
-      paddingVertical: 9,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.sm,
       borderWidth: 1,
       borderColor: c.border,
     },
-    metricDanger: { borderColor: c.red },
-    metricValue: { color: c.text1, fontSize: 18, fontWeight: '700' },
-    metricLabel: { color: c.textMuted, fontSize: 11, marginTop: 2 },
-    dangerText: { color: c.red },
-    button: {
-      minHeight: 46,
-      borderRadius: 11,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 16,
-      borderWidth: 1,
-    },
-    buttonPrimary: { backgroundColor: c.orange, borderColor: c.orange },
-    buttonSecondary: { backgroundColor: 'transparent', borderColor: c.orange },
-    buttonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', textAlign: 'center' },
-    buttonSecondaryText: { color: c.orange },
-    disabled: { opacity: 0.55 },
+    metricDanger: { borderColor: c.danger },
+    metricValue: { ...type.heading, color: c.text1 },
+    metricLabel: { color: c.textMuted, fontSize: 11, marginTop: spacing.xs },
+    dangerText: { color: c.danger },
     notice: {
-      borderRadius: 10,
-      padding: 11,
-      backgroundColor: c.skeleton,
+      borderRadius: radius.md,
+      padding: spacing.md,
+      backgroundColor: c.neutralSoft,
       borderWidth: 1,
       borderColor: c.border,
     },
-    noticeWarning: { borderColor: c.orange },
-    noticeError: { borderColor: c.red },
-    noticeSuccess: { borderColor: c.orange },
+    noticeWarning: { backgroundColor: c.warningSoft, borderColor: c.warning },
+    noticeError: { backgroundColor: c.dangerSoft, borderColor: c.danger },
+    noticeSuccess: { backgroundColor: c.successSoft, borderColor: c.success },
     noticeText: { color: c.text1, fontSize: 13, lineHeight: 18 },
   });

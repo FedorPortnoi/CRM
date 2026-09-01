@@ -5,7 +5,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { describeArc } from './geometry';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, type } from '../../theme';
 
 export type DonutSegment = {
   key: string;
@@ -84,7 +84,7 @@ export default function ShareDonut({
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   wrap: {
     alignItems: 'center',
-    marginVertical: 12,
+    marginVertical: spacing.md,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -93,14 +93,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 34,
   },
   centerValue: {
-    fontSize: 24,
-    fontWeight: '700',
+    ...type.title,
     color: c.text1,
+    fontVariant: ['tabular-nums'],
   },
   centerLabel: {
-    fontSize: 11,
+    ...type.micro,
     color: c.textMuted,
     textAlign: 'center',
-    marginTop: 2,
+    marginTop: spacing.xs,
   },
 });

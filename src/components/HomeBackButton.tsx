@@ -13,6 +13,7 @@ export default function HomeBackButton(): JSX.Element {
     <TouchableOpacity
       onPress={() => router.replace('/' as never)}
       style={{ paddingHorizontal: 12, paddingVertical: 6, marginLeft: -4 }}
+      activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityLabel={t('common.back')}
       hitSlop={8}

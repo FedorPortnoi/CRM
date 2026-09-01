@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
-  RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,6 +12,7 @@ import {
 } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { AlertCircle } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { enqueue } from '../../utils/offlineQueue';
@@ -22,7 +20,9 @@ import { sendOrQueueMutation } from '../../utils/offlineMutation';
 import { formatMarketDateTime, formatMarketTime } from '../../market/profile';
 import AttachmentsSection from '../../components/AttachmentsSection';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { Screen, Card, Button, Badge, EmptyState, Skeleton, SkeletonText } from '../../components/ui';
+import type { BadgeVariant } from '../../components/ui';
 
 type CalendarEventStatus = 'scheduled' | 'completed' | 'cancelled';
 
@@ -76,10 +76,10 @@ function formatTime(dateString: string): string {
   });
 }
 
-function statusColor(status: CalendarEventStatus, c: ThemeColors): string {
-  if (status === 'completed') return c.orange;
-  if (status === 'cancelled') return c.textMuted;
-  return c.orange;
+function statusBadgeVariant(status: CalendarEventStatus): BadgeVariant {
+  if (status === 'completed') return 'success';
+  if (status === 'cancelled') return 'neutral';
+  return 'accent';
 }
 
 function contactName(contact: CalendarContact): string {
@@ -94,26 +94,6 @@ async function parseEventResponse(res: Response, fallbackMessage: string): Promi
 
   const body = (await res.json()) as { data: CalendarEvent };
   return body.data;
-}
-
-interface SkeletonBoxProps {
-  height: number;
-  width?: number | '75%' | '100%';
-  marginBottom?: number;
-}
-
-function SkeletonBox({ height, width = '100%', marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return (
-    <View
-      style={{
-        height,
-        width,
-        marginBottom,
-        borderRadius: 12,
-        backgroundColor: 'rgba(204,120,92,0.08)',
-      }}
-    />
-  );
 }
 
 export default function CalendarEventDetailScreen(): JSX.Element {
@@ -360,20 +340,19 @@ export default function CalendarEventDetailScreen(): JSX.Element {
     return (
       <>
         <Stack.Screen options={{ title: 'Event', headerShown: true }} />
-        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-          <View style={styles.card}>
-            <SkeletonBox height={24} width={240} marginBottom={12} />
-            <SkeletonBox height={14} width={180} marginBottom={10} />
-            <SkeletonBox height={22} width={92} />
-          </View>
-          <View style={styles.card}>
-            <SkeletonBox height={16} marginBottom={12} />
-            <SkeletonBox height={16} width="75%" />
-          </View>
-          <View style={styles.card}>
-            <SkeletonBox height={80} />
-          </View>
-        </ScrollView>
+        <Screen contentContainerStyle={styles.content}>
+          <Card>
+            <Skeleton width={240} height={22} style={styles.skeletonGap} />
+            <Skeleton width={180} height={14} style={styles.skeletonGap} />
+            <Skeleton width={92} height={20} rounded={radius.pill} />
+          </Card>
+          <Card>
+            <SkeletonText lines={2} lastLineWidth="75%" />
+          </Card>
+          <Card>
+            <Skeleton height={80} />
+          </Card>
+        </Screen>
       </>
     );
   }
@@ -382,17 +361,14 @@ export default function CalendarEventDetailScreen(): JSX.Element {
     return (
       <>
         <Stack.Screen options={{ title: 'Event', headerShown: true }} />
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{fetchError}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => {
-              void fetchEvent(false);
-            }}
-          >
-            <Text style={styles.retryText}>{t('common.retry')}</Text>
-          </TouchableOpacity>
-        </View>
+        <Screen>
+          <EmptyState
+            icon={<AlertCircle size={32} color={colors.danger} />}
+            title={fetchError}
+            actionLabel={t('common.retry')}
+            onAction={() => { void fetchEvent(false); }}
+          />
+        </Screen>
       </>
     );
   }
@@ -423,26 +399,18 @@ export default function CalendarEventDetailScreen(): JSX.Element {
           ),
         }}
       />
-      <ScrollView
-        style={styles.container}
+      <Screen
         contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={() => { void fetchEvent(true); }}
-            tintColor={colors.orange}
-          />
-        }
+        refreshing={isRefreshing}
+        onRefresh={() => { void fetchEvent(true); }}
       >
-        <View style={styles.card}>
+        <Card>
           <Text style={styles.title}>{event.title}</Text>
           <Text style={styles.timeRange}>
             {formatDateTime(event.start_time)} - {formatTime(event.end_time)}
           </Text>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor(event.status, colors) }]}>
-            <Text style={styles.statusText}>{t(`calendar.${event.status}`)}</Text>
-          </View>
-        </View>
+          <Badge label={t(`calendar.${event.status}`)} variant={statusBadgeVariant(event.status)} />
+        </Card>
 
         {isCancelled ? (
           <View style={styles.cancelledBanner}>
@@ -450,7 +418,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
           </View>
         ) : null}
 
-        <View style={styles.card}>
+        <Card>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>{t('calendar.locationLabel')}</Text>
             <Text style={event.location ? styles.detailValue : styles.emptyValue}>
@@ -467,6 +435,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
                     params: { id: event.contact!.id },
                   })
                 }
+                activeOpacity={0.7}
                 accessibilityRole="button"
               >
                 <Text style={styles.linkText}>{contactName(event.contact)}</Text>
@@ -475,7 +444,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               <Text style={styles.emptyValue}>{t('calendar.none')}</Text>
             )}
           </View>
-          <View style={styles.detailRow}>
+          <View style={[styles.detailRow, styles.detailRowLast]}>
             <Text style={styles.detailLabel}>{t('calendar.dealLabel')}</Text>
             {event.deal ? (
               <TouchableOpacity
@@ -485,6 +454,7 @@ export default function CalendarEventDetailScreen(): JSX.Element {
                     params: { id: event.deal!.id },
                   })
                 }
+                activeOpacity={0.7}
                 accessibilityRole="button"
               >
                 <Text style={styles.linkText}>{event.deal.title}</Text>
@@ -493,17 +463,17 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               <Text style={styles.emptyValue}>{t('calendar.none')}</Text>
             )}
           </View>
-        </View>
+        </Card>
 
-        <View style={styles.card}>
+        <Card>
           <Text style={styles.sectionLabel}>{t('calendar.agendaNotes')}</Text>
           <Text style={event.description ? styles.bodyText : styles.emptyValue}>
             {event.description ?? t('calendar.noAgendaNotes')}
           </Text>
-        </View>
+        </Card>
 
         {isCompleted ? (
-          <View style={styles.card}>
+          <Card>
             <Text style={styles.sectionLabel}>{t('calendar.postMeetingNotes')}</Text>
             <TextInput
               style={styles.notesInput}
@@ -519,23 +489,15 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               placeholderTextColor={colors.placeholder}
             />
             {notesFieldError ? <Text style={styles.fieldError}>{notesFieldError}</Text> : null}
-            <TouchableOpacity
-              style={[
-                styles.button,
-                styles.buttonPrimary,
-                isActionDisabled && styles.buttonDisabled,
-              ]}
+            <Button
+              title={event.notes ? t('calendar.updateNotes') : t('calendar.saveNotes')}
               onPress={() => { void handleSaveNotes(); }}
+              loading={activeAction === 'notes'}
               disabled={isActionDisabled}
-              accessibilityRole="button"
-            >
-              {activeAction === 'notes' ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.buttonText}>{event.notes ? t('calendar.updateNotes') : t('calendar.saveNotes')}</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+              block
+              style={styles.actionSpacing}
+            />
+          </Card>
         ) : (
           <View style={styles.infoBox}>
             <Text style={styles.infoText}>{t('calendar.completeToAddNotes')}</Text>
@@ -543,48 +505,31 @@ export default function CalendarEventDetailScreen(): JSX.Element {
         )}
 
         {!isCancelled ? (
-          <View style={styles.card}>
+          <Card>
             {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
-            <TouchableOpacity
-              style={[
-                styles.button,
-                styles.buttonPrimary,
-                isActionDisabled && styles.buttonDisabled,
-              ]}
+            <Button
+              title={completeLabel}
               onPress={() => { void handleToggleComplete(); }}
+              loading={activeAction === 'complete'}
               disabled={isActionDisabled}
-              accessibilityRole="button"
-            >
-              {activeAction === 'complete' ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.buttonText}>{completeLabel}</Text>
-              )}
-            </TouchableOpacity>
+              block
+            />
 
             {!isCompleted ? (
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  styles.buttonDestructive,
-                  styles.secondaryAction,
-                  isActionDisabled && styles.buttonDisabled,
-                ]}
+              <Button
+                title={t('calendar.cancelEvent')}
+                variant="danger"
                 onPress={() => { void handleCancel(); }}
+                loading={activeAction === 'cancel'}
                 disabled={isActionDisabled}
-                accessibilityRole="button"
-              >
-                {activeAction === 'cancel' ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={styles.buttonText}>{t('calendar.cancelEvent')}</Text>
-                )}
-              </TouchableOpacity>
+                block
+                style={styles.secondaryAction}
+              />
             ) : null}
-          </View>
+          </Card>
         ) : null}
         <AttachmentsSection entityType="calendar_event" entityId={id as string} />
-      </ScrollView>
+      </Screen>
 
       <Modal
         visible={isCompletionNotesPromptVisible}
@@ -612,32 +557,20 @@ export default function CalendarEventDetailScreen(): JSX.Element {
               autoFocus
             />
             <View style={styles.promptActions}>
-              <TouchableOpacity
-                style={[styles.promptButton, styles.promptButtonSecondary]}
+              <Button
+                title={t('calendar.completeNotesPromptSkip')}
+                variant="secondary"
                 onPress={handleCompletionNotesPromptSkip}
                 disabled={isActionDisabled}
-                accessibilityRole="button"
-              >
-                <Text style={styles.promptButtonSecondaryText}>
-                  {t('calendar.completeNotesPromptSkip')}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.promptButton,
-                  styles.promptButtonPrimary,
-                  isActionDisabled && styles.buttonDisabled,
-                ]}
-                onPress={() => {
-                  handleCompletionNotesPromptSave(completionNotesDraft);
-                }}
+                style={styles.flexButton}
+              />
+              <Button
+                title={t('calendar.completeNotesPromptSave')}
+                onPress={() => { handleCompletionNotesPromptSave(completionNotesDraft); }}
+                loading={activeAction === 'complete'}
                 disabled={isActionDisabled}
-                accessibilityRole="button"
-              >
-                <Text style={styles.promptButtonPrimaryText}>
-                  {t('calendar.completeNotesPromptSave')}
-                </Text>
-              </TouchableOpacity>
+                style={styles.flexButton}
+              />
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -647,57 +580,33 @@ export default function CalendarEventDetailScreen(): JSX.Element {
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'rgba(204,120,92,0.08)',
-  },
   content: {
-    padding: 16,
-    paddingBottom: 40,
-    gap: 14,
+    gap: spacing.md,
   },
-  card: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 16,
+  skeletonGap: {
+    marginBottom: spacing.sm,
   },
   title: {
     color: c.text1,
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 8,
+    ...type.title,
+    marginBottom: spacing.sm,
   },
   timeRange: {
-    color: c.amber,
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 12,
-  },
-  statusBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'capitalize',
+    color: c.textMuted,
+    ...type.label,
+    marginBottom: spacing.md,
+    fontVariant: ['tabular-nums'],
   },
   cancelledBanner: {
-    backgroundColor: 'rgba(204,82,71,0.12)',
-    borderLeftColor: c.red,
+    backgroundColor: c.dangerSoft,
+    borderLeftColor: c.danger,
     borderLeftWidth: 3,
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: radius.lg,
+    padding: spacing.md,
   },
   cancelledText: {
-    color: c.red,
-    fontSize: 13,
-    fontWeight: '600',
+    color: c.danger,
+    ...type.label,
   },
   detailRow: {
     alignItems: 'center',
@@ -705,203 +614,131 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderBottomWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 10,
+    paddingVertical: spacing.sm,
+  },
+  detailRowLast: {
+    borderBottomWidth: 0,
   },
   detailLabel: {
-    color: c.amber,
-    fontSize: 13,
-    fontWeight: '600',
+    color: c.textMuted,
+    ...type.label,
     width: 82,
   },
   detailValue: {
     color: c.text1,
     flex: 1,
-    fontSize: 14,
+    ...type.body,
     textAlign: 'right',
   },
   emptyValue: {
     color: c.textMuted,
     flex: 1,
-    fontSize: 14,
+    ...type.body,
     textAlign: 'right',
   },
   linkText: {
-    color: c.orange,
-    fontSize: 14,
+    color: c.accent,
+    ...type.body,
     fontWeight: '600',
     maxWidth: 220,
     textAlign: 'right',
   },
   sectionLabel: {
-    color: c.amber,
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 8,
+    color: c.textMuted,
+    ...type.caption,
+    marginBottom: spacing.sm,
     textTransform: 'uppercase',
   },
   bodyText: {
     color: c.text1,
-    fontSize: 14,
-    lineHeight: 20,
+    ...type.body,
   },
   notesInput: {
     backgroundColor: c.inputBg,
     borderColor: c.inputBorder,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
     color: c.text1,
-    fontSize: 15,
+    ...type.body,
     minHeight: 116,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   fieldError: {
-    color: c.red,
-    fontSize: 12,
-    marginTop: 6,
+    color: c.danger,
+    ...type.caption,
+    marginTop: spacing.sm,
   },
   infoBox: {
-    backgroundColor: 'rgba(204,120,92,0.08)',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: c.accentSoft,
+    borderRadius: radius.lg,
+    padding: spacing.md,
   },
   infoText: {
-    color: c.orange,
-    fontSize: 13,
-    fontWeight: '600',
+    color: c.accent,
+    ...type.label,
   },
-  button: {
-    alignItems: 'center',
-    borderRadius: 12,
-    justifyContent: 'center',
-    minHeight: 46,
-    paddingVertical: 12,
-  },
-  buttonPrimary: {
-    backgroundColor: c.orange,
-  },
-  buttonDestructive: {
-    backgroundColor: c.red,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
+  actionSpacing: {
+    marginTop: spacing.md,
   },
   secondaryAction: {
-    marginTop: 10,
+    marginTop: spacing.sm,
+  },
+  flexButton: {
+    flex: 1,
   },
   actionError: {
-    color: c.red,
-    fontSize: 13,
-    marginBottom: 12,
+    color: c.danger,
+    ...type.label,
+    marginBottom: spacing.md,
     textAlign: 'center',
-  },
-  errorContainer: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(204,120,92,0.08)',
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  errorText: {
-    color: c.red,
-    fontSize: 14,
-    marginBottom: 14,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  retryText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
   },
   headerEditButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   headerEditText: {
-    color: c.orange,
-    fontSize: 16,
-    fontWeight: '600',
+    color: c.accent,
+    ...type.heading,
   },
   promptOverlay: {
     alignItems: 'center',
     backgroundColor: c.overlay,
     flex: 1,
     justifyContent: 'center',
-    padding: 16,
+    padding: spacing.lg,
   },
   promptCard: {
     backgroundColor: c.bgPanel,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     maxWidth: 420,
-    padding: 16,
+    padding: spacing.lg,
     width: '100%',
   },
   promptTitle: {
     color: c.text1,
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 8,
+    ...type.subtitle,
+    marginBottom: spacing.sm,
   },
   promptMessage: {
-    color: c.amber,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 12,
+    color: c.textMuted,
+    ...type.body,
+    marginBottom: spacing.md,
   },
   promptInput: {
     backgroundColor: c.inputBg,
     borderColor: c.inputBorder,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
     color: c.text1,
-    fontSize: 15,
+    ...type.body,
     minHeight: 104,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   promptActions: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-  },
-  promptButton: {
-    alignItems: 'center',
-    borderRadius: 12,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
-  promptButtonPrimary: {
-    backgroundColor: c.orange,
-  },
-  promptButtonSecondary: {
-    backgroundColor: c.bgPanel,
-    borderColor: c.orange,
-    borderWidth: 1,
-  },
-  promptButtonPrimaryText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  promptButtonSecondaryText: {
-    color: c.orange,
-    fontSize: 14,
-    fontWeight: '600',
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
 });

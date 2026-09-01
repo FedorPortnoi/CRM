@@ -106,6 +106,7 @@ export default function ConsentRefusalNotice({
         <TouchableOpacity
           style={styles.primaryButton}
           onPress={onOpenContact}
+          activeOpacity={0.7}
           accessibilityRole="button"
         >
           <Text style={styles.primaryButtonText}>{t('sequences.refusedOpenContact')}</Text>
@@ -115,6 +116,7 @@ export default function ConsentRefusalNotice({
       <TouchableOpacity
         style={styles.secondaryButton}
         onPress={onDismiss}
+        activeOpacity={0.7}
         accessibilityRole="button"
       >
         <Text style={styles.secondaryButtonText}>{t('sequences.refusedDismiss')}</Text>
@@ -149,6 +151,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     marginTop: 4,
   },
   primaryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  secondaryButton: { alignSelf: 'center', paddingVertical: 12, paddingHorizontal: 20 },
+  secondaryButton: { alignSelf: 'center', paddingVertical: 12, paddingHorizontal: 16 },
   secondaryButtonText: { color: c.amber, fontSize: 15 },
 });
