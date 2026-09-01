@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, ScrollView, Switch,
@@ -6,6 +6,8 @@ import {
 import { useRouter } from 'expo-router';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 type Phase = 'input' | 'loading' | 'done';
 
@@ -17,6 +19,8 @@ interface ImportResult {
 export default function Bitrix24ImportScreen() {
   const router = useRouter();
   const token = useUserStore((s) => s.token);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [webhookUrl, setWebhookUrl] = useState('');
   const [includeDeals, setIncludeDeals] = useState(true);
   const [phase, setPhase] = useState<Phase>('input');
@@ -43,7 +47,7 @@ export default function Bitrix24ImportScreen() {
   if (phase === 'loading') {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#FF5752" />
+        <ActivityIndicator size="large" color={colors.danger} />
         <Text style={styles.loadingText}>Импортируем из Битрикс24...</Text>
       </View>
     );
@@ -52,10 +56,10 @@ export default function Bitrix24ImportScreen() {
   if (phase === 'done' && result) {
     return (
       <View style={styles.center}>
-        <Text style={[styles.doneEmoji, { color: '#FF5752' }]}>✓</Text>
+        <Text style={[styles.doneEmoji, { color: colors.danger }]}>✓</Text>
         <Text style={styles.doneTitle}>{result.contacts_imported} контактов</Text>
         {result.deals_imported > 0 && <Text style={styles.doneSub}>{result.deals_imported} сделок</Text>}
-        <TouchableOpacity style={[styles.btn, { backgroundColor: '#FF5752' }]} onPress={() => router.push('/(tabs)/contacts' as never)}>
+        <TouchableOpacity style={[styles.btn, { backgroundColor: colors.danger }]} onPress={() => router.push('/(tabs)/contacts' as never)}>
           <Text style={styles.btnText}>Перейти к контактам</Text>
         </TouchableOpacity>
       </View>
@@ -72,7 +76,7 @@ export default function Bitrix24ImportScreen() {
         value={webhookUrl}
         onChangeText={setWebhookUrl}
         placeholder="https://домен.bitrix24.ru/rest/1/ключ/"
-        placeholderTextColor="rgba(232,224,212,0.3)"
+        placeholderTextColor={colors.placeholder}
         autoCapitalize="none"
         autoCorrect={false}
       />
@@ -82,41 +86,41 @@ export default function Bitrix24ImportScreen() {
         <Switch
           value={includeDeals}
           onValueChange={setIncludeDeals}
-          thumbColor="#fff"
-          trackColor={{ true: '#FF5752', false: 'rgba(232,224,212,0.08)' }}
+          thumbColor={colors.onAccent}
+          trackColor={{ true: colors.danger, false: colors.border }}
         />
       </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <TouchableOpacity style={[styles.btn, { backgroundColor: '#FF5752' }]} onPress={() => void run()}>
+      <TouchableOpacity style={[styles.btn, { backgroundColor: colors.danger }]} onPress={() => void run()}>
         <Text style={styles.btnText}>Начать импорт</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0E0E0D' },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
   content: { padding: 24, paddingTop: 32 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0E0E0D', gap: 12 },
-  title: { fontSize: 24, fontWeight: '800', color: '#E8E0D4', marginBottom: 6 },
-  sub: { fontSize: 13, color: '#D4A27F', marginBottom: 24, lineHeight: 18 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg, gap: 12 },
+  title: { fontSize: 24, fontWeight: '800', color: c.text1, marginBottom: 6 },
+  sub: { fontSize: 13, color: c.amber, marginBottom: 24, lineHeight: 18 },
   input: {
-    height: 54, borderWidth: 1, borderColor: 'rgba(232,224,212,0.12)', borderRadius: 12,
-    backgroundColor: '#1A1A18', paddingHorizontal: 16, fontSize: 14, color: '#E8E0D4', marginBottom: 16,
+    height: 54, borderWidth: 1, borderColor: c.inputBorder, borderRadius: 12,
+    backgroundColor: c.surface, paddingHorizontal: 16, fontSize: 14, color: c.text1, marginBottom: 16,
   },
   switchRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: '#1A1A18', borderRadius: 12, padding: 16, marginBottom: 20,
-    borderWidth: 1, borderColor: '#F5EDE8',
+    backgroundColor: c.surface, borderRadius: 12, padding: 16, marginBottom: 20,
+    borderWidth: 1, borderColor: c.borderStrong,
   },
-  switchLabel: { fontSize: 15, color: '#E8E0D4', fontWeight: '500' },
+  switchLabel: { fontSize: 15, color: c.text1, fontWeight: '500' },
   btn: { height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  error: { color: '#CC5247', fontSize: 13, marginBottom: 12, textAlign: 'center' },
-  loadingText: { fontSize: 15, color: '#E8E0D4', fontWeight: '600' },
+  btnText: { color: c.onAccent, fontSize: 16, fontWeight: '700' },
+  error: { color: c.danger, fontSize: 13, marginBottom: 12, textAlign: 'center' },
+  loadingText: { fontSize: 15, color: c.text1, fontWeight: '600' },
   doneEmoji: { fontSize: 52, fontWeight: '700' },
-  doneTitle: { fontSize: 22, fontWeight: '800', color: '#E8E0D4' },
-  doneSub: { fontSize: 15, color: '#D4A27F' },
+  doneTitle: { fontSize: 22, fontWeight: '800', color: c.text1 },
+  doneSub: { fontSize: 15, color: c.amber },
 });

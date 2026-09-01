@@ -28,6 +28,7 @@ import { initSentry } from '../utils/sentry';
 import Constants from 'expo-constants';
 import { API_URL } from '../utils/api';
 import { isUnauthenticatedRoute } from '../utils/authRoutes';
+import { useTheme } from '../hooks/useTheme';
 
 initSentry();
 
@@ -47,6 +48,7 @@ export default function RootLayout() {
   const segments = useSegments();
   const { token, user, restoreSession } = useUserStore();
   const fetchOnboarding = useOnboardingStore((s) => s.fetch);
+  const { colors } = useTheme();
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
   const [splashDone, setSplashDone] = useState<boolean>(false);
   const pushRegistrationAttemptRef = useRef<string | null>(null);
@@ -252,7 +254,7 @@ export default function RootLayout() {
               first-frame can never flash white. The spinner stays as the
               no-video fallback underneath. */}
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0A0A0A' }}>
-            <ActivityIndicator size="large" color="#CC785C" />
+            <ActivityIndicator size="large" color={colors.accent} />
           </View>
           {/* key must match the main branch so React keeps ONE splash instance
               (and one playing video) across the isRestoring branch switch. */}

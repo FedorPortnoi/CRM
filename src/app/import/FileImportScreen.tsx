@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ActivityIndicator, FlatList, ListRenderItemInfo,
@@ -9,6 +9,8 @@ import * as FileSystem from 'expo-file-system';
 import { Upload } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 // ─── Config contract ─────────────────────────────────────────────────────────
 
@@ -64,6 +66,8 @@ export default function FileImportScreen<T>({
 }: FileImportConfig<T>) {
   const router = useRouter();
   const token = useUserStore((s) => s.token);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [phase, setPhase] = useState<Phase>('pick');
   const [items, setItems] = useState<T[]>([]);
@@ -178,7 +182,7 @@ export default function FileImportScreen<T>({
           style={[styles.btn, { backgroundColor: accentColor, flexDirection: 'row', gap: 8 }]}
           onPress={() => void pickFile()}
         >
-          <Upload size={18} color="#fff" strokeWidth={2.5} />
+          <Upload size={18} color={colors.onAccent} strokeWidth={2.5} />
           <Text style={styles.btnText}>{pickButtonLabel}</Text>
         </TouchableOpacity>
       </View>
@@ -256,31 +260,31 @@ export default function FileImportScreen<T>({
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: '#0E0E0D' },
-  center:     { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: '#0E0E0D', gap: 14 },
-  title:      { fontSize: 26, fontWeight: '800', color: '#E8E0D4' },
-  sub:        { fontSize: 14, color: '#D4A27F', lineHeight: 21, textAlign: 'center' },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container:  { flex: 1, backgroundColor: c.bg },
+  center:     { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: c.bg, gap: 14 },
+  title:      { fontSize: 26, fontWeight: '800', color: c.text1 },
+  sub:        { fontSize: 14, color: c.amber, lineHeight: 21, textAlign: 'center' },
   btn:        { height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
   btnOff:     { opacity: 0.45 },
-  btnText:    { color: '#fff', fontSize: 16, fontWeight: '700' },
-  error:      { color: '#CC5247', fontSize: 13 },
+  btnText:    { color: c.onAccent, fontSize: 16, fontWeight: '700' },
+  error:      { color: c.danger, fontSize: 13 },
   doneEmoji:  { fontSize: 52, fontWeight: '700' },
-  doneTitle:  { fontSize: 20, fontWeight: '800', color: '#E8E0D4' },
-  bar:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#1A1A18', borderBottomWidth: 1, borderBottomColor: '#F5EDE8' },
-  barTitle:   { fontSize: 14, fontWeight: '600', color: '#E8E0D4' },
+  doneTitle:  { fontSize: 20, fontWeight: '800', color: c.text1 },
+  bar:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.borderStrong },
+  barTitle:   { fontSize: 14, fontWeight: '600', color: c.text1 },
   selAll:     { fontSize: 13, fontWeight: '600' },
-  row:        { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A18', borderRadius: 10, padding: 12, marginBottom: 8, gap: 12, borderWidth: 1, borderColor: '#F5EDE8' },
+  row:        { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, borderRadius: 10, padding: 12, marginBottom: 8, gap: 12, borderWidth: 1, borderColor: c.borderStrong },
   check:      { width: 22, height: 22, borderRadius: 4, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  checkMark:  { color: '#fff', fontSize: 13, fontWeight: '700' },
-  rowName:    { fontSize: 15, fontWeight: '600', color: '#E8E0D4' },
-  rowSub:     { fontSize: 12, color: '#D4A27F', marginTop: 2 },
-  footer:     { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: 32, backgroundColor: '#1A1A18', borderTopWidth: 1, borderTopColor: '#F5EDE8' },
+  checkMark:  { color: c.onAccent, fontSize: 13, fontWeight: '700' },
+  rowName:    { fontSize: 15, fontWeight: '600', color: c.text1 },
+  rowSub:     { fontSize: 12, color: c.amber, marginTop: 2 },
+  footer:     { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: 32, backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.borderStrong },
 });
 
 // ─── Re-export row text styles so callers can match the design system ─────────
-//     Usage: import { rowStyles } from './FileImportScreen';
-export const rowStyles = {
-  rowName: styles.rowName,
-  rowSub:  styles.rowSub,
-};
+//     Usage: const rowStyles = useMemo(() => makeRowStyles(colors), [colors]);
+export const makeRowStyles = (c: ThemeColors) => ({
+  rowName: makeStyles(c).rowName,
+  rowSub:  makeStyles(c).rowSub,
+});

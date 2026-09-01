@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   RefreshControl,
@@ -16,6 +16,8 @@ import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import HomeBackButton from '../../components/HomeBackButton';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
 
 interface WorkflowItem {
   id: string;
@@ -39,7 +41,8 @@ interface SkeletonBoxProps {
 }
 
 function SkeletonBox({ width, height, borderRadius = 4, marginBottom = 0 }: SkeletonBoxProps): JSX.Element {
-  return <View style={{ width, height, backgroundColor: 'rgba(204,120,92,0.08)', borderRadius, marginBottom }} />;
+  const { colors } = useTheme();
+  return <View style={{ width, height, backgroundColor: colors.accentSoft, borderRadius, marginBottom }} />;
 }
 
 const TRIGGER_KEY_MAP: Record<string, string> = {
@@ -59,6 +62,8 @@ export default function WorkflowsScreen(): JSX.Element {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const fetchWorkflows = useCallback(
     (silent: boolean): void => {
@@ -169,7 +174,7 @@ export default function WorkflowsScreen(): JSX.Element {
             onPress={() => { router.push('/workflows/new' as never); }}
             accessibilityRole='button'
           >
-            <Plus size={20} color='#FFFFFF' />
+            <Plus size={20} color={colors.onAccent} />
           </TouchableOpacity>
         </View>
         <View style={styles.center}>
@@ -194,7 +199,7 @@ export default function WorkflowsScreen(): JSX.Element {
           onPress={() => { router.push('/workflows/new' as never); }}
           accessibilityRole='button'
         >
-          <Plus size={20} color='#FFFFFF' />
+          <Plus size={20} color={colors.onAccent} />
         </TouchableOpacity>
       </View>
       <FlatList
@@ -211,7 +216,7 @@ export default function WorkflowsScreen(): JSX.Element {
           return (
             <View style={styles.row}>
               <View style={styles.iconBox}>
-                <WorkflowIcon size={20} color='#CC785C' />
+                <WorkflowIcon size={20} color={colors.accent} />
               </View>
               <TouchableOpacity
                 style={styles.rowBody}
@@ -228,8 +233,8 @@ export default function WorkflowsScreen(): JSX.Element {
                 <Switch
                   value={isEnabled}
                   onValueChange={(val) => { handleToggle(item, val); }}
-                  trackColor={{ false: 'rgba(232,224,212,0.08)', true: '#93C5FD' }}
-                  thumbColor={isEnabled ? '#CC785C' : 'rgba(232,224,212,0.35)'}
+                  trackColor={{ false: colors.border, true: '#93C5FD' }}
+                  thumbColor={isEnabled ? colors.accent : colors.textMuted}
                 />
               </View>
             </View>
@@ -240,80 +245,80 @@ export default function WorkflowsScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0E0E0D' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: c.bg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   header: {
-    padding: 16,
+    padding: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  title: { fontSize: 26, fontWeight: '700', color: '#E8E0D4' },
+  title: { fontSize: type.display.fontSize, fontWeight: '700', color: c.text1 },
   addButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: '#CC785C',
+    borderRadius: radius.lg,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  list: { paddingHorizontal: 16, paddingBottom: 24 },
-  emptyList: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  emptyText: { color: '#D4A27F', fontSize: 16, textAlign: 'center' },
+  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+  emptyList: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  emptyText: { color: c.amber, fontSize: type.heading.fontSize, textAlign: 'center' },
   row: {
     minHeight: 72,
-    backgroundColor: '#1A1A18',
-    borderRadius: 12,
+    backgroundColor: c.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: 'rgba(232,224,212,0.08)',
-    padding: 12,
+    borderColor: c.border,
+    padding: spacing.md,
     marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
   },
   skeletonRow: {
     minHeight: 72,
-    backgroundColor: '#1A1A18',
-    borderRadius: 12,
+    backgroundColor: c.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: 'rgba(232,224,212,0.08)',
-    padding: 12,
+    borderColor: c.border,
+    padding: spacing.md,
     marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
   },
-  skeletonBody: { flex: 1, marginHorizontal: 12 },
+  skeletonBody: { flex: 1, marginHorizontal: spacing.md },
   iconBox: {
     width: 42,
     height: 42,
-    borderRadius: 12,
-    backgroundColor: 'rgba(204,120,92,0.08)',
+    borderRadius: radius.lg,
+    backgroundColor: c.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   rowBody: { flex: 1 },
-  rowTitle: { fontSize: 16, fontWeight: '700', color: '#E8E0D4' },
-  rowMeta: { marginTop: 4, color: '#D4A27F', fontSize: 13 },
-  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 8 },
+  rowTitle: { fontSize: type.heading.fontSize, fontWeight: '700', color: c.text1 },
+  rowMeta: { marginTop: spacing.xs, color: c.amber, fontSize: type.label.fontSize },
+  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: spacing.sm },
   badge: {
     minWidth: 24,
     height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(204,120,92,0.08)',
+    borderRadius: radius.lg,
+    backgroundColor: c.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
-  badgeText: { fontSize: 12, fontWeight: '700', color: '#CC785C' },
-  errorText: { color: '#C5221F', marginBottom: 12, textAlign: 'center' },
+  badgeText: { fontSize: type.caption.fontSize, fontWeight: '700', color: c.accent },
+  errorText: { color: c.danger, marginBottom: spacing.md, textAlign: 'center' },
   retryButton: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: '#CC785C',
+    borderRadius: radius.lg,
+    backgroundColor: c.accent,
     justifyContent: 'center',
   },
-  retryText: { color: '#FFFFFF', fontWeight: '700' },
+  retryText: { color: c.onAccent, fontWeight: '700' },
 });

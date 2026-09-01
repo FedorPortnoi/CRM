@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +18,8 @@ import { useTranslation } from 'react-i18next';
 import { Camera, ScanText } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
 
 type CameraPermissionState = 'unknown' | 'granted' | 'denied';
 
@@ -46,6 +48,8 @@ type ScanResponse = {
 
 export default function ScanCardScreen(): JSX.Element {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const token = useUserStore((s) => s.token);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -238,9 +242,9 @@ export default function ScanCardScreen(): JSX.Element {
                 accessibilityRole="button"
               >
                 {isRequestingCamera ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator color={colors.onAccent} />
                 ) : (
-                  <Camera size={24} color="#FFFFFF" />
+                  <Camera size={24} color={colors.onAccent} />
                 )}
                 <Text style={styles.cameraButtonText}>{t('contacts.scanTakePhoto')}</Text>
               </TouchableOpacity>
@@ -310,9 +314,9 @@ export default function ScanCardScreen(): JSX.Element {
           accessibilityRole="button"
         >
           {isScanning ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={colors.onAccent} />
           ) : (
-            <ScanText size={20} color="#FFFFFF" />
+            <ScanText size={20} color={colors.onAccent} />
           )}
           <Text style={styles.buttonText}>{t('contacts.scanAndCreate')}</Text>
         </TouchableOpacity>
@@ -321,100 +325,100 @@ export default function ScanCardScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0E0E0D' },
-  container: { padding: 16, paddingBottom: 28 },
-  title: { fontSize: 26, fontWeight: '700', color: '#E8E0D4', marginBottom: 8 },
-  helperText: { color: '#4B5563', lineHeight: 20, marginBottom: 12 },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: c.bg },
+  container: { padding: spacing.lg, paddingBottom: 28 },
+  title: { fontSize: type.display.fontSize, fontWeight: '700', color: c.text1, marginBottom: spacing.sm },
+  helperText: { color: c.textMuted, lineHeight: 20, marginBottom: spacing.md },
   capturePanel: {
     minHeight: 190,
-    borderRadius: 12,
-    backgroundColor: '#1A1A18',
+    borderRadius: radius.lg,
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: 'rgba(232,224,212,0.08)',
+    borderColor: c.border,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    padding: 12,
+    padding: spacing.md,
   },
   image: { width: '100%', height: 190, borderRadius: 8 },
-  captureActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  captureActions: { flexDirection: 'row', gap: 10, marginTop: spacing.md },
   cameraButton: {
     height: 52,
     minWidth: 180,
-    borderRadius: 12,
-    backgroundColor: '#CC785C',
+    borderRadius: radius.lg,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
   },
-  cameraButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
-  libraryButton: { marginTop: 12, paddingVertical: 10, paddingHorizontal: 12 },
-  libraryButtonText: { color: '#047857', fontWeight: '700' },
+  cameraButtonText: { color: c.onAccent, fontWeight: '700', fontSize: type.heading.fontSize },
+  libraryButton: { marginTop: spacing.md, paddingVertical: 10, paddingHorizontal: spacing.md },
+  libraryButtonText: { color: c.success, fontWeight: '700' },
   secondaryButton: {
     flex: 1,
     minHeight: 44,
-    borderRadius: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#A7F3D0',
+    borderColor: c.success,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 10,
   },
-  secondaryButtonText: { color: '#047857', fontWeight: '700' },
+  secondaryButtonText: { color: c.success, fontWeight: '700' },
   settingsButton: {
     alignSelf: 'flex-start',
     paddingVertical: 10,
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
-  settingsButtonText: { color: '#047857', fontWeight: '700' },
+  settingsButtonText: { color: c.success, fontWeight: '700' },
   sectionLabel: {
-    marginTop: 16,
-    marginBottom: 8,
-    color: '#E8E0D4',
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+    color: c.text1,
     fontWeight: '700',
   },
   input: {
     minHeight: 160,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: 'rgba(232,224,212,0.12)',
-    backgroundColor: '#1A1A18',
-    padding: 12,
-    color: '#E8E0D4',
+    borderColor: c.inputBorder,
+    backgroundColor: c.surface,
+    padding: spacing.md,
+    color: c.text1,
   },
   errorBox: {
-    marginTop: 12,
-    borderRadius: 12,
+    marginTop: spacing.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#FECACA',
-    backgroundColor: '#FEF2F2',
-    padding: 12,
+    borderColor: c.danger,
+    backgroundColor: c.dangerSoft,
+    padding: spacing.md,
   },
-  error: { color: '#991B1B', lineHeight: 20 },
+  error: { color: c.danger, lineHeight: 20 },
   errorActions: { flexDirection: 'row', gap: 10, marginTop: 10 },
   errorAction: {
     minHeight: 38,
-    borderRadius: 10,
-    backgroundColor: '#1A1A18',
+    borderRadius: radius.md,
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: '#FCA5A5',
+    borderColor: c.danger,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
   },
-  errorActionText: { color: '#991B1B', fontWeight: '700' },
+  errorActionText: { color: c.danger, fontWeight: '700' },
   button: {
     height: 52,
-    borderRadius: 12,
-    backgroundColor: '#CC785C',
+    borderRadius: radius.lg,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 16,
+    gap: spacing.sm,
+    marginTop: spacing.lg,
   },
   buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+  buttonText: { color: c.onAccent, fontWeight: '700', fontSize: type.heading.fontSize },
 });

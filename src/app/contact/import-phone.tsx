@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +16,8 @@ import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
 
 type Phase = 'permission' | 'loading' | 'list' | 'importing';
 
@@ -102,6 +104,8 @@ function buildContactBody(contact: PhoneContact): ContactCreateBody {
 
 export default function ImportPhoneContactsScreen(): React.ReactElement {
   const { t } = useTranslation();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const token: string | null = useUserStore((state: UserStoreTokenState): string | null => state.token);
   const [phase, setPhase] = useState<Phase>('permission');
   const [isRequestingPermission, setIsRequestingPermission] = useState<boolean>(true);
@@ -266,7 +270,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
         >
           <View style={styles.checkboxArea}>
             <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-              {isSelected ? <Check size={16} color="#FFFFFF" /> : null}
+              {isSelected ? <Check size={16} color={colors.onAccent} /> : null}
             </View>
           </View>
           <View style={styles.contactTextArea}>
@@ -276,14 +280,14 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
         </TouchableOpacity>
       );
     },
-    [selectedIds, toggleSelection],
+    [colors, selectedIds, styles, toggleSelection],
   );
 
   if (phase === 'permission') {
     if (isRequestingPermission || !permissionDenied) {
       return (
         <View style={styles.centeredContainer}>
-          <ActivityIndicator size="large" color="#CC785C" />
+          <ActivityIndicator size="large" color={colors.accent} />
         </View>
       );
     }
@@ -313,7 +317,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
   if (phase === 'loading') {
     return (
       <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color="#CC785C" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -321,7 +325,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
   if (phase === 'importing') {
     return (
       <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color="#CC785C" />
+        <ActivityIndicator size="large" color={colors.accent} />
         <Text style={styles.progressText}>
           Импортируем {progress.done} из {progress.total}...
         </Text>
@@ -337,7 +341,7 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
           value={search}
           onChangeText={handleSearchChange}
           placeholder={t('contacts.searchImportPhone')}
-          placeholderTextColor="rgba(232,224,212,0.3)"
+          placeholderTextColor={colors.placeholder}
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -384,23 +388,23 @@ export default function ImportPhoneContactsScreen(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'rgba(204,120,92,0.08)',
+    backgroundColor: c.accentSoft,
   },
   centeredContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-    backgroundColor: 'rgba(204,120,92,0.08)',
+    padding: spacing.xl,
+    backgroundColor: c.accentSoft,
   },
   errorText: {
-    color: '#CC5247',
-    fontSize: 16,
+    color: c.danger,
+    fontSize: type.heading.fontSize,
     lineHeight: 22,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   settingsButton: {
@@ -408,42 +412,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: '#CC785C',
+    borderRadius: radius.lg,
+    backgroundColor: c.accent,
   },
   settingsButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+    color: c.onAccent,
+    fontSize: type.heading.fontSize,
     fontWeight: '600',
   },
   progressText: {
-    marginTop: 16,
-    color: '#E8E0D4',
-    fontSize: 16,
+    marginTop: spacing.lg,
+    color: c.text1,
+    fontSize: type.heading.fontSize,
     fontWeight: '600',
   },
   searchContainer: {
-    padding: 16,
-    backgroundColor: 'rgba(204,120,92,0.08)',
+    padding: spacing.lg,
+    backgroundColor: c.accentSoft,
   },
   searchInput: {
     minHeight: 44,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: 'rgba(232,224,212,0.12)',
-    borderRadius: 12,
-    backgroundColor: '#1A1A18',
-    color: '#E8E0D4',
-    fontSize: 16,
+    borderColor: c.inputBorder,
+    borderRadius: radius.lg,
+    backgroundColor: c.surface,
+    color: c.text1,
+    fontSize: type.heading.fontSize,
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
   },
   emptyListContent: {
     flexGrow: 1,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
   },
   emptyState: {
     flex: 1,
@@ -451,20 +455,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyStateText: {
-    color: '#D4A27F',
-    fontSize: 16,
+    color: c.amber,
+    fontSize: type.heading.fontSize,
   },
   contactRow: {
     minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 8,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: 'rgba(232,224,212,0.08)',
-    borderRadius: 12,
-    backgroundColor: '#1A1A18',
+    borderColor: c.border,
+    borderRadius: radius.lg,
+    backgroundColor: c.surface,
   },
   checkboxArea: {
     width: 36,
@@ -477,33 +481,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#CC785C',
+    borderColor: c.accent,
     borderRadius: 4,
-    backgroundColor: '#1A1A18',
+    backgroundColor: c.surface,
   },
   checkboxSelected: {
-    backgroundColor: '#CC785C',
+    backgroundColor: c.accent,
   },
   contactTextArea: {
     flex: 1,
   },
   contactName: {
-    color: '#E8E0D4',
-    fontSize: 16,
+    color: c.text1,
+    fontSize: type.heading.fontSize,
     fontWeight: '700',
   },
   contactSubtitle: {
     marginTop: 2,
-    color: '#D4A27F',
-    fontSize: 14,
+    color: c.amber,
+    fontSize: type.body.fontSize,
   },
   actionBar: {
     flexDirection: 'row',
-    gap: 12,
-    padding: 16,
+    gap: spacing.md,
+    padding: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(232,224,212,0.08)',
-    backgroundColor: '#1A1A18',
+    borderTopColor: c.border,
+    backgroundColor: c.surface,
   },
   cancelButton: {
     minHeight: 44,
@@ -511,13 +515,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(232,224,212,0.08)',
-    borderRadius: 12,
-    backgroundColor: '#1A1A18',
+    borderColor: c.border,
+    borderRadius: radius.lg,
+    backgroundColor: c.surface,
   },
   cancelButtonText: {
-    color: '#E8E0D4',
-    fontSize: 16,
+    color: c.text1,
+    fontSize: type.heading.fontSize,
     fontWeight: '600',
   },
   importButton: {
@@ -525,15 +529,15 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: '#CC785C',
+    borderRadius: radius.lg,
+    backgroundColor: c.accent,
   },
   importButtonDisabled: {
     opacity: 0.5,
   },
   importButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+    color: c.onAccent,
+    fontSize: type.heading.fontSize,
     fontWeight: '600',
   },
 });

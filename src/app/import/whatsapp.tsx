@@ -1,5 +1,8 @@
-﻿import { Text, View, StyleSheet } from 'react-native';
-import FileImportScreen, { rowStyles } from './FileImportScreen';
+import { useMemo } from 'react';
+import { Text, View, StyleSheet } from 'react-native';
+import FileImportScreen, { makeRowStyles } from './FileImportScreen';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 interface WaContact { name: string; phone?: string; message_count: number }
 
@@ -23,10 +26,14 @@ function parseWhatsApp(text: string): WaContact[] {
 }
 
 export default function WhatsAppImportScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const rowStyles = useMemo(() => makeRowStyles(colors), [colors]);
+
   return (
     <FileImportScreen<WaContact>
       mimeTypes={['text/plain', '*/*']}
-      accentColor="#25D366"
+      accentColor="#25D366" // brand color: WhatsApp
       parse={parseWhatsApp}
       endpoint="/import/whatsapp"
       getKey={(item) => item.name}
@@ -48,8 +55,8 @@ export default function WhatsAppImportScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   row:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   textBlock: { flex: 1 },
-  count:     { fontSize: 11, color: 'rgba(232,224,212,0.35)' },
+  count:     { fontSize: 11, color: c.textMuted },
 });

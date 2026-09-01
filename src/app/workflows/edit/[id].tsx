@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   ScrollView,
   Modal,
@@ -15,6 +15,8 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
+import { useTheme } from '../../../hooks/useTheme';
+import { ThemeColors, spacing, radius, type } from '../../../theme';
 
 type TriggerValue =
   | 'contact_created'
@@ -96,6 +98,8 @@ export default function EditWorkflowScreen(): JSX.Element {
   const { t } = useTranslation();
   const token = useUserStore((s) => s.token);
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -265,7 +269,7 @@ export default function EditWorkflowScreen(): JSX.Element {
       <>
         <Stack.Screen options={{ title: t('workflows.edit') }} />
         <View style={styles.centered}>
-          <ActivityIndicator size='large' color='#CC785C' />
+          <ActivityIndicator size='large' color={colors.accent} />
         </View>
       </>
     );
@@ -297,6 +301,7 @@ export default function EditWorkflowScreen(): JSX.Element {
               value={name}
               onChangeText={(v) => { setName(v); if (v.trim()) setNameError(''); }}
               placeholder={t('workflows.name')}
+              placeholderTextColor={colors.placeholder}
             />
             {nameError ? <Text style={styles.error}>{nameError}</Text> : null}
             <Text style={styles.label}>{t('workflows.trigger')}</Text>
@@ -354,7 +359,7 @@ export default function EditWorkflowScreen(): JSX.Element {
               onPress={saveWorkflow}
             >
               {isSaving
-                ? <ActivityIndicator color='#FFFFFF' />
+                ? <ActivityIndicator color={colors.onAccent} />
                 : <Text style={styles.primaryBtnText}>{t('workflows.save')}</Text>}
             </TouchableOpacity>
           </View>
@@ -371,6 +376,7 @@ export default function EditWorkflowScreen(): JSX.Element {
               value={condField}
               onChangeText={setCondField}
               placeholder={t('workflows.conditionField')}
+              placeholderTextColor={colors.placeholder}
             />
             <Text style={styles.label}>{t('workflows.conditionOperator')}</Text>
             <FlatList
@@ -380,7 +386,7 @@ export default function EditWorkflowScreen(): JSX.Element {
                   style={[styles.pickerRow, condOperator === item && styles.pickerRowSelected]}
                   onPress={() => setCondOperator(item)}
                 >
-                  <Text>{item}</Text>
+                  <Text style={styles.pickerText}>{item}</Text>
                 </TouchableOpacity>
               )}
               keyExtractor={(item) => item}
@@ -392,6 +398,7 @@ export default function EditWorkflowScreen(): JSX.Element {
               value={condValue}
               onChangeText={setCondValue}
               placeholder={t('workflows.conditionValue')}
+              placeholderTextColor={colors.placeholder}
             />
             <View style={styles.rowBtns}>
               <TouchableOpacity style={styles.skipBtn} onPress={() => setCondModal(false)}>
@@ -417,7 +424,7 @@ export default function EditWorkflowScreen(): JSX.Element {
                   style={[styles.pickerRow, actType === item && styles.pickerRowSelected]}
                   onPress={() => setActType(item)}
                 >
-                  <Text>{item}</Text>
+                  <Text style={styles.pickerText}>{item}</Text>
                 </TouchableOpacity>
               )}
               keyExtractor={(item) => item}
@@ -426,21 +433,21 @@ export default function EditWorkflowScreen(): JSX.Element {
             {actType === 'create_task' && (
               <View>
                 <Text style={styles.label}>{t('workflows.taskTitle')}</Text>
-                <TextInput style={styles.input} value={actTitle} onChangeText={setActTitle} placeholder={t('workflows.taskTitle')} />
+                <TextInput style={styles.input} value={actTitle} onChangeText={setActTitle} placeholder={t('workflows.taskTitle')} placeholderTextColor={colors.placeholder} />
                 <Text style={styles.label}>{t('workflows.taskDueDays')}</Text>
-                <TextInput style={styles.input} value={actDueDays} onChangeText={setActDueDays} keyboardType='numeric' placeholder={t('workflows.taskDueDays')} />
+                <TextInput style={styles.input} value={actDueDays} onChangeText={setActDueDays} keyboardType='numeric' placeholder={t('workflows.taskDueDays')} placeholderTextColor={colors.placeholder} />
               </View>
             )}
             {actType === 'add_contact_note' && (
               <View>
                 <Text style={styles.label}>{t('workflows.noteBody')}</Text>
-                <TextInput style={styles.input} value={actBody} onChangeText={setActBody} placeholder={t('workflows.noteBody')} />
+                <TextInput style={styles.input} value={actBody} onChangeText={setActBody} placeholder={t('workflows.noteBody')} placeholderTextColor={colors.placeholder} />
               </View>
             )}
             {actType === 'update_deal_stage' && (
               <View>
                 <Text style={styles.label}>{t('workflows.stageId')}</Text>
-                <TextInput style={styles.input} value={actStageId} onChangeText={setActStageId} placeholder={t('workflows.stageId')} />
+                <TextInput style={styles.input} value={actStageId} onChangeText={setActStageId} placeholder={t('workflows.stageId')} placeholderTextColor={colors.placeholder} />
               </View>
             )}
             <View style={styles.rowBtns}>
@@ -458,32 +465,33 @@ export default function EditWorkflowScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
-  container: { flex: 1, backgroundColor: '#0E0E0D' },
-  content: { padding: 16 },
-  label: { marginTop: 12, marginBottom: 6, color: '#E8E0D4', fontWeight: '700' },
-  input: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(232,224,212,0.12)', backgroundColor: '#1A1A18', paddingHorizontal: 12, color: '#E8E0D4' },
-  error: { color: '#C5221F', marginTop: 4 },
-  stepIndicator: { fontSize: 14, color: '#D4A27F', marginBottom: 4 },
-  triggerRow: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(232,224,212,0.08)', backgroundColor: '#1A1A18', justifyContent: 'center', paddingHorizontal: 12, marginBottom: 8 },
-  triggerRowSelected: { borderColor: '#CC785C', backgroundColor: 'rgba(204,120,92,0.08)' },
-  triggerText: { color: '#E8E0D4' },
-  itemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: 'rgba(232,224,212,0.08)' },
-  itemText: { flex: 1, color: '#E8E0D4' },
-  deleteBtn: { color: '#C5221F', paddingHorizontal: 8 },
-  retryBtn: { height: 48, borderRadius: 12, backgroundColor: '#CC785C', alignItems: 'center', justifyContent: 'center', marginTop: 16, paddingHorizontal: 32 },
-  primaryBtn: { flex: 1, height: 48, borderRadius: 12, backgroundColor: '#CC785C', alignItems: 'center', justifyContent: 'center', marginTop: 16 },
-  primaryBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  container: { flex: 1, backgroundColor: c.bg },
+  content: { padding: spacing.lg },
+  label: { marginTop: spacing.md, marginBottom: 6, color: c.text1, fontWeight: '700' },
+  input: { height: 48, borderRadius: radius.lg, borderWidth: 1, borderColor: c.inputBorder, backgroundColor: c.surface, paddingHorizontal: spacing.md, color: c.text1 },
+  error: { color: c.danger, marginTop: spacing.xs },
+  stepIndicator: { fontSize: type.body.fontSize, color: c.amber, marginBottom: spacing.xs },
+  triggerRow: { minHeight: 48, borderRadius: radius.lg, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, justifyContent: 'center', paddingHorizontal: spacing.md, marginBottom: spacing.sm },
+  triggerRowSelected: { borderColor: c.accent, backgroundColor: c.accentSoft },
+  triggerText: { color: c.text1 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, borderBottomWidth: 1, borderBottomColor: c.border },
+  itemText: { flex: 1, color: c.text1 },
+  deleteBtn: { color: c.danger, paddingHorizontal: spacing.sm },
+  retryBtn: { height: 48, borderRadius: radius.lg, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginTop: spacing.lg, paddingHorizontal: 32 },
+  primaryBtn: { flex: 1, height: 48, borderRadius: radius.lg, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginTop: spacing.lg },
+  primaryBtnText: { color: c.onAccent, fontWeight: '700', fontSize: type.heading.fontSize },
   btnDisabled: { opacity: 0.5 },
-  secondaryBtn: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#CC785C', alignItems: 'center', justifyContent: 'center', marginTop: 12 },
-  secondaryBtnText: { color: '#CC785C', fontWeight: '700' },
-  skipBtn: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(232,224,212,0.08)', alignItems: 'center', justifyContent: 'center', marginTop: 16, marginRight: 8 },
-  skipBtnText: { color: '#E8E0D4', fontWeight: '600' },
+  secondaryBtn: { height: 48, borderRadius: radius.lg, borderWidth: 1, borderColor: c.accent, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
+  secondaryBtnText: { color: c.accent, fontWeight: '700' },
+  skipBtn: { flex: 1, height: 48, borderRadius: radius.lg, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center', marginTop: spacing.lg, marginRight: spacing.sm },
+  skipBtnText: { color: c.text1, fontWeight: '600' },
   rowBtns: { flexDirection: 'row', gap: 8 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalBox: { backgroundColor: '#1A1A18', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, maxHeight: '80%' },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#E8E0D4', marginBottom: 8 },
-  pickerRow: { height: 44, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(232,224,212,0.08)', justifyContent: 'center', paddingHorizontal: 12, marginBottom: 6 },
-  pickerRowSelected: { borderColor: '#CC785C', backgroundColor: 'rgba(204,120,92,0.08)' },
+  modalBox: { backgroundColor: c.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: 20, maxHeight: '80%' },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: c.text1, marginBottom: spacing.sm },
+  pickerRow: { height: 44, borderRadius: radius.lg, borderWidth: 1, borderColor: c.border, justifyContent: 'center', paddingHorizontal: spacing.md, marginBottom: 6 },
+  pickerRowSelected: { borderColor: c.accent, backgroundColor: c.accentSoft },
+  pickerText: { color: c.text1 },
 });

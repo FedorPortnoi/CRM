@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -6,12 +6,18 @@ import {
 import { useRouter } from 'expo-router';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors } from '../../theme';
 
 type Phase = 'phone' | 'code' | 'loading' | 'done';
+
+const TELEGRAM_BLUE = '#2AABEE'; // brand color: Telegram
 
 export default function TelegramImportScreen() {
   const router = useRouter();
   const token = useUserStore((s) => s.token);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [phase, setPhase] = useState<Phase>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -55,7 +61,7 @@ export default function TelegramImportScreen() {
   if (phase === 'loading') {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2AABEE" />
+        <ActivityIndicator size="large" color={TELEGRAM_BLUE} />
       </View>
     );
   }
@@ -65,7 +71,7 @@ export default function TelegramImportScreen() {
       <View style={styles.center}>
         <Text style={styles.doneEmoji}>✓</Text>
         <Text style={styles.doneTitle}>Импортировано {imported} контактов</Text>
-        <TouchableOpacity style={[styles.btn, { backgroundColor: '#2AABEE' }]} onPress={() => router.push('/(tabs)/contacts' as never)}>
+        <TouchableOpacity style={[styles.btn, { backgroundColor: TELEGRAM_BLUE }]} onPress={() => router.push('/(tabs)/contacts' as never)}>
           <Text style={styles.btnText}>Перейти к контактам</Text>
         </TouchableOpacity>
       </View>
@@ -90,7 +96,7 @@ export default function TelegramImportScreen() {
             value={phone}
             onChangeText={setPhone}
             placeholder="+7 999 000 00 00"
-            placeholderTextColor="rgba(232,224,212,0.3)"
+            placeholderTextColor={colors.placeholder}
             keyboardType="phone-pad"
             autoFocus
           />
@@ -102,7 +108,7 @@ export default function TelegramImportScreen() {
             value={code}
             onChangeText={setCode}
             placeholder="·····"
-            placeholderTextColor="rgba(232,224,212,0.3)"
+            placeholderTextColor={colors.placeholder}
             keyboardType="number-pad"
             maxLength={8}
             autoFocus
@@ -112,7 +118,7 @@ export default function TelegramImportScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <TouchableOpacity
-          style={[styles.btn, { backgroundColor: '#2AABEE' }]}
+          style={[styles.btn, { backgroundColor: TELEGRAM_BLUE }]}
           onPress={phase === 'phone' ? () => void sendCode() : () => void verify()}
         >
           <Text style={styles.btnText}>
@@ -130,22 +136,22 @@ export default function TelegramImportScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0E0E0D' },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
   content: { flex: 1, padding: 24, justifyContent: 'center' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0E0E0D', gap: 16 },
-  title: { fontSize: 24, fontWeight: '800', color: '#E8E0D4', marginBottom: 6 },
-  sub: { fontSize: 14, color: '#D4A27F', marginBottom: 28, lineHeight: 20 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg, gap: 16 },
+  title: { fontSize: 24, fontWeight: '800', color: c.text1, marginBottom: 6 },
+  sub: { fontSize: 14, color: c.amber, marginBottom: 28, lineHeight: 20 },
   input: {
-    height: 54, borderWidth: 1, borderColor: 'rgba(232,224,212,0.12)', borderRadius: 12,
-    backgroundColor: '#1A1A18', paddingHorizontal: 16, fontSize: 17, color: '#E8E0D4', marginBottom: 12,
+    height: 54, borderWidth: 1, borderColor: c.inputBorder, borderRadius: 12,
+    backgroundColor: c.surface, paddingHorizontal: 16, fontSize: 17, color: c.text1, marginBottom: 12,
   },
   codeInput: { fontSize: 30, fontWeight: '700', textAlign: 'center', letterSpacing: 10 },
   btn: { height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  btnText: { color: c.onAccent, fontSize: 16, fontWeight: '700' },
   back: { alignItems: 'center', paddingVertical: 10 },
-  backText: { color: '#D4A27F', fontSize: 14 },
-  error: { color: '#CC5247', fontSize: 13, marginBottom: 10, textAlign: 'center' },
-  doneEmoji: { fontSize: 52, color: '#2AABEE', fontWeight: '700' },
-  doneTitle: { fontSize: 18, fontWeight: '700', color: '#E8E0D4' },
+  backText: { color: c.amber, fontSize: 14 },
+  error: { color: c.danger, fontSize: 13, marginBottom: 10, textAlign: 'center' },
+  doneEmoji: { fontSize: 52, color: TELEGRAM_BLUE, fontWeight: '700' },
+  doneTitle: { fontSize: 18, fontWeight: '700', color: c.text1 },
 });

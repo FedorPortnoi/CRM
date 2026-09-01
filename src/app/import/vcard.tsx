@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { Text } from 'react-native';
-import FileImportScreen, { rowStyles } from './FileImportScreen';
+import FileImportScreen, { makeRowStyles } from './FileImportScreen';
+import { useTheme } from '../../hooks/useTheme';
 
 interface VContact { first_name: string; last_name?: string; phone?: string; email?: string; company?: string }
 
@@ -15,10 +17,13 @@ function parseVCards(text: string): VContact[] {
 }
 
 export default function VCardImportScreen() {
+  const { colors } = useTheme();
+  const rowStyles = useMemo(() => makeRowStyles(colors), [colors]);
+
   return (
     <FileImportScreen<VContact>
       mimeTypes={['text/vcard', 'text/x-vcard', '*/*']}
-      accentColor="#8B5CF6"
+      accentColor="#8B5CF6" // per-channel accent (not a hardcoded dark-palette value; renders fine on both themes)
       parse={parseVCards}
       endpoint="/import/vcard"
       getKey={(_item, index) => String(index)}

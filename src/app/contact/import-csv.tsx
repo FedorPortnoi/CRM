@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,6 +15,8 @@ import { Upload } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
 
 type CsvRow = {
   first_name: string;
@@ -90,6 +92,8 @@ function parseCsv(text: string): CsvRow[] {
 }
 
 export default function ImportCsvScreen(): JSX.Element {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const token = useUserStore((s) => s.token);
   const [csvText, setCsvText] = useState(sample);
   const [isImporting, setIsImporting] = useState(false);
@@ -155,7 +159,7 @@ export default function ImportCsvScreen(): JSX.Element {
           onPress={() => { void submit(); }}
           accessibilityRole="button"
         >
-          {isImporting ? <ActivityIndicator color="#FFFFFF" /> : <Upload size={20} color="#FFFFFF" />}
+          {isImporting ? <ActivityIndicator color={colors.onAccent} /> : <Upload size={20} color={colors.onAccent} />}
           <Text style={styles.buttonText}>Импортировать</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -163,41 +167,41 @@ export default function ImportCsvScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0E0E0D' },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: c.bg },
   container: { flex: 1 },
-  content: { padding: 16 },
-  title: { fontSize: 26, fontWeight: '700', color: '#E8E0D4', marginBottom: 12 },
+  content: { padding: spacing.lg },
+  title: { fontSize: type.display.fontSize, fontWeight: '700', color: c.text1, marginBottom: spacing.md },
   input: {
     minHeight: 260,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: 'rgba(232,224,212,0.12)',
-    backgroundColor: '#1A1A18',
-    padding: 12,
-    fontSize: 14,
-    color: '#E8E0D4',
+    borderColor: c.inputBorder,
+    backgroundColor: c.surface,
+    padding: spacing.md,
+    fontSize: type.body.fontSize,
+    color: c.text1,
   },
   preview: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#1A1A18',
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: 'rgba(232,224,212,0.08)',
+    borderColor: c.border,
   },
-  previewText: { color: '#E8E0D4', fontWeight: '600' },
-  error: { color: '#C5221F', marginTop: 12 },
+  previewText: { color: c.text1, fontWeight: '600' },
+  error: { color: c.danger, marginTop: spacing.md },
   button: {
     height: 52,
-    borderRadius: 12,
-    backgroundColor: '#CC785C',
+    borderRadius: radius.lg,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 16,
+    gap: spacing.sm,
+    marginTop: spacing.lg,
   },
   buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+  buttonText: { color: c.onAccent, fontWeight: '700', fontSize: type.heading.fontSize },
 });
