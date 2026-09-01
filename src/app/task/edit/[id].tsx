@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { ListRenderItemInfo } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,7 +12,8 @@ import { RECURRENCE_OPTIONS, labelKeyForRule, normalizeRule } from '../../../uti
 import { useContactSearch } from '../../../hooks/useContactSearch';
 import { useCreateMutation } from '../../../hooks/useCreateMutation';
 import { useTheme } from '../../../hooks/useTheme';
-import { ThemeColors } from '../../../theme';
+import { ThemeColors, spacing, radius, type, control, tabular } from '../../../theme';
+import { Screen, Card, Button, EmptyState, SkeletonText } from '../../../components/ui';
 import ReminderEditor from '../../../components/reminders/ReminderEditor';
 import {
   draftFromReminder,
@@ -351,6 +352,7 @@ export default function EditTaskScreen(): JSX.Element {
   const renderContactItem = ({ item }: ListRenderItemInfo<ContactPreview>): JSX.Element => (
     <TouchableOpacity
       style={styles.contactResultItem}
+      activeOpacity={0.7}
       onPress={() => {
         setSelectedContactId(item.id);
         setSelectedContactName(contactDisplayName(item));
@@ -362,32 +364,39 @@ export default function EditTaskScreen(): JSX.Element {
   );
 
   return (
-    <View style={styles.container}>
+    <>
       <Stack.Screen options={{ title: t('tasks.edit') }} />
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <Screen contentContainerStyle={styles.contentPad}>
         {(loadError ?? apiError) !== null ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorBannerText}>{loadError ?? apiError}</Text>
             {!isSubmitting && loadError !== null ? (
-              <TouchableOpacity
+              <Button
+                title={t('common.retry')}
+                variant="ghost"
+                size="sm"
+                onPress={() => { void loadTask(); }}
                 style={styles.bannerRetry}
-                onPress={() => {
-                  void loadTask();
-                }}
-              >
-                <Text style={styles.bannerRetryText}>{t('common.retry')}</Text>
-              </TouchableOpacity>
+              />
             ) : null}
           </View>
         ) : null}
 
         {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.orange} />
-          </View>
+          <>
+            <Card style={styles.cardSpacing}>
+              <SkeletonText lines={1} />
+            </Card>
+            <Card style={styles.cardSpacing}>
+              <SkeletonText lines={2} lastLineWidth="45%" />
+            </Card>
+            <Card>
+              <SkeletonText lines={3} lastLineWidth="55%" />
+            </Card>
+          </>
         ) : original !== null ? (
           <>
-            <View style={styles.fieldGroup}>
+            <Card style={styles.cardSpacing}>
               <Text style={styles.label}>{t('tasks.taskTitle')} *</Text>
               <TextInput
                 style={styles.input}
@@ -401,26 +410,39 @@ export default function EditTaskScreen(): JSX.Element {
                 autoCapitalize="sentences"
               />
               {showTitleError ? <Text style={styles.fieldError}>{t('tasks.titleRequired')}</Text> : null}
-            </View>
+            </Card>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('tasks.dueDate')}</Text>
-              <TouchableOpacity style={styles.input} onPress={() => setShowCalendar(true)}>
-                <Text style={dueDate !== '' ? styles.inputText : styles.placeholderText}>
-                  {dueDate !== '' ? formatDate(dueDate) : t('tasks.pickDate')}
-                </Text>
-              </TouchableOpacity>
-              {dueDate !== '' ? (
-                <TouchableOpacity onPress={() => setDueDate('')}>
-                  <Text style={styles.clearLink}>{t('tasks.clear')}</Text>
+            <Card style={styles.cardSpacing}>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>{t('tasks.dueDate')}</Text>
+                <TouchableOpacity style={styles.input} activeOpacity={0.7} onPress={() => setShowCalendar(true)}>
+                  <Text style={[dueDate !== '' ? styles.inputText : styles.placeholderText, styles.tabularText]}>
+                    {dueDate !== '' ? formatDate(dueDate) : t('tasks.pickDate')}
+                  </Text>
                 </TouchableOpacity>
-              ) : null}
-            </View>
+                {dueDate !== '' ? (
+                  <TouchableOpacity activeOpacity={0.7} onPress={() => setDueDate('')}>
+                    <Text style={styles.clearLink}>{t('tasks.clear')}</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              <View style={styles.fieldGroupLast}>
+                <ReminderEditor
+                  value={reminders}
+                  onChange={setReminders}
+                  defaultDate={dueDate}
+                  isLoading={remindersQuery.isLoading}
+                  loadError={remindersQuery.isError ? t('reminders.loadFailed') : null}
+                  onRetry={() => void remindersQuery.refetch()}
+                />
+              </View>
+            </Card>
 
             <Modal animationType="slide" visible={showCalendar} onRequestClose={() => setShowCalendar(false)}>
-              <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
+              <View style={[styles.modalHeader, { paddingTop: insets.top + spacing.md }]}>
                 <Text style={styles.modalTitle}>{t('tasks.selectDate')}</Text>
-                <TouchableOpacity onPress={() => setShowCalendar(false)}>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => setShowCalendar(false)}>
                   <Text style={styles.modalDone}>{t('tasks.done')}</Text>
                 </TouchableOpacity>
               </View>
@@ -433,32 +455,32 @@ export default function EditTaskScreen(): JSX.Element {
                 markedDates={
                   dueDate !== ''
                     ? ({
-                        [dueDate]: { selected: true, selectedColor: colors.orange },
+                        [dueDate]: { selected: true, selectedColor: colors.accent },
                       } as Record<string, { selected?: boolean; selectedColor?: string }>)
                     : {}
                 }
               />
             </Modal>
 
-            {/* Replaces the old date-only picker, which silently chose 09:00 for the user. */}
-            <View style={styles.fieldGroup}>
-              <ReminderEditor
-                value={reminders}
-                onChange={setReminders}
-                defaultDate={dueDate}
-                isLoading={remindersQuery.isLoading}
-                loadError={remindersQuery.isError ? t('reminders.loadFailed') : null}
-                onRetry={() => void remindersQuery.refetch()}
-              />
-            </View>
+            <Card style={styles.cardSpacing}>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>{t('tasks.repeat')}</Text>
+                <TouchableOpacity style={styles.dropdownField} onPress={() => setShowRepeatPicker(true)} activeOpacity={0.7}>
+                  <Text style={styles.inputText}>{t(labelKeyForRule(recurrenceRule) ?? 'tasks.recurrenceNone')}</Text>
+                  <Text style={styles.dropdownChevron}>{'⌄'}</Text>
+                </TouchableOpacity>
+              </View>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('tasks.repeat')}</Text>
-              <TouchableOpacity style={styles.dropdownField} onPress={() => setShowRepeatPicker(true)} activeOpacity={0.75}>
-                <Text style={styles.inputText}>{t(labelKeyForRule(recurrenceRule) ?? 'tasks.recurrenceNone')}</Text>
-                <Text style={styles.dropdownChevron}>{'⌄'}</Text>
-              </TouchableOpacity>
-            </View>
+              <View style={styles.fieldGroupLast}>
+                <Text style={styles.label}>{t('tasks.assignedTo')}</Text>
+                <TouchableOpacity style={styles.dropdownField} onPress={() => setShowAssigneePicker(true)} activeOpacity={0.7}>
+                  <Text style={styles.inputText}>
+                    {user && assigneeId === user.id ? t('tasks.assignedToYou', { name: assigneeName || user.name }) : assigneeName}
+                  </Text>
+                  <Text style={styles.dropdownChevron}>{'⌄'}</Text>
+                </TouchableOpacity>
+              </View>
+            </Card>
 
             <Modal animationType="slide" transparent visible={showRepeatPicker} onRequestClose={() => setShowRepeatPicker(false)}>
               <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setShowRepeatPicker(false)}>
@@ -470,6 +492,7 @@ export default function EditTaskScreen(): JSX.Element {
                       <TouchableOpacity
                         key={option.labelKey}
                         style={styles.pickerRow}
+                        activeOpacity={0.7}
                         onPress={() => {
                           setRecurrenceRule(option.rule);
                           setShowRepeatPicker(false);
@@ -484,16 +507,6 @@ export default function EditTaskScreen(): JSX.Element {
               </TouchableOpacity>
             </Modal>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('tasks.assignedTo')}</Text>
-              <TouchableOpacity style={styles.dropdownField} onPress={() => setShowAssigneePicker(true)} activeOpacity={0.75}>
-                <Text style={styles.inputText}>
-                  {user && assigneeId === user.id ? t('tasks.assignedToYou', { name: assigneeName || user.name }) : assigneeName}
-                </Text>
-                <Text style={styles.dropdownChevron}>{'⌄'}</Text>
-              </TouchableOpacity>
-            </View>
-
             <Modal animationType="slide" transparent visible={showAssigneePicker} onRequestClose={() => setShowAssigneePicker(false)}>
               <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setShowAssigneePicker(false)}>
                 <View style={styles.pickerSheet}>
@@ -505,6 +518,7 @@ export default function EditTaskScreen(): JSX.Element {
                       <TouchableOpacity
                         key={member.id}
                         style={styles.pickerRow}
+                        activeOpacity={0.7}
                         onPress={() => {
                           setAssigneeId(member.id);
                           setAssigneeName(member.name);
@@ -520,7 +534,7 @@ export default function EditTaskScreen(): JSX.Element {
               </TouchableOpacity>
             </Modal>
 
-            <View style={styles.fieldGroup}>
+            <Card style={styles.cardSpacing}>
               <Text style={styles.label}>{t('tasks.notes')}</Text>
               <TextInput
                 style={styles.notesInput}
@@ -532,9 +546,9 @@ export default function EditTaskScreen(): JSX.Element {
                 numberOfLines={4}
                 textAlignVertical="top"
               />
-            </View>
+            </Card>
 
-            <View style={styles.fieldGroup}>
+            <Card style={styles.cardSpacing}>
               <Text style={styles.label}>{t('tasks.contact')}</Text>
               {selectedContactId !== '' ? (
                 <View style={styles.contactChip}>
@@ -542,6 +556,7 @@ export default function EditTaskScreen(): JSX.Element {
                     {selectedContactName}
                   </Text>
                   <TouchableOpacity
+                    activeOpacity={0.7}
                     onPress={() => {
                       setSelectedContactId('');
                       setSelectedContactName('');
@@ -560,7 +575,7 @@ export default function EditTaskScreen(): JSX.Element {
                     placeholder={t('contacts.searchByName')}
                     placeholderTextColor={colors.placeholder}
                   />
-                  {contactResults.slice(0, 5).length > 0 ? (
+                  {contactQuery.trim() !== '' ? (
                     <View style={styles.contactResultsContainer}>
                       <FlatList<ContactPreview>
                         data={contactResults.slice(0, 5)}
@@ -568,182 +583,158 @@ export default function EditTaskScreen(): JSX.Element {
                         renderItem={renderContactItem}
                         scrollEnabled={false}
                         keyboardShouldPersistTaps="handled"
+                        ListEmptyComponent={
+                          <EmptyState
+                            title={t('contacts.noSearchResults')}
+                            style={styles.contactEmptyState}
+                          />
+                        }
                       />
                     </View>
                   ) : null}
                 </>
               )}
-            </View>
+            </Card>
 
-            <TouchableOpacity
-              style={[styles.submitButton, isSubmitting ? styles.submitButtonDisabled : null]}
-              onPress={() => {
-                void handleSubmit();
-              }}
+            <Button
+              title={t('tasks.saveTask')}
+              onPress={() => { void handleSubmit(); }}
+              loading={isSubmitting}
               disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.submitButtonText}>{t('tasks.saveTask')}</Text>
-              )}
-            </TouchableOpacity>
+              block
+            />
           </>
         ) : null}
-      </ScrollView>
-    </View>
+      </Screen>
+    </>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: c.bg },
-  scrollView: { flex: 1 },
-  content: { padding: 16 },
-  loadingContainer: { paddingTop: 48 },
-  errorBanner: {
-    backgroundColor: 'rgba(204,82,71,0.12)',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
+  contentPad: {
+    paddingTop: spacing.lg,
   },
-  errorBannerText: { color: c.red },
-  bannerRetry: { marginTop: 8, alignSelf: 'flex-start' },
-  bannerRetryText: { color: c.orange, fontWeight: '600' },
-  fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 14, fontWeight: '600', color: c.text1, marginBottom: 6 },
+  cardSpacing: {
+    marginBottom: spacing.lg,
+  },
+  errorBanner: {
+    backgroundColor: c.dangerSoft,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.lg,
+  },
+  errorBannerText: { ...type.body, color: c.danger },
+  bannerRetry: { marginTop: spacing.sm, alignSelf: 'flex-start' },
+  fieldGroup: { marginBottom: spacing.md },
+  fieldGroupLast: { marginBottom: 0 },
+  label: { ...type.label, color: c.text1, marginBottom: spacing.xs },
   input: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    minHeight: 44,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: control.md,
     justifyContent: 'center',
-    fontSize: 16,
+    ...type.body,
     color: c.text1,
   },
-  inputText: { color: c.text1, fontSize: 16 },
-  placeholderText: { color: c.amber, fontSize: 16 },
-  clearLink: { color: c.orange, fontSize: 12, marginTop: 4 },
+  inputText: { ...type.body, color: c.text1 },
+  placeholderText: { ...type.body, color: c.placeholder },
+  tabularText: { ...tabular },
+  clearLink: { ...type.caption, color: c.accent, marginTop: spacing.xs },
   dropdownField: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    minHeight: 44,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    minHeight: control.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  dropdownChevron: { color: c.amber, fontSize: 18, marginLeft: 8 },
+  dropdownChevron: { color: c.textMuted, fontSize: 16, marginLeft: spacing.sm },
   pickerOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
   pickerSheet: {
     backgroundColor: c.bgPanel,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 32,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xxl,
   },
-  pickerTitle: { fontSize: 16, fontWeight: '600', color: c.text1, marginBottom: 8 },
+  pickerTitle: { ...type.heading, color: c.text1, marginBottom: spacing.sm },
   pickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: c.border,
   },
-  pickerRowText: { fontSize: 16, color: c.text1 },
-  pickerRowTextSelected: { color: c.orange, fontWeight: '600' },
-  pickerCheck: { color: c.orange, fontSize: 16, fontWeight: '700' },
-  segmentedControl: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  segmentButton: {
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: c.bgPanel,
-  },
-  segmentButtonSelected: {
-    borderColor: c.orange,
-    backgroundColor: 'rgba(204,120,92,0.08)',
-  },
-  segmentText: { color: c.text1, fontSize: 14, fontWeight: '500' },
-  segmentTextSelected: { color: c.orange },
-  customRuleInput: { marginTop: 10 },
+  pickerRowText: { ...type.body, color: c.text1 },
+  pickerRowTextSelected: { color: c.accent, fontWeight: '600' },
+  pickerCheck: { color: c.accent, fontSize: 16, fontWeight: '700' },
   notesInput: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     height: 100,
-    fontSize: 16,
+    ...type.body,
     color: c.text1,
   },
-  fieldError: { color: c.red, fontSize: 12, marginTop: 4 },
+  fieldError: { ...type.caption, color: c.danger, marginTop: spacing.xs },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: spacing.lg,
     backgroundColor: c.bgPanel,
     borderBottomWidth: 1,
     borderBottomColor: c.border,
   },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: c.text1 },
-  modalDone: { fontSize: 16, color: c.orange, fontWeight: '600' },
+  modalTitle: { ...type.title, color: c.text1 },
+  modalDone: { ...type.body, color: c.accent, fontWeight: '600' },
   contactChip: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: c.bgPanel,
     borderWidth: 1,
     borderColor: c.border,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     alignSelf: 'flex-start',
     maxWidth: '100%',
   },
   contactChipText: {
-    fontSize: 14,
+    ...type.body,
     color: c.text1,
-    marginRight: 8,
+    marginRight: spacing.sm,
     flexShrink: 1,
   },
-  contactChipRemove: { fontSize: 14, color: c.orange, fontWeight: '600' },
+  contactChipRemove: { ...type.body, color: c.accent, fontWeight: '600' },
   contactResultsContainer: {
     backgroundColor: c.bgPanel,
     borderWidth: 1,
     borderColor: c.border,
-    borderRadius: 12,
-    marginTop: 4,
+    borderRadius: radius.lg,
+    marginTop: spacing.xs,
   },
   contactResultItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: c.border,
   },
-  contactResultText: { fontSize: 15, color: c.text1 },
-  submitButton: {
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    minHeight: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 32,
+  contactResultText: { ...type.body, color: c.text1 },
+  contactEmptyState: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
   },
-  submitButtonDisabled: { opacity: 0.7 },
-  submitButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });

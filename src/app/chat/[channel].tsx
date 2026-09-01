@@ -6,12 +6,15 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Send } from 'lucide-react-native';
+import { MessageSquare, Send } from 'lucide-react-native';
 import { useChatStore, ChatMessage } from '../../store/chatStore';
 import { useUserStore } from '../../store/userStore';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type, tabular } from '../../theme';
+import { EmptyState } from '../../components/ui';
 
+// TODO(i18n): hardcoded 'ru-RU' locale — English users see Russian month names and a
+// day/month order that does not follow their locale. See report for the full inventory.
 function formatTime(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
@@ -101,11 +104,12 @@ export default function ChatRoomScreen() {
         showsVerticalScrollIndicator={false}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.3}
-        ListFooterComponent={loadingMore ? <ActivityIndicator style={{ margin: 16 }} color={colors.orange} /> : null}
+        ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.accent} style={styles.footer} /> : null}
         ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyText}>{t('chat.startConversation')}</Text>
-          </View>
+          <EmptyState
+            icon={<MessageSquare size={48} color={colors.skeleton} strokeWidth={1.5} />}
+            title={t('chat.startConversation')}
+          />
         }
       />
 
@@ -124,11 +128,11 @@ export default function ChatRoomScreen() {
           style={[styles.sendBtn, (!body.trim() || sending) && styles.sendBtnDisabled]}
           onPress={() => { void handleSend(); }}
           disabled={!body.trim() || sending}
-          activeOpacity={0.8}
+          activeOpacity={0.7}
         >
           {sending
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Send size={18} color="#fff" strokeWidth={2} />}
+            ? <ActivityIndicator size="small" color={colors.onAccent} />
+            : <Send size={18} color={colors.onAccent} strokeWidth={2} />}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -137,37 +141,36 @@ export default function ChatRoomScreen() {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  list: { paddingHorizontal: 12, paddingVertical: 8 },
-  bubble: { marginVertical: 2 },
+  list: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexGrow: 1 },
+  footer: { margin: spacing.lg },
+  bubble: { marginVertical: spacing.xs / 2 },
   bubbleMine: { alignItems: 'flex-end' },
   bubbleOther: { alignItems: 'flex-start' },
-  senderName: { fontSize: 12, color: c.amber, fontWeight: '600', marginBottom: 3, marginLeft: 4 },
+  senderName: { ...type.caption, color: c.amber, marginBottom: spacing.xs, marginLeft: spacing.xs },
   bubbleInner: {
-    maxWidth: '78%', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8,
-    flexDirection: 'row', alignItems: 'flex-end', gap: 6, flexWrap: 'wrap',
+    maxWidth: '78%', borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    flexDirection: 'row', alignItems: 'flex-end', gap: spacing.xs, flexWrap: 'wrap',
   },
-  bubbleInnerMine: { backgroundColor: c.orange, borderBottomRightRadius: 4 },
-  bubbleInnerOther: { backgroundColor: c.bgPanel, borderBottomLeftRadius: 4 },
-  bubbleText: { fontSize: 15, color: c.text1, lineHeight: 20, flexShrink: 1 },
-  bubbleTextMine: { color: '#fff' },
-  bubbleTime: { fontSize: 11, color: c.textMuted, alignSelf: 'flex-end' },
-  bubbleTimeMine: { color: 'rgba(255,255,255,0.7)' },
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  emptyText: { color: c.textMuted, fontSize: 14 },
+  bubbleInnerMine: { backgroundColor: c.accent, borderBottomRightRadius: 4 },
+  bubbleInnerOther: { backgroundColor: c.surface, borderBottomLeftRadius: 4 },
+  bubbleText: { ...type.body, color: c.text1, flexShrink: 1 },
+  bubbleTextMine: { color: c.onAccent },
+  bubbleTime: { ...type.micro, color: c.textMuted, alignSelf: 'flex-end', ...tabular },
+  bubbleTimeMine: { color: 'rgba(255,255,255,0.7)' }, // fixed: translucent onAccent, white in both themes
   inputBar: {
     flexDirection: 'row', alignItems: 'flex-end',
-    backgroundColor: c.bgPanel, paddingHorizontal: 12, paddingVertical: 10,
-    borderTopWidth: 1, borderTopColor: c.border, gap: 8,
+    backgroundColor: c.surface, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    borderTopWidth: 1, borderTopColor: c.border, gap: spacing.sm,
   },
   input: {
     flex: 1, minHeight: 40, maxHeight: 120,
-    backgroundColor: c.bg, borderRadius: 20, borderWidth: 1,
-    borderColor: c.border, paddingHorizontal: 16, paddingVertical: 10,
-    fontSize: 15, color: c.text1,
+    backgroundColor: c.inputBg, borderRadius: radius.xxl, borderWidth: 1,
+    borderColor: c.inputBorder, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+    ...type.body, color: c.text1,
   },
   sendBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: c.orange, alignItems: 'center', justifyContent: 'center',
+    width: 40, height: 40, borderRadius: radius.xxl,
+    backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center',
   },
   sendBtnDisabled: { backgroundColor: c.skeleton },
 });

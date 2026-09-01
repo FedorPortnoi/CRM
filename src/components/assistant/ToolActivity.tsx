@@ -6,7 +6,7 @@
 // and reads are collapsed into one muted line underneath. Failed calls stay
 // visible with their reason: an action the user believes happened but did not
 // is the expensive failure here.
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, CheckCircle2, Search } from 'lucide-react-native';
@@ -19,7 +19,7 @@ import {
   type AssistantToolCall,
 } from '../../utils/assistantTools';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
 
 interface ToolActivityProps {
   calls: AssistantToolCall[];
@@ -28,7 +28,7 @@ interface ToolActivityProps {
 export default function ToolActivity({ calls }: ToolActivityProps): JSX.Element | null {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const styles = makeStyles(colors);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   if (calls.length === 0) return null;
 
@@ -60,12 +60,12 @@ export default function ToolActivity({ calls }: ToolActivityProps): JSX.Element 
                 {call.ok ? (
                   <CheckCircle2
                     size={16}
-                    color={colors.orange}
+                    color={colors.success}
                     strokeWidth={2.2}
                     accessibilityLabel={t('assistant.toolOk')}
                   />
                 ) : (
-                  <AlertTriangle size={16} color={colors.red} strokeWidth={2.2} />
+                  <AlertTriangle size={16} color={colors.danger} strokeWidth={2.2} />
                 )}
                 <View style={styles.actionBody}>
                   <Text style={[styles.actionTitle, !call.ok && styles.actionTitleFailed]}>
@@ -110,31 +110,30 @@ export default function ToolActivity({ calls }: ToolActivityProps): JSX.Element 
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  wrap: { alignSelf: 'stretch', marginTop: 8, gap: 8 },
+  wrap: { alignSelf: 'stretch', marginTop: spacing.sm, gap: spacing.sm },
   actions: {
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: c.borderStrong,
-    backgroundColor: c.bgPanel,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
+    backgroundColor: c.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
   },
   sectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: c.orange,
+    ...type.micro,
+    color: c.accent,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  actionRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
-  actionBody: { flex: 1, gap: 2 },
-  actionTitle: { fontSize: 14, fontWeight: '600', color: c.text1, lineHeight: 19 },
-  actionTitleFailed: { color: c.red },
-  actionSubject: { fontSize: 13, color: c.amber, lineHeight: 18 },
-  actionError: { fontSize: 12, color: c.red, lineHeight: 17 },
-  lookups: { paddingHorizontal: 2, gap: 2 },
-  lookupHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  lookupTitle: { fontSize: 11, color: c.textMuted, fontWeight: '600' },
-  lookupRow: { fontSize: 12, color: c.textMuted, lineHeight: 17, paddingLeft: 19 },
+  actionRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  actionBody: { flex: 1, gap: spacing.xs },
+  actionTitle: { ...type.body, color: c.text1 },
+  actionTitleFailed: { color: c.danger },
+  actionSubject: { ...type.label, color: c.amber },
+  actionError: { ...type.caption, color: c.danger },
+  lookups: { paddingHorizontal: spacing.xs, gap: spacing.xs },
+  lookupHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  lookupTitle: { ...type.micro, color: c.textMuted },
+  lookupRow: { ...type.caption, color: c.textMuted, paddingLeft: spacing.lg + spacing.xs },
 });

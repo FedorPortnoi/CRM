@@ -1,20 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../../store/userStore';
 import { API_URL } from '../../../utils/api';
 import { useCreateMutation } from '../../../hooks/useCreateMutation';
 import { useTheme } from '../../../hooks/useTheme';
-import { ThemeColors } from '../../../theme';
+import { ThemeColors, spacing, radius, type, control } from '../../../theme';
+import { Screen, Card, Button, SkeletonText } from '../../../components/ui';
 
 interface Contact {
   id: string;
@@ -159,157 +152,168 @@ export default function EditContactScreen(): JSX.Element {
   };
 
   return (
-    <View style={styles.container}>
+    <>
       <Stack.Screen options={{ title: t('contacts.editTitle') }} />
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
-        {(loadError ?? apiError) !== null && (
+      <Screen contentContainerStyle={styles.contentPad}>
+        {(loadError ?? apiError) !== null ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorBannerText}>{loadError ?? apiError}</Text>
-            {loadError !== null && (
-              <TouchableOpacity style={styles.bannerRetry} onPress={() => { void loadContact(); }}>
-                <Text style={styles.bannerRetryText}>{t('common.retry')}</Text>
-              </TouchableOpacity>
-            )}
+            {loadError !== null ? (
+              <Button
+                title={t('common.retry')}
+                variant="ghost"
+                size="sm"
+                onPress={() => { void loadContact(); }}
+                style={styles.bannerRetry}
+              />
+            ) : null}
           </View>
-        )}
+        ) : null}
 
         {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.orange} />
-          </View>
+          <>
+            <Card style={styles.cardSpacing}>
+              <SkeletonText lines={2} lastLineWidth="60%" />
+            </Card>
+            <Card style={styles.cardSpacing}>
+              <SkeletonText lines={3} lastLineWidth="50%" />
+            </Card>
+            <Card>
+              <SkeletonText lines={2} lastLineWidth="70%" />
+            </Card>
+          </>
         ) : (
           <>
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('contacts.firstName')} *</Text>
-              <TextInput
-                style={styles.input}
-                value={firstName}
-                onChangeText={setFirstName}
-                autoCapitalize="words"
-              />
-              {showFirstNameError && (
-                <Text style={styles.fieldError}>{t('contacts.firstNameRequired')}</Text>
-              )}
-            </View>
+            <Card style={styles.cardSpacing}>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>{t('contacts.firstName')} *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  autoCapitalize="words"
+                  placeholderTextColor={colors.placeholder}
+                />
+                {showFirstNameError ? (
+                  <Text style={styles.fieldError}>{t('contacts.firstNameRequired')}</Text>
+                ) : null}
+              </View>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('contacts.lastName')}</Text>
-              <TextInput
-                style={styles.input}
-                value={lastName}
-                onChangeText={setLastName}
-                autoCapitalize="words"
-              />
-            </View>
+              <View style={styles.fieldGroupLast}>
+                <Text style={styles.label}>{t('contacts.lastName')}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={lastName}
+                  onChangeText={setLastName}
+                  autoCapitalize="words"
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
+            </Card>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('contacts.company')}</Text>
-              <TextInput style={styles.input} value={company} onChangeText={setCompany} />
-            </View>
+            <Card style={styles.cardSpacing}>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>{t('contacts.company')}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={company}
+                  onChangeText={setCompany}
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('contacts.email')}</Text>
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>{t('contacts.email')}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('contacts.phone')}</Text>
-              <TextInput
-                style={styles.input}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-              />
-            </View>
+              <View style={styles.fieldGroupLast}>
+                <Text style={styles.label}>{t('contacts.phone')}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
+            </Card>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('contacts.notes')}</Text>
-              <TextInput
-                style={styles.notesInput}
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
-            </View>
+            <Card style={styles.cardSpacing}>
+              <View style={styles.fieldGroupLast}>
+                <Text style={styles.label}>{t('contacts.notes')}</Text>
+                <TextInput
+                  style={styles.notesInput}
+                  value={notes}
+                  onChangeText={setNotes}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
+            </Card>
 
-            <TouchableOpacity
-              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+            <Button
+              title={t('common.save')}
               onPress={handleSubmit}
+              loading={isSubmitting}
               disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.submitButtonText}>{t('common.save')}</Text>
-              )}
-            </TouchableOpacity>
+              block
+            />
           </>
         )}
-      </ScrollView>
-    </View>
+      </Screen>
+    </>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: c.bg },
-  scrollView: { flex: 1 },
-  content: { padding: 16 },
-  loadingContainer: { paddingTop: 48 },
-  errorBanner: {
-    backgroundColor: 'rgba(204,82,71,0.12)',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
+  contentPad: {
+    paddingTop: spacing.lg,
   },
-  errorBannerText: { color: c.red },
-  bannerRetry: { marginTop: 8, alignSelf: 'flex-start' },
-  bannerRetryText: { color: c.orange, fontWeight: '600' },
-  fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: c.text1, marginBottom: 4 },
+  cardSpacing: {
+    marginBottom: spacing.lg,
+  },
+  errorBanner: {
+    backgroundColor: c.dangerSoft,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.lg,
+  },
+  errorBannerText: { ...type.body, color: c.danger },
+  bannerRetry: { marginTop: spacing.sm, alignSelf: 'flex-start' },
+  fieldGroup: { marginBottom: spacing.md },
+  fieldGroupLast: { marginBottom: 0 },
+  label: { ...type.label, color: c.text1, marginBottom: spacing.xs },
   input: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    minHeight: 44,
-    fontSize: 15,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: control.md,
+    ...type.body,
     color: c.text1,
   },
   notesInput: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: c.inputBorder,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     height: 100,
-    fontSize: 15,
+    ...type.body,
     color: c.text1,
   },
-  fieldError: { color: c.red, fontSize: 12, marginTop: 4 },
-  submitButton: {
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    minHeight: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 32,
-  },
-  submitButtonDisabled: { opacity: 0.7 },
-  submitButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  fieldError: { ...type.caption, color: c.danger, marginTop: spacing.xs },
 });

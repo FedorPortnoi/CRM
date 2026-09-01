@@ -1,17 +1,19 @@
-﻿import React, { useCallback } from 'react';
+import React, { useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, ListRenderItemInfo,
+  ListRenderItemInfo,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
+import { AlertCircle, Users } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { useChatStore } from '../../store/chatStore';
 import { API_URL } from '../../utils/api';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type } from '../../theme';
+import { EmptyState, Skeleton } from '../../components/ui';
 
 function dmChannel(uid1: string, uid2: string): string {
   return uid1 < uid2 ? `dm:${uid1}:${uid2}` : `dm:${uid2}:${uid1}`;
@@ -36,6 +38,19 @@ function isMember(value: unknown): value is Member {
     && (member.username === undefined || member.username === null || typeof member.username === 'string');
 }
 
+/** Loading placeholder shaped like a real member row. */
+function SkeletonRow({ styles }: { styles: ReturnType<typeof makeStyles> }): JSX.Element {
+  return (
+    <View style={styles.row}>
+      <Skeleton width={46} height={46} rounded={radius.xl} />
+      <View style={styles.info}>
+        <Skeleton width="45%" height={15} />
+        <Skeleton width="30%" height={13} style={styles.skeletonEmail} />
+      </View>
+    </View>
+  );
+}
+
 export default function NewDmScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -50,7 +65,6 @@ export default function NewDmScreen() {
     isPending,
     isError,
     isSuccess,
-    isFetching,
     refetch,
   } = useQuery<Member[]>({
     queryKey: ['org-users', token, 'dm-recipients', currentUser?.id],
@@ -106,21 +120,16 @@ export default function NewDmScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ title: t('chat.newDmTitle') }} />
       {isPending ? (
-        <ActivityIndicator style={styles.loading} color={colors.orange} />
-      ) : isError ? (
-        <View style={styles.feedback}>
-          <Text style={styles.feedbackTitle}>{t('chat.membersLoadError')}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => { void refetch(); }}
-            disabled={isFetching}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.retryButtonText}>
-              {isFetching ? t('common.loading') : t('common.retry')}
-            </Text>
-          </TouchableOpacity>
+        <View style={styles.list}>
+          {Array.from({ length: 8 }, (_, i) => <SkeletonRow key={i} styles={styles} />)}
         </View>
+      ) : isError ? (
+        <EmptyState
+          icon={<AlertCircle size={40} color={colors.danger} strokeWidth={1.6} />}
+          title={t('chat.membersLoadError')}
+          actionLabel={t('common.retry')}
+          onAction={() => { void refetch(); }}
+        />
       ) : (
           <FlatList
             data={members ?? []}
@@ -129,10 +138,11 @@ export default function NewDmScreen() {
             contentContainerStyle={styles.list}
             ListHeaderComponent={<Text style={styles.header}>{t('chat.selectMember')}</Text>}
             ListEmptyComponent={isSuccess ? (
-              <View style={styles.empty}>
-                <Text style={styles.emptyTitle}>{t('chat.noDmMembersTitle')}</Text>
-                <Text style={styles.emptyBody}>{t('chat.noDmMembersBody')}</Text>
-              </View>
+              <EmptyState
+                icon={<Users size={44} color={colors.skeleton} strokeWidth={1.5} />}
+                title={t('chat.noDmMembersTitle')}
+                description={t('chat.noDmMembersBody')}
+              />
             ) : null}
           />
       )}
@@ -142,30 +152,20 @@ export default function NewDmScreen() {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  list: { flexGrow: 1, paddingVertical: 8 },
-  loading: { marginTop: 40 },
-  header: { fontSize: 13, color: c.amber, paddingHorizontal: 16, paddingVertical: 8 },
+  list: { flexGrow: 1, paddingVertical: spacing.sm },
+  header: { ...type.caption, color: c.textMuted, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   row: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: c.bgPanel, paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: c.border, gap: 12,
+    backgroundColor: c.surface, paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: c.border, gap: spacing.md,
   },
   avatar: {
-    width: 42, height: 42, borderRadius: 21,
+    width: 46, height: 46, borderRadius: radius.xl,
     backgroundColor: c.amber, alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { color: c.bgDark, fontSize: 17, fontWeight: '700' },
+  avatarText: { ...type.subtitle, color: c.onAccent },
   info: { flex: 1 },
-  name: { fontSize: 15, fontWeight: '600', color: c.text1 },
-  email: { fontSize: 13, color: c.amber, marginTop: 2 },
-  feedback: { alignItems: 'center', paddingHorizontal: 32, paddingTop: 80 },
-  feedbackTitle: { color: c.red, fontSize: 15, lineHeight: 21, textAlign: 'center' },
-  retryButton: {
-    marginTop: 16, borderRadius: 8, borderWidth: 1, borderColor: c.orange,
-    paddingHorizontal: 18, paddingVertical: 10,
-  },
-  retryButtonText: { color: c.orange, fontSize: 14, fontWeight: '600' },
-  empty: { alignItems: 'center', paddingHorizontal: 32, paddingTop: 72 },
-  emptyTitle: { color: c.text1, fontSize: 18, fontWeight: '700', textAlign: 'center' },
-  emptyBody: { color: c.amber, fontSize: 14, lineHeight: 20, marginTop: 8, textAlign: 'center' },
+  skeletonEmail: { marginTop: spacing.sm },
+  name: { ...type.heading, color: c.text1 },
+  email: { ...type.label, color: c.textMuted, marginTop: spacing.xs },
 });

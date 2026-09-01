@@ -19,7 +19,6 @@
 // preview falls back to the saved-template route, which is explicitly viewer-safe.
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Modal,
@@ -35,10 +34,11 @@ import {
 } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { AlertCircle } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { formatMarketNumber } from '../../market/profile';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type, tabular } from '../../theme';
 import { useContactSearch } from '../../hooks/useContactSearch';
 import {
   MAX_TEMPLATE_BODY_LENGTH,
@@ -52,6 +52,7 @@ import {
   useTemplatePlaceholders,
   type TemplatePlaceholder,
 } from '../../hooks/useEmailTemplates';
+import { Card, Button, EmptyState, Skeleton, SkeletonText } from '../../components/ui';
 
 type Selection = { start: number; end: number };
 type PlaceholderTarget = 'subject' | 'body';
@@ -216,30 +217,33 @@ export default function TemplateEditorScreen(): JSX.Element {
     return (
       <View style={styles.screen}>
         <Stack.Screen options={{ title: t('templates.title') }} />
-        <ActivityIndicator style={styles.loader} color={colors.orange} />
+        <View style={styles.content}>
+          <Card>
+            <Skeleton width="50%" height={16} style={styles.skeletonGap} />
+            <Skeleton width="100%" height={44} rounded={radius.lg} style={styles.skeletonGap} />
+            <Skeleton width="100%" height={44} rounded={radius.lg} />
+          </Card>
+          <Card style={styles.cardGap}>
+            <SkeletonText lines={4} lastLineWidth="70%" />
+          </Card>
+        </View>
       </View>
     );
   }
 
   if (!isNew && templateQuery.isError) {
+    const notFound =
+      templateQuery.error instanceof TemplateApiError &&
+      templateQuery.error.code === 'EMAIL_TEMPLATE_NOT_FOUND';
     return (
       <View style={styles.screen}>
         <Stack.Screen options={{ title: t('templates.title') }} />
-        <View style={styles.stateBlock}>
-          <Text style={styles.errorText}>
-            {templateQuery.error instanceof TemplateApiError &&
-            templateQuery.error.code === 'EMAIL_TEMPLATE_NOT_FOUND'
-              ? t('templates.notFound')
-              : t('templates.failedToLoad')}
-          </Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => { void templateQuery.refetch(); }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.retryText}>{t('templates.retry')}</Text>
-          </TouchableOpacity>
-        </View>
+        <EmptyState
+          icon={<AlertCircle size={32} color={colors.danger} />}
+          title={notFound ? t('templates.notFound') : t('templates.failedToLoad')}
+          actionLabel={notFound ? undefined : t('templates.retry')}
+          onAction={notFound ? undefined : () => { void templateQuery.refetch(); }}
+        />
       </View>
     );
   }
@@ -310,7 +314,7 @@ export default function TemplateEditorScreen(): JSX.Element {
         </View>
 
         {/* Placeholder catalogue — what the author is allowed to insert. */}
-        <View style={styles.panel}>
+        <Card style={styles.panel}>
           <Text style={styles.panelTitle}>{t('templates.placeholders')}</Text>
           <Text style={styles.panelHint}>{t('templates.placeholdersHint')}</Text>
           {canManage ? (
@@ -322,7 +326,11 @@ export default function TemplateEditorScreen(): JSX.Element {
           ) : null}
 
           {placeholdersQuery.isPending ? (
-            <ActivityIndicator color={colors.orange} style={styles.panelLoader} />
+            <View style={styles.chips}>
+              {Array.from({ length: 4 }, (_, i) => (
+                <Skeleton key={i} width={92} height={40} rounded={radius.md} />
+              ))}
+            </View>
           ) : placeholdersQuery.isError ? (
             <Text style={styles.errorText}>{t('templates.placeholdersFailed')}</Text>
           ) : (
@@ -345,10 +353,10 @@ export default function TemplateEditorScreen(): JSX.Element {
               ))}
             </View>
           )}
-        </View>
+        </Card>
 
         {/* Preview — the last chance to catch a mistake before a customer reads it. */}
-        <View style={styles.panel}>
+        <Card style={styles.panel}>
           <Text style={styles.panelTitle}>{t('templates.preview')}</Text>
           <Text style={styles.panelHint}>{t('templates.previewHint')}</Text>
 
@@ -363,6 +371,7 @@ export default function TemplateEditorScreen(): JSX.Element {
               style={styles.linkButton}
               onPress={() => setIsContactPickerVisible(true)}
               accessibilityRole="button"
+              activeOpacity={0.7}
             >
               <Text style={styles.linkButtonText}>{t('templates.chooseContact')}</Text>
             </TouchableOpacity>
@@ -372,24 +381,20 @@ export default function TemplateEditorScreen(): JSX.Element {
               style={styles.linkButton}
               onPress={() => setPreviewContact(null)}
               accessibilityRole="button"
+              activeOpacity={0.7}
             >
               <Text style={styles.linkButtonText}>{t('templates.useSampleValues')}</Text>
             </TouchableOpacity>
           ) : null}
 
-          <TouchableOpacity
-            style={styles.secondaryButton}
+          <Button
+            title={t('templates.runPreview')}
             onPress={runPreview}
-            disabled={previewMutation.isPending || (!canManage && templateId === null)}
-            accessibilityRole="button"
-            activeOpacity={0.7}
-          >
-            {previewMutation.isPending ? (
-              <ActivityIndicator color={colors.orange} />
-            ) : (
-              <Text style={styles.secondaryButtonText}>{t('templates.runPreview')}</Text>
-            )}
-          </TouchableOpacity>
+            variant="secondary"
+            loading={previewMutation.isPending}
+            disabled={!canManage && templateId === null}
+            style={styles.previewButton}
+          />
 
           {previewErrorMessage !== null ? (
             <Text style={styles.errorText}>{previewErrorMessage}</Text>
@@ -418,7 +423,7 @@ export default function TemplateEditorScreen(): JSX.Element {
               ) : null}
             </View>
           ) : null}
-        </View>
+        </Card>
 
         {validationError !== null ? <Text style={styles.errorText}>{validationError}</Text> : null}
         {saveErrorMessage !== null ? <Text style={styles.errorText}>{saveErrorMessage}</Text> : null}
@@ -433,29 +438,25 @@ export default function TemplateEditorScreen(): JSX.Element {
 
         {canManage ? (
           <>
-            <TouchableOpacity
-              style={[styles.primaryButton, isBusy ? styles.buttonDisabled : null]}
+            <Button
+              title={t('templates.save')}
               onPress={save}
+              loading={saveMutation.isPending}
               disabled={isBusy}
-              accessibilityRole="button"
-              activeOpacity={0.8}
-            >
-              {saveMutation.isPending ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.primaryButtonText}>{t('templates.save')}</Text>
-              )}
-            </TouchableOpacity>
+              block
+              style={styles.submitButton}
+            />
 
             {!isNew ? (
-              <TouchableOpacity
-                style={styles.deleteButton}
+              <Button
+                title={t('templates.delete')}
                 onPress={confirmDelete}
+                variant="danger"
+                loading={deleteMutation.isPending}
                 disabled={isBusy}
-                accessibilityRole="button"
-              >
-                <Text style={styles.deleteButtonText}>{t('templates.delete')}</Text>
-              </TouchableOpacity>
+                block
+                style={styles.deleteButton}
+              />
             ) : null}
           </>
         ) : null}
@@ -498,6 +499,7 @@ export default function TemplateEditorScreen(): JSX.Element {
                       setIsContactPickerVisible(false);
                     }}
                     accessibilityRole="button"
+                    activeOpacity={0.7}
                   >
                     <Text style={styles.contactName}>
                       {contactLabel(contact.first_name, contact.last_name, contact.company)}
@@ -510,6 +512,7 @@ export default function TemplateEditorScreen(): JSX.Element {
               style={styles.modalClose}
               onPress={() => setIsContactPickerVisible(false)}
               accessibilityRole="button"
+              activeOpacity={0.7}
             >
               <Text style={styles.modalCloseText}>{t('templates.cancel')}</Text>
             </TouchableOpacity>
@@ -522,137 +525,98 @@ export default function TemplateEditorScreen(): JSX.Element {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: c.bg },
-  content: { padding: 16, paddingBottom: 40 },
-  loader: { marginTop: 32 },
-  stateBlock: { padding: 16, gap: 10, alignItems: 'flex-start' },
-  mutedNote: { fontSize: 12, color: c.textMuted, lineHeight: 17, marginBottom: 12 },
-  fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: c.text1, marginBottom: 4 },
-  fieldHint: { fontSize: 12, color: c.textMuted, marginTop: 4, lineHeight: 16 },
-  counter: { fontSize: 11, color: c.textMuted, marginTop: 4, textAlign: 'right' },
+  content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  skeletonGap: { marginBottom: spacing.sm },
+  cardGap: { marginTop: spacing.lg },
+  mutedNote: { ...type.caption, color: c.textMuted, marginBottom: spacing.lg },
+  fieldGroup: { marginBottom: spacing.lg },
+  label: { ...type.label, color: c.text1, marginBottom: spacing.xs },
+  fieldHint: { ...type.caption, color: c.textMuted, marginTop: spacing.xs },
+  counter: { ...type.micro, color: c.textMuted, marginTop: spacing.xs, textAlign: 'right', ...tabular },
   input: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    minHeight: 44,
-    fontSize: 15,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    ...type.body,
     color: c.text1,
   },
   bodyInput: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     height: 200,
-    fontSize: 15,
-    lineHeight: 21,
+    ...type.body,
     color: c.text1,
   },
-  inputActive: { borderColor: c.orange },
-  panel: {
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 14,
-    marginBottom: 16,
-    gap: 6,
-  },
-  panelTitle: { fontSize: 14, fontWeight: '700', color: c.orange },
-  panelHint: { fontSize: 12, color: c.amber, lineHeight: 17 },
-  panelLoader: { marginVertical: 12 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  inputActive: { borderColor: c.accent },
+  panel: { gap: spacing.sm, marginBottom: spacing.lg },
+  panelTitle: { ...type.heading, color: c.accent },
+  panelHint: { ...type.caption, color: c.textMuted },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
   chip: {
-    borderRadius: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: c.borderStrong,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
     justifyContent: 'center',
     maxWidth: '100%',
   },
-  chipText: { fontSize: 13, fontWeight: '700', color: c.text1 },
-  chipExample: { fontSize: 11, color: c.textMuted, marginTop: 2 },
+  chipText: { ...type.label, color: c.text1 },
+  chipExample: { ...type.micro, color: c.textMuted, marginTop: spacing.xs },
   previewTargetRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
-    marginTop: 6,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
   },
   previewTargetInfo: { flex: 1 },
-  previewTargetLabel: { fontSize: 11, color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  previewTargetValue: { fontSize: 14, color: c.text1, fontWeight: '600', marginTop: 2 },
-  linkButton: { paddingVertical: 8, alignSelf: 'flex-start' },
-  linkButtonText: { fontSize: 13, color: c.orange, fontWeight: '700' },
-  secondaryButton: {
-    marginTop: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.orange,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryButtonText: { color: c.orange, fontSize: 14, fontWeight: '700' },
+  previewTargetLabel: { ...type.micro, color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  previewTargetValue: { ...type.body, color: c.text1, marginTop: spacing.xs },
+  linkButton: { paddingVertical: spacing.sm, alignSelf: 'flex-start' },
+  linkButtonText: { ...type.label, color: c.accent },
+  previewButton: { marginTop: spacing.xs, alignSelf: 'stretch' },
   previewResult: {
-    marginTop: 10,
+    marginTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: c.border,
-    paddingTop: 10,
-    gap: 4,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
   },
-  previewMeta: { fontSize: 12, color: c.amber, marginBottom: 4 },
+  previewMeta: { ...type.caption, color: c.textMuted, marginBottom: spacing.xs },
   previewFieldLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: c.amber,
+    ...type.micro,
+    color: c.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
-  previewValue: { fontSize: 14, color: c.text1, lineHeight: 20 },
-  warningText: { fontSize: 12, color: c.red, lineHeight: 17, marginTop: 8 },
-  savedText: { fontSize: 13, color: c.orange, marginBottom: 8 },
-  errorText: { fontSize: 13, color: c.red, lineHeight: 18, marginTop: 6 },
-  retryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: c.orange,
-    borderRadius: 6,
-  },
-  retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
-  primaryButton: {
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  primaryButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  buttonDisabled: { opacity: 0.7 },
-  deleteButton: { marginTop: 12, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  deleteButtonText: { color: c.red, fontSize: 15, fontWeight: '600' },
+  previewValue: { ...type.body, color: c.text1 },
+  warningText: { ...type.label, color: c.danger, marginTop: spacing.sm },
+  savedText: { ...type.label, color: c.accent, marginBottom: spacing.sm },
+  errorText: { ...type.label, color: c.danger, marginTop: spacing.xs },
+  submitButton: { marginTop: spacing.lg },
+  deleteButton: { marginTop: spacing.md },
   modalBackdrop: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
   modalCard: {
-    backgroundColor: c.bgPanel,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    backgroundColor: c.surface,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    padding: spacing.xl,
     maxHeight: '80%',
-    gap: 8,
+    gap: spacing.sm,
   },
-  modalTitle: { fontSize: 17, fontWeight: '700', color: c.text1 },
-  modalScroll: { marginTop: 4 },
-  contactRow: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border },
-  contactName: { fontSize: 15, color: c.text1 },
-  modalClose: { alignSelf: 'center', paddingVertical: 12, paddingHorizontal: 20 },
-  modalCloseText: { color: c.orange, fontSize: 14, fontWeight: '700' },
+  modalTitle: { ...type.subtitle, color: c.text1 },
+  modalScroll: { marginTop: spacing.xs },
+  contactRow: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: c.border },
+  contactName: { ...type.body, color: c.text1 },
+  modalClose: { alignSelf: 'center', paddingVertical: spacing.md, paddingHorizontal: spacing.xl },
+  modalCloseText: { ...type.label, color: c.accent },
 });

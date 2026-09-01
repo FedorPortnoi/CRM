@@ -1,7 +1,8 @@
+import { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type, control } from '../../theme';
 import { WEEKDAYS_ISO } from '../../hooks/useTaskReminders';
 import { weekdayLabel, type Translate } from './format';
 
@@ -15,7 +16,7 @@ interface Props {
 export default function WeekdayChips({ value, onChange }: Props): JSX.Element {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const styles = makeStyles(colors);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const toggle = (iso: number): void => {
     const next = value.includes(iso) ? value.filter((day) => day !== iso) : [...value, iso];
@@ -31,7 +32,7 @@ export default function WeekdayChips({ value, onChange }: Props): JSX.Element {
             key={iso}
             style={[styles.chip, selected ? styles.chipSelected : null]}
             onPress={() => toggle(iso)}
-            activeOpacity={0.75}
+            activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityState={{ selected }}
           >
@@ -46,18 +47,17 @@ export default function WeekdayChips({ value, onChange }: Props): JSX.Element {
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     minWidth: 44,
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: c.bgPanel,
+    height: control.sm,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    backgroundColor: c.neutralSoft,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  chipSelected: { borderColor: c.orange, backgroundColor: 'rgba(204,120,92,0.08)' },
-  chipText: { color: c.text1, fontSize: 14, fontWeight: '500' },
-  chipTextSelected: { color: c.orange, fontWeight: '600' },
+  chipSelected: { backgroundColor: c.accent },
+  chipText: { ...type.label, color: c.textMuted },
+  chipTextSelected: { color: c.onAccent },
 });

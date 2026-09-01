@@ -1,14 +1,15 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView,
-  ScrollView, ActivityIndicator, Platform, StyleSheet,
+  ScrollView, Platform, StyleSheet,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ShieldCheck } from 'lucide-react-native';
 import { useUserStore } from '../store/userStore';
 import { useTheme } from '../hooks/useTheme';
-import { ThemeColors } from '../theme';
+import { ThemeColors, spacing, radius, type, tabular } from '../theme';
+import { Button } from '../components/ui';
 
 const TOTP_CODE_LENGTH = 6;
 const TOTP_REJECT_PATTERN = /[^0-9]/g;
@@ -40,7 +41,7 @@ export default function VerifyTotpScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
-  const styles = makeStyles(colors);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { pendingTotp, verifyTotp } = useUserStore();
 
   const [mode, setMode] = useState<CodeMode>('totp');
@@ -115,7 +116,7 @@ export default function VerifyTotpScreen() {
       >
         <View style={styles.logoContainer}>
           <View style={styles.logoSquare}>
-            <ShieldCheck size={32} color="#FFFFFF" strokeWidth={2.5} />
+            <ShieldCheck size={32} color={colors.onAccent} strokeWidth={2.5} />
           </View>
         </View>
 
@@ -138,21 +139,19 @@ export default function VerifyTotpScreen() {
             accessibilityLabel={isTotpMode ? t('auth.verifyTotpTitle') : t('auth.verifyTotpBackupLabel')}
           />
 
-          <TouchableOpacity
-            style={[styles.button, (isSubmitting || !isCodeComplete) && styles.buttonDisabled]}
+          <Button
+            title={t('auth.verifyTotpButton')}
             onPress={() => { void handleSubmit(); }}
+            loading={isSubmitting}
             disabled={isSubmitting || !isCodeComplete}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-          >
-            {isSubmitting
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.buttonText}>{t('auth.verifyTotpButton')}</Text>}
-          </TouchableOpacity>
+            block
+            style={styles.submitButton}
+          />
 
           <TouchableOpacity
             onPress={handleToggleMode}
             style={styles.toggleButton}
+            activeOpacity={0.7}
             accessibilityRole="button"
           >
             <Text style={styles.toggleText}>
@@ -160,7 +159,9 @@ export default function VerifyTotpScreen() {
             </Text>
           </TouchableOpacity>
 
-          {error !== null && <Text style={styles.errorText}>{error}</Text>}
+          {error !== null && (
+            <Text accessibilityLiveRegion="polite" style={styles.errorText}>{error}</Text>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -171,45 +172,42 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   circle1: {
     position: 'absolute', width: 350, height: 350, borderRadius: 175,
-    backgroundColor: 'rgba(6,95,70,0.04)', top: -80, right: -100,
+    backgroundColor: c.accentSoft, top: -80, right: -100,
   },
   circle2: {
     position: 'absolute', width: 280, height: 280, borderRadius: 140,
-    backgroundColor: 'rgba(6,95,70,0.03)', bottom: 100, left: -80,
+    backgroundColor: c.accentSoft, bottom: 100, left: -80,
   },
   scrollContent: {
     flexGrow: 1, justifyContent: 'center', alignItems: 'center',
-    padding: 24, paddingTop: 60, paddingBottom: 40,
+    padding: spacing.xl, paddingTop: 60, paddingBottom: 40,
   },
-  logoContainer: { marginBottom: 24 },
+  logoContainer: { marginBottom: spacing.xl },
   logoSquare: {
-    width: 80, height: 80, borderRadius: 20,
-    backgroundColor: c.orange, justifyContent: 'center', alignItems: 'center',
-    shadowColor: c.orange, shadowOffset: { width: 0, height: 4 },
+    width: 80, height: 80, borderRadius: radius.xxl,
+    backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center',
+    shadowColor: c.accent, shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
   },
-  title: { fontSize: 26, fontWeight: '700', color: c.text1, textAlign: 'center', marginBottom: 8 },
+  title: { ...type.display, color: c.text1, textAlign: 'center', marginBottom: spacing.sm },
   subtitle: {
-    fontSize: 14, color: c.amber, textAlign: 'center',
-    marginBottom: 32, lineHeight: 20, paddingHorizontal: 12,
+    ...type.body, color: c.amber, textAlign: 'center',
+    marginBottom: spacing.xxl, paddingHorizontal: spacing.md,
   },
   card: {
-    width: '100%', maxWidth: 400, backgroundColor: c.bgPanel, borderRadius: 16, padding: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    width: '100%', maxWidth: 400, backgroundColor: c.surface, borderRadius: radius.xl,
+    padding: spacing.xl,
+    shadowColor: '#000', // fixed: shadows read dark in both themes
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
   },
   codeInput: {
-    borderWidth: 1, borderColor: c.border, borderRadius: 12, backgroundColor: c.bg,
-    height: 60, marginBottom: 16, textAlign: 'center',
-    fontSize: 28, fontWeight: '700', letterSpacing: 8, color: c.text1,
+    borderWidth: 1, borderColor: c.border, borderRadius: radius.lg, backgroundColor: c.bg,
+    height: 60, marginBottom: spacing.lg, textAlign: 'center',
+    ...type.display, ...tabular, letterSpacing: 8, color: c.text1,
   },
-  button: {
-    height: 52, backgroundColor: c.orange, borderRadius: 12,
-    justifyContent: 'center', alignItems: 'center', marginTop: 4,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  toggleButton: { marginTop: 16, alignItems: 'center' },
-  toggleText: { color: c.orange, fontSize: 14, fontWeight: '600' },
-  errorText: { color: c.red, fontSize: 14, textAlign: 'center', marginTop: 12 },
+  submitButton: { marginTop: spacing.xs },
+  toggleButton: { marginTop: spacing.lg, alignItems: 'center' },
+  toggleText: { ...type.body, color: c.accent },
+  errorText: { ...type.body, color: c.danger, textAlign: 'center', marginTop: spacing.md },
 });

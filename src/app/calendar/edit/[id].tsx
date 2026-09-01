@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,7 +16,8 @@ import { formatMarketDateTime } from '../../../market/profile';
 import { useContactSearch } from '../../../hooks/useContactSearch';
 import { useCreateMutation } from '../../../hooks/useCreateMutation';
 import { useTheme } from '../../../hooks/useTheme';
-import { ThemeColors } from '../../../theme';
+import { ThemeColors, spacing, radius, type, control, tabular } from '../../../theme';
+import { Screen, Card, Button, EmptyState, SkeletonText } from '../../../components/ui';
 
 type CalendarContact = {
   id: string;
@@ -223,11 +222,10 @@ export default function EditCalendarEventScreen(): JSX.Element {
     startDateTime && endDateTime
       ? `${formatPreview(startDateTime)} - ${formatPreview(endDateTime)}`
       : null;
-  const visibleContactResults = contactResults.slice(0, 5);
 
   const loadEvent = useCallback(async (): Promise<void> => {
     if (!token) {
-      setLoadError('Not authenticated');
+      setLoadError(t('errors.unauthorized'));
       setIsLoading(false);
       return;
     }
@@ -242,7 +240,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
 
       if (!response.ok) {
         const parsedBody = (await response.json()) as ErrorApiResponse;
-        setLoadError(parsedBody.error?.message ?? 'Не удалось загрузить событие');
+        setLoadError(parsedBody.error?.message ?? t('errors.networkError'));
         return;
       }
 
@@ -262,11 +260,11 @@ export default function EditCalendarEventScreen(): JSX.Element {
       clearContactSearch();
       setFieldErrors({});
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Не удалось загрузить событие');
+      setLoadError(err instanceof Error ? err.message : t('errors.networkError'));
     } finally {
       setIsLoading(false);
     }
-  }, [id, token, clearContactSearch]);
+  }, [id, t, token, clearContactSearch]);
 
   useEffect(() => {
     void loadEvent();
@@ -283,13 +281,13 @@ export default function EditCalendarEventScreen(): JSX.Element {
     }
 
     if (!start) {
-      nextErrors.start = 'Use YYYY-MM-DD and HH:mm';
+      nextErrors.start = t('calendar.dateFormatHint');
     }
 
     if (!end) {
-      nextErrors.end = 'Use YYYY-MM-DD and HH:mm';
+      nextErrors.end = t('calendar.dateFormatHint');
     } else if (start && end <= start) {
-      nextErrors.end = 'End must be after start';
+      nextErrors.end = t('calendar.endAfterStart');
     }
 
     setFieldErrors(nextErrors);
@@ -326,6 +324,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
   const renderContactItem = ({ item }: ListRenderItemInfo<ContactPreview>): JSX.Element => (
     <TouchableOpacity
       style={styles.contactResultItem}
+      activeOpacity={0.7}
       onPress={() => {
         setSelectedContactId(item.id);
         setSelectedContactName(contactDisplayName(item));
@@ -337,13 +336,9 @@ export default function EditCalendarEventScreen(): JSX.Element {
   );
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ title: 'Edit Event', headerShown: true }} />
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
+    <>
+      <Stack.Screen options={{ title: t('calendar.edit') }} />
+      <Screen contentContainerStyle={styles.contentPad}>
         {(loadError ?? apiError) !== null ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorBannerText}>{loadError ?? apiError}</Text>
@@ -351,12 +346,20 @@ export default function EditCalendarEventScreen(): JSX.Element {
         ) : null}
 
         {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator color={colors.orange} size="large" />
-          </View>
+          <>
+            <Card style={styles.cardSpacing}>
+              <SkeletonText lines={1} />
+            </Card>
+            <Card style={styles.cardSpacing}>
+              <SkeletonText lines={2} lastLineWidth="60%" />
+            </Card>
+            <Card>
+              <SkeletonText lines={3} lastLineWidth="50%" />
+            </Card>
+          </>
         ) : original !== null ? (
           <>
-            <View style={styles.fieldGroup}>
+            <Card style={styles.cardSpacing}>
               <Text style={styles.label}>{t('calendar.titleLabel')} *</Text>
               <TextInput
                 style={styles.input}
@@ -370,80 +373,86 @@ export default function EditCalendarEventScreen(): JSX.Element {
                 autoCapitalize="sentences"
               />
               {fieldErrors.title ? <Text style={styles.fieldError}>{fieldErrors.title}</Text> : null}
-            </View>
+            </Card>
 
-            <View style={styles.row}>
-              <View style={styles.rowField}>
-                <Text style={styles.label}>{t('calendar.startDate')} *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={startDate}
-                  onChangeText={(value) => {
-                    setStartDate(value);
-                    setFieldErrors((prev) => ({ ...prev, start: undefined }));
-                  }}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={colors.placeholder}
-                  keyboardType="numbers-and-punctuation"
-                />
+            <Card style={styles.cardSpacing}>
+              <View style={styles.fieldGroup}>
+                <View style={styles.row}>
+                  <View style={styles.rowField}>
+                    <Text style={styles.label}>{t('calendar.startDate')} *</Text>
+                    <TextInput
+                      style={[styles.input, styles.tabularInput]}
+                      value={startDate}
+                      onChangeText={(value) => {
+                        setStartDate(value);
+                        setFieldErrors((prev) => ({ ...prev, start: undefined }));
+                      }}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={colors.placeholder}
+                      keyboardType="numbers-and-punctuation"
+                    />
+                  </View>
+                  <View style={styles.timeField}>
+                    <Text style={styles.label}>{t('calendar.time')} *</Text>
+                    <TextInput
+                      style={[styles.input, styles.tabularInput]}
+                      value={startTime}
+                      onChangeText={(value) => {
+                        setStartTime(value);
+                        setFieldErrors((prev) => ({ ...prev, start: undefined }));
+                      }}
+                      placeholder="HH:mm"
+                      placeholderTextColor={colors.placeholder}
+                      keyboardType="numbers-and-punctuation"
+                    />
+                  </View>
+                </View>
+                {fieldErrors.start ? <Text style={styles.fieldError}>{fieldErrors.start}</Text> : null}
               </View>
-              <View style={styles.timeField}>
-                <Text style={styles.label}>{t('calendar.time')} *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={startTime}
-                  onChangeText={(value) => {
-                    setStartTime(value);
-                    setFieldErrors((prev) => ({ ...prev, start: undefined }));
-                  }}
-                  placeholder="HH:mm"
-                  placeholderTextColor={colors.placeholder}
-                  keyboardType="numbers-and-punctuation"
-                />
-              </View>
-            </View>
-            {fieldErrors.start ? <Text style={styles.fieldError}>{fieldErrors.start}</Text> : null}
 
-            <View style={styles.row}>
-              <View style={styles.rowField}>
-                <Text style={styles.label}>{t('calendar.endDate')} *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={endDate}
-                  onChangeText={(value) => {
-                    setEndDate(value);
-                    setFieldErrors((prev) => ({ ...prev, end: undefined }));
-                  }}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={colors.placeholder}
-                  keyboardType="numbers-and-punctuation"
-                />
+              <View style={styles.fieldGroupLast}>
+                <View style={styles.row}>
+                  <View style={styles.rowField}>
+                    <Text style={styles.label}>{t('calendar.endDate')} *</Text>
+                    <TextInput
+                      style={[styles.input, styles.tabularInput]}
+                      value={endDate}
+                      onChangeText={(value) => {
+                        setEndDate(value);
+                        setFieldErrors((prev) => ({ ...prev, end: undefined }));
+                      }}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={colors.placeholder}
+                      keyboardType="numbers-and-punctuation"
+                    />
+                  </View>
+                  <View style={styles.timeField}>
+                    <Text style={styles.label}>{t('calendar.time')} *</Text>
+                    <TextInput
+                      style={[styles.input, styles.tabularInput]}
+                      value={endTime}
+                      onChangeText={(value) => {
+                        setEndTime(value);
+                        setFieldErrors((prev) => ({ ...prev, end: undefined }));
+                      }}
+                      placeholder="HH:mm"
+                      placeholderTextColor={colors.placeholder}
+                      keyboardType="numbers-and-punctuation"
+                    />
+                  </View>
+                </View>
+                {fieldErrors.end ? <Text style={styles.fieldError}>{fieldErrors.end}</Text> : null}
               </View>
-              <View style={styles.timeField}>
-                <Text style={styles.label}>{t('calendar.time')} *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={endTime}
-                  onChangeText={(value) => {
-                    setEndTime(value);
-                    setFieldErrors((prev) => ({ ...prev, end: undefined }));
-                  }}
-                  placeholder="HH:mm"
-                  placeholderTextColor={colors.placeholder}
-                  keyboardType="numbers-and-punctuation"
-                />
-              </View>
-            </View>
-            {fieldErrors.end ? <Text style={styles.fieldError}>{fieldErrors.end}</Text> : null}
 
-            {preview ? (
-              <View style={styles.previewBox}>
-                <Text style={styles.previewLabel}>{t('calendar.scheduled')}</Text>
-                <Text style={styles.previewText}>{preview}</Text>
-              </View>
-            ) : null}
+              {preview ? (
+                <View style={styles.previewBox}>
+                  <Text style={styles.previewLabel}>{t('calendar.scheduled')}</Text>
+                  <Text style={[styles.previewText, styles.tabularInput]}>{preview}</Text>
+                </View>
+              ) : null}
+            </Card>
 
-            <View style={styles.fieldGroup}>
+            <Card style={styles.cardSpacing}>
               <Text style={styles.label}>{t('calendar.notesLabel')}</Text>
               <TextInput
                 style={styles.notesInput}
@@ -455,9 +464,9 @@ export default function EditCalendarEventScreen(): JSX.Element {
                 numberOfLines={5}
                 textAlignVertical="top"
               />
-            </View>
+            </Card>
 
-            <View style={styles.fieldGroup}>
+            <Card style={styles.cardSpacing}>
               <Text style={styles.label}>{t('calendar.contactLabel')}</Text>
               {selectedContactId !== '' ? (
                 <View style={styles.contactChip}>
@@ -465,6 +474,7 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     {selectedContactName}
                   </Text>
                   <TouchableOpacity
+                    activeOpacity={0.7}
                     onPress={() => {
                       setSelectedContactId('');
                       setSelectedContactName('');
@@ -483,111 +493,95 @@ export default function EditCalendarEventScreen(): JSX.Element {
                     placeholder={t('contacts.searchByName')}
                     placeholderTextColor={colors.placeholder}
                   />
-                  {visibleContactResults.length > 0 ? (
+                  {contactQuery.trim() !== '' ? (
                     <View style={styles.contactResultsContainer}>
                       <FlatList<ContactPreview>
-                        data={visibleContactResults}
+                        data={contactResults.slice(0, 5)}
                         keyExtractor={(item) => item.id}
                         renderItem={renderContactItem}
                         scrollEnabled={false}
                         keyboardShouldPersistTaps="handled"
+                        ListEmptyComponent={
+                          <EmptyState
+                            title={t('contacts.noSearchResults')}
+                            style={styles.contactEmptyState}
+                          />
+                        }
                       />
                     </View>
                   ) : null}
                 </>
               )}
-            </View>
+            </Card>
 
-            <TouchableOpacity
-              style={[styles.submitButton, isSubmitting ? styles.submitButtonDisabled : null]}
+            <Button
+              title={t('common.save')}
               onPress={handleSubmit}
+              loading={isSubmitting}
               disabled={isSubmitting}
-              accessibilityRole="button"
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.submitButtonText}>{t('common.save')}</Text>
-              )}
-            </TouchableOpacity>
+              block
+            />
           </>
         ) : (
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => {
-              void loadEvent();
-            }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
-          </TouchableOpacity>
+          <EmptyState
+            title={loadError ?? t('errors.networkError')}
+            actionLabel={t('common.retry')}
+            onAction={() => { void loadEvent(); }}
+          />
         )}
-      </ScrollView>
-    </View>
+      </Screen>
+    </>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: {
-    backgroundColor: c.bg,
-    flex: 1,
+  contentPad: {
+    paddingTop: spacing.lg,
   },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  loadingContainer: {
-    paddingTop: 48,
+  cardSpacing: {
+    marginBottom: spacing.lg,
   },
   errorBanner: {
-    backgroundColor: 'rgba(204,82,71,0.12)',
-    borderRadius: 12,
-    marginBottom: 16,
-    padding: 12,
+    backgroundColor: c.dangerSoft,
+    borderRadius: radius.lg,
+    marginBottom: spacing.lg,
+    padding: spacing.md,
   },
-  errorBannerText: {
-    color: c.red,
-    fontSize: 14,
-  },
-  fieldGroup: {
-    marginBottom: 16,
-  },
+  errorBannerText: { ...type.body, color: c.danger },
+  fieldGroup: { marginBottom: spacing.md },
+  fieldGroupLast: { marginBottom: 0 },
   label: {
+    ...type.label,
     color: c.text1,
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 5,
+    marginBottom: spacing.xs,
   },
   input: {
     backgroundColor: c.inputBg,
     borderColor: c.inputBorder,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
     color: c.text1,
-    fontSize: 15,
+    ...type.body,
     justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    minHeight: control.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
+  tabularInput: { ...tabular },
   notesInput: {
     backgroundColor: c.inputBg,
     borderColor: c.border,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
     color: c.text1,
-    fontSize: 15,
+    ...type.body,
     height: 112,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   row: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 6,
+    gap: spacing.sm,
   },
   rowField: {
     flex: 1,
@@ -596,100 +590,61 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     width: 108,
   },
   fieldError: {
-    color: c.red,
-    fontSize: 12,
-    marginBottom: 10,
-    marginTop: -2,
+    ...type.caption,
+    color: c.danger,
+    marginTop: spacing.xs,
   },
   previewBox: {
-    backgroundColor: 'rgba(204,120,92,0.08)',
-    borderRadius: 12,
-    marginBottom: 16,
-    marginTop: 4,
-    padding: 12,
+    backgroundColor: c.accentSoft,
+    borderRadius: radius.lg,
+    marginTop: spacing.sm,
+    padding: spacing.md,
   },
   previewLabel: {
-    color: c.orange,
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 4,
+    ...type.micro,
+    color: c.accent,
+    marginBottom: spacing.xs,
     textTransform: 'uppercase',
   },
   previewText: {
+    ...type.body,
     color: c.text1,
-    fontSize: 14,
   },
   contactChip: {
     alignItems: 'center',
     alignSelf: 'flex-start',
     backgroundColor: c.bgPanel,
     borderColor: c.border,
-    borderRadius: 20,
+    borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
     maxWidth: '100%',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   contactChipText: {
+    ...type.body,
     color: c.text1,
     flexShrink: 1,
-    fontSize: 14,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
-  contactChipRemove: {
-    color: c.orange,
-    fontSize: 14,
-    fontWeight: '600',
-  },
+  contactChipRemove: { ...type.body, color: c.accent, fontWeight: '600' },
   contactResultsContainer: {
     backgroundColor: c.bgPanel,
     borderColor: c.border,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   contactResultItem: {
     borderBottomColor: c.border,
     borderBottomWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
-  contactResultText: {
-    color: c.text1,
-    fontSize: 15,
-  },
-  submitButton: {
-    alignItems: 'center',
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    justifyContent: 'center',
-    marginBottom: 32,
-    marginTop: 24,
-    minHeight: 48,
-  },
-  submitButtonDisabled: {
-    opacity: 0.7,
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  retryButton: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    justifyContent: 'center',
-    marginTop: 16,
-    minHeight: 44,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+  contactResultText: { ...type.body, color: c.text1 },
+  contactEmptyState: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
   },
 });

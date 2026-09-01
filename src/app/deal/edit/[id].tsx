@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   ListRenderItemInfo,
   Modal,
-  ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  StyleSheet,
 } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,7 +18,8 @@ import { API_URL } from '../../../utils/api';
 import { useContactSearch } from '../../../hooks/useContactSearch';
 import { useCreateMutation } from '../../../hooks/useCreateMutation';
 import { useTheme } from '../../../hooks/useTheme';
-import { ThemeColors } from '../../../theme';
+import { ThemeColors, spacing, radius, type, control, tabular } from '../../../theme';
+import { Screen, Card, Button, EmptyState, Skeleton, SkeletonText } from '../../../components/ui';
 
 interface PipelineStage {
   id: string;
@@ -299,6 +298,7 @@ export default function EditDealScreen(): JSX.Element {
   const renderPipelineItem = ({ item }: ListRenderItemInfo<Pipeline>): JSX.Element => (
     <TouchableOpacity
       style={styles.modalItem}
+      activeOpacity={0.7}
       onPress={() => {
         setSelectedPipelineId(item.id);
         setSelectedStageId('');
@@ -320,6 +320,7 @@ export default function EditDealScreen(): JSX.Element {
   const renderStageItem = ({ item }: ListRenderItemInfo<PipelineStage>): JSX.Element => (
     <TouchableOpacity
       style={styles.modalItem}
+      activeOpacity={0.7}
       onPress={() => {
         setSelectedStageId(item.id);
         setShowPipelineStageError(false);
@@ -340,6 +341,7 @@ export default function EditDealScreen(): JSX.Element {
   const renderContactItem = ({ item }: ListRenderItemInfo<ContactPreview>): JSX.Element => (
     <TouchableOpacity
       style={styles.contactResultItem}
+      activeOpacity={0.7}
       onPress={() => {
         setSelectedContactId(item.id);
         setSelectedContactName(contactDisplayName(item));
@@ -351,242 +353,267 @@ export default function EditDealScreen(): JSX.Element {
   );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <>
       <Stack.Screen options={{ title: t('deals.edit') }} />
-      {(loadError ?? apiError) !== null && (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorBannerText}>{loadError ?? apiError}</Text>
-        </View>
-      )}
+      <Screen contentContainerStyle={styles.contentPad}>
+        {(loadError ?? apiError) !== null ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>{loadError ?? apiError}</Text>
+          </View>
+        ) : null}
 
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color={colors.orange} size="large" />
-        </View>
-      ) : (
-        <>
-          <Text style={styles.label}>{t('deals.name')} *</Text>
-          <TextInput
-            style={styles.input}
-            value={title}
-            onChangeText={(text) => {
-              setTitle(text);
-              setShowTitleError(false);
-            }}
-            placeholder={t('deals.titlePlaceholder')}
-            placeholderTextColor={colors.placeholder}
-          />
-          {showTitleError && <Text style={styles.fieldError}>{t('deals.titleRequired')}</Text>}
+        {isLoading ? (
+          <>
+            <Card style={styles.cardSpacing}>
+              <SkeletonText lines={2} lastLineWidth="55%" />
+            </Card>
+            <Card style={styles.cardSpacing}>
+              <SkeletonText lines={2} lastLineWidth="65%" />
+            </Card>
+            <Card>
+              <SkeletonText lines={3} lastLineWidth="50%" />
+            </Card>
+          </>
+        ) : (
+          <>
+            <Card style={styles.cardSpacing}>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>{t('deals.name')} *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={title}
+                  onChangeText={(text) => {
+                    setTitle(text);
+                    setShowTitleError(false);
+                  }}
+                  placeholder={t('deals.titlePlaceholder')}
+                  placeholderTextColor={colors.placeholder}
+                />
+                {showTitleError ? <Text style={styles.fieldError}>{t('deals.titleRequired')}</Text> : null}
+              </View>
 
-          <Text style={styles.label}>{t('deals.valueUsd')}</Text>
-          <TextInput
-            style={styles.input}
-            value={valueStr}
-            onChangeText={(text) => {
-              setValueStr(text);
-              setShowValueError(false);
-            }}
-            keyboardType="numeric"
-            placeholder="0.00"
-            placeholderTextColor={colors.placeholder}
-          />
-          {showValueError && <Text style={styles.fieldError}>{t('deals.valuePositiveRequired')}</Text>}
+              <View style={styles.fieldGroupLast}>
+                <Text style={styles.label}>{t('deals.valueUsd')}</Text>
+                <TextInput
+                  style={[styles.input, styles.tabularInput]}
+                  value={valueStr}
+                  onChangeText={(text) => {
+                    setValueStr(text);
+                    setShowValueError(false);
+                  }}
+                  keyboardType="numeric"
+                  placeholder="0.00"
+                  placeholderTextColor={colors.placeholder}
+                />
+                {showValueError ? <Text style={styles.fieldError}>{t('deals.valuePositiveRequired')}</Text> : null}
+              </View>
+            </Card>
 
-          <Text style={styles.label}>{t('deals.pipeline')} *</Text>
-          <TouchableOpacity style={styles.pickerButton} onPress={() => setShowPipelineModal(true)}>
-            {pipelinesLoading ? (
-              <ActivityIndicator color={colors.orange} />
-            ) : (
-              <Text style={styles.pickerButtonText}>{selectedPipelineName}</Text>
-            )}
-          </TouchableOpacity>
-
-          <Modal
-            visible={showPipelineModal}
-            animationType="slide"
-            transparent={false}
-            onRequestClose={() => setShowPipelineModal(false)}
-          >
-            <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{t('deals.selectPipeline')}</Text>
-                <TouchableOpacity onPress={() => setShowPipelineModal(false)}>
-                  <Text style={styles.modalClose}>{t('common.cancel')}</Text>
+            <Card style={styles.cardSpacing}>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>{t('deals.pipeline')} *</Text>
+                <TouchableOpacity
+                  style={styles.pickerButton}
+                  activeOpacity={0.7}
+                  onPress={() => setShowPipelineModal(true)}
+                >
+                  {pipelinesLoading ? (
+                    <Skeleton width={140} height={16} />
+                  ) : (
+                    <Text style={styles.pickerButtonText}>{selectedPipelineName}</Text>
+                  )}
                 </TouchableOpacity>
               </View>
-              <FlatList<Pipeline>
-                data={pipelines}
-                keyExtractor={(item) => item.id}
-                renderItem={renderPipelineItem}
-              />
-            </View>
-          </Modal>
 
-          <Text style={styles.label}>{t('deals.stage')} *</Text>
-          <TouchableOpacity
-            style={[styles.pickerButton, stagePickerDisabled && styles.pickerButtonDisabled]}
-            onPress={() => {
-              if (!stagePickerDisabled) setShowStageModal(true);
-            }}
-            disabled={stagePickerDisabled}
-          >
-            <Text style={styles.pickerButtonText}>{selectedStageName}</Text>
-          </TouchableOpacity>
-          {showPipelineStageError && (
-            <Text style={styles.fieldError}>{t('deals.pipelineStageRequired')}</Text>
-          )}
-
-          <Modal
-            visible={showStageModal}
-            animationType="slide"
-            transparent={false}
-            onRequestClose={() => setShowStageModal(false)}
-          >
-            <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{t('deals.selectStage')}</Text>
-                <TouchableOpacity onPress={() => setShowStageModal(false)}>
-                  <Text style={styles.modalClose}>{t('common.cancel')}</Text>
+              <View style={styles.fieldGroupLast}>
+                <Text style={styles.label}>{t('deals.stage')} *</Text>
+                <TouchableOpacity
+                  style={[styles.pickerButton, stagePickerDisabled && styles.pickerButtonDisabled]}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    if (!stagePickerDisabled) setShowStageModal(true);
+                  }}
+                  disabled={stagePickerDisabled}
+                >
+                  <Text style={styles.pickerButtonText}>{selectedStageName}</Text>
                 </TouchableOpacity>
+                {showPipelineStageError ? (
+                  <Text style={styles.fieldError}>{t('deals.pipelineStageRequired')}</Text>
+                ) : null}
               </View>
-              <FlatList<PipelineStage>
-                data={filteredStages}
-                keyExtractor={(item) => item.id}
-                renderItem={renderStageItem}
-              />
-            </View>
-          </Modal>
+            </Card>
 
-          <Text style={styles.label}>{t('deals.contactOptional')}</Text>
-          {selectedContactId !== '' ? (
-            <View style={styles.contactChip}>
-              <Text style={styles.contactChipText}>{selectedContactName}</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setSelectedContactId('');
-                  setSelectedContactName('');
-                  clearContactSearch();
-                }}
-              >
-                <Text style={styles.contactChipRemove}>{t('deals.changeContact')}</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              <TextInput
-                style={styles.input}
-                value={contactQuery}
-                onChangeText={setContactQuery}
-                placeholder={t('deals.searchContactsPlaceholder')}
-                placeholderTextColor={colors.placeholder}
-              />
-              {contactResults.slice(0, 5).length > 0 && (
-                <View style={styles.contactResultsContainer}>
-                  <FlatList<ContactPreview>
-                    data={contactResults.slice(0, 5)}
-                    keyExtractor={(item) => item.id}
-                    renderItem={renderContactItem}
-                    scrollEnabled={false}
-                  />
+            <Modal
+              visible={showPipelineModal}
+              animationType="slide"
+              transparent={false}
+              onRequestClose={() => setShowPipelineModal(false)}
+            >
+              <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{t('deals.selectPipeline')}</Text>
+                  <TouchableOpacity activeOpacity={0.7} onPress={() => setShowPipelineModal(false)}>
+                    <Text style={styles.modalClose}>{t('common.cancel')}</Text>
+                  </TouchableOpacity>
                 </View>
-              )}
-            </>
-          )}
+                <FlatList<Pipeline>
+                  data={pipelines}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderPipelineItem}
+                />
+              </View>
+            </Modal>
 
-          <Text style={styles.label}>{t('deals.nextAction')}</Text>
-          <TextInput
-            style={styles.input}
-            value={nextAction}
-            onChangeText={setNextAction}
-            placeholder={t('deals.nextActionPlaceholder')}
-            placeholderTextColor={colors.placeholder}
-          />
+            <Modal
+              visible={showStageModal}
+              animationType="slide"
+              transparent={false}
+              onRequestClose={() => setShowStageModal(false)}
+            >
+              <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{t('deals.selectStage')}</Text>
+                  <TouchableOpacity activeOpacity={0.7} onPress={() => setShowStageModal(false)}>
+                    <Text style={styles.modalClose}>{t('common.cancel')}</Text>
+                  </TouchableOpacity>
+                </View>
+                <FlatList<PipelineStage>
+                  data={filteredStages}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderStageItem}
+                />
+              </View>
+            </Modal>
 
-          <Text style={styles.label}>{t('tasks.dueDateOptional')}</Text>
-          <TextInput
-            style={styles.input}
-            value={nextActionDue}
-            onChangeText={setNextActionDue}
-            placeholder={t('deals.nextActionDuePlaceholder')}
-            placeholderTextColor={colors.placeholder}
-            autoCapitalize="none"
-          />
+            <Card style={styles.cardSpacing}>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>{t('deals.nextAction')}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={nextAction}
+                  onChangeText={setNextAction}
+                  placeholder={t('deals.nextActionPlaceholder')}
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
 
-          <TouchableOpacity
-            style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-            onPress={() => { void handleSubmit(); }}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.submitButtonText}>{t('common.save')}</Text>
-            )}
-          </TouchableOpacity>
-        </>
-      )}
-    </ScrollView>
+              <View style={styles.fieldGroupLast}>
+                <Text style={styles.label}>{t('tasks.dueDateOptional')}</Text>
+                <TextInput
+                  style={[styles.input, styles.tabularInput]}
+                  value={nextActionDue}
+                  onChangeText={setNextActionDue}
+                  placeholder={t('deals.nextActionDuePlaceholder')}
+                  placeholderTextColor={colors.placeholder}
+                  autoCapitalize="none"
+                />
+              </View>
+            </Card>
+
+            <Card style={styles.cardSpacing}>
+              <View style={styles.fieldGroupLast}>
+                <Text style={styles.label}>{t('deals.contactOptional')}</Text>
+                {selectedContactId !== '' ? (
+                  <View style={styles.contactChip}>
+                    <Text style={styles.contactChipText} numberOfLines={1}>{selectedContactName}</Text>
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        setSelectedContactId('');
+                        setSelectedContactName('');
+                        clearContactSearch();
+                      }}
+                    >
+                      <Text style={styles.contactChipRemove}>{t('deals.changeContact')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <>
+                    <TextInput
+                      style={styles.input}
+                      value={contactQuery}
+                      onChangeText={setContactQuery}
+                      placeholder={t('deals.searchContactsPlaceholder')}
+                      placeholderTextColor={colors.placeholder}
+                    />
+                    {contactQuery.trim() !== '' ? (
+                      <View style={styles.contactResultsContainer}>
+                        <FlatList<ContactPreview>
+                          data={contactResults.slice(0, 5)}
+                          keyExtractor={(item) => item.id}
+                          renderItem={renderContactItem}
+                          scrollEnabled={false}
+                          ListEmptyComponent={
+                            <EmptyState
+                              title={t('contacts.noSearchResults')}
+                              style={styles.contactEmptyState}
+                            />
+                          }
+                        />
+                      </View>
+                    ) : null}
+                  </>
+                )}
+              </View>
+            </Card>
+
+            <Button
+              title={t('common.save')}
+              onPress={() => { void handleSubmit(); }}
+              loading={isSubmitting}
+              disabled={isSubmitting}
+              block
+            />
+          </>
+        )}
+      </Screen>
+    </>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: c.bg,
+  contentPad: {
+    paddingTop: spacing.lg,
   },
-  content: {
-    padding: 16,
-  },
-  loadingContainer: {
-    paddingTop: 48,
+  cardSpacing: {
+    marginBottom: spacing.lg,
   },
   errorBanner: {
-    backgroundColor: 'rgba(204,82,71,0.12)',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
+    backgroundColor: c.dangerSoft,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.lg,
   },
-  errorBannerText: {
-    color: c.red,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: c.text1,
-    marginTop: 16,
-    marginBottom: 6,
-  },
+  errorBannerText: { ...type.body, color: c.danger },
+  fieldGroup: { marginBottom: spacing.md },
+  fieldGroupLast: { marginBottom: 0 },
+  label: { ...type.label, color: c.text1, marginBottom: spacing.xs },
   input: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.inputBorder,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: control.md,
+    ...type.body,
     color: c.text1,
   },
-  fieldError: {
-    color: c.red,
-    fontSize: 13,
-    marginTop: 4,
-  },
+  tabularInput: { ...tabular },
+  fieldError: { ...type.caption, color: c.danger, marginTop: spacing.xs },
   pickerButton: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    minHeight: control.md,
     justifyContent: 'center',
   },
   pickerButtonDisabled: {
     opacity: 0.5,
   },
-  pickerButtonText: {
-    fontSize: 16,
-    color: c.text1,
-  },
+  pickerButtonText: { ...type.body, color: c.text1 },
   modalContainer: {
     flex: 1,
     backgroundColor: c.bg,
@@ -595,87 +622,50 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: c.border,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: c.text1,
-  },
-  modalClose: {
-    fontSize: 14,
-    color: c.orange,
-    fontWeight: '600',
-    paddingHorizontal: 8,
-  },
+  modalTitle: { ...type.subtitle, color: c.text1 },
+  modalClose: { ...type.body, color: c.accent, fontWeight: '600', paddingHorizontal: spacing.sm },
   modalItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: c.border,
   },
-  modalItemText: {
-    fontSize: 16,
-    color: c.text1,
-  },
-  modalItemTextSelected: {
-    color: c.orange,
-    fontWeight: '600',
-  },
+  modalItemText: { ...type.body, color: c.text1 },
+  modalItemTextSelected: { color: c.accent, fontWeight: '600' },
   contactChip: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.border,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     alignSelf: 'flex-start',
+    maxWidth: '100%',
   },
-  contactChipText: {
-    fontSize: 14,
-    color: c.text1,
-    marginRight: 8,
-  },
-  contactChipRemove: {
-    fontSize: 14,
-    color: c.orange,
-    fontWeight: '600',
-  },
+  contactChipText: { ...type.body, color: c.text1, marginRight: spacing.sm, flexShrink: 1 },
+  contactChipRemove: { ...type.body, color: c.accent, fontWeight: '600' },
   contactResultsContainer: {
     backgroundColor: c.inputBg,
     borderWidth: 1,
     borderColor: c.border,
-    borderRadius: 12,
-    marginTop: 4,
+    borderRadius: radius.lg,
+    marginTop: spacing.xs,
   },
   contactResultItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: c.border,
   },
-  contactResultText: {
-    fontSize: 15,
-    color: c.text1,
-  },
-  submitButton: {
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 32,
-    marginBottom: 16,
-  },
-  submitButtonDisabled: {
-    opacity: 0.7,
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+  contactResultText: { ...type.body, color: c.text1 },
+  contactEmptyState: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
   },
 });

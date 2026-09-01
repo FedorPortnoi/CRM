@@ -8,25 +8,36 @@
 // rather than shown and then rejected with a 403.
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   RefreshControl,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, FileText } from 'lucide-react-native';
+import { AlertCircle, ChevronRight, FileText, Plus } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { formatMarketDate } from '../../market/profile';
 import { useTheme } from '../../hooks/useTheme';
-import { ThemeColors } from '../../theme';
+import { ThemeColors, spacing, radius, type, tabular } from '../../theme';
 import { useEmailTemplates, type EmailTemplate } from '../../hooks/useEmailTemplates';
+import { Card, Button, EmptyState, SkeletonText } from '../../components/ui';
 
 const SEARCH_DEBOUNCE_MS = 300;
+
+function ListSkeleton({ styles }: { styles: ReturnType<typeof makeStyles> }): JSX.Element {
+  return (
+    <View style={styles.list}>
+      {Array.from({ length: 6 }, (_, i) => (
+        <Card key={i} style={styles.card}>
+          <SkeletonText lines={3} lastLineWidth="40%" />
+        </Card>
+      ))}
+    </View>
+  );
+}
 
 export default function TemplatesScreen(): JSX.Element {
   const { t } = useTranslation();
@@ -73,18 +84,14 @@ export default function TemplatesScreen(): JSX.Element {
       </View>
 
       {templatesQuery.isPending ? (
-        <ActivityIndicator style={styles.loader} color={colors.orange} />
+        <ListSkeleton styles={styles} />
       ) : templatesQuery.isError ? (
-        <View style={styles.stateBlock}>
-          <Text style={styles.errorText}>{t('templates.failedToLoad')}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => { void templatesQuery.refetch(); }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.retryText}>{t('templates.retry')}</Text>
-          </TouchableOpacity>
-        </View>
+        <EmptyState
+          icon={<AlertCircle size={32} color={colors.danger} />}
+          title={t('templates.failedToLoad')}
+          actionLabel={t('templates.retry')}
+          onAction={() => { void templatesQuery.refetch(); }}
+        />
       ) : (
         <FlatList
           data={templates}
@@ -95,7 +102,7 @@ export default function TemplatesScreen(): JSX.Element {
             <RefreshControl
               refreshing={templatesQuery.isRefetching}
               onRefresh={() => { void templatesQuery.refetch(); }}
-              tintColor={colors.orange}
+              tintColor={colors.accent}
             />
           }
           ListHeaderComponent={
@@ -104,49 +111,46 @@ export default function TemplatesScreen(): JSX.Element {
             ) : null
           }
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <FileText size={28} color={colors.orange} strokeWidth={2} />
-              <Text style={styles.emptyTitle}>
-                {isSearching ? t('templates.noMatches') : t('templates.empty')}
-              </Text>
-              <Text style={styles.emptyHint}>
-                {isSearching ? t('templates.noMatchesHint') : t('templates.emptyHint')}
-              </Text>
-              {!isSearching && canManage ? (
-                <Text style={styles.emptyHint}>{t('templates.editHint')}</Text>
-              ) : null}
-            </View>
+            <EmptyState
+              icon={<FileText size={32} color={colors.textMuted} />}
+              title={isSearching ? t('templates.noMatches') : t('templates.empty')}
+              description={
+                isSearching
+                  ? t('templates.noMatchesHint')
+                  : canManage
+                    ? `${t('templates.emptyHint')}\n${t('templates.editHint')}`
+                    : t('templates.emptyHint')
+              }
+            />
           }
           renderItem={({ item }) => (
-            <TouchableOpacity
+            <Card
               style={styles.card}
               onPress={() => openTemplate(item.id)}
-              accessibilityRole="button"
-              activeOpacity={0.7}
+              accessibilityLabel={item.name}
             >
-              <View style={styles.cardBody}>
+              <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.cardSubject} numberOfLines={2}>{item.subject}</Text>
-                <Text style={styles.cardMeta}>
-                  {t('templates.updatedAt', { date: formatMarketDate(item.updated_at) })}
-                  {item.creator ? ` · ${t('templates.createdBy')}: ${item.creator.name}` : ''}
-                </Text>
+                <ChevronRight size={18} color={colors.textMuted} strokeWidth={2} />
               </View>
-              <ChevronRight size={18} color={colors.textMuted} strokeWidth={2} />
-            </TouchableOpacity>
+              <Text style={styles.cardSubject} numberOfLines={2}>{item.subject}</Text>
+              <Text style={styles.cardMeta}>
+                {t('templates.updatedAt', { date: formatMarketDate(item.updated_at) })}
+                {item.creator ? ` · ${t('templates.createdBy')}: ${item.creator.name}` : ''}
+              </Text>
+            </Card>
           )}
         />
       )}
 
       {canManage ? (
-        <TouchableOpacity
-          style={styles.createButton}
+        <Button
+          title={t('templates.create')}
+          icon={<Plus size={18} color={colors.onAccent} strokeWidth={2.5} />}
           onPress={() => openTemplate('new')}
-          accessibilityRole="button"
-          activeOpacity={0.8}
-        >
-          <Text style={styles.createButtonText}>+ {t('templates.create')}</Text>
-        </TouchableOpacity>
+          block
+          style={styles.createButton}
+        />
       ) : null}
     </View>
   );
@@ -154,62 +158,26 @@ export default function TemplatesScreen(): JSX.Element {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: c.bg },
-  intro: { paddingHorizontal: 16, paddingTop: 14, gap: 8 },
-  subtitle: { fontSize: 14, color: c.amber, lineHeight: 20 },
-  mutedNote: { fontSize: 12, color: c.textMuted, lineHeight: 17 },
+  intro: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.sm },
+  subtitle: { ...type.body, color: c.textMuted },
+  mutedNote: { ...type.caption, color: c.textMuted },
   search: {
     borderWidth: 1,
     borderColor: c.inputBorder,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     backgroundColor: c.inputBg,
     color: c.text1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    minHeight: 44,
-    fontSize: 15,
-    marginBottom: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    ...type.body,
   },
-  loader: { marginTop: 32 },
-  stateBlock: { paddingHorizontal: 16, paddingTop: 24, alignItems: 'flex-start', gap: 10 },
-  list: { paddingHorizontal: 16, paddingBottom: 96 },
-  emptyList: { flexGrow: 1, justifyContent: 'center', padding: 24, paddingBottom: 96 },
-  empty: { alignItems: 'center', gap: 8 },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: c.text1 },
-  emptyHint: { fontSize: 13, color: c.amber, textAlign: 'center', lineHeight: 19 },
-  count: { fontSize: 13, color: c.amber, marginBottom: 10 },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: c.bgPanel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 14,
-    marginBottom: 10,
-  },
-  cardBody: { flex: 1 },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: c.text1 },
-  cardSubject: { fontSize: 13, color: c.text1, marginTop: 4, lineHeight: 18 },
-  cardMeta: { fontSize: 12, color: c.amber, marginTop: 6 },
-  errorText: { color: c.red, fontSize: 14 },
-  retryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: c.orange,
-    borderRadius: 6,
-  },
-  retryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
-  createButton: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 16,
-    backgroundColor: c.orange,
-    borderRadius: 12,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  createButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
+  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+  emptyList: { flexGrow: 1, justifyContent: 'center', padding: spacing.xl },
+  count: { ...type.caption, color: c.textMuted, marginBottom: spacing.sm, ...tabular },
+  card: { marginBottom: spacing.sm },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  cardTitle: { flex: 1, ...type.heading, color: c.text1 },
+  cardSubject: { marginTop: spacing.xs, ...type.label, color: c.text1 },
+  cardMeta: { marginTop: spacing.xs, ...type.caption, color: c.textMuted, ...tabular },
+  createButton: { margin: spacing.lg },
 });
