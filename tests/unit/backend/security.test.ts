@@ -394,11 +394,35 @@ function directive(csp: string, name: string): string {
 
 const htmlPages = fs.readdirSync(WEBSITE).filter((f) => f.endsWith('.html'));
 
+/**
+ * Search-engine ownership tokens (Yandex Webmaster, Google Search Console) are
+ * dropped into the web root verbatim: the provider fetches the file and checks
+ * one string in it. They are real served documents, so every header, CSP and
+ * caching assertion below MUST keep covering them.
+ *
+ * What they cannot have is the shape of a content page — no stylesheet to stamp,
+ * no inline SVG to size — so the two assertions that require those would fail on
+ * a file that is correct exactly as the provider issued it. Editing one to
+ * satisfy a test would break the verification it exists to perform.
+ */
+const isVerificationStub = (f: string) => /^(yandex_[0-9a-f]+|google[0-9a-f]+)\.html$/.test(f);
+const contentPages = htmlPages.filter((f) => !isVerificationStub(f));
+
 describe('static site security headers', () => {
   it('has HTML pages to police', () => {
     // Guards the loops below against silently passing on an empty list if the
     // site is ever moved out from under this path.
     expect(htmlPages.length).toBeGreaterThanOrEqual(6);
+
+    // And guards the verification-stub exemption from widening into a hole that
+    // exempts the site. A stub is a handful of bytes with one token in it; if
+    // this ever matches a real page, the two content-shape assertions below stop
+    // covering it and nothing else would say so.
+    expect(contentPages.length).toBeGreaterThanOrEqual(6);
+    expect(htmlPages.length - contentPages.length).toBeLessThanOrEqual(2);
+    for (const stub of htmlPages.filter(isVerificationStub)) {
+      expect(fs.statSync(path.join(WEBSITE, stub)).size, stub).toBeLessThan(1024);
+    }
   });
 
   // ── The policy itself ──────────────────────────────────────────────────────
@@ -778,7 +802,7 @@ describe('static asset versions', () => {
   it('ships pages whose every stamped reference resolves to a real file', () => {
     // A stamp on a path that does not exist would be left alone by design, so
     // nothing downstream would ever complain about it.
-    for (const page of htmlPages) {
+    for (const page of contentPages) {
       const refs: string[] = versionedRefs(fs.readFileSync(path.join(WEBSITE, page), 'utf8'));
       expect(refs.length, page).toBeGreaterThan(0);
       for (const ref of refs) {
@@ -897,7 +921,7 @@ describe('static site degradation without CSS', () => {
        resolves to 100% of the container — that is why a 26px nav mark became a
        1904px one. Every one of these is sized by a rule setting BOTH width and
        height, so the attributes are inert whenever the stylesheet loads. */
-    for (const page of htmlPages) {
+    for (const page of contentPages) {
       const html = fs.readFileSync(path.join(WEBSITE, page), 'utf8');
       // Double-quoted viewBox is the markup's own SVGs. The favicon is a data:
       // URI written with single quotes and is sized by the browser chrome.

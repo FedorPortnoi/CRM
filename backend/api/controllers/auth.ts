@@ -309,49 +309,64 @@ export const AuthController = {
       const join_code = generateJoinCode(org_name);
       const join_code_expires_at = new Date(Date.now() + JOIN_CODE_TTL_MS);
 
-      // Single SQL CTE: org + user + owner_id update + pipeline + stages in one round-trip.
+      // Two statements in one transaction: the CTE creates org + user + pipeline + stages,
+      // then a separate UPDATE links the org back to its owner.
       // The circular FK (org.owner_id → user, user.organization_id → org) is broken by
       // inserting org with owner_id=NULL first, then updating once we have the user id.
-      const rows = await db.$queryRaw<Array<{ org_id: string; user_id: string }>>`
-        WITH
-          org_cte AS (
-            INSERT INTO organizations (name, slug, plan, join_code, join_code_expires_at, updated_at)
-            VALUES (${org_name}, ${slug}, 'starter'::"OrgPlan", ${join_code}, ${join_code_expires_at}, NOW())
-            RETURNING id
-          ),
-          user_cte AS (
-            INSERT INTO "User" (organization_id, email, password_hash, name, role, phone, updated_at)
-            SELECT id, ${email}, ${password_hash}, ${name}, 'owner'::"UserRole", ${phone}, NOW()
-            FROM org_cte
-            RETURNING id
-          ),
-          owner_update AS (
-            UPDATE organizations
-            SET owner_id = (SELECT id FROM user_cte), updated_at = NOW()
-            WHERE id = (SELECT id FROM org_cte)
-            RETURNING id
-          ),
-          pipeline_cte AS (
-            INSERT INTO "Pipeline" (organization_id, name, is_default, created_by, updated_at)
-            SELECT org_cte.id, ${DEFAULT_PIPELINE_NAME}, true, user_cte.id, NOW()
-            FROM org_cte, user_cte
-            RETURNING id
-          ),
-          stage_cte AS (
-            INSERT INTO "PipelineStage" (pipeline_id, name, position, is_won_stage, updated_at)
-            SELECT
-              (SELECT id FROM pipeline_cte),
-              unnest(ARRAY[${Prisma.join(DEFAULT_PIPELINE_STAGE_NAMES)}]::text[]),
-              unnest(ARRAY[0,1,2,3]),
-              unnest(ARRAY[false,false,false,true]),
-              NOW()
-            RETURNING id
-          )
-        SELECT
-          (SELECT id FROM org_cte)   AS org_id,
-          (SELECT id FROM user_cte)  AS user_id,
-          (SELECT COUNT(*)::int FROM stage_cte) AS _s
-      `;
+      // The UPDATE cannot live in the CTE above: every CTE in a statement reads the same
+      // snapshot taken before the statement runs, so it would not see the row org_cte just
+      // inserted and would silently update 0 rows (which is what shipped from 2026-05-16
+      // until 2026-09-01, leaving every org created by signup with owner_id = NULL).
+      const rows = await db.$transaction(async (tx) => {
+        const created = await tx.$queryRaw<Array<{ org_id: string; user_id: string }>>`
+          WITH
+            org_cte AS (
+              INSERT INTO organizations (name, slug, plan, join_code, join_code_expires_at, updated_at)
+              VALUES (${org_name}, ${slug}, 'starter'::"OrgPlan", ${join_code}, ${join_code_expires_at}, NOW())
+              RETURNING id
+            ),
+            user_cte AS (
+              INSERT INTO "User" (organization_id, email, password_hash, name, role, phone, updated_at)
+              SELECT id, ${email}, ${password_hash}, ${name}, 'owner'::"UserRole", ${phone}, NOW()
+              FROM org_cte
+              RETURNING id
+            ),
+            pipeline_cte AS (
+              INSERT INTO "Pipeline" (organization_id, name, is_default, created_by, updated_at)
+              SELECT org_cte.id, ${DEFAULT_PIPELINE_NAME}, true, user_cte.id, NOW()
+              FROM org_cte, user_cte
+              RETURNING id
+            ),
+            stage_cte AS (
+              INSERT INTO "PipelineStage" (pipeline_id, name, position, is_won_stage, updated_at)
+              SELECT
+                (SELECT id FROM pipeline_cte),
+                unnest(ARRAY[${Prisma.join(DEFAULT_PIPELINE_STAGE_NAMES)}]::text[]),
+                unnest(ARRAY[0,1,2,3]),
+                unnest(ARRAY[false,false,false,true]),
+                NOW()
+              RETURNING id
+            )
+          SELECT
+            (SELECT id FROM org_cte)   AS org_id,
+            (SELECT id FROM user_cte)  AS user_id,
+            (SELECT COUNT(*)::int FROM stage_cte) AS _s
+        `;
+
+        const { org_id, user_id } = created[0];
+        const linked = await tx.$executeRaw`
+          UPDATE organizations
+          SET owner_id = ${user_id}::uuid, updated_at = NOW()
+          WHERE id = ${org_id}::uuid
+        `;
+        // Fail loudly rather than committing an org with no owner: cleanupStaleUnverifiedAccounts
+        // joins organizations to "User" on owner_id and silently skips orgs where it is NULL.
+        if (linked !== 1) {
+          throw new Error(`register: owner_id link updated ${linked} rows for org ${org_id}`);
+        }
+
+        return created;
+      });
 
       const { org_id, user_id } = rows[0];
 
