@@ -18,6 +18,7 @@ const ENV_KEYS = [
   'VOICE_INPUT_CROSS_BORDER_OK',
   'OPENAI_TRANSCRIBE_MODEL',
   'OPENAI_TRANSCRIBE_LANGUAGE',
+  'OPENAI_TRANSCRIBE_PROMPT',
   'OPENAI_TRANSCRIBE_TIMEOUT_MS',
 ] as const;
 
@@ -116,18 +117,28 @@ describe('getTranscriptionConfig', () => {
     expect(isVoiceInputConfigured()).toBe(false);
   });
 
-  it('defaults model to whisper-1, language to ru, and strips a trailing slash', () => {
+  it('defaults the model, language and prompt, and strips a trailing slash', () => {
     configureEnv({ OPENAI_BASE_URL: 'https://proxy.example.workers.dev/v1/' });
     const config = getTranscriptionConfig();
     expect(config?.baseUrl).toBe('https://proxy.example.workers.dev/v1');
-    expect(config?.model).toBe('whisper-1');
+    // Must stay inside the proxy's ALLOWED_TRANSCRIBE_MODELS — a model the
+    // worker does not allowlist fails every recording with a flat 400.
+    expect(config?.model).toBe('gpt-4o-mini-transcribe');
     expect(config?.language).toBe('ru');
+    // Off by default: a prompt turns silence into a confident echo (measured
+    // against the live proxy 2026-09-01), and buys no accuracy we could show.
+    expect(config?.prompt).toBe('');
     expect(config?.timeoutMs).toBe(60_000);
   });
 
   it('an explicitly empty language means autodetect, not ru', () => {
     configureEnv({ OPENAI_TRANSCRIBE_LANGUAGE: '' });
     expect(getTranscriptionConfig()?.language).toBe('');
+  });
+
+  it('a configured prompt is passed through when one is deliberately set', () => {
+    configureEnv({ OPENAI_TRANSCRIBE_PROMPT: 'сделка, воронка, этап' });
+    expect(getTranscriptionConfig()?.prompt).toBe('сделка, воронка, этап');
   });
 });
 
@@ -178,9 +189,10 @@ describe('transcribeVoiceMessage', () => {
 
     const form = calls[0].init.body as FormData;
     expect(form).toBeInstanceOf(FormData);
-    expect(form.get('model')).toBe('whisper-1');
+    expect(form.get('model')).toBe('gpt-4o-mini-transcribe');
     expect(form.get('language')).toBe('ru');
     expect(form.get('response_format')).toBe('json');
+    expect(form.get('prompt')).toBeNull();
     const file = form.get('file') as File;
     expect(file.name).toBe('voice.m4a');
     expect(file.type).toBe('audio/mp4');
@@ -192,6 +204,88 @@ describe('transcribeVoiceMessage', () => {
     const calls = stubFetch(() => jsonResponse({ text: 'ok' }));
     await transcribeVoiceMessage(AUDIO, { mimeType: 'audio/mp4' });
     expect((calls[0].init.body as FormData).get('language')).toBeNull();
+  });
+
+  it('omits the prompt field when no vocabulary hint is configured', async () => {
+    configureEnv();
+    const calls = stubFetch(() => jsonResponse({ text: 'ok' }));
+    await transcribeVoiceMessage(AUDIO, { mimeType: 'audio/mp4' });
+    expect((calls[0].init.body as FormData).get('prompt')).toBeNull();
+  });
+
+  it("the caller's language overrides the deployment default", async () => {
+    configureEnv();
+    const calls = stubFetch(() => jsonResponse({ text: 'ok' }));
+    await transcribeVoiceMessage(AUDIO, { mimeType: 'audio/mp4', language: 'en-US' });
+    expect((calls[0].init.body as FormData).get('language')).toBe('en');
+  });
+
+  it('an unsupported or absent caller language falls back to the default', async () => {
+    configureEnv();
+    const calls = stubFetch(() => jsonResponse({ text: 'ok' }));
+    await transcribeVoiceMessage(AUDIO, { mimeType: 'audio/mp4', language: 'klingon' });
+    await transcribeVoiceMessage(AUDIO, { mimeType: 'audio/mp4', language: null });
+    expect((calls[0].init.body as FormData).get('language')).toBe('ru');
+    expect((calls[1].init.body as FormData).get('language')).toBe('ru');
+  });
+
+  it("reports Whisper's silence hallucination as nothing-was-said", async () => {
+    configureEnv();
+    // The exact string prod returned twice in a row on 2026-09-01 for a
+    // recording the operator had spoken into.
+    stubFetch(() => jsonResponse({ text: 'Редактор субтитров А.Синецкая Корректор А.Егорова' }));
+    expect(await transcribeVoiceMessage(AUDIO, { mimeType: 'audio/mp4' })).toEqual({
+      ok: true,
+      text: '',
+      rejected: 'hallucination',
+    });
+  });
+
+  it('catches the other known artifacts, in both languages', async () => {
+    configureEnv();
+    for (const artifact of [
+      'Продолжение следует...',
+      'Спасибо за просмотр!',
+      'Субтитры сделал DimaTorzok',
+      'Subtitles by the Amara.org community',
+      'Thank you for watching!',
+    ]) {
+      stubFetch(() => jsonResponse({ text: artifact }));
+      expect(await transcribeVoiceMessage(AUDIO, { mimeType: 'audio/mp4' })).toMatchObject({
+        ok: true,
+        text: '',
+        rejected: 'hallucination',
+      });
+    }
+  });
+
+  it('rejects a configured vocabulary prompt echoed back as a transcript', async () => {
+    // Exactly what gpt-4o-mini-transcribe returned for silent audio once a
+    // prompt was set — the reason the default is now no prompt at all.
+    configureEnv({ OPENAI_TRANSCRIBE_PROMPT: 'Это голосовая команда для CRM. Термины: сделка, задача, контакт.' });
+    const prompt = getTranscriptionConfig()?.prompt ?? '';
+    expect(prompt).not.toBe('');
+    stubFetch(() => jsonResponse({ text: prompt }));
+    expect(await transcribeVoiceMessage(AUDIO, { mimeType: 'audio/mp4' })).toMatchObject({
+      ok: true,
+      text: '',
+      rejected: 'hallucination',
+    });
+  });
+
+  it('lets real commands through, including ones that mention a caught phrase', async () => {
+    configureEnv();
+    for (const real of [
+      'Поставь задачу внести правки в презентацию для риэлторов до 3 сентября',
+      'Создай контакт Корректор Егорова и поставь ей задачу на завтра к десяти утра',
+      'Спасибо за просмотр записи встречи, создай по ней задачу на понедельник и добавь заметку',
+    ]) {
+      stubFetch(() => jsonResponse({ text: real }));
+      expect(await transcribeVoiceMessage(AUDIO, { mimeType: 'audio/mp4' })).toEqual({
+        ok: true,
+        text: real,
+      });
+    }
   });
 
   it('maps upstream statuses onto the assistant error vocabulary', async () => {
@@ -293,12 +387,16 @@ type FakeMultipartFile = {
   mimetype: string;
   filename: string;
   toBuffer: () => Promise<Buffer>;
+  fields?: Record<string, { value?: unknown }>;
 };
 
 function makeTranscribeRequest(file: FakeMultipartFile | null, multipart = true): unknown {
   return {
     isMultipart: () => multipart,
     file: async () => file,
+    // Fastify decorates every request with a pino child logger; the controller
+    // records byte counts there so a silent microphone is diagnosable later.
+    log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
   };
 }
 
@@ -379,6 +477,44 @@ describe('AssistantController.transcribe', () => {
 
     expect(reply.statusCode).toBeUndefined();
     expect(reply.payload).toEqual({ data: { text: 'Позвони Иванову' }, meta: {} });
+  });
+
+  it('forwards the language field that arrived ahead of the file', async () => {
+    configureEnv();
+    const calls = stubFetch(() => jsonResponse({ text: 'Call Ivanov' }));
+    const { AssistantController } = await import('../../../backend/api/controllers/assistant');
+
+    const reply = makeReply();
+    await AssistantController.transcribe(
+      makeTranscribeRequest({
+        mimetype: 'audio/mp4',
+        filename: 'voice.m4a',
+        toBuffer: async () => AUDIO,
+        fields: { language: { value: 'en' } },
+      }) as never,
+      reply as never,
+    );
+
+    expect((calls[0].init.body as FormData).get('language')).toBe('en');
+  });
+
+  it('survives a request with no fields at all', async () => {
+    configureEnv();
+    const calls = stubFetch(() => jsonResponse({ text: 'Позвони' }));
+    const { AssistantController } = await import('../../../backend/api/controllers/assistant');
+
+    const reply = makeReply();
+    await AssistantController.transcribe(
+      makeTranscribeRequest({
+        mimetype: 'audio/mp4',
+        filename: 'voice.m4a',
+        toBuffer: async () => AUDIO,
+      }) as never,
+      reply as never,
+    );
+
+    expect(reply.statusCode).toBeUndefined();
+    expect((calls[0].init.body as FormData).get('language')).toBe('ru');
   });
 
   it('maps service failures through the shared status table', async () => {

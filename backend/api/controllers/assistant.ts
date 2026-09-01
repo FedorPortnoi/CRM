@@ -12,6 +12,7 @@ import { currentModelProvider } from '../../services/model-jurisdiction';
 import {
   isVoiceInputConfigured,
   transcribeVoiceMessage,
+  normalizeTranscribeLanguage,
 } from '../../services/transcription';
 
 // --- Local request types ---
@@ -135,10 +136,37 @@ async function transcribe(request: FastifyRequest, reply: FastifyReply): Promise
     return;
   }
 
+  // The app appends `language` BEFORE the file precisely so it lands here:
+  // @fastify/multipart only exposes fields that arrived ahead of the file part.
+  // Absent or unrecognised → the service falls back to its configured default.
+  const languageField = (file as { fields?: Record<string, unknown> }).fields?.language;
+  const language = normalizeTranscribeLanguage(
+    (languageField as { value?: unknown } | undefined)?.value,
+  );
+
   const result = await transcribeVoiceMessage(audio, {
     mimeType,
     filename: file.filename,
+    language,
   });
+
+  // Diagnostics only — never the audio, never the transcript. Byte count and
+  // transcript length are what distinguish "the microphone captured nothing"
+  // (a few KB for a ten-second recording) from "the model misheard real
+  // speech", which is otherwise unanswerable after the fact: the recording is
+  // not persisted anywhere by design.
+  request.log.info(
+    {
+      audio_bytes: audio.byteLength,
+      mime_type: mimeType,
+      language: language ?? 'default',
+      ok: result.ok,
+      ...(result.ok
+        ? { transcript_chars: result.text.length, rejected: result.rejected ?? null }
+        : { error_code: result.error.code }),
+    },
+    'assistant voice transcription',
+  );
 
   if (!result.ok) {
     reply.status(statusForError(result.error.code)).send({

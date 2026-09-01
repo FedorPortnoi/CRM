@@ -245,6 +245,9 @@ export function useSendAssistantMessage(): UseMutationResult<
 export type TranscribeVoiceInput = {
   /** file:// URI of the finished recording (AAC in an m4a container). */
   uri: string;
+  /** UI language of the speaker ('ru' | 'en'). Whisper is told which one to
+   *  expect: given the wrong hint it does not fail, it returns fluent nonsense. */
+  language?: string;
 };
 
 export type TranscribeVoiceResult = { text: string };
@@ -263,8 +266,13 @@ export function useTranscribeVoice(): UseMutationResult<
   const token = useUserStore((s) => s.token);
 
   return useMutation<TranscribeVoiceResult, Error, TranscribeVoiceInput>({
-    mutationFn: ({ uri }) => {
+    mutationFn: ({ uri, language }) => {
       const form = new FormData();
+      // Order matters: @fastify/multipart only surfaces fields that arrived
+      // before the file part, so the language hint must be appended first.
+      if (language) {
+        form.append('language', language);
+      }
       // React Native's FormData takes a file descriptor, not a Blob; the cast
       // bridges the DOM lib type that fetch's types insist on.
       form.append('file', {

@@ -205,7 +205,7 @@ function ChatSkeleton(): JSX.Element {
 }
 
 export default function AssistantScreen(): JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   // edgeToEdgeEnabled is on, so the app draws under the transparent system navigation
@@ -255,6 +255,10 @@ export default function AssistantScreen(): JSX.Element {
   const recorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(recorder);
   const { mutate: transcribeVoice } = useTranscribeVoice();
+  // The 120s auto-stop polls the same clock the stop button reads, so both can
+  // fire for one recording. Without this latch the second caller stops an
+  // already-stopped recorder and uploads the same file a second time.
+  const finishingRef = useRef(false);
   const recordingPulse = useRecordingPulse(voiceState === 'recording');
 
   const isSending = sendMutation.isPending;
@@ -364,6 +368,7 @@ export default function AssistantScreen(): JSX.Element {
   const startRecording = useCallback(async (): Promise<void> => {
     setVoiceErrorText(null);
     try {
+      finishingRef.current = false;
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
         setVoiceErrorText(t('assistant.voiceMicDenied'));
@@ -382,6 +387,7 @@ export default function AssistantScreen(): JSX.Element {
   }, [recorder, t]);
 
   const cancelRecording = useCallback(async (): Promise<void> => {
+    finishingRef.current = false;
     setVoiceState('idle');
     try {
       await recorder.stop();
@@ -392,7 +398,20 @@ export default function AssistantScreen(): JSX.Element {
   }, [recorder]);
 
   const finishRecording = useCallback(async (): Promise<void> => {
-    const durationMs = recorderState.durationMillis;
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+
+    // getStatus(), not recorderState: the hook's durationMillis is a snapshot
+    // polled every 500ms, so at the moment of the tap it can still read 0 for a
+    // recording that really lasted a second — and a real message would then be
+    // dropped by the accidental-tap guard below with no error and no upload.
+    let durationMs = recorderState.durationMillis;
+    try {
+      durationMs = Math.max(durationMs, recorder.getStatus().durationMillis);
+    } catch {
+      // Recorder already torn down — the polled value is the best we have.
+    }
+
     let uri: string | null = null;
     try {
       await recorder.stop();
@@ -404,10 +423,12 @@ export default function AssistantScreen(): JSX.Element {
 
     // A sub-second tap is an accident, not a message — drop it silently.
     if (durationMs < MIN_VOICE_RECORDING_MS) {
+      finishingRef.current = false;
       setVoiceState('idle');
       return;
     }
     if (uri === null) {
+      finishingRef.current = false;
       setVoiceState('idle');
       setVoiceErrorText(t('assistant.voiceRecordFailed'));
       return;
@@ -415,30 +436,38 @@ export default function AssistantScreen(): JSX.Element {
 
     setVoiceState('transcribing');
     transcribeVoice(
-      { uri },
+      // Whisper is told which language to expect. Left to the server default it
+      // hears Russian in everything, and an English command comes back as
+      // confident transliterated nonsense rather than as an error.
+      { uri, language: i18n.language },
       {
         onSuccess: ({ text }) => {
+          finishingRef.current = false;
           setVoiceState('idle');
           if (text.length === 0) {
             setVoiceErrorText(t('assistant.voiceEmpty'));
             return;
           }
-          // Appended, not sent: the user reviews (and can fix) the transcript
-          // before the assistant is allowed to act on it.
-          setDraft((prev) =>
-            (prev.trim().length === 0 ? text : `${prev.trimEnd()} ${text}`).slice(
-              0,
-              ASSISTANT_MAX_MESSAGE_CHARS,
-            ),
-          );
+          // Sent, not parked: dictating a command and then having to tap send
+          // again defeats the point of speaking to the assistant (owner call,
+          // 2026-09-01). What makes this safe is the hallucination guard in
+          // backend/services/transcription.ts — audio with no intelligible
+          // speech arrives here as '' and is reported below instead of being
+          // turned into an instruction nobody gave.
+          const combined = (
+            draft.trim().length === 0 ? text : `${draft.trimEnd()} ${text}`
+          ).slice(0, ASSISTANT_MAX_MESSAGE_CHARS);
+          setDraft('');
+          submit(combined);
         },
         onError: (error) => {
+          finishingRef.current = false;
           setVoiceState('idle');
           setVoiceErrorText(t(voiceErrorKey(assistantErrorCode(error))));
         },
       },
     );
-  }, [recorder, recorderState.durationMillis, t, transcribeVoice]);
+  }, [recorder, recorderState.durationMillis, draft, submit, t, i18n.language, transcribeVoice]);
 
   // The duration check lives in an effect rather than a timer so it keeps
   // counting from the recorder's own clock, which survives re-renders.
