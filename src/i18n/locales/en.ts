@@ -316,6 +316,8 @@ const en = {
     dueDateOptional: 'Due date (optional)',
     pickDate: 'Pick a date',
     selectDate: 'Select date',
+    dueTime: 'Time',
+    pickTime: 'Pick a time',
     reminderOptional: 'Reminder (optional)',
     noReminder: 'No reminder',
     remindOn: 'Remind on {{date}}',

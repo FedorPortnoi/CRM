@@ -5,6 +5,7 @@ import { MessageCircle, Sparkles } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { formatDueDate } from '../../utils/dueDate';
 import { formatMarketDate, formatMarketTime, formatMoney } from '../../market/profile';
 import AttachmentsSection from '../../components/AttachmentsSection';
 import ContactConsentCard from '../../components/ContactConsentCard';
@@ -500,7 +501,7 @@ export default function ContactDetailScreen(): JSX.Element {
                   />
                   {task.due_date ? (
                     <Text style={[styles.taskDueDate, styles.tabular, isOverdue(task.due_date, task.status) ? styles.overdueText : null]}>
-                      {formatDate(task.due_date)}
+                      {formatDueDate(task.due_date, { month: 'short', day: 'numeric', year: 'numeric' })}
                     </Text>
                   ) : null}
                 </View>

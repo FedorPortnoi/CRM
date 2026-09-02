@@ -319,6 +319,8 @@ const ru = {
     dueDateOptional: 'Срок (необязательно)',
     pickDate: 'Выберите дату',
     selectDate: 'Выберите дату',
+    dueTime: 'Время',
+    pickTime: 'Выберите время',
     reminderOptional: 'Напоминание (необязательно)',
     noReminder: 'Без напоминания',
     remindOn: 'Напомнить {{date}}',

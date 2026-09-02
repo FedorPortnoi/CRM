@@ -15,6 +15,7 @@ import { AlertTriangle, ListChecks } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { useTaskScopeStore } from '../../store/taskScopeStore';
 import { API_URL } from '../../utils/api';
+import { formatDueDate } from '../../utils/dueDate';
 import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors, spacing, radius, type } from '../../theme';
 import { Badge, BadgeVariant, EmptyState, Skeleton } from '../../components/ui';
@@ -45,8 +46,7 @@ function sortByDueAsc(tasks: Task[]): Task[] {
 }
 
 function formatDue(due: string | null): string {
-  if (!due) return '';
-  return new Date(due).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' });
+  return formatDueDate(due);
 }
 
 /** Status reads through the semantic palette: done is green, not accent. */

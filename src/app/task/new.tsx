@@ -13,6 +13,8 @@ import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors, spacing, radius, type } from '../../theme';
 import { Button } from '../../components/ui';
 import ReminderEditor from '../../components/reminders/ReminderEditor';
+import TimeOfDayPicker from '../../components/reminders/TimeOfDayPicker';
+import { DEFAULT_DUE_TIME } from '../../utils/dueDate';
 import {
   firstLocalFireInstant,
   syncTaskReminders,
@@ -60,7 +62,9 @@ export default function NewTaskScreen(): JSX.Element | null {
   const [title, setTitle] = useState<string>('');
   const [showTitleError, setShowTitleError] = useState<boolean>(false);
   const [dueDate, setDueDate] = useState<string>('');
+  const [dueTime, setDueTime] = useState<string>(DEFAULT_DUE_TIME);
   const [showCalendar, setShowCalendar] = useState<boolean>(false);
+  const [showTimePicker, setShowTimePicker] = useState<boolean>(false);
   const [selectedContactId, setSelectedContactId] = useState<string>(
     typeof prefillContactId === 'string' ? prefillContactId : '',
   );
@@ -169,7 +173,7 @@ export default function NewTaskScreen(): JSX.Element | null {
         assigned_to: assigneeId || (user?.id ?? ''),
         is_recurring: recurrenceRule !== null,
         ...(recurrenceRule !== null ? { recurrence_rule: recurrenceRule } : {}),
-        ...(dueDate !== '' ? { due_date: new Date(dueDate + 'T00:00:00').toISOString() } : {}),
+        ...(dueDate !== '' ? { due_date: new Date(`${dueDate}T${dueTime}:00`).toISOString() } : {}),
         ...(legacyReminderAt !== null ? { reminder_at: legacyReminderAt } : {}),
         ...(finalContactId !== '' ? { contact_id: finalContactId } : {}),
       };
@@ -359,6 +363,22 @@ export default function NewTaskScreen(): JSX.Element | null {
         </TouchableOpacity>
       )}
 
+      {dueDate !== '' && (
+        <>
+          <Text style={styles.label}>{t('tasks.dueTime')}</Text>
+          <TouchableOpacity style={styles.input} activeOpacity={0.7} onPress={() => setShowTimePicker(true)}>
+            <Text style={[styles.inputText, styles.tabular]}>{dueTime}</Text>
+          </TouchableOpacity>
+        </>
+      )}
+
+      <TimeOfDayPicker
+        visible={showTimePicker}
+        value={dueTime}
+        onChange={setDueTime}
+        onClose={() => setShowTimePicker(false)}
+      />
+
       <Modal animationType="slide" visible={showCalendar} onRequestClose={() => setShowCalendar(false)}>
         <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
           <Text style={styles.modalTitle}>{t('tasks.selectDate')}</Text>
@@ -523,6 +543,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     minHeight: 44,
     backgroundColor: c.inputBg,
     justifyContent: 'center',
+    fontSize: 16,
+    color: c.text1,
   },
   dropdownField: {
     borderWidth: 1,

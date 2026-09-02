@@ -9,7 +9,7 @@ import AttachmentsSection from '../../components/AttachmentsSection';
 import ReminderSummaryList from '../../components/reminders/ReminderSummaryList';
 import { cancelTaskDueReminder } from '../../utils/notifications';
 import { sendOrQueueMutation } from '../../utils/offlineMutation';
-import { formatMarketDate } from '../../market/profile';
+import { formatDueDate } from '../../utils/dueDate';
 import { labelKeyForRule } from '../../utils/recurrence';
 import { useAuditLog } from '../../hooks/useAuditLog';
 import { useTheme } from '../../hooks/useTheme';
@@ -56,7 +56,7 @@ interface Task {
 }
 
 function formatDate(dateStr: string): string {
-  return formatMarketDate(dateStr, {
+  return formatDueDate(dateStr, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { TrendingUp, CheckSquare, AlertCircle, AlertTriangle, MessageCircle, Calendar, Zap, UserPlus, PlusCircle, ListChecks, ChevronRight, Mic } from 'lucide-react-native';
 import { useUserStore } from '../../store/userStore';
 import { API_URL } from '../../utils/api';
+import { formatDueDate as formatDueLabel } from '../../utils/dueDate';
 import { notifyPendingCaptureCount } from '../../utils/notifications';
 import { formatMarketDate, formatMarketNumber, formatMoney, formatMarketTime } from '../../market/profile';
 import { useTheme } from '../../hooks/useTheme';
@@ -88,8 +89,7 @@ function formatPipelineHealth(score: number): string {
 }
 
 function formatDueDate(date: string | null): string {
-  if (!date) return '';
-  return formatMarketDate(date, { month: 'short', day: 'numeric' });
+  return formatDueLabel(date);
 }
 
 function contactName(contact: StaleContact): string {

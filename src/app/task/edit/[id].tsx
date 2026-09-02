@@ -15,6 +15,8 @@ import { useTheme } from '../../../hooks/useTheme';
 import { ThemeColors, spacing, radius, type, control, tabular } from '../../../theme';
 import { Screen, Card, Button, EmptyState, SkeletonText } from '../../../components/ui';
 import ReminderEditor from '../../../components/reminders/ReminderEditor';
+import TimeOfDayPicker from '../../../components/reminders/TimeOfDayPicker';
+import { DEFAULT_DUE_TIME, toTimeInputValue } from '../../../utils/dueDate';
 import {
   draftFromReminder,
   draftSignature,
@@ -71,6 +73,7 @@ interface Assignee {
 type TaskForm = {
   title: string;
   due_date: string;
+  due_time: string;
   description: string;
   contact_id: string;
   is_recurring: boolean;
@@ -130,6 +133,7 @@ function toForm(task: Task): TaskForm {
   return {
     title: task.title,
     due_date: toDateInputValue(task.due_date),
+    due_time: toTimeInputValue(task.due_date),
     description: task.description ?? '',
     contact_id: task.contact_id ?? task.contact?.id ?? '',
     is_recurring: task.is_recurring,
@@ -153,9 +157,13 @@ function buildPatch(current: TaskForm, original: TaskForm): TaskPatch {
     patch.description = currentDescription;
   }
 
-  if (current.due_date !== original.due_date) {
+  if (current.due_date !== original.due_date || current.due_time !== original.due_time) {
+    // An empty time means the task predates due-time support and was stored at midnight;
+    // rebuilding it as T00:00:00 keeps an untouched schedule byte-identical.
     patch.due_date =
-      current.due_date !== '' ? new Date(`${current.due_date}T00:00:00`).toISOString() : null;
+      current.due_date !== ''
+        ? new Date(`${current.due_date}T${current.due_time !== '' ? current.due_time : '00:00'}:00`).toISOString()
+        : null;
   }
 
   if (current.contact_id !== original.contact_id) {
@@ -188,6 +196,8 @@ export default function EditTaskScreen(): JSX.Element {
   const [original, setOriginal] = useState<TaskForm | null>(null);
   const [title, setTitle] = useState<string>('');
   const [dueDate, setDueDate] = useState<string>('');
+  const [dueTime, setDueTime] = useState<string>('');
+  const [showTimePicker, setShowTimePicker] = useState<boolean>(false);
   const [notes, setNotes] = useState<string>('');
   const [selectedContactId, setSelectedContactId] = useState<string>('');
   const [selectedContactName, setSelectedContactName] = useState<string>('');
@@ -214,13 +224,14 @@ export default function EditTaskScreen(): JSX.Element {
     () => ({
       title,
       due_date: dueDate,
+      due_time: dueTime,
       description: notes,
       contact_id: selectedContactId,
       is_recurring: recurrenceRule !== null,
       recurrence_rule: recurrenceRule ?? '',
       assigned_to: assigneeId,
     }),
-    [assigneeId, dueDate, notes, recurrenceRule, selectedContactId, title],
+    [assigneeId, dueDate, dueTime, notes, recurrenceRule, selectedContactId, title],
   );
 
   const remindersQuery = useTaskReminders(typeof id === 'string' && id !== '' ? id : null);
@@ -268,6 +279,7 @@ export default function EditTaskScreen(): JSX.Element {
       setOriginal(loadedForm);
       setTitle(loadedForm.title);
       setDueDate(loadedForm.due_date);
+      setDueTime(loadedForm.due_time);
       setNotes(loadedForm.description);
       setSelectedContactId(loadedForm.contact_id);
       setSelectedContactName(parsedBody.data.contact !== null ? contactDisplayName(parsedBody.data.contact) : '');
@@ -421,11 +433,22 @@ export default function EditTaskScreen(): JSX.Element {
                   </Text>
                 </TouchableOpacity>
                 {dueDate !== '' ? (
-                  <TouchableOpacity activeOpacity={0.7} onPress={() => setDueDate('')}>
+                  <TouchableOpacity activeOpacity={0.7} onPress={() => { setDueDate(''); setDueTime(''); }}>
                     <Text style={styles.clearLink}>{t('tasks.clear')}</Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
+
+              {dueDate !== '' ? (
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>{t('tasks.dueTime')}</Text>
+                  <TouchableOpacity style={styles.input} activeOpacity={0.7} onPress={() => setShowTimePicker(true)}>
+                    <Text style={[dueTime !== '' ? styles.inputText : styles.placeholderText, styles.tabularText]}>
+                      {dueTime !== '' ? dueTime : t('tasks.pickTime')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
 
               <View style={styles.fieldGroupLast}>
                 <ReminderEditor
@@ -450,6 +473,7 @@ export default function EditTaskScreen(): JSX.Element {
                 firstDay={1}
                 onDayPress={(day: CalendarDay) => {
                   setDueDate(day.dateString);
+                  setDueTime((prev) => (prev === '' ? DEFAULT_DUE_TIME : prev));
                   setShowCalendar(false);
                 }}
                 markedDates={
@@ -461,6 +485,13 @@ export default function EditTaskScreen(): JSX.Element {
                 }
               />
             </Modal>
+
+            <TimeOfDayPicker
+              visible={showTimePicker}
+              value={dueTime !== '' ? dueTime : DEFAULT_DUE_TIME}
+              onChange={setDueTime}
+              onClose={() => setShowTimePicker(false)}
+            />
 
             <Card style={styles.cardSpacing}>
               <View style={styles.fieldGroup}>
