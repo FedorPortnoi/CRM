@@ -419,10 +419,19 @@ export default function NewTaskScreen(): JSX.Element | null {
       <ReminderEditor value={reminders} onChange={setReminders} defaultDate={dueDate} />
 
       <Text style={styles.label}>{t('tasks.repeat')}</Text>
+      {/* Repeat and reminders sit next to each other and were read as the same
+          control (the owner asked outright what the difference was). Each now
+          says what it does, and each says what the OTHER one does not. */}
+      <Text style={styles.hint}>{t('tasks.repeatHint')}</Text>
       <TouchableOpacity style={styles.dropdownField} onPress={() => setShowRepeatPicker(true)} activeOpacity={0.7}>
         <Text style={styles.inputText}>{t(labelKeyForRule(recurrenceRule) ?? 'tasks.recurrenceNone')}</Text>
         <Text style={styles.dropdownChevron}>{'⌄'}</Text>
       </TouchableOpacity>
+      {/* runRecurrence() skips any task without a due_date, so a repeat set
+          without one is silently never honoured. Say so where it is chosen. */}
+      {recurrenceRule !== null && dueDate === '' && (
+        <Text style={styles.fieldError}>{t('tasks.repeatNeedsDue')}</Text>
+      )}
 
       <Modal animationType="slide" transparent visible={showRepeatPicker} onRequestClose={() => setShowRepeatPicker(false)}>
         <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setShowRepeatPicker(false)}>
@@ -605,6 +614,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   pickerRowText: { fontSize: 16, color: c.text1 },
   pickerRowTextSelected: { color: c.orange, fontWeight: '600' },
   pickerCheck: { color: c.orange, fontSize: 16, fontWeight: '700' },
+  hint: { color: c.textMuted, fontSize: 12, lineHeight: 17, marginBottom: 8, marginTop: -4 },
   inputText: { color: c.text1, fontSize: 16 },
   placeholderText: { color: c.amber, fontSize: 16 },
   fieldError: { color: c.red, fontSize: 12, marginTop: 4 },

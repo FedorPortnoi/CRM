@@ -496,10 +496,16 @@ export default function EditTaskScreen(): JSX.Element {
             <Card style={styles.cardSpacing}>
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>{t('tasks.repeat')}</Text>
+                {/* Same wording as the create form on purpose — the two screens
+                    are read as one control by anyone filling them in. */}
+                <Text style={styles.hint}>{t('tasks.repeatHint')}</Text>
                 <TouchableOpacity style={styles.dropdownField} onPress={() => setShowRepeatPicker(true)} activeOpacity={0.7}>
                   <Text style={styles.inputText}>{t(labelKeyForRule(recurrenceRule) ?? 'tasks.recurrenceNone')}</Text>
                   <Text style={styles.dropdownChevron}>{'⌄'}</Text>
                 </TouchableOpacity>
+                {recurrenceRule !== null && dueDate === '' && (
+                  <Text style={styles.fieldError}>{t('tasks.repeatNeedsDue')}</Text>
+                )}
               </View>
 
               <View style={styles.fieldGroupLast}>
@@ -719,6 +725,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     ...type.body,
     color: c.text1,
   },
+  hint: { ...type.caption, color: c.textMuted, lineHeight: 17, marginBottom: spacing.sm, marginTop: -2 },
   fieldError: { ...type.caption, color: c.danger, marginTop: spacing.xs },
   modalHeader: {
     flexDirection: 'row',

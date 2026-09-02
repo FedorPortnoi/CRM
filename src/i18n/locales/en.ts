@@ -334,6 +334,8 @@ const en = {
     clear: 'Clear',
     done: 'Done',
     repeat: 'Repeat',
+    repeatHint: 'When the task is completed it comes back on the next date. This is not a reminder — the phone does not ring for it.',
+    repeatNeedsDue: 'A repeat needs a due date: without one the task will not come back.',
     recurrenceNone: 'None',
     recurrenceDaily: 'Daily',
     recurrenceWeekly: 'Weekly',
@@ -1429,7 +1431,7 @@ const en = {
   },
   reminders: {
     title: 'Reminders',
-    sectionHint: 'The reminder arrives on your phone at the time you set.',
+    sectionHint: 'The reminder arrives on your phone at the time you set. It does not repeat the task itself — that is "Repeat" below.',
     none: 'No reminders',
     add: 'Add another',
     addFirst: 'Add a reminder',
