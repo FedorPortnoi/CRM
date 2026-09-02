@@ -67,3 +67,43 @@ describe('OTA build configuration', () => {
     });
   });
 });
+
+describe('update overlay', () => {
+  const overlay = fs.readFileSync(
+    path.join(root, 'src/components/UpdateOverlay.tsx'),
+    'utf8',
+  );
+  const layout = fs.readFileSync(path.join(root, 'src/app/_layout.tsx'), 'utf8');
+
+  it('renders above the animated splash, which covers the cold-start download', () => {
+    // The ON_LOAD download runs during native startup, so the whole window this
+    // layer exists for is the one the splash is painted over. Mounted before it,
+    // it would be invisible exactly when it is needed.
+    const restoringBranch = layout.slice(0, layout.indexOf('<StatusBar'));
+    expect(restoringBranch.indexOf('<UpdateOverlay />')).toBeGreaterThan(
+      restoringBranch.indexOf('<AnimatedSplash'),
+    );
+  });
+
+  it('can always be escaped, so it can never repeat the looping-splash lockout', () => {
+    expect(overlay).toContain('const DISMISS_AFTER_MS');
+    expect(overlay).toContain('const GIVE_UP_MS');
+    expect(overlay).toContain('setTimeout(() => setDismissed(true), GIVE_UP_MS)');
+  });
+
+  it('restarts only a download the user actually watched', () => {
+    // A background download finishing mid-edit must not reload the app out from
+    // under whatever the user is typing; it applies on the next launch instead.
+    expect(overlay).toContain('(isUpdatePending && watched)');
+  });
+
+  it('shows a percentage only when the platform actually reports one', () => {
+    // Startup downloads emit no progress at all (only FetchUpdateProcedure does),
+    // so anything shown as a number there would be invented.
+    expect(overlay).toContain("typeof downloadProgress === 'number' && downloadProgress > 0");
+  });
+
+  it('stays inert where updates are disabled, such as a dev client', () => {
+    expect(overlay).toContain('Updates.isEnabled &&');
+  });
+});

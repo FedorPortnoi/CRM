@@ -87,6 +87,15 @@ const en = {
     reports: 'Reports',
     nearby: 'Nearby',
   },
+  updates: {
+    title: 'Updating the app',
+    body: 'Downloading the new version. On a mobile connection this takes up to a minute.',
+    working: 'Downloading…',
+    readyTitle: 'Update ready',
+    readyBody: 'The app will restart on the new version in a moment.',
+    restarting: 'Restarting…',
+    later: 'Continue without updating',
+  },
   chat: {
     emptyTitle: 'No conversations',
     emptySub: 'Start chatting with your team',

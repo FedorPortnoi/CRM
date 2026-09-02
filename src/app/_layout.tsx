@@ -19,6 +19,7 @@ import AnimatedSplash from '../components/AnimatedSplash';
 import { ConflictToast } from '../components/ConflictToast';
 import { OnboardingWalkthrough } from '../components/OnboardingWalkthrough';
 import NavHeader from '../components/NavHeader';
+import UpdateOverlay from '../components/UpdateOverlay';
 import { registerBackgroundSync } from '../utils/backgroundSync';
 import { initCallCapture } from '../utils/callCapture';
 import { useOnboardingStore } from '../store/onboardingStore';
@@ -259,6 +260,10 @@ export default function RootLayout() {
           {/* key must match the main branch so React keeps ONE splash instance
               (and one playing video) across the isRestoring branch switch. */}
           <AnimatedSplash key="animated-splash" ready={false} onFinish={() => setSplashDone(true)} />
+          {/* Last child on purpose: an OTA download starts during native
+              startup, so the only window this layer matters in is the one the
+              splash is covering. */}
+          <UpdateOverlay />
         </GestureHandlerRootView>
       </PersistQueryClientProvider>
     );
@@ -304,6 +309,7 @@ export default function RootLayout() {
             onFinish={() => setSplashDone(true)}
           />
         )}
+        <UpdateOverlay />
       </GestureHandlerRootView>
     </PersistQueryClientProvider>
   );
