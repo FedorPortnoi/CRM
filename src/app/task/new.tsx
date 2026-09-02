@@ -61,6 +61,7 @@ export default function NewTaskScreen(): JSX.Element | null {
 
   const [title, setTitle] = useState<string>('');
   const [showTitleError, setShowTitleError] = useState<boolean>(false);
+  const [notes, setNotes] = useState<string>('');
   const [dueDate, setDueDate] = useState<string>('');
   const [dueTime, setDueTime] = useState<string>(DEFAULT_DUE_TIME);
   const [showCalendar, setShowCalendar] = useState<boolean>(false);
@@ -143,6 +144,7 @@ export default function NewTaskScreen(): JSX.Element | null {
   const { isSubmitting, apiError, submit } = useCreateMutation<
     {
       title: string;
+      description?: string;
       assigned_to: string;
       is_recurring: boolean;
       recurrence_rule?: string;
@@ -170,6 +172,7 @@ export default function NewTaskScreen(): JSX.Element | null {
       const legacyReminderAt = firstLocalFireInstant(reminders);
       return {
         title: title.trim(),
+        ...(notes.trim() !== '' ? { description: notes.trim() } : {}),
         assigned_to: assigneeId || (user?.id ?? ''),
         is_recurring: recurrenceRule !== null,
         ...(recurrenceRule !== null ? { recurrence_rule: recurrenceRule } : {}),
@@ -352,6 +355,18 @@ export default function NewTaskScreen(): JSX.Element | null {
           ))}
         </View>
       )}
+
+      <Text style={styles.label}>{t('tasks.notes')}</Text>
+      <TextInput
+        style={styles.notesInput}
+        value={notes}
+        onChangeText={setNotes}
+        placeholder={t('tasks.notesPlaceholder')}
+        placeholderTextColor={colors.placeholder}
+        multiline
+        numberOfLines={4}
+        textAlignVertical="top"
+      />
 
       <Text style={styles.label}>{t('tasks.dueDateOptional')}</Text>
       <TouchableOpacity style={styles.input} activeOpacity={0.7} onPress={() => setShowCalendar(true)}>
@@ -543,6 +558,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     minHeight: 44,
     backgroundColor: c.inputBg,
     justifyContent: 'center',
+    fontSize: 16,
+    color: c.text1,
+  },
+  notesInput: {
+    borderWidth: 1,
+    borderColor: c.inputBorder,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    height: 100,
+    backgroundColor: c.inputBg,
     fontSize: 16,
     color: c.text1,
   },
