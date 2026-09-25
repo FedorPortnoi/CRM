@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Kanban as KanbanIcon } from 'lucide-react-native';
 import KanbanBoard from '../../screens/KanbanBoard';
 import { useDealsStore } from '../../store/dealsStore';
-import { usePipelinesStore } from '../../store/pipelinesStore';
+import { usePipelinesStore, selectActivePipeline } from '../../store/pipelinesStore';
 import { formatMoney } from '../../market/profile';
 import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors, spacing, radius, type } from '../../theme';
@@ -74,7 +74,8 @@ function DealListView(): JSX.Element {
     void fetchPipelines().then(() => fetchDeals()).finally(() => setIsRefreshing(false));
   }, [fetchDeals, fetchPipelines]);
 
-  const defaultPipeline = pipelines.find((p) => p.is_default) ?? pipelines[0];
+  const selectedPipelineId = usePipelinesStore((s) => s.selectedPipelineId);
+  const defaultPipeline = selectActivePipeline({ pipelines, selectedPipelineId });
 
   const rows: DealRow[] = useMemo(() => {
     if (!defaultPipeline) return [];
@@ -172,9 +173,46 @@ export default function PipelineScreen(): JSX.Element {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const [viewMode, setViewMode] = useState<ViewMode>('board');
+  const pipelines = usePipelinesStore((s) => s.pipelines);
+  const selectedPipelineId = usePipelinesStore((s) => s.selectedPipelineId);
+  const selectPipeline = usePipelinesStore((s) => s.selectPipeline);
+  const active = selectActivePipeline({ pipelines, selectedPipelineId });
 
   return (
     <View style={styles.container}>
+      {/* One row per pipeline, shown only when there is a choice to make. Before
+          this the tab could only ever show the default pipeline, so deals in any
+          other one (an amoCRM import brings its own funnels) were unreachable. */}
+      {pipelines.length > 1 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.pipelineBar}
+          contentContainerStyle={styles.pipelineBarContent}
+          accessibilityLabel={t('deals.pipelinePicker')}
+        >
+          {pipelines.map((p) => {
+            const selected = p.id === active?.id;
+            return (
+              <TouchableOpacity
+                key={p.id}
+                style={[styles.pipelineChip, selected ? styles.pipelineChipActive : null]}
+                onPress={() => selectPipeline(p.id)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+              >
+                <Text
+                  style={[styles.pipelineChipText, selected ? styles.pipelineChipTextActive : null]}
+                  numberOfLines={1}
+                >
+                  {p.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      ) : null}
       <View style={styles.toggleBar}>
         <TouchableOpacity
           style={[styles.toggleBtn, viewMode === 'board' ? styles.toggleActive : null]}
@@ -226,6 +264,28 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   toggleActive: { backgroundColor: c.accent },
   toggleText: { ...type.body, fontWeight: '600', color: c.amber },
   toggleTextActive: { color: c.onAccent },
+  pipelineBar: {
+    flexGrow: 0,
+    backgroundColor: c.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: c.border,
+  },
+  pipelineBarContent: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  pipelineChip: {
+    maxWidth: 220,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.xxl,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  pipelineChipActive: { borderColor: c.accent, backgroundColor: c.bg },
+  pipelineChipText: { ...type.label, color: c.textMuted },
+  pipelineChipTextActive: { color: c.text1, fontWeight: '600' },
   content: { flex: 1 },
 });
 

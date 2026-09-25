@@ -14,7 +14,7 @@ import {
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useDealsStore } from '../store/dealsStore';
-import { usePipelinesStore } from '../store/pipelinesStore';
+import { usePipelinesStore, selectActivePipeline } from '../store/pipelinesStore';
 import { formatMoney } from '../market/profile';
 import { useTheme } from '../hooks/useTheme';
 import { ThemeColors, spacing, radius, type, tabular } from '../theme';
@@ -224,7 +224,8 @@ const KanbanBoard: React.FC = () => {
     }, [fetchDeals, fetchPipelines]),
   );
 
-  const defaultPipeline = pipelines.find((p) => p.is_default) ?? pipelines[0];
+  const selectedPipelineId = usePipelinesStore((s) => s.selectedPipelineId);
+  const defaultPipeline = selectActivePipeline({ pipelines, selectedPipelineId });
 
   const stages: PipelineStage[] = useMemo(() => {
     if (!defaultPipeline) return [];

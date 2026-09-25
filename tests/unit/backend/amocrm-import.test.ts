@@ -15,6 +15,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const dbMock = vi.hoisted(() => ({
   contact: { create: vi.fn(), update: vi.fn() },
   deal: { create: vi.fn(), update: vi.fn() },
+  task: { create: vi.fn(), update: vi.fn() },
+  calendarEvent: { create: vi.fn(), update: vi.fn() },
+  message: { create: vi.fn(), update: vi.fn() },
+  user: { findMany: vi.fn() },
   amoEntityMap: { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn(), count: vi.fn() },
   pipeline: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
   pipelineStage: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
@@ -48,6 +52,9 @@ function installFakeDb() {
   const deals = new Map<string, Row>();
   const pipelines = new Map<string, Row>();
   const stages = new Map<string, Row>();
+  const tasks = new Map<string, Row>();
+  const events = new Map<string, Row>();
+  const messages = new Map<string, Row>();
   const maps = new Map<string, { entity_type: string; amo_id: bigint; local_id: string; last_remote_hash?: string }>();
   let seq = 0;
   const uid = (p: string) => `${p}-${String(++seq).padStart(4, '0')}`;
@@ -83,6 +90,10 @@ function installFakeDb() {
   Object.assign(dbMock.deal, store(deals, 'deal'));
   Object.assign(dbMock.pipeline, store(pipelines, 'pipeline'));
   Object.assign(dbMock.pipelineStage, store(stages, 'stage'));
+  Object.assign(dbMock.task, store(tasks, 'task'));
+  Object.assign(dbMock.calendarEvent, store(events, 'event'));
+  Object.assign(dbMock.message, store(messages, 'message'));
+  dbMock.user.findMany.mockResolvedValue([]);
 
   dbMock.amoEntityMap.findUnique.mockImplementation(
     async ({ where }: { where: Record<string, { entity_type: string; amo_id: bigint }> }) => {
@@ -109,7 +120,7 @@ function installFakeDb() {
       [...maps.values()].filter((m) => m.entity_type === where.entity_type).length,
   );
 
-  return { contacts, deals, pipelines, stages, maps };
+  return { contacts, deals, pipelines, stages, tasks, events, messages, maps };
 }
 
 // ── amoCRM fixtures (shapes taken from amoCRM's published examples) ───────────
@@ -193,7 +204,7 @@ function makeClient(
     return { _embedded: { [collection]: first }, _links: { next: (pages[base]?.length ?? 0) > 1 ? { href: 'x' } : undefined } };
   });
 
-  const paginate = vi.fn((_org: string, path: string) => {
+  const paginate = vi.fn((_org: string, path: string, _params?: Record<string, unknown>) => {
     const batches = pages[path] ?? [];
     return (async function* () {
       let index = 0;
@@ -685,5 +696,129 @@ describe('previewAmoImport', () => {
 
     expect(preview.warnings.filter((w) => w.code === 'DUPLICATE_TERMINAL_STATUS')).toHaveLength(1);
     expect(preview.pipelines[0].stages.filter((s) => s.is_won_stage)).toHaveLength(1);
+  });
+});
+
+// ── Full transfer: history, owners, activity ─────────────────────────────────
+
+describe('full transfer', () => {
+  const OTHER_USER = '66666666-6666-4666-8666-00000000000b';
+  const CREATED = 1_700_000_000; // 2023-11-14
+  const CLOSED = 1_700_864_000; // ten days later
+  const MOVED = 1_701_000_000;
+
+  function fullClient(extra: Record<string, unknown[][]> = {}) {
+    return makeClient({
+      '/api/v4/users': [[{ id: 1, email: 'Anna@Example.ru' }, { id: 2, email: 'nobody@example.ru' }]],
+      '/api/v4/companies': [[amoCompany({ custom_fields_values: [{ field_code: 'ADDRESS', values: [{ value: 'г. Краснодар, ул. Красная, 1' }] }] })]],
+      '/api/v4/contacts': [[
+        amoContact({
+          responsible_user_id: 1,
+          created_at: CREATED,
+          custom_fields_values: [
+            { field_code: 'PHONE', values: [{ value: '+7 918 111-11-11', enum_code: 'MOB' }, { value: '+7 861 222-22-22', enum_code: 'WORK' }] },
+          ],
+          _embedded: { tags: [{ name: 'VIP' }], companies: [{ id: 406320 }] },
+        }),
+      ]],
+      '/api/v4/events': [[{ entity_id: 10971465, created_at: MOVED - 100 }, { entity_id: 10971465, created_at: MOVED }]],
+      '/api/v4/leads': [[
+        amoLead({ responsible_user_id: 2, created_at: CREATED, custom_fields_values: [{ field_id: 9, field_name: 'Дата замера', field_type: 'date', values: [{ value: CLOSED }] }], _embedded: { contacts: [{ id: 406322, is_main: true }], companies: [{ id: 406320 }], tags: [{ name: 'Срочно' }] } }),
+        amoLead({ id: 555, status_id: AMO_STATUS_LOST, created_at: CREATED, closed_at: CLOSED, _embedded: { contacts: [], loss_reason: [{ name: 'Дорого' }] } }),
+      ]],
+      ...extra,
+    });
+  }
+
+  beforeEach(() => {
+    dbMock.user.findMany.mockResolvedValue([{ id: OTHER_USER, email: 'anna@example.ru' }]);
+  });
+
+  it('keeps amo dates, owners, tags, address and splits mobile from phone', async () => {
+    const client = fullClient();
+    await importFromAmo(ORG, USER, { client });
+
+    const contact = [...fake.contacts.values()][0];
+    expect(contact.created_at).toEqual(new Date(CREATED * 1000));
+    // amo user 1 matched by email (case-insensitive) → that 4КУБ user.
+    expect(contact.assigned_to).toBe(OTHER_USER);
+    expect(decryptField(contact.phone as string)).toBe('+7 861 222-22-22');
+    expect(decryptField(contact.mobile as string)).toBe('+7 918 111-11-11');
+    expect(contact.mobile_bidx).toBe(blindIndex('+7 918 111-11-11', 'mobile'));
+    expect(contact.tags).toEqual(['VIP']);
+    // No address of its own → its company's.
+    expect(contact.address).toEqual({ formatted: 'г. Краснодар, ул. Красная, 1' });
+
+    const deals = [...fake.deals.values()];
+    const open = deals.find((d) => d.title === 'Поставка станков')!;
+    expect(open.created_at).toEqual(new Date(CREATED * 1000));
+    // Latest lead_status_changed event wins.
+    expect(open.stage_entered_at).toEqual(new Date(MOVED * 1000));
+    // amo user 2 has no 4КУБ account → the importing user, never nobody.
+    expect(open.assigned_to).toBe(USER);
+    expect(open.custom_fields).toMatchObject({ Компания: 'ООО «Ромашка»', Теги: 'Срочно', 'Дата замера': '2023-11-24' });
+
+    const lost = deals.find((d) => d.status === 'lost')!;
+    expect(lost.actual_close).toEqual(new Date(CLOSED * 1000));
+    expect(lost.stage_entered_at).toEqual(new Date(CLOSED * 1000));
+    expect(lost.lost_reason).toBe('Дорого');
+
+    // loss_reason is only embedded when asked for.
+    const leadsCall = client.paginate.mock.calls.find((c) => c[1] === '/api/v4/leads');
+    expect(leadsCall?.[2]?.with).toBe('contacts,loss_reason');
+  });
+
+  it('imports tasks, turns «Встреча» into a calendar event, and notes/calls into messages', async () => {
+    const client = fullClient({
+      '/api/v4/tasks': [[
+        { id: 1, text: 'Перезвонить', entity_type: 'leads', entity_id: 10971465, task_type_id: 1, is_completed: true, complete_till: CLOSED, updated_at: CLOSED + 60, result: { text: 'Клиент согласен' } },
+        { id: 2, text: 'Замер на объекте', entity_type: 'contacts', entity_id: 406322, task_type_id: 2, is_completed: false, complete_till: MOVED, duration: 1800 },
+      ]],
+      '/api/v4/contacts/notes': [[
+        { id: 11, entity_id: 406322, note_type: 'common', created_at: CREATED, params: { text: 'Предпочитает WhatsApp' } },
+        { id: 12, entity_id: 406322, note_type: 'call_in', created_at: CREATED, params: { duration: 125, call_result: 'Договорились о встрече' } },
+        { id: 13, entity_id: 406322, note_type: 'sms_out', params: { text: 'x' } },
+      ]],
+      '/api/v4/leads/notes': [[
+        { id: 11, entity_id: 10971465, note_type: 'common', params: { text: 'КП отправлено' } },
+        { id: 14, entity_id: 555, note_type: 'common', params: { text: 'нет контакта' } },
+      ]],
+    });
+
+    const result = await importFromAmo(ORG, USER, { client });
+    expect(result).toMatchObject({ tasks_imported: 1, meetings_imported: 1, notes_imported: 2, calls_imported: 1, notes_skipped: 2 });
+
+    const deal = [...fake.deals.values()].find((d) => d.title === 'Поставка станков')!;
+    const contact = [...fake.contacts.values()][0];
+
+    const task = [...fake.tasks.values()][0];
+    expect(task).toMatchObject({ title: 'Перезвонить', deal_id: deal.id, contact_id: contact.id, status: 'done', description: 'Результат: Клиент согласен' });
+    expect(task.completed_at).toEqual(new Date((CLOSED + 60) * 1000));
+
+    const meeting = [...fake.events.values()][0];
+    expect(meeting).toMatchObject({ title: 'Замер на объекте', contact_id: contact.id, status: 'scheduled' });
+    expect((meeting.end_time as Date).getTime() - (meeting.start_time as Date).getTime()).toBe(1_800_000);
+
+    const bodies = [...fake.messages.values()].map((m) => [m.channel, m.direction, m.body]);
+    expect(bodies).toEqual(expect.arrayContaining([
+      ['in_app', 'outbound', 'Предпочитает WhatsApp'],
+      // The exact `[<seconds>s] ` prefix the contact screen parses as a call duration.
+      ['call', 'inbound', '[125s] Договорились о встрече'],
+      // Lead and contact note ids are separate namespaces in amo; both land.
+      ['in_app', 'outbound', 'Сделка «Поставка станков»: КП отправлено'],
+    ]));
+
+    // Re-running updates in place: nothing doubles.
+    await importFromAmo(ORG, USER, { client });
+    expect(fake.tasks.size).toBe(1);
+    expect(fake.events.size).toBe(1);
+    expect(fake.messages.size).toBe(3);
+  });
+
+  it('include_activity: false stops after deals', async () => {
+    const client = fullClient({ '/api/v4/tasks': [[{ id: 1, text: 'x', entity_type: 'leads', entity_id: 10971465 }]] });
+    const result = await importFromAmo(ORG, USER, { client, include_activity: false });
+    expect(result.tasks_imported).toBe(0);
+    expect(client.paginate.mock.calls.some((c) => c[1] === '/api/v4/tasks')).toBe(false);
   });
 });

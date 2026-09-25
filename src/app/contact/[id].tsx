@@ -22,6 +22,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors, spacing, type } from '../../theme';
 import { Card, Button, Badge, EmptyState, Skeleton } from '../../components/ui';
 import type { BadgeVariant } from '../../components/ui';
+import { CustomFieldList } from '../../components/CustomFieldList';
 
 interface Attachment {
   id: string;
@@ -43,6 +44,8 @@ interface Contact {
   mobile: string | null;
   email: string | null;
   tags: string[] | null;
+  address?: { formatted?: string } | null;
+  custom_fields?: Record<string, unknown> | null;
   status: string;
   notes: string | null;
   type: string | null;
@@ -285,6 +288,20 @@ export default function ContactDetailScreen(): JSX.Element {
                   ) : null}
                 </View>
               ) : null}
+              {typeof contact.address?.formatted === 'string' && contact.address.formatted ? (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>{t('contacts.addressLabel')}</Text>
+                  <Text style={styles.detailValue} selectable>{contact.address.formatted}</Text>
+                </View>
+              ) : null}
+              {Array.isArray(contact.tags) && contact.tags.length > 0 ? (
+                <View style={styles.tagRow}>
+                  {contact.tags.map((tag) => (
+                    <Badge key={tag} label={tag} variant="neutral" />
+                  ))}
+                </View>
+              ) : null}
+              <CustomFieldList fields={contact.custom_fields} />
               <Button
                 title={t('contacts.conversation')}
                 icon={<MessageCircle size={18} color={colors.onAccent} />}
@@ -551,6 +568,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
   detailLabel: { ...type.body, color: c.textMuted, width: 64 },
   detailValue: { ...type.body, color: c.text1, flex: 1 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
   conversationButton: { marginTop: spacing.md },
   // AI summary. Same card as every other section; the primary button deliberately
   // matches conversationButton so the screen keeps one primary-action shape.

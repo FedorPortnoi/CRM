@@ -19,6 +19,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors, spacing, radius, type } from '../../theme';
 import { Screen, Card, Button, Badge, EmptyState, Skeleton, SkeletonText } from '../../components/ui';
 import type { BadgeVariant } from '../../components/ui';
+import { CustomFieldList } from '../../components/CustomFieldList';
 
 interface Deal {
   id: string;
@@ -33,6 +34,8 @@ interface Deal {
   stage: { id: string; name: string; position: number } | null;
   next_action: string | null;
   next_action_due: string | null;
+  custom_fields?: Record<string, unknown> | null;
+  created_at?: string;
 }
 
 interface DealApiResponse {
@@ -326,7 +329,14 @@ export default function DealDetailScreen(): JSX.Element {
             <Text style={styles.detailValue}>{deal.lost_reason}</Text>
           </View>
         )}
-        {deal.source === null && deal.lost_reason === null && (
+        {deal.created_at ? (
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>{t('deals.createdAt')}</Text>
+            <Text style={[styles.detailValue, styles.tabular]}>{formatMarketDate(deal.created_at)}</Text>
+          </View>
+        ) : null}
+        <CustomFieldList fields={deal.custom_fields} />
+        {deal.source === null && deal.lost_reason === null && !deal.created_at && !deal.custom_fields && (
           <Text style={styles.mutedText}>{t('deals.noDetails')}</Text>
         )}
       </Card>

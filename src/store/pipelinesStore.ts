@@ -30,7 +30,24 @@ interface PipelinesState {
   pipelines: Pipeline[];
   isLoading: boolean;
   error: string | null;
+  /** The pipeline the Воронка tab is showing; null = the org's default. */
+  selectedPipelineId: string | null;
   fetchPipelines: () => Promise<void>;
+  selectPipeline: (id: string) => void;
+}
+
+/**
+ * The pipeline the Воронка tab shows: the one picked, else the default, else the
+ * first. A picked pipeline that no longer exists (deleted elsewhere) falls back
+ * instead of rendering an empty board.
+ */
+export function selectActivePipeline(state: Pick<PipelinesState, 'pipelines' | 'selectedPipelineId'>): Pipeline | undefined {
+  const { pipelines, selectedPipelineId } = state;
+  return (
+    (selectedPipelineId ? pipelines.find((p) => p.id === selectedPipelineId) : undefined) ??
+    pipelines.find((p) => p.is_default) ??
+    pipelines[0]
+  );
 }
 
 type ApiListResponse = {
@@ -41,6 +58,9 @@ export const usePipelinesStore = create<PipelinesState>()((set, get) => ({
   pipelines: [],
   isLoading: false,
   error: null,
+  selectedPipelineId: null,
+
+  selectPipeline: (id: string): void => set({ selectedPipelineId: id }),
 
   fetchPipelines: async (): Promise<void> => {
     if (get().isLoading) return;

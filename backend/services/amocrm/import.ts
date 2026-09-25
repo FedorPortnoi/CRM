@@ -89,6 +89,39 @@ interface AmoCompany {
   custom_fields_values?: AmoCustomField[] | null;
 }
 
+interface AmoTask {
+  id?: number;
+  text?: string | null;
+  entity_id?: number | null;
+  entity_type?: string | null;
+  responsible_user_id?: number | null;
+  task_type_id?: number | null;
+  duration?: number | null;
+  is_completed?: boolean;
+  complete_till?: number | null;
+  created_at?: number | null;
+  updated_at?: number | null;
+  result?: { text?: string | null } | unknown[] | null;
+}
+
+interface AmoNote {
+  id?: number;
+  entity_id?: number | null;
+  note_type?: string | null;
+  created_at?: number | null;
+  params?: {
+    text?: string | null;
+    duration?: number | null;
+    call_result?: string | null;
+    phone?: string | null;
+  } | null;
+}
+
+interface AmoUser {
+  id?: number;
+  email?: string | null;
+}
+
 interface AmoLead {
   id?: number;
   name?: string | null;
@@ -98,6 +131,7 @@ interface AmoLead {
   created_at?: number | null;
   updated_at?: number | null;
   closed_at?: number | null;
+  responsible_user_id?: number | null;
   is_deleted?: boolean;
   loss_reason_id?: number | null;
   custom_fields_values?: AmoCustomField[] | null;
@@ -111,7 +145,15 @@ interface AmoLead {
 
 // ─── Public surface ───────────────────────────────────────────────────────────
 
-export type AmoImportPhase = 'pipelines' | 'companies' | 'contacts' | 'leads' | 'done';
+export type AmoImportPhase =
+  | 'pipelines'
+  | 'companies'
+  | 'contacts'
+  | 'leads'
+  | 'tasks'
+  | 'contact_notes'
+  | 'lead_notes'
+  | 'done';
 
 /** Resume point handed back on a partial run and accepted on the next call. */
 export interface AmoImportCursor {
@@ -123,6 +165,8 @@ export interface AmoImportCursor {
 export interface AmoImportOptions {
   include_leads?: boolean;
   include_companies?: boolean;
+  /** Tasks, meetings, notes and calls. Default true. */
+  include_activity?: boolean;
   /** Records per entity for ONE invocation. Default 5000. */
   max_records?: number;
   cursor?: AmoImportCursor;
@@ -151,6 +195,18 @@ export interface AmoImportResult {
   pipelines_updated: number;
   stages_created: number;
   stages_updated: number;
+  /** amo tasks of every type except «Встреча» → Task. */
+  tasks_imported: number;
+  /** amo tasks of type «Встреча» → CalendarEvent. */
+  meetings_imported: number;
+  tasks_failed: number;
+  /** amo `common` notes → Message (the same note the contact screen composer writes). */
+  notes_imported: number;
+  /** amo `call_in` / `call_out` notes → Message on the call channel. */
+  calls_imported: number;
+  /** Notes with nowhere to live: a lead note on a lead with no contact, or a note type 4КУБ has no equivalent for. */
+  notes_skipped: number;
+  notes_failed: number;
   warnings: StagePlanWarning[];
   /** True when the run stopped early — read `cursor` and call again. */
   partial: boolean;
@@ -176,6 +232,13 @@ function emptyResult(): AmoImportResult {
     pipelines_updated: 0,
     stages_created: 0,
     stages_updated: 0,
+    tasks_imported: 0,
+    meetings_imported: 0,
+    tasks_failed: 0,
+    notes_imported: 0,
+    calls_imported: 0,
+    notes_skipped: 0,
+    notes_failed: 0,
     warnings: [],
     partial: false,
   };
@@ -253,13 +316,50 @@ export async function importFromAmo(
     return result;
   }
 
+  // Responsible users. amoCRM users are matched to this organization's 4КУБ users
+  // by email; anyone without a match (and anything amo leaves unassigned) falls to
+  // the person running the import, never to nobody. Optional: a failed read of
+  // /users only costs the attribution, not the import.
+  const ownerByAmoUser = new Map<number, string>();
+  try {
+    const amoUsers: AmoUser[] = [];
+    for await (const batch of client.paginate(orgId, '/api/v4/users', { limit: PAGE_LIMIT })) {
+      amoUsers.push(...(batch as AmoUser[]));
+    }
+    const emails = amoUsers
+      .map((u) => (typeof u.email === 'string' ? u.email.trim().toLowerCase() : ''))
+      .filter(Boolean);
+    const locals = emails.length
+      ? await db.user.findMany({
+          where: { organization_id: orgId, email: { in: emails }, is_active: true },
+          select: { id: true, email: true },
+        })
+      : [];
+    const localByEmail = new Map(locals.map((u) => [String(u.email).toLowerCase(), u.id]));
+    for (const u of amoUsers) {
+      const local = typeof u.email === 'string' ? localByEmail.get(u.email.trim().toLowerCase()) : undefined;
+      if (typeof u.id === 'number' && local) ownerByAmoUser.set(u.id, local);
+    }
+  } catch {
+    // attribution degrades to the importing user
+  }
+  const ctx: ImportContext = {
+    orgId,
+    userId,
+    ownerOf: (amoUserId) =>
+      (typeof amoUserId === 'number' ? ownerByAmoUser.get(amoUserId) : undefined) ?? userId,
+    companyNames: new Map<number, string>(),
+    companyAddresses: new Map<number, string>(),
+    stageEnteredAt: new Map<number, Date>(),
+  };
+
   // ── 2. Companies → the contact's company field ─────────────────────────────
   //
   // 4КУБ has no Company entity (schema.prisma: `Contact.company String?`, no
   // Company model), so an amo company is imported as a NAME that lands on every
   // contact attached to it. The names are collected first so the contact pass can
   // resolve `_embedded.companies[0].id` without a per-contact round trip.
-  const companyNames = new Map<number, string>();
+  const companyNames = ctx.companyNames;
   if (includeCompanies && phaseAtOrAfter(startPhase, 'companies')) {
     const outcome = await runPhase(
       client,
@@ -274,6 +374,8 @@ export async function importFromAmo(
         if (company.is_deleted) return;
         const name = typeof company.name === 'string' ? company.name.trim() : '';
         if (name) companyNames.set(company.id, name);
+        const address = firstFieldText(company.custom_fields_values, { code: 'ADDRESS' });
+        if (address) ctx.companyAddresses.set(company.id, address);
         await recordMap(orgId, 'company', company.id, syntheticCompanyLocalId(company.id), company);
       },
       () => {
@@ -298,7 +400,7 @@ export async function importFromAmo(
       startPhase === 'contacts' ? startPage : 1,
       maxRecords,
       async (raw) => {
-        const localId = await upsertContact(orgId, userId, raw as AmoContact, companyNames);
+        const localId = await upsertContact(ctx, raw as AmoContact);
         if (localId) {
           contactIdByAmo.set((raw as AmoContact).id as number, localId);
           result.contacts_imported++;
@@ -324,6 +426,25 @@ export async function importFromAmo(
 
   // ── 4. Leads → Deal ────────────────────────────────────────────────────────
   if (includeLeads && phaseAtOrAfter(startPhase, 'leads')) {
+    // When each lead entered its current stage, from amo's event log. Without it
+    // every imported deal "entered its stage" at import time and nothing can ever
+    // read as stalled. Optional: a missing log falls back to created/closed dates.
+    try {
+      for await (const batch of client.paginate(orgId, '/api/v4/events', {
+        limit: 100,
+        'filter[type]': 'lead_status_changed',
+      })) {
+        for (const ev of batch as Array<{ entity_id?: number; created_at?: number }>) {
+          const at = amoTimestampToDate(ev?.created_at);
+          if (typeof ev?.entity_id !== 'number' || !at) continue;
+          const seen = ctx.stageEnteredAt.get(ev.entity_id);
+          if (!seen || at > seen) ctx.stageEnteredAt.set(ev.entity_id, at);
+        }
+      }
+    } catch {
+      // fall back per deal
+    }
+
     const outcome = await runPhase(
       client,
       orgId,
@@ -331,21 +452,16 @@ export async function importFromAmo(
       startPhase === 'leads' ? startPage : 1,
       maxRecords,
       async (raw) => {
-        const ok = await upsertDeal(
-          orgId,
-          userId,
-          raw as AmoLead,
-          mapping,
-          contactIdByAmo,
-          accountCurrency,
-        );
+        const ok = await upsertDeal(ctx, raw as AmoLead, mapping, contactIdByAmo, accountCurrency);
         if (ok) result.deals_imported++;
         else result.deals_failed++;
       },
       () => {
         result.deals_failed++;
       },
-      { with: 'contacts' },
+      // loss_reason is not embedded unless asked for; without it every lost deal
+      // arrives with no reason and the lost-reasons report is empty.
+      { with: 'contacts,loss_reason' },
     );
     if (outcome.stopped) {
       result.partial = true;
@@ -355,12 +471,89 @@ export async function importFromAmo(
     }
   }
 
+  if (opts.include_activity === false) return result;
+
+  // ── 5. Tasks → Task, «Встреча» → CalendarEvent ─────────────────────────────
+  if (phaseAtOrAfter(startPhase, 'tasks')) {
+    const outcome = await runPhase(
+      client,
+      orgId,
+      '/api/v4/tasks',
+      startPhase === 'tasks' ? startPage : 1,
+      maxRecords,
+      async (raw) => {
+        const kind = await upsertTask(ctx, raw as AmoTask);
+        if (kind === 'meeting') result.meetings_imported++;
+        else if (kind === 'task') result.tasks_imported++;
+      },
+      () => {
+        result.tasks_failed++;
+      },
+    );
+    if (outcome.stopped) {
+      result.partial = true;
+      result.error = outcome.error;
+      result.cursor = { phase: 'tasks', page: outcome.page };
+      return result;
+    }
+  }
+
+  // ── 6. Notes and calls → Message ───────────────────────────────────────────
+  for (const [phase, path, owner] of [
+    ['contact_notes', '/api/v4/contacts/notes', 'contact'],
+    ['lead_notes', '/api/v4/leads/notes', 'lead'],
+  ] as const) {
+    if (!phaseAtOrAfter(startPhase, phase)) continue;
+    const outcome = await runPhase(
+      client,
+      orgId,
+      path,
+      startPhase === phase ? startPage : 1,
+      maxRecords,
+      async (raw) => {
+        const kind = await upsertNote(ctx, owner, raw as AmoNote);
+        if (kind === 'call') result.calls_imported++;
+        else if (kind === 'note') result.notes_imported++;
+        else result.notes_skipped++;
+      },
+      () => {
+        result.notes_failed++;
+      },
+    );
+    if (outcome.stopped) {
+      result.partial = true;
+      result.error = outcome.error;
+      result.cursor = { phase, page: outcome.page };
+      return result;
+    }
+  }
+
   return result;
+}
+
+interface ImportContext {
+  orgId: string;
+  userId: string;
+  /** amo responsible_user_id → 4КУБ user id; the importing user when unmatched. */
+  ownerOf(amoUserId: number | null | undefined): string;
+  companyNames: Map<number, string>;
+  companyAddresses: Map<number, string>;
+  /** amo lead id → when it entered its current stage (latest lead_status_changed). */
+  stageEnteredAt: Map<number, Date>;
 }
 
 // ─── Phase driver ─────────────────────────────────────────────────────────────
 
-const PHASE_ORDER: AmoImportPhase[] = ['pipelines', 'companies', 'contacts', 'leads', 'done'];
+const PHASE_ORDER: AmoImportPhase[] = [
+  'pipelines',
+  'companies',
+  'contacts',
+  'leads',
+  'tasks',
+  'contact_notes',
+  'lead_notes',
+  'done',
+];
 
 function phaseAtOrAfter(current: AmoImportPhase, target: AmoImportPhase): boolean {
   return PHASE_ORDER.indexOf(current) <= PHASE_ORDER.indexOf(target);
@@ -447,27 +640,113 @@ function splitName(contact: AmoContact): { first: string; last?: string } {
   return { first: parts[0], last: parts.slice(1).join(' ') || undefined };
 }
 
-async function upsertContact(
-  orgId: string,
-  userId: string,
-  contact: AmoContact,
-  companyNames: Map<number, string>,
-): Promise<string | null> {
+/**
+ * amo phone values carry an enum_code: WORK / WORKDD / MOB / FAX / HOME / OTHER.
+ * The first MOB number becomes the 4КУБ mobile; the first other number the phone.
+ * With only mobiles, the first mobile is also the phone — phone is what search,
+ * calling and dedup read first, and it must not be empty when amo has a number.
+ */
+function splitAmoPhones(fields: AmoCustomField[] | null | undefined): { phone?: string; mobile?: string } {
+  const values = (Array.isArray(fields) ? fields : [])
+    .filter((f) => typeof f?.field_code === 'string' && f.field_code.toUpperCase() === 'PHONE')
+    .flatMap((f) => (Array.isArray(f.values) ? f.values : []))
+    .map((v) => ({
+      value: typeof v?.value === 'string' ? v.value.trim() : typeof v?.value === 'number' ? String(v.value) : '',
+      mobile: typeof v?.enum_code === 'string' && v.enum_code.toUpperCase() === 'MOB',
+    }))
+    .filter((v) => v.value);
+  const mobile = values.find((v) => v.mobile)?.value;
+  const phone = values.find((v) => !v.mobile)?.value ?? mobile;
+  return { phone, mobile: mobile && mobile !== phone ? mobile : undefined };
+}
+
+/** First text value of a custom field, matched by code or (case-insensitive) name. */
+function firstFieldText(
+  fields: AmoCustomField[] | null | undefined,
+  match: { code?: string; names?: string[] },
+): string | undefined {
+  const names = (match.names ?? []).map((n) => n.toLowerCase());
+  for (const f of Array.isArray(fields) ? fields : []) {
+    const code = typeof f?.field_code === 'string' ? f.field_code.toUpperCase() : '';
+    const name = typeof f?.field_name === 'string' ? f.field_name.trim().toLowerCase() : '';
+    if (!(match.code && code === match.code) && !names.includes(name)) continue;
+    for (const v of Array.isArray(f.values) ? f.values : []) {
+      if (typeof v?.value === 'string' && v.value.trim()) return v.value.trim();
+    }
+  }
+  return undefined;
+}
+
+function tagNames(tags: Array<{ name?: string }> | null | undefined): string[] {
+  return (Array.isArray(tags) ? tags : [])
+    .map((t) => (typeof t?.name === 'string' ? t.name.trim() : ''))
+    .filter(Boolean);
+}
+
+const ADDRESS_FIELD_NAMES = ['адрес', 'address'];
+
+/** amo sends date-like fields as unix seconds; a bare 1699999999 means nothing on a phone. */
+const DATE_FIELD_TYPES = new Set(['date', 'birthday', 'date_time']);
+
+/**
+ * mapCustomFields, plus: date-like fields become ISO dates (YYYY-MM-DD, or a full
+ * ISO timestamp for date_time) so the app can render them as dates. Kept here and
+ * not in mapping.ts because the sync worker hashes mapCustomFields' output.
+ */
+function importCustomFields(fields: AmoCustomField[] | null | undefined): Record<string, unknown> | undefined {
+  const custom = mapCustomFields(fields);
+  if (!custom) return custom;
+  for (const f of Array.isArray(fields) ? fields : []) {
+    const type = typeof f?.field_type === 'string' ? f.field_type : '';
+    const name = typeof f?.field_name === 'string' ? f.field_name.trim() : '';
+    if (!DATE_FIELD_TYPES.has(type) || !name || !(name in custom)) continue;
+    const toIso = (v: unknown) => {
+      const d = amoTimestampToDate(typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : v);
+      if (!d) return v;
+      return type === 'date_time' ? d.toISOString() : d.toISOString().slice(0, 10);
+    };
+    const v = custom[name];
+    custom[name] = Array.isArray(v) ? v.map(toIso) : toIso(v);
+  }
+  return custom;
+}
+
+async function upsertContact(ctx: ImportContext, contact: AmoContact): Promise<string | null> {
+  const { orgId, userId } = ctx;
   if (!contact || typeof contact.id !== 'number') throw new Error('malformed contact: no id');
   if (contact.is_deleted) return null;
 
   const { first, last } = splitName(contact);
-  const phone = extractAmoPhone(contact.custom_fields_values);
+  const { phone, mobile } = splitAmoPhones(contact.custom_fields_values);
   const email = extractAmoEmail(contact.custom_fields_values);
   const companyId = contact._embedded?.companies?.[0]?.id;
-  const company = typeof companyId === 'number' ? companyNames.get(companyId) : undefined;
-  const custom = mapCustomFields(contact.custom_fields_values);
+  const company = typeof companyId === 'number' ? ctx.companyNames.get(companyId) : undefined;
+  // The contact's own address first; otherwise its company's. Stored as
+  // { formatted } — no coordinates, because nothing here geocodes, so "nearby"
+  // still skips these contacts rather than placing them somewhere invented.
+  const addressText =
+    firstFieldText(contact.custom_fields_values, { names: ADDRESS_FIELD_NAMES }) ??
+    (typeof companyId === 'number' ? ctx.companyAddresses.get(companyId) : undefined);
+  const tags = tagNames(contact._embedded?.tags);
+  const createdAt = amoTimestampToDate(contact.created_at);
+  const custom = importCustomFields(contact.custom_fields_values);
+  if (custom) {
+    for (const key of Object.keys(custom)) {
+      if (ADDRESS_FIELD_NAMES.includes(key.toLowerCase())) delete custom[key];
+    }
+  }
 
   const payload = {
     first_name: first,
     last_name: last,
     phone: phone ? encryptField(phone) : null,
+    mobile: mobile ? encryptField(mobile) : null,
+    mobile_bidx: mobile ? blindIndex(mobile, 'mobile') : null,
     email: email ? encryptField(email) : null,
+    address: addressText ? ({ formatted: addressText } as Prisma.InputJsonValue) : Prisma.DbNull,
+    tags: tags.length ? (tags as Prisma.InputJsonValue) : Prisma.DbNull,
+    assigned_to: ctx.ownerOf(contact.responsible_user_id),
+    ...(createdAt ? { created_at: createdAt } : {}),
     // Indexed from the TRIMMED PLAINTEXT that was encrypted on the line above,
     // never from the ciphertext: encryptField picks a fresh IV per call, so a hash
     // of its output matches no lookup that will ever be performed. An amoCRM
@@ -513,13 +792,13 @@ async function upsertContact(
 }
 
 async function upsertDeal(
-  orgId: string,
-  userId: string,
+  ctx: ImportContext,
   lead: AmoLead,
   mapping: StageMapping,
   contactIdByAmo: Map<number, string>,
   accountCurrency: string,
 ): Promise<boolean> {
+  const { orgId, userId } = ctx;
   if (!lead || typeof lead.id !== 'number') throw new Error('malformed lead: no id');
   if (lead.is_deleted) return false;
 
@@ -555,8 +834,25 @@ async function upsertDeal(
     contactId = contactIdByAmo.get(amoContactId) ?? (await findMapped(orgId, 'contact', amoContactId)) ?? undefined;
   }
 
-  const custom = mapCustomFields(lead.custom_fields_values);
+  const custom = importCustomFields(lead.custom_fields_values) ?? {};
+  // 4КУБ deals have no company link and no tags; both are kept visible on the
+  // deal rather than dropped. The company is also on the contact when there is one.
+  const amoCompanyId = lead._embedded?.companies?.[0]?.id;
+  const companyName = typeof amoCompanyId === 'number' ? ctx.companyNames.get(amoCompanyId) : undefined;
+  if (companyName) custom['Компания'] = companyName;
+  const tags = tagNames(lead._embedded?.tags);
+  if (tags.length) custom['Теги'] = tags.length === 1 ? tags[0] : tags;
+
+  const createdAt = amoTimestampToDate(lead.created_at);
+  // When it entered the current stage: amo's event log, else the close date for a
+  // closed deal, else creation. Never "now" — that makes every deal look fresh.
+  const stageEnteredAt =
+    ctx.stageEnteredAt.get(lead.id) ?? (status === 'open' ? undefined : closedAt) ?? createdAt;
+
   const payload = {
+    ...(createdAt ? { created_at: createdAt } : {}),
+    ...(stageEnteredAt ? { stage_entered_at: stageEnteredAt } : {}),
+    assigned_to: ctx.ownerOf(lead.responsible_user_id),
     title: (typeof lead.name === 'string' && lead.name.trim()) || `Сделка ${lead.id}`,
     contact_id: contactId ?? null,
     pipeline_id: pipelineId,
@@ -570,7 +866,7 @@ async function upsertDeal(
     actual_close: status === 'open' ? null : closedAt,
     lost_reason: status === 'lost' ? (lead._embedded?.loss_reason?.[0]?.name ?? null) : null,
     source: 'amocrm',
-    custom_fields: custom === undefined ? undefined : (custom as Prisma.InputJsonValue),
+    custom_fields: Object.keys(custom).length ? (custom as Prisma.InputJsonValue) : undefined,
   };
 
   const existing = await findMapped(orgId, 'lead', lead.id);
@@ -601,6 +897,193 @@ async function upsertDeal(
     written ? hashAmoEntity('lead', written) : amoRecordHash(lead),
   );
   return true;
+}
+
+/** amo's built-in task type id for «Встреча» (MEETING); 1 is «Связаться» (FOLLOW_UP). */
+const AMO_TASK_TYPE_MEETING = 2;
+const DEFAULT_MEETING_MS = 60 * 60 * 1000;
+
+/** Where an amo task/note hangs: a deal (and that deal's contact) or a contact. */
+async function resolveParent(
+  orgId: string,
+  entityType: string | null | undefined,
+  entityId: number | null | undefined,
+): Promise<{ dealId: string | null; contactId: string | null }> {
+  if (typeof entityId !== 'number') return { dealId: null, contactId: null };
+  if (entityType === 'leads' || entityType === 'lead') {
+    const dealId = await findMapped(orgId, 'lead', entityId);
+    if (!dealId) return { dealId: null, contactId: null };
+    const deal = await db.deal.findUnique({ where: { id: dealId }, select: { contact_id: true, title: true } });
+    return { dealId, contactId: deal?.contact_id ?? null };
+  }
+  if (entityType === 'contacts' || entityType === 'contact') {
+    return { dealId: null, contactId: await findMapped(orgId, 'contact', entityId) };
+  }
+  return { dealId: null, contactId: null };
+}
+
+function taskResultText(result: AmoTask['result']): string | undefined {
+  if (!result || Array.isArray(result)) return undefined;
+  const text = (result as { text?: unknown }).text;
+  return typeof text === 'string' && text.trim() ? text.trim() : undefined;
+}
+
+/**
+ * amo task → 4КУБ Task; a «Встреча» → CalendarEvent, because that is where 4КУБ
+ * shows meetings (calendar tab, contact timeline) and a meeting filed as a to-do
+ * would never appear on the calendar.
+ */
+async function upsertTask(ctx: ImportContext, task: AmoTask): Promise<'task' | 'meeting' | 'skipped'> {
+  const { orgId, userId } = ctx;
+  if (!task || typeof task.id !== 'number') throw new Error('malformed task: no id');
+
+  const { dealId, contactId } = await resolveParent(orgId, task.entity_type, task.entity_id);
+  const title = (typeof task.text === 'string' && task.text.trim()) || 'Задача из amoCRM';
+  const due = amoTimestampToDate(task.complete_till);
+  const createdAt = amoTimestampToDate(task.created_at);
+  const done = task.is_completed === true;
+  const doneAt = done ? amoTimestampToDate(task.updated_at) ?? due ?? new Date() : null;
+  const resultText = taskResultText(task.result);
+  const owner = ctx.ownerOf(task.responsible_user_id);
+
+  if (task.task_type_id === AMO_TASK_TYPE_MEETING) {
+    if (!due) return 'skipped';
+    const durationMs = typeof task.duration === 'number' && task.duration > 0 ? task.duration * 1000 : DEFAULT_MEETING_MS;
+    const data = {
+      title,
+      description: resultText ? `Результат: ${resultText}` : null,
+      contact_id: contactId,
+      deal_id: dealId,
+      created_by: owner,
+      start_time: due,
+      end_time: new Date(due.getTime() + durationMs),
+      status: (done ? 'completed' : 'scheduled') as 'completed' | 'scheduled',
+      completed_at: doneAt,
+      ...(createdAt ? { created_at: createdAt } : {}),
+    };
+    const existing = await findMapped(orgId, 'meeting', task.id);
+    let localId = existing;
+    if (localId) {
+      try {
+        await db.calendarEvent.update({ where: { id: localId }, data });
+      } catch {
+        localId = null;
+      }
+    }
+    if (!localId) {
+      localId = (await db.calendarEvent.create({ data: { organization_id: orgId, ...data } })).id;
+    }
+    await recordMap(orgId, 'meeting', task.id, localId, task);
+    return 'meeting';
+  }
+
+  const data = {
+    title,
+    description: resultText ? `Результат: ${resultText}` : null,
+    contact_id: contactId,
+    deal_id: dealId,
+    assigned_to: owner,
+    due_date: due ?? null,
+    status: (done ? 'done' : 'pending') as 'done' | 'pending',
+    completed_at: doneAt,
+    completed_by: done ? owner : null,
+    ...(createdAt ? { created_at: createdAt } : {}),
+  };
+  const existing = await findMapped(orgId, 'task', task.id);
+  let localId = existing;
+  if (localId) {
+    try {
+      await db.task.update({ where: { id: localId }, data });
+    } catch {
+      localId = null;
+    }
+  }
+  if (!localId) {
+    localId = (await db.task.create({ data: { organization_id: orgId, created_by: userId, ...data } })).id;
+  }
+  await recordMap(orgId, 'task', task.id, localId, task);
+  return 'task';
+}
+
+/**
+ * amo note → Message, in exactly the shapes the contact screen's own composer
+ * writes (api/controllers/messages.ts): a note is an outbound in_app message, a
+ * call is a `call`-channel message whose body starts `[<seconds>s]`. A 4КУБ
+ * message belongs to a contact, so a lead note lands on that lead's contact with
+ * the deal named in front; a lead with no contact has nowhere to put it.
+ */
+async function upsertNote(
+  ctx: ImportContext,
+  owner: 'contact' | 'lead',
+  note: AmoNote,
+): Promise<'note' | 'call' | 'skipped'> {
+  const { orgId, userId } = ctx;
+  if (!note || typeof note.id !== 'number') throw new Error('malformed note: no id');
+
+  const type = typeof note.note_type === 'string' ? note.note_type : '';
+  const isCall = type === 'call_in' || type === 'call_out';
+  if (!isCall && type !== 'common') return 'skipped';
+
+  let contactId: string | null;
+  let prefix = '';
+  if (owner === 'lead') {
+    const dealId = typeof note.entity_id === 'number' ? await findMapped(orgId, 'lead', note.entity_id) : null;
+    if (!dealId) return 'skipped';
+    const deal = await db.deal.findUnique({ where: { id: dealId }, select: { contact_id: true, title: true } });
+    contactId = deal?.contact_id ?? null;
+    if (deal?.title) prefix = `Сделка «${deal.title}»: `;
+  } else {
+    contactId = typeof note.entity_id === 'number' ? await findMapped(orgId, 'contact', note.entity_id) : null;
+  }
+  if (!contactId) return 'skipped';
+
+  const createdAt = amoTimestampToDate(note.created_at);
+  let data: {
+    body: string;
+    direction: 'inbound' | 'outbound';
+    channel: 'in_app' | 'call';
+    status: 'sent' | 'delivered';
+  };
+  if (isCall) {
+    const seconds = typeof note.params?.duration === 'number' && note.params.duration >= 0 ? Math.round(note.params.duration) : null;
+    const text = (typeof note.params?.call_result === 'string' && note.params.call_result.trim()) || 'Звонок';
+    data = {
+      body: `${seconds !== null ? `[${seconds}s] ` : ''}${prefix}${text}`,
+      direction: type === 'call_in' ? 'inbound' : 'outbound',
+      channel: 'call',
+      status: 'delivered',
+    };
+  } else {
+    const text = typeof note.params?.text === 'string' ? note.params.text.trim() : '';
+    if (!text) return 'skipped';
+    data = { body: `${prefix}${text}`, direction: 'outbound', channel: 'in_app', status: 'sent' };
+  }
+
+  const mapType = owner === 'lead' ? 'note:lead' : 'note:contact';
+  const existing = await findMapped(orgId, mapType, note.id);
+  let localId = existing;
+  if (localId) {
+    try {
+      await db.message.update({ where: { id: localId }, data: { contact_id: contactId, ...data } });
+    } catch {
+      localId = null;
+    }
+  }
+  if (!localId) {
+    localId = (
+      await db.message.create({
+        data: {
+          organization_id: orgId,
+          contact_id: contactId,
+          user_id: userId,
+          ...data,
+          ...(createdAt ? { created_at: createdAt } : {}),
+        },
+      })
+    ).id;
+  }
+  await recordMap(orgId, mapType, note.id, localId, note);
+  return isCall ? 'call' : 'note';
 }
 
 // ─── AmoEntityMap ─────────────────────────────────────────────────────────────
