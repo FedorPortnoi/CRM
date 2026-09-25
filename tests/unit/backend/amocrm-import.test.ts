@@ -204,8 +204,11 @@ function makeClient(
     return { _embedded: { [collection]: first }, _links: { next: (pages[base]?.length ?? 0) > 1 ? { href: 'x' } : undefined } };
   });
 
-  const paginate = vi.fn((_org: string, path: string, _params?: Record<string, unknown>) => {
-    const batches = pages[path] ?? [];
+  const paginate = vi.fn((_org: string, path: string, params?: Record<string, unknown>) => {
+    // A filtered read is a different result set; the fixtures describe only the
+    // unfiltered one (the event log's type filter is the exception: it IS the set).
+    const filtered = Object.keys(params ?? {}).some((k) => k.startsWith('filter[') && k !== 'filter[type]');
+    const batches = filtered ? [] : pages[path] ?? [];
     return (async function* () {
       let index = 0;
       for (const batch of batches) {
@@ -813,6 +816,25 @@ describe('full transfer', () => {
     expect(fake.tasks.size).toBe(1);
     expect(fake.events.size).toBe(1);
     expect(fake.messages.size).toBe(3);
+  });
+
+  it('walks «Неразобранное» explicitly, since an unfiltered /leads omits it', async () => {
+    const client = fullClient();
+    const unsortedLead = amoLead({ id: 777, name: 'Заявка с сайта', status_id: 32392156, _embedded: { contacts: [] } });
+    const base = client.paginate.getMockImplementation()!;
+    client.paginate.mockImplementation((org: string, path: string, params?: Record<string, unknown>) => {
+      if (path === '/api/v4/leads' && params?.['filter[statuses][0][status_id]'] === 32392156) {
+        expect(params['filter[statuses][0][pipeline_id]']).toBe(AMO_PIPELINE);
+        return (async function* () { yield [unsortedLead]; })();
+      }
+      return base(org, path, params);
+    });
+
+    const result = await importFromAmo(ORG, USER, { client });
+    expect(result.deals_imported).toBe(3);
+    const deal = [...fake.deals.values()].find((d) => d.title === 'Заявка с сайта')!;
+    const unsortedStage = [...fake.stages.values()].find((s) => s.name === 'Неразобранное')!;
+    expect(deal.stage_id).toBe(unsortedStage.id);
   });
 
   it('include_activity: false stops after deals', async () => {

@@ -469,6 +469,39 @@ export async function importFromAmo(
       result.cursor = { phase: 'leads', page: outcome.page };
       return result;
     }
+
+    // «Неразобранное» (status type 1) is left out of an unfiltered /leads list —
+    // verified against a live account: 6 unsorted leads, 0 of them in /leads, all
+    // 6 returned once the status is named in the filter. Those are fresh incoming
+    // requests, the last thing an import should lose, so each pipeline's unsorted
+    // status is walked explicitly. Idempotent like everything else here.
+    try {
+      const unsorted = (await fetchAmoPipelines(client, orgId)).flatMap((p) =>
+        (p._embedded?.statuses ?? [])
+          .filter((s) => s.type === 1)
+          .map((s) => ({ pipeline_id: p.id, status_id: s.id })),
+      );
+      for (const s of unsorted) {
+        for await (const batch of client.paginate(orgId, '/api/v4/leads', {
+          limit: PAGE_LIMIT,
+          with: 'contacts,loss_reason',
+          'filter[statuses][0][pipeline_id]': s.pipeline_id,
+          'filter[statuses][0][status_id]': s.status_id,
+        })) {
+          for (const raw of batch) {
+            try {
+              if (await upsertDeal(ctx, raw as AmoLead, mapping, contactIdByAmo, accountCurrency)) result.deals_imported++;
+              else result.deals_failed++;
+            } catch {
+              result.deals_failed++;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      // Not worth stopping the import over; said out loud rather than swallowed.
+      result.error = `Неразобранные заявки не прочитаны: ${errorMessage(err)}`;
+    }
   }
 
   if (opts.include_activity === false) return result;
