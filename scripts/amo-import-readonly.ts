@@ -38,7 +38,7 @@ const USER_MAP: Record<number, string> = Object.fromEntries(
     .filter(Boolean)
     .map((pair) => {
       const [amo, local] = pair.split('=');
-      if (!/^d+$/.test(amo) || !/^[0-9a-f-]{36}$/.test(local ?? '')) throw new Error(`bad --user-map entry: ${pair}`);
+      if (!/^\d+$/.test(amo) || !/^[0-9a-f-]{36}$/.test(local ?? '')) throw new Error(`bad --user-map entry: ${pair}`);
       return [Number(amo), local];
     }),
 );
