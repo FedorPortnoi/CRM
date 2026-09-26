@@ -196,7 +196,12 @@ function makeClient(
   opts: { throwOnPath?: string; throwAfterPage?: number; accountCurrency?: string } = {},
 ) {
   const amoRequest = vi.fn(async (_org: string, _method: string, path: string) => {
-    if (path === '/api/v4/account') return { currency: opts.accountCurrency ?? 'RUB' };
+    if (path.split('?')[0] === '/api/v4/account') {
+      return {
+        currency: opts.accountCurrency ?? 'RUB',
+        _embedded: { task_types: [{ id: 1, name: 'Связаться' }, { id: 2, name: 'Встреча' }, { id: 3852078, name: 'КОММЕНТАРИЙ' }] },
+      };
+    }
     if (path.startsWith('/api/v4/leads/pipelines')) return PIPELINES_PAYLOAD;
     const base = path.split('?')[0];
     const collection = base.replace('/api/v4/', '');
@@ -439,7 +444,7 @@ describe('leads', () => {
     await importFromAmo(ORG, USER, { client });
 
     expect([...fake.deals.values()][0].currency).toBe('KZT');
-    expect(client.amoRequest).toHaveBeenCalledWith(ORG, 'GET', '/api/v4/account');
+    expect(client.amoRequest).toHaveBeenCalledWith(ORG, 'GET', '/api/v4/account?with=task_types');
   });
 
   it('reads status 142 as won and 143 as lost, with the close date', async () => {
@@ -615,12 +620,15 @@ describe('long runs', () => {
     const client = makeClient({
       '/api/v4/companies': [[amoCompany()]],
       '/api/v4/contacts': [[amoContact()]],
-      '/api/v4/leads': [[amoLead({ _embedded: {} })]],
+      '/api/v4/leads': [[amoLead({ _embedded: { companies: [{ id: 406320 }] } })]],
     });
 
     const result = await importFromAmo(ORG, USER, { client, cursor: { phase: 'leads', page: 1 } });
 
-    expect(result.companies_seen).toBe(0);
+    // Companies are re-read on every run: their names live only in memory, and a
+    // resume that skipped them wrote every later contact and deal company-less.
+    expect(result.companies_seen).toBe(1);
+    expect([...fake.deals.values()][0].custom_fields).toMatchObject({ Компания: 'ООО «Ромашка»' });
     expect(result.contacts_imported).toBe(0);
     expect(result.deals_imported).toBe(1);
     // The funnel pass always runs — leads cannot be placed without it.
@@ -816,6 +824,47 @@ describe('full transfer', () => {
     expect(fake.tasks.size).toBe(1);
     expect(fake.events.size).toBe(1);
     expect(fake.messages.size).toBe(3);
+  });
+
+  it('keeps amo managers without a 4КУБ account, custom task types, company notes, geolocation and call details', async () => {
+    const client = fullClient({
+      '/api/v4/users': [[{ id: 1, name: 'Анна', email: 'Anna@Example.ru' }, { id: 2, name: 'Кристина Л', email: 'nobody@example.ru' }]],
+      '/api/v4/companies': [[amoCompany({ _embedded: { contacts: [{ id: 406322 }] } })]],
+      '/api/v4/tasks': [[
+        { id: 5, text: 'клиент думает', entity_type: 'leads', entity_id: 10971465, task_type_id: 3852078, responsible_user_id: 2, complete_till: MOVED },
+        { id: 6, text: 'Позвонить в офис', entity_type: 'companies', entity_id: 406320, task_type_id: 1, responsible_user_id: 1, complete_till: MOVED },
+      ]],
+      '/api/v4/contacts/notes': [[
+        { id: 21, entity_id: 406322, note_type: 'call_out', responsible_user_id: 2, params: { duration: 60, phone: '+79181112233', link: 'https://rec.example/1.mp3' } },
+        { id: 22, entity_id: 406322, note_type: 'geolocation', params: { text: 'Отметка', address: 'Краснодар, Красная 1' } },
+      ]],
+      '/api/v4/companies/notes': [[{ id: 23, entity_id: 406320, note_type: 'common', params: { text: 'Бухгалтерия на 3 этаже' } }]],
+    });
+
+    const result = await importFromAmo(ORG, USER, { client });
+
+    // amo user 2 has no 4КУБ account: the deal goes to the importer, the name stays on it.
+    const deal = [...fake.deals.values()].find((d) => d.title === 'Поставка станков')!;
+    expect(deal.custom_fields).toMatchObject({ 'Ответственный (amoCRM)': 'Кристина Л' });
+    // Contact belongs to amo user 1, who IS matched: no extra field.
+    expect([...fake.contacts.values()][0].custom_fields ?? {}).not.toHaveProperty('Ответственный (amoCRM)');
+
+    const tasks = [...fake.tasks.values()];
+    const typed = tasks.find((t) => String(t.title).startsWith('КОММЕНТАРИЙ'))!;
+    expect(typed.title).toBe('КОММЕНТАРИЙ: клиент думает');
+    expect(typed.description).toBe('Ответственный (amoCRM): Кристина Л');
+    // A company task lands on the company's contact.
+    const contact = [...fake.contacts.values()][0];
+    expect(tasks.find((t) => t.title === 'Позвонить в офис')!.contact_id).toBe(contact.id);
+
+    const bodies = [...fake.messages.values()].map((m) => m.body);
+    expect(bodies).toEqual(expect.arrayContaining([
+      '[60s] Звонок · +79181112233 · запись: https://rec.example/1.mp3 · Кристина Л',
+      'Геолокация: Отметка: Краснодар, Красная 1',
+      'Компания «ООО «Ромашка»»: Бухгалтерия на 3 этаже',
+    ]));
+    expect(result.calls_imported).toBe(1);
+    expect(result.notes_imported).toBe(2);
   });
 
   it('walks «Неразобранное» explicitly, since an unfiltered /leads omits it', async () => {

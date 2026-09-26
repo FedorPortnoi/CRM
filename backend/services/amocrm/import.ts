@@ -87,6 +87,7 @@ interface AmoCompany {
   name?: string | null;
   is_deleted?: boolean;
   custom_fields_values?: AmoCustomField[] | null;
+  _embedded?: { contacts?: AmoEmbeddedRef[] | null } | null;
 }
 
 interface AmoTask {
@@ -107,6 +108,8 @@ interface AmoTask {
 interface AmoNote {
   id?: number;
   entity_id?: number | null;
+  responsible_user_id?: number | null;
+  created_by?: number | null;
   note_type?: string | null;
   created_at?: number | null;
   params?: {
@@ -114,11 +117,14 @@ interface AmoNote {
     duration?: number | null;
     call_result?: string | null;
     phone?: string | null;
+    link?: string | null;
+    address?: string | null;
   } | null;
 }
 
 interface AmoUser {
   id?: number;
+  name?: string | null;
   email?: string | null;
 }
 
@@ -153,6 +159,7 @@ export type AmoImportPhase =
   | 'tasks'
   | 'contact_notes'
   | 'lead_notes'
+  | 'company_notes'
   | 'done';
 
 /** Resume point handed back on a partial run and accepted on the next call. */
@@ -287,6 +294,8 @@ export async function importFromAmo(
   // translatable in the other direction.
   let mapping: StageMapping;
   let accountCurrency = 'RUB';
+  /** amo task type id → its name; accounts define their own («КОММЕНТАРИЙ», «Не ответ 1»…). */
+  const taskTypeNames = new Map<number, string>();
   try {
     const applied = await syncPipelinesFromAmo(client, orgId, userId);
     mapping = applied.mapping;
@@ -296,13 +305,18 @@ export async function importFromAmo(
     result.stages_updated = applied.stages_updated;
     result.warnings = applied.warnings;
     try {
-      const account = await client.amoRequest(orgId, 'GET', '/api/v4/account') as
-        | { currency?: unknown }
+      const account = await client.amoRequest(orgId, 'GET', '/api/v4/account?with=task_types') as
+        | { currency?: unknown; _embedded?: { task_types?: Array<{ id?: number; name?: string }> } }
         | null;
       const currency = typeof account?.currency === 'string'
         ? account.currency.trim().toUpperCase()
         : '';
       if (/^[A-Z]{3}$/.test(currency)) accountCurrency = currency;
+      for (const tt of account?._embedded?.task_types ?? []) {
+        if (typeof tt?.id === 'number' && typeof tt.name === 'string' && tt.name.trim()) {
+          taskTypeNames.set(tt.id, tt.name.trim());
+        }
+      }
     } catch {
       // Lead.price has no currency; keep the Russian market default if the optional
       // account metadata read is unavailable.
@@ -321,10 +335,14 @@ export async function importFromAmo(
   // the person running the import, never to nobody. Optional: a failed read of
   // /users only costs the attribution, not the import.
   const ownerByAmoUser = new Map<number, string>();
+  const amoUserNames = new Map<number, string>();
   try {
     const amoUsers: AmoUser[] = [];
     for await (const batch of client.paginate(orgId, '/api/v4/users', { limit: PAGE_LIMIT })) {
       amoUsers.push(...(batch as AmoUser[]));
+    }
+    for (const u of amoUsers) {
+      if (typeof u.id === 'number' && typeof u.name === 'string' && u.name.trim()) amoUserNames.set(u.id, u.name.trim());
     }
     const emails = amoUsers
       .map((u) => (typeof u.email === 'string' ? u.email.trim().toLowerCase() : ''))
@@ -348,8 +366,14 @@ export async function importFromAmo(
     userId,
     ownerOf: (amoUserId) =>
       (typeof amoUserId === 'number' ? ownerByAmoUser.get(amoUserId) : undefined) ?? userId,
+    // The amo manager's name when they have no 4КУБ account here — so "who handled
+    // this" survives even though the row is assigned to the importing user.
+    unmatchedOwnerName: (amoUserId) =>
+      typeof amoUserId === 'number' && !ownerByAmoUser.has(amoUserId) ? amoUserNames.get(amoUserId) : undefined,
+    taskTypeNames,
     companyNames: new Map<number, string>(),
     companyAddresses: new Map<number, string>(),
+    companyContactsAmo: new Map<number, number[]>(),
     stageEnteredAt: new Map<number, Date>(),
   };
 
@@ -359,8 +383,13 @@ export async function importFromAmo(
   // Company model), so an amo company is imported as a NAME that lands on every
   // contact attached to it. The names are collected first so the contact pass can
   // resolve `_embedded.companies[0].id` without a per-contact round trip.
+  //
+  // Walked on EVERY run, resumed or not: the names, addresses and contact links it
+  // collects live only in memory, and a run resumed at 'contacts' or later used to
+  // skip this pass — every contact and deal written after the resume lost its
+  // company. It is idempotent and small next to contacts, so the walk is always whole.
   const companyNames = ctx.companyNames;
-  if (includeCompanies && phaseAtOrAfter(startPhase, 'companies')) {
+  if (includeCompanies) {
     const outcome = await runPhase(
       client,
       orgId,
@@ -376,11 +405,16 @@ export async function importFromAmo(
         if (name) companyNames.set(company.id, name);
         const address = firstFieldText(company.custom_fields_values, { code: 'ADDRESS' });
         if (address) ctx.companyAddresses.set(company.id, address);
+        const contactIds = (company._embedded?.contacts ?? [])
+          .map((c) => c?.id)
+          .filter((id): id is number => typeof id === 'number');
+        if (contactIds.length) ctx.companyContactsAmo.set(company.id, contactIds);
         await recordMap(orgId, 'company', company.id, syntheticCompanyLocalId(company.id), company);
       },
       () => {
         result.companies_failed++;
       },
+      { with: 'contacts' },
     );
     if (outcome.stopped) {
       result.partial = true;
@@ -535,6 +569,7 @@ export async function importFromAmo(
   for (const [phase, path, owner] of [
     ['contact_notes', '/api/v4/contacts/notes', 'contact'],
     ['lead_notes', '/api/v4/leads/notes', 'lead'],
+    ['company_notes', '/api/v4/companies/notes', 'company'],
   ] as const) {
     if (!phaseAtOrAfter(startPhase, phase)) continue;
     const outcome = await runPhase(
@@ -569,8 +604,13 @@ interface ImportContext {
   userId: string;
   /** amo responsible_user_id → 4КУБ user id; the importing user when unmatched. */
   ownerOf(amoUserId: number | null | undefined): string;
+  /** The amo user's name when ownerOf had to fall back; undefined when matched or unknown. */
+  unmatchedOwnerName(amoUserId: number | null | undefined): string | undefined;
+  taskTypeNames: Map<number, string>;
   companyNames: Map<number, string>;
   companyAddresses: Map<number, string>;
+  /** amo company id → its amo contact ids, for company notes (4КУБ has no company to hang them on). */
+  companyContactsAmo: Map<number, number[]>;
   /** amo lead id → when it entered its current stage (latest lead_status_changed). */
   stageEnteredAt: Map<number, Date>;
 }
@@ -585,6 +625,7 @@ const PHASE_ORDER: AmoImportPhase[] = [
   'tasks',
   'contact_notes',
   'lead_notes',
+  'company_notes',
   'done',
 ];
 
@@ -718,6 +759,9 @@ function tagNames(tags: Array<{ name?: string }> | null | undefined): string[] {
 
 const ADDRESS_FIELD_NAMES = ['адрес', 'address'];
 
+/** custom_fields key holding the amo manager's name when they have no 4КУБ account. */
+const AMO_OWNER_FIELD = 'Ответственный (amoCRM)';
+
 /** amo sends date-like fields as unix seconds; a bare 1699999999 means nothing on a phone. */
 const DATE_FIELD_TYPES = new Set(['date', 'birthday', 'date_time']);
 
@@ -762,12 +806,12 @@ async function upsertContact(ctx: ImportContext, contact: AmoContact): Promise<s
     (typeof companyId === 'number' ? ctx.companyAddresses.get(companyId) : undefined);
   const tags = tagNames(contact._embedded?.tags);
   const createdAt = amoTimestampToDate(contact.created_at);
-  const custom = importCustomFields(contact.custom_fields_values);
-  if (custom) {
-    for (const key of Object.keys(custom)) {
-      if (ADDRESS_FIELD_NAMES.includes(key.toLowerCase())) delete custom[key];
-    }
+  const custom = importCustomFields(contact.custom_fields_values) ?? {};
+  for (const key of Object.keys(custom)) {
+    if (ADDRESS_FIELD_NAMES.includes(key.toLowerCase())) delete custom[key];
   }
+  const amoOwner = ctx.unmatchedOwnerName(contact.responsible_user_id);
+  if (amoOwner) custom[AMO_OWNER_FIELD] = amoOwner;
 
   const payload = {
     first_name: first,
@@ -789,7 +833,7 @@ async function upsertContact(ctx: ImportContext, contact: AmoContact): Promise<s
     email_bidx: email ? blindIndex(email, 'email') : null,
     company: company ?? null,
     source: 'amocrm',
-    custom_fields: custom === undefined ? undefined : (custom as Prisma.InputJsonValue),
+    custom_fields: Object.keys(custom).length ? (custom as Prisma.InputJsonValue) : undefined,
   };
 
   const existing = await findMapped(orgId, 'contact', contact.id);
@@ -873,6 +917,8 @@ async function upsertDeal(
   const amoCompanyId = lead._embedded?.companies?.[0]?.id;
   const companyName = typeof amoCompanyId === 'number' ? ctx.companyNames.get(amoCompanyId) : undefined;
   if (companyName) custom['Компания'] = companyName;
+  const amoOwner = ctx.unmatchedOwnerName(lead.responsible_user_id);
+  if (amoOwner) custom[AMO_OWNER_FIELD] = amoOwner;
   const tags = tagNames(lead._embedded?.tags);
   if (tags.length) custom['Теги'] = tags.length === 1 ? tags[0] : tags;
 
@@ -932,17 +978,37 @@ async function upsertDeal(
   return true;
 }
 
+function str(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+}
+
 /** amo's built-in task type id for «Встреча» (MEETING); 1 is «Связаться» (FOLLOW_UP). */
 const AMO_TASK_TYPE_MEETING = 2;
 const DEFAULT_MEETING_MS = 60 * 60 * 1000;
 
-/** Where an amo task/note hangs: a deal (and that deal's contact) or a contact. */
+/** The first of an amo company's contacts that made it into 4КУБ. */
+async function companyContact(ctx: ImportContext, amoCompanyId: number): Promise<string | null> {
+  for (const amoContactId of ctx.companyContactsAmo.get(amoCompanyId) ?? []) {
+    const local = await findMapped(ctx.orgId, 'contact', amoContactId);
+    if (local) return local;
+  }
+  return null;
+}
+
+/**
+ * Where an amo task/note hangs: a deal (and that deal's contact), a contact, or —
+ * 4КУБ having no companies — the company's first contact.
+ */
 async function resolveParent(
-  orgId: string,
+  ctx: ImportContext,
   entityType: string | null | undefined,
   entityId: number | null | undefined,
 ): Promise<{ dealId: string | null; contactId: string | null }> {
+  const { orgId } = ctx;
   if (typeof entityId !== 'number') return { dealId: null, contactId: null };
+  if (entityType === 'companies' || entityType === 'company') {
+    return { dealId: null, contactId: await companyContact(ctx, entityId) };
+  }
   if (entityType === 'leads' || entityType === 'lead') {
     const dealId = await findMapped(orgId, 'lead', entityId);
     if (!dealId) return { dealId: null, contactId: null };
@@ -970,13 +1036,25 @@ async function upsertTask(ctx: ImportContext, task: AmoTask): Promise<'task' | '
   const { orgId, userId } = ctx;
   if (!task || typeof task.id !== 'number') throw new Error('malformed task: no id');
 
-  const { dealId, contactId } = await resolveParent(orgId, task.entity_type, task.entity_id);
-  const title = (typeof task.text === 'string' && task.text.trim()) || 'Задача из amoCRM';
+  const { dealId, contactId } = await resolveParent(ctx, task.entity_type, task.entity_id);
+  const text = (typeof task.text === 'string' && task.text.trim()) || '';
+  // «Связаться» (1) and «Встреча» (2) are amo's built-ins and read fine without a
+  // label; an account's own types («КОММЕНТАРИЙ», «Не ответ 1») carry meaning the
+  // text alone does not, and 4КУБ has no task-type column to keep them in.
+  const typeName =
+    typeof task.task_type_id === 'number' && task.task_type_id > AMO_TASK_TYPE_MEETING
+      ? ctx.taskTypeNames.get(task.task_type_id)
+      : undefined;
+  const title = (typeName ? (text ? `${typeName}: ${text}` : typeName) : text) || 'Задача из amoCRM';
   const due = amoTimestampToDate(task.complete_till);
   const createdAt = amoTimestampToDate(task.created_at);
   const done = task.is_completed === true;
   const doneAt = done ? amoTimestampToDate(task.updated_at) ?? due ?? new Date() : null;
-  const resultText = taskResultText(task.result);
+  const amoOwner = ctx.unmatchedOwnerName(task.responsible_user_id);
+  const resultText =
+    [taskResultText(task.result) && `Результат: ${taskResultText(task.result)}`, amoOwner && `${AMO_OWNER_FIELD}: ${amoOwner}`]
+      .filter(Boolean)
+      .join('\n') || undefined;
   const owner = ctx.ownerOf(task.responsible_user_id);
 
   if (task.task_type_id === AMO_TASK_TYPE_MEETING) {
@@ -984,7 +1062,7 @@ async function upsertTask(ctx: ImportContext, task: AmoTask): Promise<'task' | '
     const durationMs = typeof task.duration === 'number' && task.duration > 0 ? task.duration * 1000 : DEFAULT_MEETING_MS;
     const data = {
       title,
-      description: resultText ? `Результат: ${resultText}` : null,
+      description: resultText ?? null,
       contact_id: contactId,
       deal_id: dealId,
       created_by: owner,
@@ -1012,7 +1090,7 @@ async function upsertTask(ctx: ImportContext, task: AmoTask): Promise<'task' | '
 
   const data = {
     title,
-    description: resultText ? `Результат: ${resultText}` : null,
+    description: resultText ?? null,
     contact_id: contactId,
     deal_id: dealId,
     assigned_to: owner,
@@ -1047,7 +1125,7 @@ async function upsertTask(ctx: ImportContext, task: AmoTask): Promise<'task' | '
  */
 async function upsertNote(
   ctx: ImportContext,
-  owner: 'contact' | 'lead',
+  owner: 'contact' | 'lead' | 'company',
   note: AmoNote,
 ): Promise<'note' | 'call' | 'skipped'> {
   const { orgId, userId } = ctx;
@@ -1055,7 +1133,8 @@ async function upsertNote(
 
   const type = typeof note.note_type === 'string' ? note.note_type : '';
   const isCall = type === 'call_in' || type === 'call_out';
-  if (!isCall && type !== 'common') return 'skipped';
+  const isGeo = type === 'geolocation';
+  if (!isCall && !isGeo && type !== 'common') return 'skipped';
 
   let contactId: string | null;
   let prefix = '';
@@ -1065,10 +1144,16 @@ async function upsertNote(
     const deal = await db.deal.findUnique({ where: { id: dealId }, select: { contact_id: true, title: true } });
     contactId = deal?.contact_id ?? null;
     if (deal?.title) prefix = `Сделка «${deal.title}»: `;
+  } else if (owner === 'company') {
+    contactId = typeof note.entity_id === 'number' ? await companyContact(ctx, note.entity_id) : null;
+    const name = typeof note.entity_id === 'number' ? ctx.companyNames.get(note.entity_id) : undefined;
+    if (name) prefix = `Компания «${name}»: `;
   } else {
     contactId = typeof note.entity_id === 'number' ? await findMapped(orgId, 'contact', note.entity_id) : null;
   }
   if (!contactId) return 'skipped';
+  const amoOwner = ctx.unmatchedOwnerName(note.responsible_user_id ?? note.created_by);
+  const byLine = amoOwner ? ` · ${amoOwner}` : '';
 
   const createdAt = amoTimestampToDate(note.created_at);
   let data: {
@@ -1081,18 +1166,21 @@ async function upsertNote(
     const seconds = typeof note.params?.duration === 'number' && note.params.duration >= 0 ? Math.round(note.params.duration) : null;
     const text = (typeof note.params?.call_result === 'string' && note.params.call_result.trim()) || 'Звонок';
     data = {
-      body: `${seconds !== null ? `[${seconds}s] ` : ''}${prefix}${text}`,
+      // Number and recording link kept: in amo they are the call's whole record.
+      body: `${seconds !== null ? `[${seconds}s] ` : ''}${prefix}${[text, str(note.params?.phone), str(note.params?.link) && `запись: ${str(note.params?.link)}`].filter(Boolean).join(' · ')}${byLine}`,
       direction: type === 'call_in' ? 'inbound' : 'outbound',
       channel: 'call',
       status: 'delivered',
     };
   } else {
-    const text = typeof note.params?.text === 'string' ? note.params.text.trim() : '';
+    const text = isGeo
+      ? ['Геолокация', str(note.params?.text), str(note.params?.address)].filter(Boolean).join(': ')
+      : str(note.params?.text) ?? '';
     if (!text) return 'skipped';
-    data = { body: `${prefix}${text}`, direction: 'outbound', channel: 'in_app', status: 'sent' };
+    data = { body: `${prefix}${text}${byLine}`, direction: 'outbound', channel: 'in_app', status: 'sent' };
   }
 
-  const mapType = owner === 'lead' ? 'note:lead' : 'note:contact';
+  const mapType = `note:${owner}`;
   const existing = await findMapped(orgId, mapType, note.id);
   let localId = existing;
   if (localId) {
