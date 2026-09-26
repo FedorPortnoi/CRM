@@ -65,7 +65,17 @@ async function get(p: string, attempt = 0): Promise<any> {
   const wait = last + 170 - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   last = Date.now();
-  const res = await fetch(BASE + p, { method: 'GET', headers: { Authorization: `Bearer ${TOKEN}` } });
+  let res: Response;
+  try {
+    res = await fetch(BASE + p, { method: 'GET', headers: { Authorization: `Bearer ${TOKEN}` } });
+  } catch (err) {
+    // A dropped connection on a 10 000+ request run is expected, not fatal. GETs are
+    // safe to repeat; back off and retry rather than abandon an hour's work.
+    requestLog.push(`GET ${p} -> network error (attempt ${attempt + 1})`);
+    if (attempt >= 6) throw err;
+    await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)));
+    return get(p, attempt + 1);
+  }
   requestLog.push(`GET ${p} -> ${res.status}`);
   if (res.status === 204) return null;
   if (res.status === 429 && attempt < 5) {
