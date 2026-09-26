@@ -12,6 +12,7 @@
 //     --amo-env AMO_KOMANDAR --out <dir outside the repo> [--dry]
 //
 //   --amo-env  prefix of two lines in .env: <prefix>_SUBDOMAIN and <prefix>_TOKEN
+//   --user-map amoUserId=4kubUserId[,…] for people whose email differs between systems
 //   --dry      snapshots only: reads amoCRM twice and compares; writes nothing to 4КУБ
 //   --out      where snapshots go. They hold the customer's personal data — keep them
 //              out of the repo and delete them when done.
@@ -31,6 +32,16 @@ const USER_ID = arg('user');
 const AMO_ENV = arg('amo-env');
 const OUT = arg('out');
 const DRY = process.argv.includes('--dry');
+const USER_MAP: Record<number, string> = Object.fromEntries(
+  (arg('user-map') ?? '')
+    .split(',')
+    .filter(Boolean)
+    .map((pair) => {
+      const [amo, local] = pair.split('=');
+      if (!/^d+$/.test(amo) || !/^[0-9a-f-]{36}$/.test(local ?? '')) throw new Error(`bad --user-map entry: ${pair}`);
+      return [Number(amo), local];
+    }),
+);
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '..');
 const ENV_ROOT = process.env.CRM_ENV_ROOT ?? 'D:/crm'; // .env files are not in git worktrees
 if (!ORG_ID || !USER_ID || !AMO_ENV || !OUT) {
@@ -227,7 +238,7 @@ async function main() {
     const { importFromAmo } = await import(new URL('../backend/services/amocrm/import.ts', import.meta.url).href);
     let cursor: any;
     for (let run = 1; run <= 50; run++) {
-      const r = await importFromAmo(ORG_ID, USER_ID, { client: readOnlyClient as any, cursor });
+      const r = await importFromAmo(ORG_ID, USER_ID, { client: readOnlyClient as any, cursor, user_map: USER_MAP });
       const { warnings, cursor: c, ...counts } = r;
       console.log(`import run ${run}:`, counts);
       if (warnings.length) console.log('warnings:', warnings.map((w: any) => w.message));

@@ -797,7 +797,7 @@ describe('full transfer', () => {
     });
 
     const result = await importFromAmo(ORG, USER, { client });
-    expect(result).toMatchObject({ tasks_imported: 1, meetings_imported: 1, notes_imported: 2, calls_imported: 1, notes_skipped: 2 });
+    expect(result).toMatchObject({ tasks_imported: 1, meetings_imported: 1, notes_imported: 3, calls_imported: 1, notes_skipped: 1 });
 
     const deal = [...fake.deals.values()].find((d) => d.title === 'Поставка станков')!;
     const contact = [...fake.contacts.values()][0];
@@ -865,6 +865,34 @@ describe('full transfer', () => {
     ]));
     expect(result.calls_imported).toBe(1);
     expect(result.notes_imported).toBe(2);
+  });
+
+  it('user_map assigns amo users whose email differs; notes with no contact land on the deal, once', async () => {
+    const client = fullClient({
+      '/api/v4/users': [[{ id: 2, name: 'Светлана', email: 'sveta@gmail.com' }]],
+      '/api/v4/companies': [[amoCompany({ _embedded: { contacts: [], leads: [{ id: 555 }] } })]],
+      '/api/v4/leads/notes': [[{ id: 31, entity_id: 555, note_type: 'common', created_at: CREATED, params: { text: 'Тестовый лид' } }]],
+      '/api/v4/companies/notes': [[{ id: 32, entity_id: 406320, note_type: 'call_out', created_at: CREATED, params: { duration: 30, phone: '+79180000000' } }]],
+    });
+    dbMock.user.findMany.mockImplementation(async ({ where }: { where: { id?: { in: string[] } } }) =>
+      where.id ? where.id.in.filter((id) => id === OTHER_USER).map((id) => ({ id })) : [],
+    );
+
+    const opts = { client, user_map: { 2: OTHER_USER, 99: 'not-a-member' } };
+    const result = await importFromAmo(ORG, USER, opts);
+
+    const open = [...fake.deals.values()].find((d) => d.title === 'Поставка станков')!;
+    expect(open.assigned_to).toBe(OTHER_USER);
+    expect(open.custom_fields ?? {}).not.toHaveProperty('Ответственный (amoCRM)');
+
+    const lost = [...fake.deals.values()].find((d) => d.status === 'lost')!;
+    const expected = ['2023-11-14 Тестовый лид', '2023-11-14 Исходящий звонок · 30 с · +79180000000'];
+    expect((lost.custom_fields as Record<string, unknown>)['Примечания (amoCRM)']).toEqual(expected);
+    expect(result.notes_skipped).toBe(0);
+
+    // A re-run rewrites custom_fields from amo first; the notes must come back, not double.
+    await importFromAmo(ORG, USER, opts);
+    expect((lost.custom_fields as Record<string, unknown>)['Примечания (amoCRM)']).toEqual(expected);
   });
 
   it('walks «Неразобранное» explicitly, since an unfiltered /leads omits it', async () => {

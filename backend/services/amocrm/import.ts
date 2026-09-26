@@ -174,6 +174,12 @@ export interface AmoImportOptions {
   include_companies?: boolean;
   /** Tasks, meetings, notes and calls. Default true. */
   include_activity?: boolean;
+  /**
+   * amo user id → 4КУБ user id, for people whose email differs between the two
+   * systems. Wins over the email match; ids that are not active members of this
+   * organization are ignored.
+   */
+  user_map?: Record<number, string>;
   /** Records per entity for ONE invocation. Default 5000. */
   max_records?: number;
   cursor?: AmoImportCursor;
@@ -361,6 +367,24 @@ export async function importFromAmo(
   } catch {
     // attribution degrades to the importing user
   }
+  const explicit = Object.entries(opts.user_map ?? {});
+  if (explicit.length) {
+    const members = new Set(
+      (
+        await db.user.findMany({
+          where: { organization_id: orgId, id: { in: explicit.map(([, local]) => local) }, is_active: true },
+          select: { id: true },
+        })
+      ).map((u) => u.id),
+    );
+    for (const [amoId, local] of explicit) {
+      if (members.has(local)) ownerByAmoUser.set(Number(amoId), local);
+    }
+  }
+  try {
+  } catch {
+    // attribution degrades to the importing user
+  }
   const ctx: ImportContext = {
     orgId,
     userId,
@@ -374,6 +398,7 @@ export async function importFromAmo(
     companyNames: new Map<number, string>(),
     companyAddresses: new Map<number, string>(),
     companyContactsAmo: new Map<number, number[]>(),
+    companyLeadsAmo: new Map<number, number[]>(),
     stageEnteredAt: new Map<number, Date>(),
   };
 
@@ -409,12 +434,16 @@ export async function importFromAmo(
           .map((c) => c?.id)
           .filter((id): id is number => typeof id === 'number');
         if (contactIds.length) ctx.companyContactsAmo.set(company.id, contactIds);
+        const leadIds = ((company._embedded as { leads?: AmoEmbeddedRef[] | null } | null | undefined)?.leads ?? [])
+          .map((l) => l?.id)
+          .filter((id): id is number => typeof id === 'number');
+        if (leadIds.length) ctx.companyLeadsAmo.set(company.id, leadIds);
         await recordMap(orgId, 'company', company.id, syntheticCompanyLocalId(company.id), company);
       },
       () => {
         result.companies_failed++;
       },
-      { with: 'contacts' },
+      { with: 'contacts,leads' },
     );
     if (outcome.stopped) {
       result.partial = true;
@@ -611,6 +640,8 @@ interface ImportContext {
   companyAddresses: Map<number, string>;
   /** amo company id → its amo contact ids, for company notes (4КУБ has no company to hang them on). */
   companyContactsAmo: Map<number, number[]>;
+  /** amo company id → its amo lead ids: where a company note goes when it has no contact. */
+  companyLeadsAmo: Map<number, number[]>;
   /** amo lead id → when it entered its current stage (latest lead_status_changed). */
   stageEnteredAt: Map<number, Date>;
 }
@@ -978,6 +1009,48 @@ async function upsertDeal(
   return true;
 }
 
+/** custom_fields key on a deal for amo notes that had no contact to live on. */
+const DEAL_NOTES_FIELD = 'Примечания (amoCRM)';
+
+async function appendNoteToDeal(
+  ctx: ImportContext,
+  owner: 'contact' | 'lead' | 'company',
+  note: AmoNote,
+  dealId: string,
+  isCall: boolean,
+): Promise<'note' | 'call'> {
+  const mapType = `note:${owner}`;
+  // Re-derived and de-duplicated by content on every run: the deal pass rewrites
+  // custom_fields from amoCRM first, so relying on "mapped = already appended"
+  // would silently drop these notes on a re-run.
+  {
+    const at = amoTimestampToDate(note.created_at);
+    const when = at ? `${at.toISOString().slice(0, 10)} ` : '';
+    const text = isCall
+      ? [
+          note.note_type === 'call_in' ? 'Входящий звонок' : 'Исходящий звонок',
+          typeof note.params?.duration === 'number' ? `${Math.round(note.params.duration)} с` : undefined,
+          str(note.params?.call_result),
+          str(note.params?.phone),
+          str(note.params?.link) && `запись: ${str(note.params?.link)}`,
+        ].filter(Boolean).join(' · ')
+      : [note.note_type === 'geolocation' ? 'Геолокация' : undefined, str(note.params?.text), str(note.params?.address)]
+          .filter(Boolean)
+          .join(': ');
+    const deal = await db.deal.findUnique({ where: { id: dealId }, select: { custom_fields: true } });
+    const custom = { ...((deal?.custom_fields as Record<string, unknown> | null) ?? {}) };
+    const prev = custom[DEAL_NOTES_FIELD];
+    const list = Array.isArray(prev) ? prev : typeof prev === 'string' ? [prev] : [];
+    const line = `${when}${text || 'Примечание'}`;
+    if (!list.includes(line)) {
+      custom[DEAL_NOTES_FIELD] = [...list, line];
+      await db.deal.update({ where: { id: dealId }, data: { custom_fields: custom as Prisma.InputJsonValue } });
+    }
+  }
+  await recordMap(ctx.orgId, mapType, note.id as number, dealId, note);
+  return isCall ? 'call' : 'note';
+}
+
 function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v.trim() : undefined;
 }
@@ -1151,7 +1224,21 @@ async function upsertNote(
   } else {
     contactId = typeof note.entity_id === 'number' ? await findMapped(orgId, 'contact', note.entity_id) : null;
   }
-  if (!contactId) return 'skipped';
+  if (!contactId) {
+    // A 4КУБ message needs a contact. With none (a lead without contacts, a company
+    // with no people on it) the note goes onto the deal itself — lead's own deal,
+    // or the company's first deal — rather than being dropped.
+    let dealId: string | null = null;
+    if (owner === 'lead' && typeof note.entity_id === 'number') dealId = await findMapped(orgId, 'lead', note.entity_id);
+    if (owner === 'company' && typeof note.entity_id === 'number') {
+      for (const amoLead of ctx.companyLeadsAmo.get(note.entity_id) ?? []) {
+        dealId = await findMapped(orgId, 'lead', amoLead);
+        if (dealId) break;
+      }
+    }
+    if (!dealId) return 'skipped';
+    return appendNoteToDeal(ctx, owner, note, dealId, isCall);
+  }
   const amoOwner = ctx.unmatchedOwnerName(note.responsible_user_id ?? note.created_by);
   const byLine = amoOwner ? ` · ${amoOwner}` : '';
 
