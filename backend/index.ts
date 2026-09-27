@@ -29,6 +29,7 @@ import onboardingRoutes from './api/routes/onboarding';
 import exportRoutes from './api/routes/export';
 import { activitiesRoutes } from './api/routes/activities';
 import { attachmentsRoutes } from './api/routes/attachments';
+import { filesRoutes } from './api/routes/files';
 import chatRoutes from './api/routes/chat';
 import importsRoutes from './api/routes/imports';
 import amocrmRoutes from './api/routes/amocrm';
@@ -305,6 +306,10 @@ async function start() {
   // Client-reported debug log intake — see the header comment in
   // api/routes/debug-log.ts for why this is outside /api/v1 too.
   await server.register(debugLogRoutes, { prefix: '/debug' });
+
+  // Local-disk attachment storage (LOCAL_STORAGE_DIR) — a no-op while S3 is in use.
+  // Outside /api/v1 for the reasons in the header of api/routes/files.ts.
+  await server.register(filesRoutes, { prefix: '/api/files' });
 
   server.get('/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() };

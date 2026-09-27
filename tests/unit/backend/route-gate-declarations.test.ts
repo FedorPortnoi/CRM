@@ -81,6 +81,7 @@ const MODULES: Array<[string, string]> = [
   ['tracking', '/api/v1/tracking'],
   ['updates', '/api/v1/updates'],
   ['debug-log', '/debug'],
+  ['files', '/api/files'],
 ];
 
 type RegisteredRoute = { method: string; url: string };

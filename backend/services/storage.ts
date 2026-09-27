@@ -1,7 +1,92 @@
+import fs from 'fs';
+import path from 'path';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 
 const UPLOAD_EXPIRES_IN = 300; // 5 minutes
+
+// ─── Local-disk driver ──────────────────────────────────────────────────────
+//
+// LOCAL_STORAGE_DIR set ⇒ files live on the API host's disk instead of S3 and are
+// served by routes/files.ts under `<PUBLIC_APP_URL>/api/files/<key>`. The client
+// contract is unchanged: upload-url still returns {upload_url, fields, file_url},
+// the app still POSTs a multipart form with those fields ahead of the file, and
+// still opens file_url directly. `fields.policy` plays the part of the S3 presigned
+// policy — an HMAC over key, type, size cap and expiry, checked by the upload route.
+
+export function isLocalStorage(): boolean {
+  return !!process.env.LOCAL_STORAGE_DIR?.trim();
+}
+
+function localPublicBase(): string {
+  const base = (process.env.PUBLIC_APP_URL ?? '').trim().replace(/\/+$/, '');
+  if (!base) throw new Error('LOCAL_STORAGE_DIR needs PUBLIC_APP_URL to build file URLs');
+  return `${base}/api/files/`;
+}
+
+/** The URL prefix every stored file_url starts with, for whichever driver is active. */
+function storagePrefix(): string {
+  if (isLocalStorage()) return localPublicBase();
+  const endpoint = process.env.S3_ENDPOINT ?? 'https://storage.yandexcloud.net';
+  return `${endpoint}/${getBucket()}/`;
+}
+
+// Exactly the shape buildKey mints. Anything else — traversal, another layout,
+// stray characters — is refused before it is ever joined onto a disk path.
+const LOCAL_KEY_RE =
+  /^uploads\/[0-9a-f-]{36}\/(contact|deal|task|calendar_event)\/[0-9a-f-]{36}-[A-Za-z0-9._-]{0,300}$/;
+
+export function isValidLocalKey(key: string): boolean {
+  return LOCAL_KEY_RE.test(key) && !hasTraversalSegment(key);
+}
+
+export function localPathForKey(key: string): string {
+  if (!isValidLocalKey(key)) throw new Error('invalid storage key');
+  const root = path.resolve(process.env.LOCAL_STORAGE_DIR!.trim());
+  const full = path.resolve(root, ...key.split('/'));
+  if (!full.startsWith(root + path.sep)) throw new Error('invalid storage key');
+  return full;
+}
+
+function policySecret(): Buffer {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET is required to sign upload policies');
+  // Derived, so an upload policy can never be replayed as anything JWT-shaped.
+  return createHmac('sha256', secret).update('4kub-local-upload-policy').digest();
+}
+
+export interface UploadPolicy {
+  key: string;
+  mime: string;
+  max: number;
+  exp: number; // epoch seconds
+}
+
+export function signUploadPolicy(p: UploadPolicy): string {
+  const body = Buffer.from(JSON.stringify(p)).toString('base64url');
+  const sig = createHmac('sha256', policySecret()).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+/** The policy when the signature is ours and it has not expired; null otherwise. */
+export function verifyUploadPolicy(token: string, now = Date.now()): UploadPolicy | null {
+  const [body, sig] = token.split('.');
+  if (!body || !sig) return null;
+  const expected = createHmac('sha256', policySecret()).update(body).digest();
+  const given = Buffer.from(sig, 'base64url');
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+  try {
+    const p = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as UploadPolicy;
+    if (typeof p.key !== 'string' || typeof p.mime !== 'string' || typeof p.max !== 'number' || typeof p.exp !== 'number') {
+      return null;
+    }
+    if (p.exp * 1000 < now || !isValidLocalKey(p.key)) return null;
+    return p;
+  } catch {
+    return null;
+  }
+}
 
 // Server-side upload MIME allowlist. Anything not listed is rejected so an
 // attacker cannot upload active content (e.g. text/html or image/svg+xml, both
@@ -56,10 +141,9 @@ export function getPublicUrl(key: string): string {
   // SECURITY TODO: these are unsigned public-read URLs. A fuller fix is to keep
   // the bucket private and serve attachments via short-TTL presigned GET URLs
   // generated per-request. Deferred because it changes the client contract
-  // (the app currently opens file_url directly).
-  const endpoint = process.env.S3_ENDPOINT ?? 'https://storage.yandexcloud.net';
-  const bucket = getBucket();
-  return `${endpoint}/${bucket}/${key}`;
+  // (the app currently opens file_url directly). The local driver has the same
+  // exposure: whoever holds the URL (two random uuids) can fetch the file.
+  return `${storagePrefix()}${key}`;
 }
 
 /**
@@ -106,8 +190,7 @@ function hasTraversalSegment(key: string): boolean {
  * `..` segment, so a key containing one is never legitimate.
  */
 export function deriveOrgScopedKey(fileUrl: string, orgId: string): string | null {
-  const endpoint = process.env.S3_ENDPOINT ?? 'https://storage.yandexcloud.net';
-  const prefix = `${endpoint}/${getBucket()}/`;
+  const prefix = storagePrefix();
   if (!fileUrl.startsWith(prefix)) return null;
   const key = fileUrl.slice(prefix.length);
 
@@ -150,6 +233,21 @@ export async function generateUploadUrl(
 
   const key = buildKey(orgId, entityType, filename);
 
+  if (isLocalStorage()) {
+    const policy = signUploadPolicy({
+      key,
+      mime: mimeType,
+      max: maxSizeBytes,
+      exp: Math.floor(Date.now() / 1000) + UPLOAD_EXPIRES_IN,
+    });
+    return {
+      uploadUrl: `${localPublicBase()}upload`,
+      fields: { key, 'Content-Type': mimeType, policy },
+      fileUrl: getPublicUrl(key),
+      key,
+    };
+  }
+
   const { url, fields } = await createPresignedPost(client, {
     Bucket: getBucket(),
     Key: key,
@@ -175,5 +273,9 @@ export async function generateUploadUrl(
 }
 
 export async function deleteFile(key: string): Promise<void> {
+  if (isLocalStorage()) {
+    await fs.promises.rm(localPathForKey(key), { force: true });
+    return;
+  }
   await client.send(new DeleteObjectCommand({ Bucket: getBucket(), Key: key }));
 }
