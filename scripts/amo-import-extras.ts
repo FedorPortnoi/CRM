@@ -255,7 +255,9 @@ function describeEvent(e: any, names: { status: Map<number, string>; user: Map<n
       const id = a.lead_status?.id;
       if (id === STATUS_WON) return 'won';
       if (id === STATUS_LOST) return 'lost';
-      return `Этап: ${short(names.status.get(id) ?? id, 32)}`;
+      // A stage (or whole pipeline) deleted in amo is gone from its API; amo's own
+      // feed shows it as deleted too.
+      return `Этап: ${short(names.status.get(id) ?? '(удалён в amoCRM)', 32)}`;
     }
     case 'entity_responsible_changed':
       return `Ответственный: ${short(names.user.get(a.responsible_user?.id) ?? a.responsible_user?.id)}`;
