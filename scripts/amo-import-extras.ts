@@ -186,7 +186,13 @@ async function importFiles(snap: any, filesList: any[], entityFiles: any[]): Pro
     const key = `uploads/${ORG_ID}/${resolved[0].entity_type}/${f.uuid}-${safe}${ext}`;
     const full = localPathForKey(key);
     if (!DRY && !fs.existsSync(full)) {
-      const res = await fetch(f._links.download.href, { headers: { Authorization: `Bearer ${TOKEN}` } });
+      // Download links are signed for an hour; ask for a fresh one right before use.
+      const self = f._links?.self?.href ?? `${new URL(f._links.download.href).origin}/v1.0/files/${f.uuid}`;
+      const detail = await fetch(self, { headers: { Authorization: `Bearer ${TOKEN}` } });
+      if (!detail.ok) throw new Error(`file ${f.uuid}: ${detail.status}`);
+      const href = (await detail.json())._links?.download?.href;
+      if (!href) throw new Error(`file ${f.uuid}: no download link`);
+      const res = await fetch(href, { headers: { Authorization: `Bearer ${TOKEN}` } });
       if (!res.ok || !res.body) throw new Error(`download ${f.uuid}: ${res.status}`);
       await fs.promises.mkdir(path.dirname(full), { recursive: true });
       await pipeline(Readable.fromWeb(res.body as any), fs.createWriteStream(`${full}.part`));
