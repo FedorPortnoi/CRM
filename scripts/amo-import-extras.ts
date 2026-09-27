@@ -13,7 +13,7 @@
 // Usage (from the repo root; prod env from .env.localprod, LOCAL_STORAGE_DIR set):
 //   npx tsx scripts/amo-import-extras.ts --org <uuid> --user <owner uuid> \
 //     --amo-env AMO_KOMANDAR --snapshot … --files-list … --entity-files … --events … \
-//     [--only managers,files,history] [--dry]
+//     [--orphan-matches …] [--only managers,files,history,orphans] [--dry]
 //
 // Re-run safe: users and file attachments are keyed in AmoEntityMap, history rows
 // carry their amo event id and a re-run replaces the org's amo history wholesale.
@@ -127,7 +127,9 @@ async function userMap(snap: any): Promise<Map<number, string>> {
 async function importManagers(snap: any): Promise<void> {
   const bcrypt = (await import('bcryptjs')).default;
   const known = await userMap(snap);
-  const missing = snap.users.filter((u: any) => !known.has(u.id));
+  // Only the account's current team: users deactivated in amo own nothing here and
+  // the owner wants the 4КУБ team to mirror amo's active people (27.09).
+  const missing = snap.users.filter((u: any) => !known.has(u.id) && u.rights?.is_active);
   console.log(`managers: ${snap.users.length} in amo, ${known.size} already here, ${missing.length} to add`);
   for (const u of missing) {
     console.log(`  + ${u.name} (${u.rights?.is_active ? 'active' : 'inactive'} in amo)`);
@@ -139,7 +141,7 @@ async function importManagers(snap: any): Promise<void> {
         name: String(u.name || `amoCRM ${u.id}`),
         password_hash: await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10),
         role: 'member',
-        is_active: false,
+        is_active: true,
         manager_id: USER_ID,
       },
       select: { id: true },
@@ -152,6 +154,92 @@ async function importManagers(snap: any): Promise<void> {
 }
 
 // ── files ──────────────────────────────────────────────────────────────────────
+function fileNameOf(f: any): { filename: string; ext: string } {
+  const ext = f.metadata?.extension ? `.${String(f.metadata.extension).replace(/[^A-Za-z0-9]/g, '')}` : '';
+  const filename = String(f.name).toLowerCase().endsWith(ext.toLowerCase()) ? String(f.name) : `${f.name}${ext}`;
+  return { filename, ext };
+}
+
+/** Downloads an amo drive file into the local store (once) and returns its storage key. */
+async function storeFile(f: any, entityType: string, localPathForKey: (k: string) => string): Promise<string> {
+  const { ext } = fileNameOf(f);
+  // Deterministic key: the amo file uuid is already a uuid, so a re-run finds the bytes.
+  const safe = String(f.name).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+  const key = `uploads/${ORG_ID}/${entityType}/${f.uuid}-${safe}${ext}`;
+  const full = localPathForKey(key);
+  if (DRY || fs.existsSync(full)) return key;
+  // Download links are signed for an hour; ask for a fresh one right before use.
+  const self = f._links?.self?.href ?? `${new URL(f._links.download.href).origin}/v1.0/files/${f.uuid}`;
+  const detail = await fetch(self, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  if (!detail.ok) throw new Error(`file ${f.uuid}: ${detail.status}`);
+  const href = (await detail.json())._links?.download?.href;
+  if (!href) throw new Error(`file ${f.uuid}: no download link`);
+  const res = await fetch(href, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  if (!res.ok || !res.body) throw new Error(`download ${f.uuid}: ${res.status}`);
+  await fs.promises.mkdir(path.dirname(full), { recursive: true });
+  await pipeline(Readable.fromWeb(res.body as any), fs.createWriteStream(`${full}.part`));
+  await fs.promises.rename(`${full}.part`, full);
+  return key;
+}
+
+/**
+ * Files amo links to nothing (sent through chats, uploaded loose). Those matched to a
+ * deal by name (--orphan-matches, from amo-match-orphan-files.cjs) go on that deal;
+ * the rest go on one contact, «Файлы из amoCRM», so nothing is lost.
+ */
+async function importOrphans(snap: any, filesList: any[], matches: any[]): Promise<void> {
+  const { getPublicUrl, localPathForKey } = await import(new URL('../backend/services/storage.ts', import.meta.url).href);
+  const users = await userMap(snap);
+  const attached = await mapOf('file');
+  const byUuid = new Map(filesList.map((f: any) => [f.uuid, f]));
+  const stats = { orphans: matches.length, to_deals: 0, to_archive: 0, skipped_existing: 0, bytes: 0 };
+
+  let archiveId = (await mapOf('orphan-archive')).get(0) ?? null;
+  if (!archiveId && !DRY && matches.some((m) => !m.deal_id)) {
+    const c = await db.contact.create({
+      data: {
+        organization_id: ORG_ID,
+        first_name: 'Файлы из amoCRM',
+        created_by: USER_ID,
+        assigned_to: USER_ID,
+        source: 'amocrm',
+        custom_fields: { 'Примечание': 'Файлы, которые в amoCRM не были привязаны ни к сделке, ни к контакту (обычно отправлены в чатах).' },
+      },
+      select: { id: true },
+    });
+    archiveId = c.id;
+    await db.amoEntityMap.create({ data: { organization_id: ORG_ID, entity_type: 'orphan-archive', amo_id: 0n, local_id: c.id } });
+  }
+
+  for (const m of matches) {
+    const f = byUuid.get(m.uuid);
+    if (!f) continue;
+    if (attached.has(Number(f.id))) { stats.skipped_existing++; continue; }
+    const target = m.deal_id ? { entity_type: 'deal', entity_id: m.deal_id } : { entity_type: 'contact', entity_id: archiveId };
+    const key = await storeFile(f, target.entity_type, localPathForKey);
+    stats.bytes += Number(f.size ?? 0);
+    if (m.deal_id) stats.to_deals++; else stats.to_archive++;
+    if (DRY) continue;
+    const createdBy = typeof f.created_by?.id === 'number' ? users.get(f.created_by.id) : undefined;
+    const a = await db.attachment.create({
+      data: {
+        organization_id: ORG_ID,
+        entity_type: target.entity_type,
+        entity_id: target.entity_id,
+        filename: fileNameOf(f).filename,
+        file_url: getPublicUrl(key),
+        size: Number(f.size ?? 0) || null,
+        mime_type: f.metadata?.mime_type ?? null,
+        uploaded_by: createdBy ?? USER_ID,
+        created_at: new Date(f.created_at * 1000),
+      },
+      select: { id: true },
+    });
+    await db.amoEntityMap.create({ data: { organization_id: ORG_ID, entity_type: 'file', amo_id: BigInt(f.id), local_id: a.id } });
+  }
+  console.log('orphan files:', JSON.stringify({ ...stats, MB: (stats.bytes / 1e6).toFixed(1) }));
+}
+
 async function importFiles(snap: any, filesList: any[], entityFiles: any[]): Promise<void> {
   const { getPublicUrl, localPathForKey } = await import(new URL('../backend/services/storage.ts', import.meta.url).href);
   if (!process.env.LOCAL_STORAGE_DIR) throw new Error('LOCAL_STORAGE_DIR is not set');
@@ -170,8 +258,7 @@ async function importFiles(snap: any, filesList: any[], entityFiles: any[]): Pro
     const targets = links.get(f.uuid) ?? [];
     if (!targets.length) { stats.unlinked++; unlinked.push(f.name); continue; }
     stats.linked++;
-    const ext = f.metadata?.extension ? `.${String(f.metadata.extension).replace(/[^A-Za-z0-9]/g, '')}` : '';
-    const filename = String(f.name).toLowerCase().endsWith(ext.toLowerCase()) ? String(f.name) : `${f.name}${ext}`;
+    const { filename } = fileNameOf(f);
 
     const resolved: Target[] = [];
     for (const t of targets) {
@@ -181,23 +268,7 @@ async function importFiles(snap: any, filesList: any[], entityFiles: any[]): Pro
     if (!resolved.length) { stats.unresolved++; continue; }
     if (attached.has(Number(f.id))) { stats.skipped_existing++; continue; }
 
-    // Deterministic key: the amo file uuid is already a uuid, so a re-run finds the bytes.
-    const safe = String(f.name).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
-    const key = `uploads/${ORG_ID}/${resolved[0].entity_type}/${f.uuid}-${safe}${ext}`;
-    const full = localPathForKey(key);
-    if (!DRY && !fs.existsSync(full)) {
-      // Download links are signed for an hour; ask for a fresh one right before use.
-      const self = f._links?.self?.href ?? `${new URL(f._links.download.href).origin}/v1.0/files/${f.uuid}`;
-      const detail = await fetch(self, { headers: { Authorization: `Bearer ${TOKEN}` } });
-      if (!detail.ok) throw new Error(`file ${f.uuid}: ${detail.status}`);
-      const href = (await detail.json())._links?.download?.href;
-      if (!href) throw new Error(`file ${f.uuid}: no download link`);
-      const res = await fetch(href, { headers: { Authorization: `Bearer ${TOKEN}` } });
-      if (!res.ok || !res.body) throw new Error(`download ${f.uuid}: ${res.status}`);
-      await fs.promises.mkdir(path.dirname(full), { recursive: true });
-      await pipeline(Readable.fromWeb(res.body as any), fs.createWriteStream(`${full}.part`));
-      await fs.promises.rename(`${full}.part`, full);
-    }
+    const key = await storeFile(f, resolved[0].entity_type, localPathForKey);
     stats.bytes += Number(f.size ?? 0);
     if (DRY) { stats.attachments += resolved.length; continue; }
 
@@ -373,6 +444,9 @@ async function main() {
     await importFiles(snap, JSON.parse(fs.readFileSync(arg('files-list')!, 'utf8')), readJsonl(arg('entity-files')!));
   }
   if (ONLY.has('history')) await importHistory(snap, readJsonl(arg('events')!));
+  if (ONLY.has('orphans')) {
+    await importOrphans(snap, JSON.parse(fs.readFileSync(arg('files-list')!, 'utf8')), JSON.parse(fs.readFileSync(arg('orphan-matches')!, 'utf8')));
+  }
   console.log(DRY ? '(dry run — nothing written)' : 'done');
   await db.$disconnect();
 }
