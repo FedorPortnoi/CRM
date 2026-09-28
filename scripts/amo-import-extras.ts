@@ -12,7 +12,7 @@
 //
 // Usage (from the repo root; prod env from .env.localprod, LOCAL_STORAGE_DIR set):
 //   npx tsx scripts/amo-import-extras.ts --org <uuid> --user <owner uuid> \
-//     --amo-env AMO_KOMANDAR --snapshot … --files-list … --entity-files … --events … \
+//     --amo-env AMO_CLIENT --snapshot … --files-list … --entity-files … --events … \
 //     [--orphan-matches …] [--only managers,files,history,orphans] [--dry]
 //
 // Re-run safe: users and file attachments are keyed in AmoEntityMap, history rows

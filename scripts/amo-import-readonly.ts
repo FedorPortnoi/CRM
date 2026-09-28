@@ -9,7 +9,7 @@
 //
 // Usage (from the repo root):
 //   npx tsx scripts/amo-import-readonly.ts --org <uuid> --user <uuid> \
-//     --amo-env AMO_KOMANDAR --out <dir outside the repo> [--dry]
+//     --amo-env AMO_CLIENT --out <dir outside the repo> [--dry]
 //
 //   --amo-env  prefix of two lines in .env: <prefix>_SUBDOMAIN and <prefix>_TOKEN
 //   --user-map amoUserId=4kubUserId[,…] for people whose email differs between systems
