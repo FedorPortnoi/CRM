@@ -21,6 +21,7 @@ import { useCreateMutation } from '../../hooks/useCreateMutation';
 import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors, spacing, radius, type } from '../../theme';
 import { Button, EmptyState } from '../../components/ui';
+import { displayDateToIso, maskDateInput } from '../../utils/dateInput';
 
 interface PipelineStage {
   id: string;
@@ -141,7 +142,9 @@ export default function NewDealScreen(): JSX.Element {
         ? { value: parseFloat(valueStr) }
         : {}),
       ...(nextAction.trim() !== '' ? { next_action: nextAction.trim() } : {}),
-      ...(nextActionDue.trim() !== '' ? { next_action_due: nextActionDue.trim() } : {}),
+      ...(nextActionDue.trim() !== ''
+        ? { next_action_due: displayDateToIso(nextActionDue) ?? nextActionDue.trim() }
+        : {}),
     }),
     onSuccess: (data, queued) => {
       if (queued) {
@@ -374,10 +377,11 @@ export default function NewDealScreen(): JSX.Element {
       <TextInput
         style={[styles.input, styles.tabular]}
         value={nextActionDue}
-        onChangeText={setNextActionDue}
+        onChangeText={(v) => setNextActionDue(maskDateInput(v))}
         placeholder={t('deals.nextActionDuePlaceholder')}
         placeholderTextColor={colors.placeholder}
         autoCapitalize="none"
+        keyboardType="number-pad"
       />
 
       <Button

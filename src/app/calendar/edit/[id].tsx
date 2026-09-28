@@ -18,6 +18,7 @@ import { useCreateMutation } from '../../../hooks/useCreateMutation';
 import { useTheme } from '../../../hooks/useTheme';
 import { ThemeColors, spacing, radius, type, control, tabular } from '../../../theme';
 import { Screen, Card, Button, EmptyState, SkeletonText } from '../../../components/ui';
+import { displayDateToIso, maskDateInput } from '../../../utils/dateInput';
 
 type CalendarContact = {
   id: string;
@@ -87,7 +88,7 @@ function toDateInputValue(dateStr: string): string {
   const date = new Date(dateStr);
   if (Number.isNaN(date.getTime())) return '';
 
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`;
 }
 
 function toTimeInputValue(dateStr: string): string {
@@ -97,8 +98,9 @@ function toTimeInputValue(dateStr: string): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function buildLocalDate(dateValue: string, timeValue: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) return null;
+function buildLocalDate(displayDate: string, timeValue: string): Date | null {
+  const dateValue = displayDateToIso(displayDate);
+  if (!dateValue) return null;
   if (!/^\d{2}:\d{2}$/.test(timeValue)) return null;
 
   const [year, month, day] = dateValue.split('-').map(Number);
@@ -384,12 +386,12 @@ export default function EditCalendarEventScreen(): JSX.Element {
                       style={[styles.input, styles.tabularInput]}
                       value={startDate}
                       onChangeText={(value) => {
-                        setStartDate(value);
+                        setStartDate(maskDateInput(value));
                         setFieldErrors((prev) => ({ ...prev, start: undefined }));
                       }}
-                      placeholder="YYYY-MM-DD"
+                      placeholder={t('common.datePlaceholder')}
                       placeholderTextColor={colors.placeholder}
-                      keyboardType="numbers-and-punctuation"
+                      keyboardType="number-pad"
                     />
                   </View>
                   <View style={styles.timeField}>
@@ -418,12 +420,12 @@ export default function EditCalendarEventScreen(): JSX.Element {
                       style={[styles.input, styles.tabularInput]}
                       value={endDate}
                       onChangeText={(value) => {
-                        setEndDate(value);
+                        setEndDate(maskDateInput(value));
                         setFieldErrors((prev) => ({ ...prev, end: undefined }));
                       }}
-                      placeholder="YYYY-MM-DD"
+                      placeholder={t('common.datePlaceholder')}
                       placeholderTextColor={colors.placeholder}
-                      keyboardType="numbers-and-punctuation"
+                      keyboardType="number-pad"
                     />
                   </View>
                   <View style={styles.timeField}>

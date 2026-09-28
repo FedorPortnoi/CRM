@@ -29,6 +29,7 @@ import { formatMarketDate, formatMarketDateTime } from '../../market/profile';
 import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors, spacing, radius, type, tabular, control } from '../../theme';
 import { Screen, Card, Button, Badge, EmptyState, SkeletonText } from '../../components/ui';
+import { displayDateToIso, maskDateInput } from '../../utils/dateInput';
 
 // Mirrors API_KEY_SCOPES in backend/services/api-keys.ts.
 const SCOPES = [
@@ -89,15 +90,14 @@ function keyStatus(item: ApiKeySummary, now: number): KeyStatus {
   return 'active';
 }
 
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
- * The backend takes a full ISO datetime; the field asks for ГГГГ-ММ-ДД. A date
+ * The backend takes a full ISO datetime; the field asks for ДД.ММ.ГГГГ. A date
  * the user types means "valid through the end of that day", so it is widened to
  * 23:59:59.999 UTC rather than midnight, which would expire the key a day early.
  */
-function expiryToIso(value: string): string | null {
-  if (!DATE_ONLY.test(value)) return null;
+function expiryToIso(displayDate: string): string | null {
+  const value = displayDateToIso(displayDate);
+  if (!value) return null;
   const [year, month, day] = value.split('-').map(Number);
   const stamp = Date.UTC(year, month - 1, day, 23, 59, 59, 999);
   const date = new Date(stamp);
@@ -480,12 +480,12 @@ export default function ApiKeysScreen(): JSX.Element {
             <TextInput
               style={styles.input}
               value={expires}
-              onChangeText={(value) => { setExpires(value); setFormError(null); }}
+              onChangeText={(value) => { setExpires(maskDateInput(value)); setFormError(null); }}
               placeholder={t('apiKeys.expiresNever')}
               placeholderTextColor={colors.placeholder}
               autoCapitalize="none"
               autoCorrect={false}
-              keyboardType="numbers-and-punctuation"
+              keyboardType="number-pad"
               maxLength={10}
             />
             <Text style={styles.fieldHint}>{t('apiKeys.expiresHint')}</Text>

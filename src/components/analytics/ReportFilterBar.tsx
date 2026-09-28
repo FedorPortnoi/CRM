@@ -1,7 +1,7 @@
 // Date-range / scope / pipeline control shared by every report tab.
 //
-// The custom range is typed as ISO dates (YYYY-MM-DD) rather than opened in a native picker:
-// the app has no date-picker dependency, and the backend accepts exactly this shape.
+// The custom range is typed rather than opened in a native picker (the app has no date-picker
+// dependency). People type ДД.ММ.ГГГГ; the filters and the backend keep ISO YYYY-MM-DD.
 import React, { useCallback, useState } from 'react';
 import {
   View,
@@ -23,6 +23,7 @@ import {
 import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors, spacing, radius, type } from '../../theme';
 import { Button } from '../ui';
+import { displayDateToIso, isoToDisplayDate, maskDateInput } from '../../utils/dateInput';
 
 const PERIOD_LABEL_KEYS: Record<ReportPeriod, string> = {
   '7d': 'reports.period7d',
@@ -38,14 +39,6 @@ const SCOPE_LABEL_KEYS: Record<ReportScope, string> = {
   direct: 'reports.scopeDirect',
   subtree: 'reports.scopeSubtree',
 };
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-export function isValidIsoDate(value: string): boolean {
-  if (!ISO_DATE.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(parsed.getTime());
-}
 
 export type PipelineOption = { id: string; name: string };
 
@@ -75,8 +68,8 @@ export default function ReportFilterBar({
   const [draftTo, setDraftTo] = useState('');
 
   const openRangeModal = useCallback((): void => {
-    setDraftFrom(filters.date_from ?? '');
-    setDraftTo(filters.date_to ?? '');
+    setDraftFrom(isoToDisplayDate(filters.date_from));
+    setDraftTo(isoToDisplayDate(filters.date_to));
     setRangeModalVisible(true);
   }, [filters.date_from, filters.date_to]);
 
@@ -95,8 +88,8 @@ export default function ReportFilterBar({
     onChange({
       ...filters,
       period: 'custom',
-      date_from: draftFrom.trim() === '' ? null : draftFrom.trim(),
-      date_to: draftTo.trim() === '' ? null : draftTo.trim(),
+      date_from: displayDateToIso(draftFrom),
+      date_to: displayDateToIso(draftTo),
     });
     setRangeModalVisible(false);
   }, [draftFrom, draftTo, filters, onChange]);
@@ -106,8 +99,8 @@ export default function ReportFilterBar({
     setRangeModalVisible(false);
   }, [filters, onChange]);
 
-  const fromValid = draftFrom.trim() === '' || isValidIsoDate(draftFrom.trim());
-  const toValid = draftTo.trim() === '' || isValidIsoDate(draftTo.trim());
+  const fromValid = draftFrom.trim() === '' || displayDateToIso(draftFrom) !== null;
+  const toValid = draftTo.trim() === '' || displayDateToIso(draftTo) !== null;
   const canApply = fromValid && toValid && (draftFrom.trim() !== '' || draftTo.trim() !== '');
 
   return (
@@ -214,26 +207,26 @@ export default function ReportFilterBar({
             <TextInput
               style={[styles.input, !fromValid && styles.inputInvalid]}
               value={draftFrom}
-              onChangeText={setDraftFrom}
+              onChangeText={(v) => setDraftFrom(maskDateInput(v))}
               placeholder={t('reports.dateHint')}
               placeholderTextColor={colors.placeholder}
               autoCapitalize="none"
               autoCorrect={false}
               maxLength={10}
-              keyboardType="numbers-and-punctuation"
+              keyboardType="number-pad"
             />
 
             <Text style={styles.inputLabel}>{t('reports.dateTo')}</Text>
             <TextInput
               style={[styles.input, !toValid && styles.inputInvalid]}
               value={draftTo}
-              onChangeText={setDraftTo}
+              onChangeText={(v) => setDraftTo(maskDateInput(v))}
               placeholder={t('reports.dateHint')}
               placeholderTextColor={colors.placeholder}
               autoCapitalize="none"
               autoCorrect={false}
               maxLength={10}
-              keyboardType="numbers-and-punctuation"
+              keyboardType="number-pad"
             />
 
             <Text style={styles.modalHint}>{t('reports.dateHint')}</Text>

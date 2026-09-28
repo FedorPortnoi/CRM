@@ -111,7 +111,7 @@ function companiesById(snap: any): Map<number, any> {
 /** amo user id → 4КУБ user id: existing members by email, placeholders by map. */
 async function userMap(snap: any): Promise<Map<number, string>> {
   const local = await db.user.findMany({ where: { organization_id: ORG_ID }, select: { id: true, email: true } });
-  const byEmail = new Map(local.filter((u: any) => u.email).map((u: any) => [String(u.email).toLowerCase(), u.id]));
+  const byEmail = new Map<string, string>(local.filter((u: any) => u.email).map((u: any) => [String(u.email).toLowerCase(), String(u.id)]));
   const out = new Map<number, string>();
   for (const u of snap.users) {
     const id = typeof u.email === 'string' ? byEmail.get(u.email.trim().toLowerCase()) : undefined;

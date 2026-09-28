@@ -9,6 +9,7 @@ import { formatMarketDateTime } from '../../market/profile';
 import { useTheme } from '../../hooks/useTheme';
 import { ThemeColors, spacing, radius, type, control } from '../../theme';
 import { Screen, Button } from '../../components/ui';
+import { displayDateToIso, maskDateInput } from '../../utils/dateInput';
 
 type FieldErrors = {
   title?: string;
@@ -21,7 +22,7 @@ function pad(value: number): string {
 }
 
 function toDateInput(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`;
 }
 
 function toTimeInput(date: Date): string {
@@ -34,8 +35,9 @@ function roundedNextHour(): Date {
   return date;
 }
 
-function buildLocalDate(dateValue: string, timeValue: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) return null;
+function buildLocalDate(displayDate: string, timeValue: string): Date | null {
+  const dateValue = displayDateToIso(displayDate);
+  if (!dateValue) return null;
   if (!/^\d{2}:\d{2}$/.test(timeValue)) return null;
 
   const [year, month, day] = dateValue.split('-').map(Number);
@@ -197,12 +199,12 @@ export default function NewCalendarEventScreen(): JSX.Element {
               style={styles.input}
               value={startDate}
               onChangeText={(value) => {
-                setStartDate(value);
+                setStartDate(maskDateInput(value));
                 setFieldErrors((prev) => ({ ...prev, start: undefined }));
               }}
-              placeholder="YYYY-MM-DD"
+              placeholder={t('common.datePlaceholder')}
               placeholderTextColor={colors.placeholder}
-              keyboardType="numbers-and-punctuation"
+              keyboardType="number-pad"
             />
           </View>
           <View style={styles.timeField}>
@@ -229,12 +231,12 @@ export default function NewCalendarEventScreen(): JSX.Element {
               style={styles.input}
               value={endDate}
               onChangeText={(value) => {
-                setEndDate(value);
+                setEndDate(maskDateInput(value));
                 setFieldErrors((prev) => ({ ...prev, end: undefined }));
               }}
-              placeholder="YYYY-MM-DD"
+              placeholder={t('common.datePlaceholder')}
               placeholderTextColor={colors.placeholder}
-              keyboardType="numbers-and-punctuation"
+              keyboardType="number-pad"
             />
           </View>
           <View style={styles.timeField}>

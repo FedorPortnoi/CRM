@@ -20,6 +20,7 @@ import { useCreateMutation } from '../../../hooks/useCreateMutation';
 import { useTheme } from '../../../hooks/useTheme';
 import { ThemeColors, spacing, radius, type, control, tabular } from '../../../theme';
 import { Screen, Card, Button, EmptyState, Skeleton, SkeletonText } from '../../../components/ui';
+import { displayDateToIso, isoToDisplayDate, maskDateInput } from '../../../utils/dateInput';
 
 interface PipelineStage {
   id: string;
@@ -96,7 +97,7 @@ function formatContactResult(contact: ContactPreview): string {
 function dateInputValue(value: string | null): string {
   if (!value) return '';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toISOString().slice(0, 10);
+  return Number.isNaN(date.getTime()) ? value : isoToDisplayDate(date.toISOString().slice(0, 10));
 }
 
 function formFromDeal(deal: Deal): DealForm {
@@ -137,7 +138,8 @@ function buildPatch(current: DealForm, original: DealForm): DealPatch {
     patch.next_action = current.next_action.trim() || null;
   }
   if (current.next_action_due.trim() !== original.next_action_due.trim()) {
-    patch.next_action_due = current.next_action_due.trim() || null;
+    const typed = current.next_action_due.trim();
+    patch.next_action_due = typed ? displayDateToIso(typed) ?? typed : null;
   }
   return patch;
 }
@@ -502,10 +504,11 @@ export default function EditDealScreen(): JSX.Element {
                 <TextInput
                   style={[styles.input, styles.tabularInput]}
                   value={nextActionDue}
-                  onChangeText={setNextActionDue}
+                  onChangeText={(v) => setNextActionDue(maskDateInput(v))}
                   placeholder={t('deals.nextActionDuePlaceholder')}
                   placeholderTextColor={colors.placeholder}
                   autoCapitalize="none"
+                  keyboardType="number-pad"
                 />
               </View>
             </Card>
